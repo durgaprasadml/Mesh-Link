@@ -1,0 +1,192 @@
+package com.meshlink.ui.mesh
+
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.delay
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.random.Random
+
+// --- Theme Colors ---
+private val DarkBackground = Color(0xFF0D1117)
+private val NeonGreen = Color(0xFF00FF88)
+private val TextPrimary = Color(0xFFFFFFFF)
+
+data class MeshNode(
+    val id: String,
+    val name: String,
+    val angle: Float,
+    val distance: Float,
+    val signal: Float
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MeshDebugScreen(
+    onBack: () -> Unit,
+    viewModel: MeshDebugViewModel = hiltViewModel()
+) {
+    val scannedDevices by viewModel.scannedDevices.collectAsState()
+    
+    // Poll the route table
+    var routeTable by remember { mutableStateOf(emptyMap<String, String>()) }
+    LaunchedEffect(Unit) {
+        while(true) {
+            routeTable = viewModel.getKnownRoutes()
+            delay(1000)
+        }
+    }
+
+    // Build the dynamic nodes based on real scanned data + route table
+    val nodes = remember(scannedDevices, routeTable) {
+        val uniqueIds = (scannedDevices.keys + routeTable.keys).distinct()
+        uniqueIds.mapIndexed { index, id ->
+            val isDirect = scannedDevices.containsKey(id)
+            val baseAngle = (index.toFloat() / uniqueIds.size.coerceAtLeast(1)) * (2 * Math.PI.toFloat())
+            val randomOffset = Random(id.hashCode()).nextFloat() * 0.5f
+            
+            MeshNode(
+                id = id,
+                name = scannedDevices[id]?.name?.takeIf { it.isNotBlank() } ?: "Node ${id.takeLast(4)}",
+                angle = baseAngle + randomOffset,
+                distance = if (isDirect) 0.4f + randomOffset * 0.3f else 0.7f + randomOffset * 0.3f,
+                signal = if (isDirect) 1.0f else 0.5f
+            )
+        }
+    }
+
+    Scaffold(
+        containerColor = DarkBackground,
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    }
+                },
+                title = { Text("Network Topography", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(DarkBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            if (nodes.isEmpty()) {
+                Text("No active mesh nodes detected.", color = NeonGreen.copy(alpha = 0.5f))
+            } else {
+                MeshGraph(nodes)
+            }
+        }
+    }
+}
+
+@Composable
+fun MeshGraph(nodes: List<MeshNode>) {
+    val infiniteTransition = rememberInfiniteTransition(label = "GraphAnimation")
+    
+    // Slow rotation animation for the entire graph
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(40000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "Rotation"
+    )
+
+    // Pulsing effect for lines
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Pulse"
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val maxRadius = minOf(size.width, size.height) / 2.5f
+
+        // Draw connections first (so they are under the nodes)
+        nodes.forEach { node ->
+            val nodeX = center.x + cos(node.angle + rotation) * (node.distance * maxRadius)
+            val nodeY = center.y + sin(node.angle + rotation) * (node.distance * maxRadius)
+            
+            // Connection to center
+            drawLine(
+                color = NeonGreen.copy(alpha = node.signal * pulse),
+                start = center,
+                end = Offset(nodeX, nodeY),
+                strokeWidth = (node.signal * 8f) * pulse,
+                cap = StrokeCap.Round
+            )
+            
+            // Random connections between nodes for a "mesh" look
+            nodes.filter { it.id != node.id && Random(it.id.hashCode() + node.id.hashCode()).nextFloat() > 0.6f }.forEach { targetNode ->
+                val targetX = center.x + cos(targetNode.angle + rotation) * (targetNode.distance * maxRadius)
+                val targetY = center.y + sin(targetNode.angle + rotation) * (targetNode.distance * maxRadius)
+                
+                drawLine(
+                    color = NeonGreen.copy(alpha = 0.15f * pulse),
+                    start = Offset(nodeX, nodeY),
+                    end = Offset(targetX, targetY),
+                    strokeWidth = 2f,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+
+        // Draw Center Node (You)
+        drawCircle(
+            color = NeonGreen.copy(alpha = 0.2f),
+            radius = 40f * pulse,
+            center = center
+        )
+        drawCircle(
+            color = NeonGreen,
+            radius = 20f,
+            center = center
+        )
+
+        // Draw Other Nodes
+        nodes.forEach { node ->
+            val nodeX = center.x + cos(node.angle + rotation) * (node.distance * maxRadius)
+            val nodeY = center.y + sin(node.angle + rotation) * (node.distance * maxRadius)
+            
+            // Outer glow
+            drawCircle(
+                color = NeonGreen.copy(alpha = 0.3f),
+                radius = 16f,
+                center = Offset(nodeX, nodeY)
+            )
+            // Inner core
+            drawCircle(
+                color = NeonGreen,
+                radius = 8f,
+                center = Offset(nodeX, nodeY)
+            )
+        }
+    }
+}

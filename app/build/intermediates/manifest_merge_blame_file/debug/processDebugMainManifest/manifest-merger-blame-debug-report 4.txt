@@ -1,0 +1,465 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.meshlink"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="34" />
+10
+11    <uses-permission android:name="android.permission.BLUETOOTH" />
+11-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:4:5-68
+11-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:4:22-65
+12    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+12-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:5:5-74
+12-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:5:22-71
+13    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+13-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:6:5-79
+13-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:6:22-76
+14    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+14-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:7:5-81
+14-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:7:22-78
+15    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+15-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:8:5-73
+15-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:8:22-70
+16    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+16-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:9:5-78
+16-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:9:22-75
+17    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+17-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:10:5-76
+17-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:10:22-73
+18
+19    <uses-feature
+19-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:11:5-90
+20        android:name="android.hardware.bluetooth_le"
+20-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:11:19-63
+21        android:required="true" />
+21-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:11:64-87
+22
+23    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+23-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:13:5-78
+23-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:13:22-75
+24    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+24-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:14:5-76
+24-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:14:22-73
+25    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+25-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:15:5-76
+25-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:15:22-73
+26    <uses-permission android:name="android.permission.INTERNET" />
+26-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:16:5-67
+26-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:16:22-64
+27
+28    <uses-feature
+28-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:17:5-89
+29        android:name="android.hardware.wifi.direct"
+29-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:17:19-62
+30        android:required="true" />
+30-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:17:63-86
+31
+32    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+32-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:19:5-71
+32-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:19:22-68
+33    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+33-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:20:5-76
+33-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:20:22-73
+34    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+34-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:21:5-80
+34-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:21:22-77
+35
+36    <!-- Foreground service permissions -->
+37    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+37-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:24:5-77
+37-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:24:22-74
+38    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+38-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:25:5-94
+38-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:25:22-91
+39    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+39-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:26:5-77
+39-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:26:22-74
+40    <uses-permission android:name="android.permission.WAKE_LOCK" />
+40-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:27:5-68
+40-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:27:22-65
+41    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+41-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:28:5-95
+41-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:28:22-92
+42
+43    <!-- FIX Issue 5 & 6: Auto-start mesh after device boot -->
+44    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+44-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:31:5-81
+44-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:31:22-78
+45    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+45-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:23:5-79
+45-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:23:22-76
+46    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+46-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:25:5-79
+46-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:25:22-76
+47    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" />
+47-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:26:5-88
+47-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:26:22-85
+48    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" />
+48-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:27:5-82
+48-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:27:22-79
+49    <uses-permission android:name="com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE" />
+49-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:26:5-110
+49-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:26:22-107
+50
+51    <permission
+51-->[androidx.core:core:1.13.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/280ce6a69e1729376873512b432c381a/transformed/core-1.13.1/AndroidManifest.xml:22:5-24:47
+52        android:name="com.meshlink.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+52-->[androidx.core:core:1.13.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/280ce6a69e1729376873512b432c381a/transformed/core-1.13.1/AndroidManifest.xml:23:9-81
+53        android:protectionLevel="signature" />
+53-->[androidx.core:core:1.13.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/280ce6a69e1729376873512b432c381a/transformed/core-1.13.1/AndroidManifest.xml:24:9-44
+54
+55    <uses-permission android:name="com.meshlink.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+55-->[androidx.core:core:1.13.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/280ce6a69e1729376873512b432c381a/transformed/core-1.13.1/AndroidManifest.xml:26:5-97
+55-->[androidx.core:core:1.13.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/280ce6a69e1729376873512b432c381a/transformed/core-1.13.1/AndroidManifest.xml:26:22-94
+56
+57    <application
+57-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:33:5-68:19
+58        android:name="com.meshlink.MeshLinkApp"
+58-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:34:9-36
+59        android:allowBackup="true"
+59-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:35:9-35
+60        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+60-->[androidx.core:core:1.13.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/280ce6a69e1729376873512b432c381a/transformed/core-1.13.1/AndroidManifest.xml:28:18-86
+61        android:debuggable="true"
+62        android:extractNativeLibs="true"
+62-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:40:9-41
+63        android:icon="@mipmap/ic_launcher"
+63-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:36:9-43
+64        android:label="@string/app_name"
+64-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:37:9-41
+65        android:roundIcon="@mipmap/ic_launcher_round"
+65-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:38:9-54
+66        android:supportsRtl="true"
+66-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:39:9-35
+67        android:testOnly="true"
+68        android:theme="@style/Theme.MeshLink" >
+68-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:41:9-46
+69        <activity
+69-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:42:9-50:20
+70            android:name="com.meshlink.MainActivity"
+70-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:43:13-41
+71            android:exported="true"
+71-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:44:13-36
+72            android:theme="@style/Theme.MeshLink" >
+72-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:45:13-50
+73            <intent-filter>
+73-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:46:13-49:29
+74                <action android:name="android.intent.action.MAIN" />
+74-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:47:17-69
+74-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:47:25-66
+75
+76                <category android:name="android.intent.category.LAUNCHER" />
+76-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:48:17-77
+76-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:48:27-74
+77            </intent-filter>
+78        </activity>
+79
+80        <service
+80-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:52:9-55:63
+81            android:name="com.meshlink.service.MeshRelayService"
+81-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:53:13-53
+82            android:exported="false"
+82-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:54:13-37
+83            android:foregroundServiceType="connectedDevice" />
+83-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:55:13-60
+84
+85        <!-- FIX Issue 5 & 6: Auto-start MeshRelayService on device boot -->
+86        <receiver
+86-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:58:9-67:20
+87            android:name="com.meshlink.service.BootCompletedReceiver"
+87-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:59:13-58
+88            android:enabled="true"
+88-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:61:13-35
+89            android:exported="true" >
+89-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:60:13-36
+90            <intent-filter>
+90-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:62:13-66:29
+91                <action android:name="android.intent.action.BOOT_COMPLETED" />
+91-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:63:17-79
+91-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:63:25-76
+92                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+92-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:64:17-82
+92-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:64:25-79
+93                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+93-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:65:17-86
+93-->/Users/durgaprasadml/Documents/Mesh Link /app/src/main/AndroidManifest.xml:65:25-83
+94            </intent-filter>
+95        </receiver>
+96
+97        <activity
+97-->[androidx.compose.ui:ui-tooling-android:1.6.7] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/0e025609fdcae5eb59f050c7dc112f0a/transformed/ui-tooling-release/AndroidManifest.xml:23:9-25:39
+98            android:name="androidx.compose.ui.tooling.PreviewActivity"
+98-->[androidx.compose.ui:ui-tooling-android:1.6.7] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/0e025609fdcae5eb59f050c7dc112f0a/transformed/ui-tooling-release/AndroidManifest.xml:24:13-71
+99            android:exported="true" />
+99-->[androidx.compose.ui:ui-tooling-android:1.6.7] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/0e025609fdcae5eb59f050c7dc112f0a/transformed/ui-tooling-release/AndroidManifest.xml:25:13-36
+100        <activity
+100-->[androidx.compose.ui:ui-test-manifest:1.6.7] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/c7eac12b8a04b483b7e41df7e9793a04/transformed/ui-test-manifest-1.6.7/AndroidManifest.xml:23:9-25:39
+101            android:name="androidx.activity.ComponentActivity"
+101-->[androidx.compose.ui:ui-test-manifest:1.6.7] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/c7eac12b8a04b483b7e41df7e9793a04/transformed/ui-test-manifest-1.6.7/AndroidManifest.xml:24:13-63
+102            android:exported="true" />
+102-->[androidx.compose.ui:ui-test-manifest:1.6.7] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/c7eac12b8a04b483b7e41df7e9793a04/transformed/ui-test-manifest-1.6.7/AndroidManifest.xml:25:13-36
+103
+104        <service
+104-->[com.google.firebase:firebase-crashlytics-ktx:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/87c17f177d1afb6aa4725d163145179a/transformed/firebase-crashlytics-ktx-19.2.1/AndroidManifest.xml:21:9-27:19
+105            android:name="com.google.firebase.components.ComponentDiscoveryService"
+105-->[com.google.firebase:firebase-crashlytics-ktx:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/87c17f177d1afb6aa4725d163145179a/transformed/firebase-crashlytics-ktx-19.2.1/AndroidManifest.xml:22:13-84
+106            android:directBootAware="true"
+106-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:32:13-43
+107            android:exported="false" >
+107-->[com.google.firebase:firebase-crashlytics-ktx:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/87c17f177d1afb6aa4725d163145179a/transformed/firebase-crashlytics-ktx-19.2.1/AndroidManifest.xml:23:13-37
+108            <meta-data
+108-->[com.google.firebase:firebase-crashlytics-ktx:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/87c17f177d1afb6aa4725d163145179a/transformed/firebase-crashlytics-ktx-19.2.1/AndroidManifest.xml:24:13-26:85
+109                android:name="com.google.firebase.components:com.google.firebase.crashlytics.ktx.FirebaseCrashlyticsKtxRegistrar"
+109-->[com.google.firebase:firebase-crashlytics-ktx:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/87c17f177d1afb6aa4725d163145179a/transformed/firebase-crashlytics-ktx-19.2.1/AndroidManifest.xml:25:17-130
+110                android:value="com.google.firebase.components.ComponentRegistrar" />
+110-->[com.google.firebase:firebase-crashlytics-ktx:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/87c17f177d1afb6aa4725d163145179a/transformed/firebase-crashlytics-ktx-19.2.1/AndroidManifest.xml:26:17-82
+111            <meta-data
+111-->[com.google.firebase:firebase-analytics-ktx:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/182d8265a52055b10bba0321849cbc1d/transformed/firebase-analytics-ktx-22.1.2/AndroidManifest.xml:11:13-13:85
+112                android:name="com.google.firebase.components:com.google.firebase.analytics.ktx.FirebaseAnalyticsLegacyRegistrar"
+112-->[com.google.firebase:firebase-analytics-ktx:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/182d8265a52055b10bba0321849cbc1d/transformed/firebase-analytics-ktx-22.1.2/AndroidManifest.xml:12:17-129
+113                android:value="com.google.firebase.components.ComponentRegistrar" />
+113-->[com.google.firebase:firebase-analytics-ktx:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/182d8265a52055b10bba0321849cbc1d/transformed/firebase-analytics-ktx-22.1.2/AndroidManifest.xml:13:17-82
+114            <meta-data
+114-->[com.google.firebase:firebase-crashlytics:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/b538d9d41afbfff374f6cec46f5a45df/transformed/firebase-crashlytics-19.2.1/AndroidManifest.xml:15:13-17:85
+115                android:name="com.google.firebase.components:com.google.firebase.crashlytics.FirebaseCrashlyticsKtxRegistrar"
+115-->[com.google.firebase:firebase-crashlytics:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/b538d9d41afbfff374f6cec46f5a45df/transformed/firebase-crashlytics-19.2.1/AndroidManifest.xml:16:17-126
+116                android:value="com.google.firebase.components.ComponentRegistrar" />
+116-->[com.google.firebase:firebase-crashlytics:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/b538d9d41afbfff374f6cec46f5a45df/transformed/firebase-crashlytics-19.2.1/AndroidManifest.xml:17:17-82
+117            <meta-data
+117-->[com.google.firebase:firebase-crashlytics:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/b538d9d41afbfff374f6cec46f5a45df/transformed/firebase-crashlytics-19.2.1/AndroidManifest.xml:18:13-20:85
+118                android:name="com.google.firebase.components:com.google.firebase.crashlytics.CrashlyticsRegistrar"
+118-->[com.google.firebase:firebase-crashlytics:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/b538d9d41afbfff374f6cec46f5a45df/transformed/firebase-crashlytics-19.2.1/AndroidManifest.xml:19:17-115
+119                android:value="com.google.firebase.components.ComponentRegistrar" />
+119-->[com.google.firebase:firebase-crashlytics:19.2.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/b538d9d41afbfff374f6cec46f5a45df/transformed/firebase-crashlytics-19.2.1/AndroidManifest.xml:20:17-82
+120            <meta-data
+120-->[com.google.firebase:firebase-sessions:2.0.6] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/829080aa4207b5ed1943a6c87eae52cc/transformed/firebase-sessions-2.0.6/AndroidManifest.xml:29:13-31:85
+121                android:name="com.google.firebase.components:com.google.firebase.sessions.FirebaseSessionsRegistrar"
+121-->[com.google.firebase:firebase-sessions:2.0.6] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/829080aa4207b5ed1943a6c87eae52cc/transformed/firebase-sessions-2.0.6/AndroidManifest.xml:30:17-117
+122                android:value="com.google.firebase.components.ComponentRegistrar" />
+122-->[com.google.firebase:firebase-sessions:2.0.6] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/829080aa4207b5ed1943a6c87eae52cc/transformed/firebase-sessions-2.0.6/AndroidManifest.xml:31:17-82
+123            <meta-data
+123-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:37:13-39:85
+124                android:name="com.google.firebase.components:com.google.firebase.analytics.connector.internal.AnalyticsConnectorRegistrar"
+124-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:38:17-139
+125                android:value="com.google.firebase.components.ComponentRegistrar" />
+125-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:39:17-82
+126            <meta-data
+126-->[com.google.firebase:firebase-installations:18.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ac56c32f9e235e4ad98ec3ce9ec39b73/transformed/firebase-installations-18.0.0/AndroidManifest.xml:15:13-17:85
+127                android:name="com.google.firebase.components:com.google.firebase.installations.FirebaseInstallationsKtxRegistrar"
+127-->[com.google.firebase:firebase-installations:18.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ac56c32f9e235e4ad98ec3ce9ec39b73/transformed/firebase-installations-18.0.0/AndroidManifest.xml:16:17-130
+128                android:value="com.google.firebase.components.ComponentRegistrar" />
+128-->[com.google.firebase:firebase-installations:18.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ac56c32f9e235e4ad98ec3ce9ec39b73/transformed/firebase-installations-18.0.0/AndroidManifest.xml:17:17-82
+129            <meta-data
+129-->[com.google.firebase:firebase-installations:18.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ac56c32f9e235e4ad98ec3ce9ec39b73/transformed/firebase-installations-18.0.0/AndroidManifest.xml:18:13-20:85
+130                android:name="com.google.firebase.components:com.google.firebase.installations.FirebaseInstallationsRegistrar"
+130-->[com.google.firebase:firebase-installations:18.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ac56c32f9e235e4ad98ec3ce9ec39b73/transformed/firebase-installations-18.0.0/AndroidManifest.xml:19:17-127
+131                android:value="com.google.firebase.components.ComponentRegistrar" />
+131-->[com.google.firebase:firebase-installations:18.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ac56c32f9e235e4ad98ec3ce9ec39b73/transformed/firebase-installations-18.0.0/AndroidManifest.xml:20:17-82
+132            <meta-data
+132-->[com.google.firebase:firebase-common-ktx:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/62695a7d96e84150afb1ff71030cb688/transformed/firebase-common-ktx-21.0.0/AndroidManifest.xml:12:13-14:85
+133                android:name="com.google.firebase.components:com.google.firebase.ktx.FirebaseCommonLegacyRegistrar"
+133-->[com.google.firebase:firebase-common-ktx:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/62695a7d96e84150afb1ff71030cb688/transformed/firebase-common-ktx-21.0.0/AndroidManifest.xml:13:17-116
+134                android:value="com.google.firebase.components.ComponentRegistrar" />
+134-->[com.google.firebase:firebase-common-ktx:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/62695a7d96e84150afb1ff71030cb688/transformed/firebase-common-ktx-21.0.0/AndroidManifest.xml:14:17-82
+135            <meta-data
+135-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:35:13-37:85
+136                android:name="com.google.firebase.components:com.google.firebase.FirebaseCommonKtxRegistrar"
+136-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:36:17-109
+137                android:value="com.google.firebase.components.ComponentRegistrar" />
+137-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:37:17-82
+138            <meta-data
+138-->[com.google.firebase:firebase-datatransport:19.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/91594ab348d1f015d959de53d754b8cf/transformed/firebase-datatransport-19.0.0/AndroidManifest.xml:25:13-27:85
+139                android:name="com.google.firebase.components:com.google.firebase.datatransport.TransportRegistrar"
+139-->[com.google.firebase:firebase-datatransport:19.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/91594ab348d1f015d959de53d754b8cf/transformed/firebase-datatransport-19.0.0/AndroidManifest.xml:26:17-115
+140                android:value="com.google.firebase.components.ComponentRegistrar" />
+140-->[com.google.firebase:firebase-datatransport:19.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/91594ab348d1f015d959de53d754b8cf/transformed/firebase-datatransport-19.0.0/AndroidManifest.xml:27:17-82
+141        </service>
+142        <service
+142-->[com.google.firebase:firebase-sessions:2.0.6] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/829080aa4207b5ed1943a6c87eae52cc/transformed/firebase-sessions-2.0.6/AndroidManifest.xml:22:9-25:40
+143            android:name="com.google.firebase.sessions.SessionLifecycleService"
+143-->[com.google.firebase:firebase-sessions:2.0.6] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/829080aa4207b5ed1943a6c87eae52cc/transformed/firebase-sessions-2.0.6/AndroidManifest.xml:23:13-80
+144            android:enabled="true"
+144-->[com.google.firebase:firebase-sessions:2.0.6] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/829080aa4207b5ed1943a6c87eae52cc/transformed/firebase-sessions-2.0.6/AndroidManifest.xml:24:13-35
+145            android:exported="false" />
+145-->[com.google.firebase:firebase-sessions:2.0.6] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/829080aa4207b5ed1943a6c87eae52cc/transformed/firebase-sessions-2.0.6/AndroidManifest.xml:25:13-37
+146
+147        <property
+147-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:30:9-32:61
+148            android:name="android.adservices.AD_SERVICES_CONFIG"
+148-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:31:13-65
+149            android:resource="@xml/ga_ad_services_config" />
+149-->[com.google.android.gms:play-services-measurement-api:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/98327e3b0819db20c77da298dd016f2b/transformed/play-services-measurement-api-22.1.2/AndroidManifest.xml:32:13-58
+150
+151        <provider
+151-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:23:9-28:39
+152            android:name="com.google.firebase.provider.FirebaseInitProvider"
+152-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:24:13-77
+153            android:authorities="com.meshlink.firebaseinitprovider"
+153-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:25:13-72
+154            android:directBootAware="true"
+154-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:26:13-43
+155            android:exported="false"
+155-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:27:13-37
+156            android:initOrder="100" />
+156-->[com.google.firebase:firebase-common:21.0.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/58830ca94a24a92a267b0aa8411490bd/transformed/firebase-common-21.0.0/AndroidManifest.xml:28:13-36
+157
+158        <receiver
+158-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:29:9-33:20
+159            android:name="com.google.android.gms.measurement.AppMeasurementReceiver"
+159-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:30:13-85
+160            android:enabled="true"
+160-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:31:13-35
+161            android:exported="false" >
+161-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:32:13-37
+162        </receiver>
+163
+164        <service
+164-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:35:9-38:40
+165            android:name="com.google.android.gms.measurement.AppMeasurementService"
+165-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:36:13-84
+166            android:enabled="true"
+166-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:37:13-35
+167            android:exported="false" />
+167-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:38:13-37
+168        <service
+168-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:39:9-43:72
+169            android:name="com.google.android.gms.measurement.AppMeasurementJobService"
+169-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:40:13-87
+170            android:enabled="true"
+170-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:41:13-35
+171            android:exported="false"
+171-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:42:13-37
+172            android:permission="android.permission.BIND_JOB_SERVICE" />
+172-->[com.google.android.gms:play-services-measurement:22.1.2] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9689567f213a26c8bb52a568691b8a9f/transformed/play-services-measurement-22.1.2/AndroidManifest.xml:43:13-69
+173        <service
+173-->[androidx.room:room-runtime:2.6.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/38902fc9f862fcc363417b3ed1cd5a06/transformed/room-runtime-2.6.1/AndroidManifest.xml:24:9-28:63
+174            android:name="androidx.room.MultiInstanceInvalidationService"
+174-->[androidx.room:room-runtime:2.6.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/38902fc9f862fcc363417b3ed1cd5a06/transformed/room-runtime-2.6.1/AndroidManifest.xml:25:13-74
+175            android:directBootAware="true"
+175-->[androidx.room:room-runtime:2.6.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/38902fc9f862fcc363417b3ed1cd5a06/transformed/room-runtime-2.6.1/AndroidManifest.xml:26:13-43
+176            android:exported="false" />
+176-->[androidx.room:room-runtime:2.6.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/38902fc9f862fcc363417b3ed1cd5a06/transformed/room-runtime-2.6.1/AndroidManifest.xml:27:13-37
+177
+178        <provider
+178-->[androidx.emoji2:emoji2:1.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/97c686eab21ff7cb925502fb2659e72d/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
+179            android:name="androidx.startup.InitializationProvider"
+179-->[androidx.emoji2:emoji2:1.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/97c686eab21ff7cb925502fb2659e72d/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
+180            android:authorities="com.meshlink.androidx-startup"
+180-->[androidx.emoji2:emoji2:1.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/97c686eab21ff7cb925502fb2659e72d/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
+181            android:exported="false" >
+181-->[androidx.emoji2:emoji2:1.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/97c686eab21ff7cb925502fb2659e72d/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
+182            <meta-data
+182-->[androidx.emoji2:emoji2:1.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/97c686eab21ff7cb925502fb2659e72d/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
+183                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+183-->[androidx.emoji2:emoji2:1.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/97c686eab21ff7cb925502fb2659e72d/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
+184                android:value="androidx.startup" />
+184-->[androidx.emoji2:emoji2:1.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/97c686eab21ff7cb925502fb2659e72d/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
+185            <meta-data
+185-->[androidx.lifecycle:lifecycle-process:2.8.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/bb5907ce0ee6a091e7b3eb7afb35dc47/transformed/lifecycle-process-2.8.0/AndroidManifest.xml:29:13-31:52
+186                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+186-->[androidx.lifecycle:lifecycle-process:2.8.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/bb5907ce0ee6a091e7b3eb7afb35dc47/transformed/lifecycle-process-2.8.0/AndroidManifest.xml:30:17-78
+187                android:value="androidx.startup" />
+187-->[androidx.lifecycle:lifecycle-process:2.8.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/bb5907ce0ee6a091e7b3eb7afb35dc47/transformed/lifecycle-process-2.8.0/AndroidManifest.xml:31:17-49
+188            <meta-data
+188-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:29:13-31:52
+189                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+189-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:30:17-85
+190                android:value="androidx.startup" />
+190-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:31:17-49
+191        </provider>
+192
+193        <uses-library
+193-->[androidx.privacysandbox.ads:ads-adservices:1.0.0-beta05] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/90b439839653ac99baf52c6925252947/transformed/ads-adservices-1.0.0-beta05/AndroidManifest.xml:23:9-25:40
+194            android:name="android.ext.adservices"
+194-->[androidx.privacysandbox.ads:ads-adservices:1.0.0-beta05] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/90b439839653ac99baf52c6925252947/transformed/ads-adservices-1.0.0-beta05/AndroidManifest.xml:24:13-50
+195            android:required="false" />
+195-->[androidx.privacysandbox.ads:ads-adservices:1.0.0-beta05] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/90b439839653ac99baf52c6925252947/transformed/ads-adservices-1.0.0-beta05/AndroidManifest.xml:25:13-37
+196
+197        <activity
+197-->[com.google.android.gms:play-services-base:18.5.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/feb2b03869db54c98b2633c6d685e809/transformed/play-services-base-18.5.0/AndroidManifest.xml:5:9-173
+198            android:name="com.google.android.gms.common.api.GoogleApiActivity"
+198-->[com.google.android.gms:play-services-base:18.5.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/feb2b03869db54c98b2633c6d685e809/transformed/play-services-base-18.5.0/AndroidManifest.xml:5:19-85
+199            android:exported="false"
+199-->[com.google.android.gms:play-services-base:18.5.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/feb2b03869db54c98b2633c6d685e809/transformed/play-services-base-18.5.0/AndroidManifest.xml:5:146-170
+200            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+200-->[com.google.android.gms:play-services-base:18.5.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/feb2b03869db54c98b2633c6d685e809/transformed/play-services-base-18.5.0/AndroidManifest.xml:5:86-145
+201
+202        <meta-data
+202-->[com.google.android.gms:play-services-basement:18.4.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/13ccc912254f7ebb634286a9cd30fd7e/transformed/play-services-basement-18.4.0/AndroidManifest.xml:6:9-122
+203            android:name="com.google.android.gms.version"
+203-->[com.google.android.gms:play-services-basement:18.4.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/13ccc912254f7ebb634286a9cd30fd7e/transformed/play-services-basement-18.4.0/AndroidManifest.xml:6:20-65
+204            android:value="@integer/google_play_services_version" />
+204-->[com.google.android.gms:play-services-basement:18.4.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/13ccc912254f7ebb634286a9cd30fd7e/transformed/play-services-basement-18.4.0/AndroidManifest.xml:6:66-119
+205
+206        <service
+206-->[com.google.android.datatransport:transport-backend-cct:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/a2dfc2e9225ae8ce99610b43a2441c13/transformed/transport-backend-cct-3.3.0/AndroidManifest.xml:26:9-32:19
+207            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+207-->[com.google.android.datatransport:transport-backend-cct:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/a2dfc2e9225ae8ce99610b43a2441c13/transformed/transport-backend-cct-3.3.0/AndroidManifest.xml:27:13-103
+208            android:exported="false" >
+208-->[com.google.android.datatransport:transport-backend-cct:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/a2dfc2e9225ae8ce99610b43a2441c13/transformed/transport-backend-cct-3.3.0/AndroidManifest.xml:28:13-37
+209            <meta-data
+209-->[com.google.android.datatransport:transport-backend-cct:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/a2dfc2e9225ae8ce99610b43a2441c13/transformed/transport-backend-cct-3.3.0/AndroidManifest.xml:29:13-31:39
+210                android:name="backend:com.google.android.datatransport.cct.CctBackendFactory"
+210-->[com.google.android.datatransport:transport-backend-cct:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/a2dfc2e9225ae8ce99610b43a2441c13/transformed/transport-backend-cct-3.3.0/AndroidManifest.xml:30:17-94
+211                android:value="cct" />
+211-->[com.google.android.datatransport:transport-backend-cct:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/a2dfc2e9225ae8ce99610b43a2441c13/transformed/transport-backend-cct-3.3.0/AndroidManifest.xml:31:17-36
+212        </service>
+213        <service
+213-->[com.google.android.datatransport:transport-runtime:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8eed2f6b1a3b104ef12fdbad70e07024/transformed/transport-runtime-3.3.0/AndroidManifest.xml:24:9-28:19
+214            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService"
+214-->[com.google.android.datatransport:transport-runtime:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8eed2f6b1a3b104ef12fdbad70e07024/transformed/transport-runtime-3.3.0/AndroidManifest.xml:25:13-117
+215            android:exported="false"
+215-->[com.google.android.datatransport:transport-runtime:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8eed2f6b1a3b104ef12fdbad70e07024/transformed/transport-runtime-3.3.0/AndroidManifest.xml:26:13-37
+216            android:permission="android.permission.BIND_JOB_SERVICE" >
+216-->[com.google.android.datatransport:transport-runtime:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8eed2f6b1a3b104ef12fdbad70e07024/transformed/transport-runtime-3.3.0/AndroidManifest.xml:27:13-69
+217        </service>
+218
+219        <receiver
+219-->[com.google.android.datatransport:transport-runtime:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8eed2f6b1a3b104ef12fdbad70e07024/transformed/transport-runtime-3.3.0/AndroidManifest.xml:30:9-32:40
+220            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"
+220-->[com.google.android.datatransport:transport-runtime:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8eed2f6b1a3b104ef12fdbad70e07024/transformed/transport-runtime-3.3.0/AndroidManifest.xml:31:13-132
+221            android:exported="false" />
+221-->[com.google.android.datatransport:transport-runtime:3.3.0] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8eed2f6b1a3b104ef12fdbad70e07024/transformed/transport-runtime-3.3.0/AndroidManifest.xml:32:13-37
+222        <receiver
+222-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:34:9-52:20
+223            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+223-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:35:13-76
+224            android:directBootAware="false"
+224-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:36:13-44
+225            android:enabled="true"
+225-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:37:13-35
+226            android:exported="true"
+226-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:38:13-36
+227            android:permission="android.permission.DUMP" >
+227-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:39:13-57
+228            <intent-filter>
+228-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:40:13-42:29
+229                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+229-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:17-91
+229-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:41:25-88
+230            </intent-filter>
+231            <intent-filter>
+231-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:43:13-45:29
+232                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+232-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:17-85
+232-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:44:25-82
+233            </intent-filter>
+234            <intent-filter>
+234-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:46:13-48:29
+235                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+235-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:17-88
+235-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:47:25-85
+236            </intent-filter>
+237            <intent-filter>
+237-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:49:13-51:29
+238                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+238-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:17-95
+238-->[androidx.profileinstaller:profileinstaller:1.3.1] /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/66128929b21dd6e9208fe79556a2de31/transformed/profileinstaller-1.3.1/AndroidManifest.xml:50:25-92
+239            </intent-filter>
+240        </receiver>
+241    </application>
+242
+243</manifest>

@@ -1,0 +1,46 @@
+package com.meshlink.di;
+
+import com.meshlink.data.local.MeshDatabase;
+import com.meshlink.data.local.RelayDao;
+import dagger.internal.DaggerGenerated;
+import dagger.internal.Factory;
+import dagger.internal.Preconditions;
+import dagger.internal.QualifierMetadata;
+import dagger.internal.ScopeMetadata;
+import javax.annotation.processing.Generated;
+import javax.inject.Provider;
+
+@ScopeMetadata("javax.inject.Singleton")
+@QualifierMetadata
+@DaggerGenerated
+@Generated(
+    value = "dagger.internal.codegen.ComponentProcessor",
+    comments = "https://dagger.dev"
+)
+@SuppressWarnings({
+    "unchecked",
+    "rawtypes",
+    "KotlinInternal",
+    "KotlinInternalInJava",
+    "cast"
+})
+public final class AppModule_ProvideRelayDaoFactory implements Factory<RelayDao> {
+  private final Provider<MeshDatabase> dbProvider;
+
+  public AppModule_ProvideRelayDaoFactory(Provider<MeshDatabase> dbProvider) {
+    this.dbProvider = dbProvider;
+  }
+
+  @Override
+  public RelayDao get() {
+    return provideRelayDao(dbProvider.get());
+  }
+
+  public static AppModule_ProvideRelayDaoFactory create(Provider<MeshDatabase> dbProvider) {
+    return new AppModule_ProvideRelayDaoFactory(dbProvider);
+  }
+
+  public static RelayDao provideRelayDao(MeshDatabase db) {
+    return Preconditions.checkNotNullFromProvides(AppModule.INSTANCE.provideRelayDao(db));
+  }
+}

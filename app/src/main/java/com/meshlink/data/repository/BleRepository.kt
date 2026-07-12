@@ -60,8 +60,7 @@ class BleRepository @Inject constructor(
     private fun normalizePeerId(peerIdOrAddress: String): String {
         if (BleConstants.isBluetoothAddress(peerIdOrAddress)) {
             val routedPeerId = meshRouter.routeTable.entries
-                .firstOrNull { it.value == peerIdOrAddress }
-                ?.key
+                .firstOrNull { it.value.nextHop == peerIdOrAddress }?.key
             if (routedPeerId != null) return routedPeerId
 
             return scannedDevices.value.values
@@ -79,7 +78,7 @@ class BleRepository @Inject constructor(
         if (BleConstants.isBluetoothAddress(peerIdOrAddress)) return peerIdOrAddress
 
         val targetId = networkId(peerIdOrAddress)
-        val routeAddress = meshRouter.routeTable[targetId]
+        val routeAddress = meshRouter.routeTable[targetId]?.nextHop
         if (routeAddress != null && BleConstants.isBluetoothAddress(routeAddress)) {
             return routeAddress
         }
@@ -113,6 +112,9 @@ class BleRepository @Inject constructor(
                         PacketType.MEDIA_CHUNK,
                         PacketType.MEDIA_ACK,
                         PacketType.MEDIA_NACK -> {
+                            if (packet.type == PacketType.MEDIA_META && packet.transferId != null) {
+                                insertPlaceholderIncomingMedia(packet)
+                            }
                             val completed = mediaTransferManager.handleIncomingMediaPacket(packet)
                             if (completed != null) {
                                 receiveMediaMessage(completed)
@@ -124,9 +126,27 @@ class BleRepository @Inject constructor(
                         PacketType.SOS -> {
                             receiveSosMessage(packet)
                         }
+                        PacketType.DELIVERY_ACK -> {
+                            chatDao.updateMessageStatus(packet.payload, DeliveryStatus.DELIVERED)
+                        }
+                        PacketType.READ_RECEIPT -> {
+                            chatDao.updateMessageStatus(packet.payload, DeliveryStatus.SEEN)
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error handling packet: ${e.message}")
+                }
+            }
+        }
+
+        // Phase 4: Handle Media Transfer failures
+        CoroutineScope(Dispatchers.IO).launch {
+            transferProgress.collect { progressMap ->
+                progressMap.forEach { (transferId, progress) ->
+                    if (progress < 0f) {
+                        // Transfer failed (e.g. timeout)
+                        chatDao.updateMessageStatus(transferId, DeliveryStatus.FAILED)
+                    }
                 }
             }
         }
@@ -446,6 +466,20 @@ class BleRepository @Inject constructor(
             messageType = MessageType.TEXT
         )
         chatDao.insertMessageAndUpdateChat(message, senderName)
+
+        // FIX: Phase 3 - Send Delivery ACK
+        userRepository.getLocalUser()?.let { user ->
+            val localPeerId = networkId(user.meshId)
+            val ackPacket = MeshPacket(
+                senderId = localPeerId,
+                targetId = packet.senderId,
+                payload = packet.packetId,
+                type = PacketType.DELIVERY_ACK,
+                encrypted = false
+            )
+            dispatchSinglePacket(packet.senderId, ackPacket)
+        }
+
         NotificationHelper.showMessageNotification(context, packet.senderId, senderName, plaintext)
     }
 
@@ -540,7 +574,57 @@ class BleRepository @Inject constructor(
             mediaPath = completed.filePath
         )
         chatDao.insertMessageAndUpdateChat(message, senderName)
+        
+        // FIX: Phase 3 - Send Delivery ACK for Media
+        userRepository.getLocalUser()?.let { user ->
+            val localPeerId = networkId(user.meshId)
+            val ackPacket = MeshPacket(
+                senderId = localPeerId,
+                targetId = completed.senderId,
+                payload = completed.transferId,
+                type = PacketType.DELIVERY_ACK,
+                encrypted = false
+            )
+            dispatchSinglePacket(completed.senderId, ackPacket)
+        }
+
         NotificationHelper.showMessageNotification(context, completed.senderId, senderName, previewText)
+    }
+
+    private suspend fun insertPlaceholderIncomingMedia(packet: MeshPacket) {
+        val transferId = packet.transferId ?: return
+        if (chatDao.getMessageByUuid(transferId) != null) return // Already have a placeholder or completed message
+
+        val isImage = packet.mimeType?.contains("image") == true
+        val isVoice = packet.mimeType?.contains("audio") == true
+
+        val messageType = when {
+            isImage -> MessageType.IMAGE
+            isVoice -> MessageType.VOICE
+            else -> MessageType.TEXT
+        }
+
+        val previewText = when {
+            isImage -> "📷 Receiving Image..."
+            isVoice -> "🎤 Receiving Voice Note..."
+            else -> "📎 Receiving File..."
+        }
+
+        val chatId = incomingChatId(packet.senderId)
+        val senderName = packet.senderId.takeLast(8)
+
+        val message = MessageEntity(
+            messageId = transferId,
+            chatId = chatId,
+            senderId = packet.senderId,
+            text = previewText,
+            timestamp = System.currentTimeMillis(),
+            isFromMe = false,
+            status = DeliveryStatus.PENDING,
+            messageType = messageType,
+            mediaPath = null // Missing until complete
+        )
+        chatDao.insertMessageAndUpdateChat(message, senderName)
     }
 
     // ────────── Voice Notes (ENCRYPTED metadata) ──────────
@@ -671,6 +755,48 @@ class BleRepository @Inject constructor(
             batteryPercent = battery
         )
         chatDao.insertMessageAndUpdateChat(message, senderName)
+        
+        // FIX: Phase 3 - Send Delivery ACK for Location
+        userRepository.getLocalUser()?.let { user ->
+            val localPeerId = networkId(user.meshId)
+            val ackPacket = MeshPacket(
+                senderId = localPeerId,
+                targetId = packet.senderId,
+                payload = packet.packetId,
+                type = PacketType.DELIVERY_ACK,
+                encrypted = false
+            )
+            dispatchSinglePacket(packet.senderId, ackPacket)
+        }
+    }
+
+    // ────────── Read Receipts ──────────
+
+    suspend fun sendReadReceipts(chatId: String) {
+        val unreadIds = chatDao.getUnreadIncomingMessages(chatId)
+        if (unreadIds.isEmpty()) return
+
+        val user = userRepository.getLocalUser() ?: return
+        val localPeerId = networkId(user.meshId)
+
+        // Mark as seen locally
+        chatDao.markMessagesAsSeen(unreadIds)
+
+        // Send READ_RECEIPT packets
+        // The chatId is the target meshId (for direct chats)
+        val targetPeerId = outgoingChatId(chatId)
+        if (targetPeerId == "BROADCAST") return // No read receipts for broadcasts
+
+        unreadIds.forEach { msgId ->
+            val receiptPacket = MeshPacket(
+                senderId = localPeerId,
+                targetId = targetPeerId,
+                payload = msgId, // The ID of the message being marked as seen
+                type = PacketType.READ_RECEIPT,
+                encrypted = false
+            )
+            dispatchSinglePacket(targetPeerId, receiptPacket)
+        }
     }
 
     // ────────── SOS Broadcast (UNENCRYPTED — emergency must be readable by all) ──────────
@@ -743,6 +869,8 @@ class BleRepository @Inject constructor(
 
     // FIX ERROR 3: Store received broadcast TEXT packets in the BROADCAST chatId
     private suspend fun receiveBroadcastTextMessage(packet: MeshPacket) {
+        if (chatDao.getMessageByUuid(packet.packetId) != null) return // Ignore duplicate
+
         val rawPayload = packet.payload
         val (plaintext, senderName) = try {
             val json = JSONObject(rawPayload)
@@ -767,6 +895,8 @@ class BleRepository @Inject constructor(
 
 
     private suspend fun receiveSosMessage(packet: MeshPacket) {
+        if (chatDao.getMessageByUuid(packet.packetId) != null) return // Ignore duplicate
+
         val json = try { JSONObject(packet.payload) } catch (_: Exception) { return }
         val lat = json.optDouble("lat", 0.0)
         val lng = json.optDouble("lng", 0.0)

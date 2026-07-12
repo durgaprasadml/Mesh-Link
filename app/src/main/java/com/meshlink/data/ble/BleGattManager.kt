@@ -87,12 +87,14 @@ class BleGattManager(private val context: Context) {
         activeClients[address] = device.connectGatt(context, false, clientCallback)
     }
 
-    fun broadcastPacket(jsonPacket: String, excludeAddress: String? = null) {
+    fun broadcastPacket(jsonPacket: String, excludeAddress: String? = null, includeAddress: String? = null) {
         val bytes = jsonPacket.toByteArray(Charsets.UTF_8)
         
         // Dispatch to Nodes we initiated connection to
         activeClients.forEach { (address, _) ->
-            if (address != excludeAddress) {
+            if (includeAddress != null) {
+                if (address == includeAddress) enqueueClientWrite(address, bytes)
+            } else if (address != excludeAddress) {
                 enqueueClientWrite(address, bytes)
             }
         }
@@ -104,7 +106,9 @@ class BleGattManager(private val context: Context) {
             
             if (char != null) {
                 connectedServers.forEach { (address, device) ->
-                    if (address != excludeAddress) {
+                    if (includeAddress != null) {
+                        if (address == includeAddress) sendFragmentedNotification(device, char, bytes)
+                    } else if (address != excludeAddress) {
                         sendFragmentedNotification(device, char, bytes)
                     }
                 }

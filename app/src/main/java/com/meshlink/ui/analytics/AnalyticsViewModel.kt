@@ -21,5 +21,5 @@ class AnalyticsViewModel @Inject constructor(
         get() = meshRouter.routeTable.size
 
     val routeTable: Map<String, String>
-        get() = meshRouter.routeTable.toMap()
+        get() = meshRouter.routeTable.mapValues { it.value.nextHop }
 }

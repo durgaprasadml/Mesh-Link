@@ -86,7 +86,8 @@ class MediaTransferManager(
         val senderId: String,
         val targetId: String,
         val totalChunks: Int,
-        val mimeType: String
+        val mimeType: String,
+        val sha256: String? = null
     )
 
     data class CompletedTransfer(
@@ -194,11 +195,15 @@ class MediaTransferManager(
 
         val packets = mutableListOf<MeshPacket>()
 
+        // Compute SHA-256 of raw data
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val sha256 = md.digest(data).joinToString("") { "%02x".format(it) }
+
         // Req. 2: META packet first
         packets.add(MeshPacket(
             senderId    = senderId,
             targetId    = targetId,
-            payload     = "MEDIA:$mimeType",
+            payload     = "MEDIA:$mimeType:$sha256",
             type        = PacketType.MEDIA_META,
             transferId  = transferId,
             chunkIndex  = 0,
@@ -253,11 +258,15 @@ class MediaTransferManager(
             Log.w(TAG, "Rejected incoming $transferId: unsupported MIME '$mimeType'")
             return null
         }
+        val parts = packet.payload.split(":")
+        val parsedSha256 = if (parts.size >= 3) parts[2] else null
+
         transferMeta[transferId] = TransferMeta(
             senderId    = packet.senderId,
             targetId    = packet.targetId,
             totalChunks = packet.totalChunks,
-            mimeType    = mimeType
+            mimeType    = mimeType,
+            sha256      = parsedSha256
         )
         incomingBuffers.getOrPut(transferId) { ConcurrentHashMap() }
         updateProgress(transferId, 0f)
@@ -471,6 +480,17 @@ class MediaTransferManager(
                 Log.e(TAG, "[$transferId] Decoded bytes are empty")
                 cleanupIncoming(transferId)
                 return null
+            }
+
+            // Verify checksum if available
+            if (meta.sha256 != null) {
+                val md = java.security.MessageDigest.getInstance("SHA-256")
+                val computedSha256 = md.digest(fileBytes).joinToString("") { "%02x".format(it) }
+                if (computedSha256 != meta.sha256) {
+                    Log.e(TAG, "[$transferId] Checksum mismatch: expected ${meta.sha256}, got $computedSha256")
+                    cleanupIncoming(transferId)
+                    return null
+                }
             }
 
             val extension = mimeToExtension(meta.mimeType)

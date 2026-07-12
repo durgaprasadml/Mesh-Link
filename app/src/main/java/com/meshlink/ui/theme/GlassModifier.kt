@@ -18,6 +18,6 @@ fun Modifier.glassBackground(
     
     return this
         .clip(RoundedCornerShape(16.dp))
-        .background(backgroundColor)
+        .background(color = backgroundColor)
         .border(1.dp, borderColor, RoundedCornerShape(16.dp))
 }

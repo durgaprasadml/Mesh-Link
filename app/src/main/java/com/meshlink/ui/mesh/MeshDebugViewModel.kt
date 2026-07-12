@@ -16,7 +16,7 @@ class MeshDebugViewModel @Inject constructor(
     val scannedDevices = bleRepository.scannedDevices
     
     fun getKnownRoutes(): Map<String, String> {
-        return bleRepository.meshRouter.routeTable.toMap()
+        return bleRepository.meshRouter.routeTable.mapValues { it.value.nextHop }
     }
     
     fun getLocalIdentifier(): String {

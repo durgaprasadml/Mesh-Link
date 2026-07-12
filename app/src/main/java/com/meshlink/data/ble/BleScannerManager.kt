@@ -83,8 +83,9 @@ class BleScannerManager(private val context: Context) {
         
         scanner.startScan(listOf(filter), settings, scanCallback)
         
-        // Stale Device Cleanup Coroutine Loop
+        // Stale Device Cleanup Coroutine Loop & Scan Timeout Recovery
         cleanupJob = scope.launch {
+            var lastScanRestartTime = System.currentTimeMillis()
             while (isActive) {
                 delay(5000)
                 val now = System.currentTimeMillis()
@@ -96,6 +97,22 @@ class BleScannerManager(private val context: Context) {
                     keysToRemove.forEach { lastSeenMap.remove(it) }
                     _scannedDevices.update { current ->
                         current.filterKeys { it !in keysToRemove }
+                    }
+                }
+
+                // FIX: Scan timeout recovery - Android downgrades scans >30 mins to opportunistic.
+                // Restart scan every 15 minutes to keep it in low latency mode continuously.
+                if (now - lastScanRestartTime > 15 * 60 * 1000L) {
+                    Log.d(TAG, "15-minute scan refresh to avoid opportunistic downgrade.")
+                    lastScanRestartTime = now
+                    try {
+                        scanCallback?.let {
+                            scanner.stopScan(it)
+                            delay(1000)
+                            scanner.startScan(listOf(filter), settings, it)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to refresh scan: ${e.message}")
                     }
                 }
             }
@@ -123,17 +140,23 @@ class BleScannerManager(private val context: Context) {
         val dataString = serviceData
             ?.takeIf { it.isNotEmpty() }
             ?.toString(Charsets.UTF_8)
-            .orEmpty()
+            
+        if (dataString == null) {
+            // Ignore incomplete scans (e.g. passive scan hits without scanResponse data)
+            // We MUST have the meshId to route messages to them.
+            return
+        }
 
         val parts = dataString.split("|", limit = 2)
         val meshPreview = parts.getOrNull(0)
             ?.ifBlank { null }
             ?.let(BleConstants::toNetworkId)
-            ?: deviceAddress
+            ?: return // Must have a meshId
+
         val displayName = parts.getOrNull(1)?.ifBlank { null }
             ?: record.deviceName
             ?: result.device.name
-            ?: "Peer ${deviceAddress.takeLast(5)}"
+            ?: "Peer ${meshPreview.takeLast(5)}"
 
         val bleDevice = BleDevice(
             meshId = meshPreview,

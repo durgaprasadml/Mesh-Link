@@ -148,6 +148,7 @@ class ChatDetailViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 chatDao.markChatAsRead(address)
+                bleRepository.sendReadReceipts(address)
             } catch (e: Exception) {
                 Log.w("ChatDetailVM", "markChatAsRead failed: ${e.message}")
             }
@@ -158,6 +159,21 @@ class ChatDetailViewModel @Inject constructor(
         if (address.isBlank()) return
         viewModelScope.launch {
             bleRepository.sendImage(rawPeerIdOrAddress.ifBlank { address }, uri, name)
+        }
+    }
+
+    fun retryTransfer(messageId: String) {
+        viewModelScope.launch {
+            val msg = chatDao.getMessageByUuid(messageId) ?: return@launch
+            if (msg.status == com.meshlink.data.local.DeliveryStatus.FAILED && msg.mediaPath != null) {
+                // Resume upload from the beginning (manual retry)
+                val uri = Uri.parse(msg.mediaPath)
+                if (msg.messageType == com.meshlink.data.local.MessageType.IMAGE) {
+                    bleRepository.sendImage(rawPeerIdOrAddress.ifBlank { address }, uri, name)
+                } else if (msg.messageType == com.meshlink.data.local.MessageType.VOICE) {
+                    bleRepository.sendVoiceNote(rawPeerIdOrAddress.ifBlank { address }, msg.mediaPath, msg.mediaDurationMs ?: 0L, name)
+                }
+            }
         }
     }
 

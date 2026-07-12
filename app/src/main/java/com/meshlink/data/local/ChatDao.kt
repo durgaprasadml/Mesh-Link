@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ChatDao {
+    @Query("SELECT * FROM messages WHERE messageId = :messageId LIMIT 1")
+    suspend fun getMessageByUuid(messageId: String): MessageEntity?
+
     @Query("SELECT * FROM chats ORDER BY lastMessageAt DESC")
     fun getAllChats(): Flow<List<ChatEntity>>
 
@@ -30,8 +33,20 @@ interface ChatDao {
     @Query("SELECT * FROM messages WHERE status = :status")
     suspend fun getMessagesByStatus(status: DeliveryStatus): List<MessageEntity>
 
+    @Query("UPDATE messages SET status = :status, text = :text, mediaPath = :mediaPath WHERE messageId = :messageId")
+    suspend fun updateMediaMessage(messageId: String, status: DeliveryStatus, text: String, mediaPath: String?)
+
     @Transaction
     suspend fun insertMessageAndUpdateChat(message: MessageEntity, chatName: String) {
+        val existing = getMessageByUuid(message.messageId)
+        if (existing != null) {
+            if (existing.status == DeliveryStatus.PENDING && existing.mediaPath == null) {
+                // Update placeholder to completed
+                updateMediaMessage(message.messageId, message.status, message.text, message.mediaPath)
+            }
+            return // Ignore duplicate
+        }
+        
         insertMessage(message)
         var chat = getChatById(message.chatId)
         if (chat == null) {
@@ -54,6 +69,12 @@ interface ChatDao {
 
     @Query("UPDATE chats SET unreadCount = 0 WHERE id = :chatId")
     suspend fun markChatAsRead(chatId: String)
+
+    @Query("SELECT messageId FROM messages WHERE chatId = :chatId AND isFromMe = 0 AND status = 'DELIVERED'")
+    suspend fun getUnreadIncomingMessages(chatId: String): List<String>
+
+    @Query("UPDATE messages SET status = 'SEEN' WHERE messageId IN (:messageIds)")
+    suspend fun markMessagesAsSeen(messageIds: List<String>)
 
     @Query("DELETE FROM messages WHERE messageId = :messageId")
     suspend fun deleteMessage(messageId: String)

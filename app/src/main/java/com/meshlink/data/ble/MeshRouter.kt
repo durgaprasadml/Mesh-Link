@@ -31,7 +31,13 @@ class MeshRouter @Inject constructor(
 
     var localMeshId: String = ""
 
-    val routeTable = ConcurrentHashMap<String, String>()
+    data class RouteEntry(
+        val nextHop: String,
+        val hops: Int,
+        val lastSeen: Long
+    )
+
+    val routeTable = ConcurrentHashMap<String, RouteEntry>()
 
     private val processedPackets: MutableSet<String> = Collections.synchronizedSet(
         object : LinkedHashSet<String>() {
@@ -55,8 +61,8 @@ class MeshRouter @Inject constructor(
 
     init {
         observeIncoming()
-        startStoreAndForwardLoop()
         startReconnectLoop()
+        startRouteCleanupLoop()
     }
 
     // ─────────────────── Incoming Observation ───────────────────
@@ -149,7 +155,7 @@ class MeshRouter @Inject constructor(
         scope.launch {
             while (isActive) {
                 delay(RECONNECT_INTERVAL_MS)
-                val knownAddresses = routeTable.values.filter { it.isNotBlank() }
+                val knownAddresses = routeTable.values.map { it.nextHop }.filter { it.isNotBlank() }
                 if (knownAddresses.isNotEmpty() && gattManager.activeClients.isEmpty() && gattManager.connectedServers.isEmpty()) {
                     Log.d(TAG, "Reconnect loop: retrying ${knownAddresses.size} known peer(s)")
                     knownAddresses.forEach { address ->
@@ -160,6 +166,19 @@ class MeshRouter @Inject constructor(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // ─────────────────── Route Cleanup Loop ───────────────────
+
+    private fun startRouteCleanupLoop() {
+        scope.launch {
+            while (isActive) {
+                delay(60_000L) // Check every minute
+                val now = System.currentTimeMillis()
+                val expiredThreshold = 15 * 60 * 1000L // 15 minutes
+                routeTable.entries.removeIf { now - it.value.lastSeen > expiredThreshold }
             }
         }
     }
@@ -187,8 +206,19 @@ class MeshRouter @Inject constructor(
             return
         }
 
-        // Route learning
-        routeTable[packet.senderId] = immediateSenderAddress
+        // Route learning - update if new route is shorter or existing route is older than 5 mins
+        val now = System.currentTimeMillis()
+        val existingRoute = routeTable[packet.senderId]
+        if (existingRoute == null || 
+            packet.hopCount <= existingRoute.hops || 
+            (now - existingRoute.lastSeen) > 5 * 60 * 1000L) {
+            routeTable[packet.senderId] = RouteEntry(
+                nextHop = immediateSenderAddress,
+                hops = packet.hopCount,
+                lastSeen = now
+            )
+        }
+
         Log.d(TAG, "Packet [${packet.type}] from=${packet.senderId.takeLast(6)} target=${packet.targetId.takeLast(6)} ttl=${packet.ttl} hops=${packet.hopCount}")
 
         analytics.recordNodeSeen(packet.senderId)
@@ -242,12 +272,21 @@ class MeshRouter @Inject constructor(
         val hasPeersToForward = connectedNodes.any { it != immediateSenderAddress }
 
         if (hasPeersToForward) {
-            // Forward immediately — do NOT also store in relay DB
-            gattManager.broadcastPacket(forwardedJson, excludeAddress = immediateSenderAddress)
-            if (immediateSenderAddress != "WIFI_DIRECT_NODE") {
-                wifiDirectManager.broadcastThroughput(forwardedJson)
+            // Relay optimization: If we have a known route for the target (and it's not broadcast), 
+            // try to send ONLY to the next hop instead of broadcasting to everyone.
+            val targetRoute = routeTable[packet.targetId]
+            if (targetRoute != null && connectedNodes.contains(targetRoute.nextHop) && targetRoute.nextHop != immediateSenderAddress) {
+                // Send only to the specific next hop
+                gattManager.broadcastPacket(forwardedJson, includeAddress = targetRoute.nextHop)
+                Log.d(TAG, "Directed relay ${packet.packetId.takeLast(6)} via ${targetRoute.nextHop}")
+            } else {
+                // Broadcast to all except sender
+                gattManager.broadcastPacket(forwardedJson, excludeAddress = immediateSenderAddress)
+                if (immediateSenderAddress != "WIFI_DIRECT_NODE") {
+                    wifiDirectManager.broadcastThroughput(forwardedJson)
+                }
+                Log.d(TAG, "Forwarded ${packet.packetId.takeLast(6)} immediately (ttl=${relayPacket.ttl})")
             }
-            Log.d(TAG, "Forwarded ${packet.packetId.takeLast(6)} immediately (ttl=${relayPacket.ttl})")
         } else if (!isAckNack) {
             // No peers available — store for later (skip for ephemeral ACK/NACK)
             scope.launch {
@@ -306,7 +345,16 @@ class MeshRouter @Inject constructor(
         Log.d(TAG, "sendPayload → $targetId (encrypted=$encrypted, packetId=${packet.packetId.takeLast(6)})")
 
         wifiDirectManager.broadcastThroughput(json)
-        gattManager.broadcastPacket(json)
+        
+        // Direct sending optimization
+        val targetRoute = routeTable[targetId]
+        val connectedNodes = gattManager.connectedServers.keys + gattManager.activeClients.keys
+        if (targetRoute != null && connectedNodes.contains(targetRoute.nextHop)) {
+            gattManager.broadcastPacket(json, includeAddress = targetRoute.nextHop)
+            Log.d(TAG, "Directed send via ${targetRoute.nextHop}")
+        } else {
+            gattManager.broadcastPacket(json)
+        }
     }
 
     fun sendMediaPacket(packet: MeshPacket) {
@@ -317,7 +365,15 @@ class MeshRouter @Inject constructor(
         Log.d(TAG, "sendMediaPacket [${packet.type}] transferId=${packet.transferId?.takeLast(6)} chunk=${packet.chunkIndex}/${packet.totalChunks}")
 
         wifiDirectManager.broadcastThroughput(json)
-        gattManager.broadcastPacket(json)
+        
+        // Direct sending optimization for media
+        val targetRoute = routeTable[packet.targetId]
+        val connectedNodes = gattManager.connectedServers.keys + gattManager.activeClients.keys
+        if (targetRoute != null && connectedNodes.contains(targetRoute.nextHop)) {
+            gattManager.broadcastPacket(json, includeAddress = targetRoute.nextHop)
+        } else {
+            gattManager.broadcastPacket(json)
+        }
     }
 
     fun broadcastKeyExchange(

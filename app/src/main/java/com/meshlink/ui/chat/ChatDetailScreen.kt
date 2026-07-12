@@ -56,6 +56,7 @@ fun ChatDetailScreen(
     val currentlyPlaying by viewModel.currentlyPlaying.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
     val connectionStatus by viewModel.connectionStatus.collectAsState()
+    val transferProgress by viewModel.transferProgress.collectAsState()
 
     val selectedMessageIds by viewModel.selectedMessageIds.collectAsState()
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
@@ -328,12 +329,15 @@ fun ChatDetailScreen(
         ) {
             items(messages, key = { it.localId }) { msg ->
                 val isSelected = selectedMessageIds.contains(msg.messageId)
+                val msgTransferProgress = transferProgress[msg.messageId]
+
                 MessageBubble(
                     message = msg,
                     isSelected = isSelected,
                     isSelectionMode = isSelectionMode,
                     currentlyPlaying = currentlyPlaying,
                     playbackProgress = playbackProgress,
+                    transferProgress = msgTransferProgress,
                     onToggleSelection = { viewModel.toggleMessageSelection(msg.messageId) },
                     onPlayVoice = { viewModel.playVoice(it) },
                     onStopPlayback = { viewModel.stopPlayback() },
@@ -348,7 +352,8 @@ fun ChatDetailScreen(
                                 }
                             } catch (_: Exception) { /* No map app installed — ignore */ }
                         }
-                    }
+                    },
+                    onRetryMedia = { viewModel.retryTransfer(it) }
                 )
             }
         }
@@ -363,11 +368,13 @@ fun MessageBubble(
     isSelectionMode: Boolean,
     currentlyPlaying: String?,
     playbackProgress: Float,
+    transferProgress: Float?,
     onToggleSelection: () -> Unit,
     onPlayVoice: (String) -> Unit,
     onStopPlayback: () -> Unit,
     onImageClick: (String) -> Unit,
-    onLocationClick: (Double, Double) -> Unit
+    onLocationClick: (Double, Double) -> Unit,
+    onRetryMedia: (String) -> Unit
 ) {
     val isMe = message.isFromMe
     val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -425,9 +432,26 @@ fun MessageBubble(
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
                                 Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(36.dp))
-                                Text("Image unavailable", style = MaterialTheme.typography.labelSmall)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(if (message.isFromMe) "Sending image..." else "Receiving image...", style = MaterialTheme.typography.labelSmall)
+                                if (message.status == DeliveryStatus.FAILED) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    IconButton(
+                                        onClick = { onRetryMedia(message.messageId) },
+                                        modifier = Modifier.background(MaterialTheme.colorScheme.error, CircleShape).size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = Color.White)
+                                    }
+                                } else if (transferProgress != null && transferProgress >= 0f) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    LinearProgressIndicator(
+                                        progress = { transferProgress },
+                                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         }
                     }
@@ -459,18 +483,41 @@ fun MessageBubble(
                         }
 
                         Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
-                            LinearProgressIndicator(
-                                progress = { if (isThisPlaying) playbackProgress else 0f },
-                                modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                                color = textColor.copy(alpha = 0.8f),
-                                trackColor = textColor.copy(alpha = 0.3f)
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = if (fileExists) "🎤 $durationText" else "🎤 File missing",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = textColor.copy(alpha = 0.7f)
-                            )
+                            if (message.status == DeliveryStatus.FAILED) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                }
+                            } else if (transferProgress != null && transferProgress >= 0f && message.status == DeliveryStatus.PENDING) {
+                                // Show transfer progress instead of playback progress during transfer
+                                Text(
+                                    text = if (message.isFromMe) "Sending..." else "Receiving...",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = textColor.copy(alpha = 0.7f)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { transferProgress },
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = textColor.copy(alpha = 0.3f)
+                                )
+                            } else {
+                                LinearProgressIndicator(
+                                    progress = { if (isThisPlaying) playbackProgress else 0f },
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = textColor.copy(alpha = 0.8f),
+                                    trackColor = textColor.copy(alpha = 0.3f)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (fileExists) "🎤 $durationText" else "🎤 File missing",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = textColor.copy(alpha = 0.7f)
+                                )
+                            }
                         }
                     }
                 }

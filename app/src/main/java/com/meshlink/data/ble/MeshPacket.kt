@@ -12,7 +12,9 @@ enum class PacketType {
     MEDIA_NACK,  // Receiver requests resend of missing chunks
     LOCATION,
     SOS,
-    KEY_EXCHANGE
+    KEY_EXCHANGE,
+    DELIVERY_ACK,
+    READ_RECEIPT
 }
 
 data class MeshPacket(

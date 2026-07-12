@@ -14,3 +14,9 @@ val Pink40 = Color(0xFF7D5260)
 val DarkBackground = Color(0xFF0D1117)
 val NeonGreen = Color(0xFF00FF88)
 val TextPrimary = Color(0xFFFFFFFF)
+
+// Glass effect colors
+val GlassSurfaceDark = Color(0x1AFFFFFF)
+val GlassSurfaceLight = Color(0x1A000000)
+val GlassBorderDark = Color(0x33FFFFFF)
+val GlassBorderLight = Color(0x33000000)

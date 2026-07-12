@@ -10,9 +10,12 @@ google-services.json
 /.idea/assetWizardSettings.xml
 .DS_Store
 /build
+build/
 /captures
+captures/
 .externalNativeBuild
 .cxx
 local.properties
 *.apk
+*.aab
 app/build/

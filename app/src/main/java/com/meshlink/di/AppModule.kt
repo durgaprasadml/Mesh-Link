@@ -137,8 +137,17 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideWifiDirectManager(@ApplicationContext context: Context): com.meshlink.data.wifi.WifiDirectManager {
-        return com.meshlink.data.wifi.WifiDirectManager(context)
+    fun provideFirebaseAnalytics(@ApplicationContext context: Context): com.google.firebase.analytics.FirebaseAnalytics {
+        return com.google.firebase.analytics.FirebaseAnalytics.getInstance(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideWifiDirectManager(
+        @ApplicationContext context: Context,
+        analytics: com.google.firebase.analytics.FirebaseAnalytics
+    ): com.meshlink.data.wifi.WifiDirectManager {
+        return com.meshlink.data.wifi.WifiDirectManager(context, analytics)
     }
 
     @Provides

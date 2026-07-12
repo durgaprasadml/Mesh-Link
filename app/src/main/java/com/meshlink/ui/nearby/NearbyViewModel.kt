@@ -32,8 +32,7 @@ class NearbyViewModel @Inject constructor(
                 bleRepository.autoStartMesh()
                 
                 // Ignite Wi-Fi subsystem concurrently with Bluetooth BLE
-                wifiDirectManager.start()
-                wifiDirectManager.igniteBackgroundDiscovery()
+                wifiDirectManager.startDiscovery()
             }
         }
     }

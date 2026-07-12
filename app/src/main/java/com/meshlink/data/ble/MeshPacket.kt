@@ -14,7 +14,8 @@ enum class PacketType {
     SOS,
     KEY_EXCHANGE,
     DELIVERY_ACK,
-    READ_RECEIPT
+    READ_RECEIPT,
+    WIFI_NEGOTIATION
 }
 
 data class MeshPacket(

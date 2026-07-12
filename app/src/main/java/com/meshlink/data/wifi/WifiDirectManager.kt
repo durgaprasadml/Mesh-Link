@@ -10,28 +10,41 @@ import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
-import android.os.Looper
 import android.util.Log
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import java.io.InputStream
-import java.io.OutputStream
-import java.net.InetSocketAddress
-import java.net.ServerSocket
-import java.net.Socket
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.google.firebase.analytics.FirebaseAnalytics
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Singleton
-@SuppressLint("MissingPermission")
 class WifiDirectManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val analytics: FirebaseAnalytics
 ) {
-    private val manager: WifiP2pManager = context.getSystemService(Context.WIFI_P2P_SERVICE) as WifiP2pManager
-    private val channel: WifiP2pManager.Channel = manager.initialize(context, Looper.getMainLooper(), null)
+    companion object {
+        private const val TAG = "WifiDirectManager"
+    }
+
+    private val manager: WifiP2pManager? = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
+    private var channel: WifiP2pManager.Channel? = null
+
+    // Map of peer MAC address to WifiP2pDevice
+    private val _discoveredPeers = MutableStateFlow<Map<String, WifiP2pDevice>>(emptyMap())
+    val discoveredPeers: StateFlow<Map<String, WifiP2pDevice>> = _discoveredPeers.asStateFlow()
+
+    // Flow of connection info when a group is formed
+    private val _connectionInfo = MutableStateFlow<WifiP2pInfo?>(null)
+    val connectionInfo: StateFlow<WifiP2pInfo?> = _connectionInfo.asStateFlow()
+    
+    // Connected peer MAC address (if any)
+    private val _connectedPeerMac = MutableStateFlow<String?>(null)
+    val connectedPeerMac: StateFlow<String?> = _connectedPeerMac.asStateFlow()
+    
+    private val _localDeviceMac = MutableStateFlow<String?>(null)
+    val localDeviceMac: StateFlow<String?> = _localDeviceMac.asStateFlow()
 
     private val intentFilter = IntentFilter().apply {
         addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
@@ -40,131 +53,98 @@ class WifiDirectManager @Inject constructor(
         addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
     }
 
-    private var activeSocket: Socket? = null
-    private var isGroupOwner = false
-    private var serverSocket: ServerSocket? = null
-    
-    // Fallback indicator
-    var isTransportActive: Boolean = false
-
-    private val _incomingStreams = MutableSharedFlow<String>(extraBufferCapacity = 50)
-    val incomingStreams: SharedFlow<String> = _incomingStreams.asSharedFlow()
-
     private val receiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
+        @SuppressLint("MissingPermission")
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
+                    val state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1)
+                    val isWifiP2pEnabled = state == WifiP2pManager.WIFI_P2P_STATE_ENABLED
+                    Log.d(TAG, "P2P State Changed: Enabled=$isWifiP2pEnabled")
+                }
+                WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
+                    manager?.requestPeers(channel) { peers ->
+                        val peerMap = peers.deviceList.associateBy { it.deviceAddress }
+                        _discoveredPeers.value = peerMap
+                        Log.d(TAG, "P2P Peers Changed: Found ${peerMap.size} peers")
+                    }
+                }
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
                     val networkInfo = intent.getParcelableExtra<NetworkInfo>(WifiP2pManager.EXTRA_NETWORK_INFO)
                     if (networkInfo?.isConnected == true) {
-                        manager.requestConnectionInfo(channel) { info ->
-                            establishSocketConnection(info)
+                        manager?.requestConnectionInfo(channel) { info ->
+                            _connectionInfo.value = info
+                            Log.d(TAG, "P2P Connected! Group Owner: ${info.isGroupOwner}")
+                            
+                            // Get the connected peer MAC from the group info
+                            manager?.requestGroupInfo(channel) { group ->
+                                if (group != null) {
+                                    if (group.isGroupOwner) {
+                                        // We are owner, peer is a client
+                                        _connectedPeerMac.value = group.clientList.firstOrNull()?.deviceAddress
+                                    } else {
+                                        // We are client, peer is owner
+                                        _connectedPeerMac.value = group.owner.deviceAddress
+                                    }
+                                }
+                            }
                         }
                     } else {
-                        isTransportActive = false
-                        activeSocket?.close()
-                        activeSocket = null
+                        Log.d(TAG, "P2P Disconnected")
+                        _connectionInfo.value = null
+                        _connectedPeerMac.value = null
                     }
+                }
+                WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION -> {
+                    val device = intent.getParcelableExtra<WifiP2pDevice>(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE)
+                    _localDeviceMac.value = device?.deviceAddress
+                    Log.d(TAG, "Local P2P Device MAC: ${_localDeviceMac.value}")
                 }
             }
         }
     }
 
-    fun start() {
+    init {
+        channel = manager?.initialize(context, context.mainLooper, null)
+    }
+
+    fun registerReceiver() {
         context.registerReceiver(receiver, intentFilter)
     }
 
-    fun stop() {
-        context.unregisterReceiver(receiver)
-        activeSocket?.close()
-        serverSocket?.close()
-        manager.removeGroup(channel, null)
+    fun unregisterReceiver() {
+        try {
+            context.unregisterReceiver(receiver)
+        } catch (e: Exception) {
+            // Ignored
+        }
     }
 
-    // A fast background blind-discovery to populate Android's internal P2P tables natively
-    // We execute this concurrently with BLE discovery to satisfy the hardware OS locks
-    fun igniteBackgroundDiscovery() {
-        manager.discoverPeers(channel, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {}
-            override fun onFailure(reason: Int) {}
+    @SuppressLint("MissingPermission")
+    fun startDiscovery() {
+        manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                Log.d(TAG, "P2P Discovery Started")
+            }
+            override fun onFailure(reasonCode: Int) {
+                Log.e(TAG, "P2P Discovery Failed: $reasonCode")
+            }
         })
     }
-    
-    // Explicit Handshake requested by MeshRouter
-    // Mac is fetched over BLE mapping or manual connection
-    fun connectToPeer(deviceMac: String) {
+
+    @SuppressLint("MissingPermission")
+    fun connectToPeer(deviceAddress: String) {
         val config = WifiP2pConfig().apply {
-            deviceAddress = deviceMac
-            // Ensure fast connections bypass prompts where historically possible
+            this.deviceAddress = deviceAddress
         }
-        manager.connect(channel, config, object : WifiP2pManager.ActionListener {
+        
+        manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
-                Log.d("WifiDirect", "Negotiation bridging successfully to P2P Link...")
+                Log.d(TAG, "P2P Connect Initiated to $deviceAddress")
             }
             override fun onFailure(reason: Int) {
-                Log.e("WifiDirect", "Failed P2P Handshake: $reason")
+                Log.e(TAG, "P2P Connect Failed to $deviceAddress: $reason")
             }
         })
-    }
-
-    private fun establishSocketConnection(info: WifiP2pInfo) {
-        isTransportActive = true
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                if (info.groupFormed && info.isGroupOwner) {
-                    isGroupOwner = true
-                    serverSocket = ServerSocket(8888)
-                    activeSocket = serverSocket?.accept() // Blocking wait
-                } else if (info.groupFormed) {
-                    isGroupOwner = false
-                    val socket = Socket()
-                    socket.bind(null)
-                    // Connect directly to the Group Owner's known explicit IP
-                    socket.connect(InetSocketAddress(info.groupOwnerAddress, 8888), 5000)
-                    activeSocket = socket
-                }
-                
-                maintainSocketStream()
-                
-            } catch (e: Exception) {
-                isTransportActive = false
-                Log.e("WifiDirect", "Socket collapse: ${e.message}")
-            }
-        }
-    }
-
-    private fun maintainSocketStream() {
-        val socket = activeSocket ?: return
-        val inputStream: InputStream = socket.getInputStream()
-        val buffer = ByteArray(8192) // 8KB Wide-Band Chunking
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                while (isTransportActive) {
-                    val bytesRead = inputStream.read(buffer)
-                    if (bytesRead == -1) break
-                    
-                    val jsonPacket = String(buffer, 0, bytesRead, Charsets.UTF_8)
-                    _incomingStreams.tryEmit(jsonPacket)
-                }
-            } catch (e: Exception) {
-                isTransportActive = false
-            } finally {
-                socket.close()
-            }
-        }
-    }
-
-    fun broadcastThroughput(jsonPacket: String): Boolean {
-        if (!isTransportActive || activeSocket == null) return false
-        
-        return try {
-            val outputStream: OutputStream = activeSocket!!.getOutputStream()
-            outputStream.write(jsonPacket.toByteArray(Charsets.UTF_8))
-            outputStream.flush()
-            true
-        } catch (e: Exception) {
-            isTransportActive = false
-            false
-        }
     }
 }

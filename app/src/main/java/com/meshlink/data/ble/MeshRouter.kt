@@ -18,7 +18,6 @@ import javax.inject.Singleton
 @Singleton
 class MeshRouter @Inject constructor(
     private val gattManager: BleGattManager,
-    private val wifiDirectManager: WifiDirectManager,
     private val analytics: MeshAnalytics,
     private val relayDao: RelayDao
 ) {
@@ -74,16 +73,6 @@ class MeshRouter @Inject constructor(
                     handleIncomingPacket(sender, json)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error handling BLE packet from $sender: ${e.message}")
-                }
-            }
-        }
-
-        scope.launch {
-            wifiDirectManager.incomingStreams.collect { json ->
-                try {
-                    handleIncomingPacket("WIFI_DIRECT_NODE", json)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error handling WiFi packet: ${e.message}")
                 }
             }
         }
@@ -143,7 +132,6 @@ class MeshRouter @Inject constructor(
 
             val json = MeshPacketParser.toJson(packet)
             gattManager.broadcastPacket(json)
-            wifiDirectManager.broadcastThroughput(json)
             relayDao.deletePacket(entity.packetId)
             Log.d(TAG, "S&F: delivered ${entity.packetId.takeLast(6)}")
         }
@@ -282,9 +270,6 @@ class MeshRouter @Inject constructor(
             } else {
                 // Broadcast to all except sender
                 gattManager.broadcastPacket(forwardedJson, excludeAddress = immediateSenderAddress)
-                if (immediateSenderAddress != "WIFI_DIRECT_NODE") {
-                    wifiDirectManager.broadcastThroughput(forwardedJson)
-                }
                 Log.d(TAG, "Forwarded ${packet.packetId.takeLast(6)} immediately (ttl=${relayPacket.ttl})")
             }
         } else if (!isAckNack) {
@@ -344,8 +329,6 @@ class MeshRouter @Inject constructor(
         val json = MeshPacketParser.toJson(packet)
         Log.d(TAG, "sendPayload → $targetId (encrypted=$encrypted, packetId=${packet.packetId.takeLast(6)})")
 
-        wifiDirectManager.broadcastThroughput(json)
-        
         // Direct sending optimization
         val targetRoute = routeTable[targetId]
         val connectedNodes = gattManager.connectedServers.keys + gattManager.activeClients.keys
@@ -364,8 +347,6 @@ class MeshRouter @Inject constructor(
         val json = MeshPacketParser.toJson(packet)
         Log.d(TAG, "sendMediaPacket [${packet.type}] transferId=${packet.transferId?.takeLast(6)} chunk=${packet.chunkIndex}/${packet.totalChunks}")
 
-        wifiDirectManager.broadcastThroughput(json)
-        
         // Direct sending optimization for media
         val targetRoute = routeTable[packet.targetId]
         val connectedNodes = gattManager.connectedServers.keys + gattManager.activeClients.keys

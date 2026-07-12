@@ -22,6 +22,8 @@ import com.meshlink.util.NotificationHelper
 import org.json.JSONObject
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.repository.UserRepository
+import com.meshlink.data.wifi.WifiDirectManager
+import com.meshlink.data.wifi.WifiSocketTransport
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +48,8 @@ class BleRepository @Inject constructor(
     private val mediaTransferManager: MediaTransferManager,
     private val locationProvider: LocationProvider,
     private val cryptoManager: MeshCryptoManager,
+    private val wifiDirectManager: WifiDirectManager,
+    private val wifiSocketTransport: WifiSocketTransport,
     @ApplicationContext private val context: Context
 ) {
     companion object {
@@ -94,52 +98,20 @@ class BleRepository @Inject constructor(
             meshRouter.sendMediaPacket(packet)
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
-            incomingMeshPayloads.collect { (_, packet) ->
-                try {
-                    when (packet.type) {
-                        PacketType.KEY_EXCHANGE -> {
-                            handleKeyExchange(packet)
-                        }
-                        PacketType.TEXT -> {
-                            if (packet.targetId == "BROADCAST") {
-                                receiveBroadcastTextMessage(packet)
-                            } else {
-                                receiveMessage(packet)
-                            }
-                        }
-                        PacketType.MEDIA_META,
-                        PacketType.MEDIA_CHUNK,
-                        PacketType.MEDIA_ACK,
-                        PacketType.MEDIA_NACK -> {
-                            if (packet.type == PacketType.MEDIA_META && packet.transferId != null) {
-                                insertPlaceholderIncomingMedia(packet)
-                            }
-                            val completed = mediaTransferManager.handleIncomingMediaPacket(packet)
-                            if (completed != null) {
-                                receiveMediaMessage(completed)
-                            }
-                        }
-                        PacketType.LOCATION -> {
-                            receiveLocationMessage(packet)
-                        }
-                        PacketType.SOS -> {
-                            receiveSosMessage(packet)
-                        }
-                        PacketType.DELIVERY_ACK -> {
-                            chatDao.updateMessageStatus(packet.payload, DeliveryStatus.DELIVERED)
-                        }
-                        PacketType.READ_RECEIPT -> {
-                            chatDao.updateMessageStatus(packet.payload, DeliveryStatus.SEEN)
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error handling packet: ${e.message}")
-                }
+        // Wire WifiSocketTransport so it routes incoming packets just like MeshRouter
+        wifiSocketTransport.onPacketReceived = { packet ->
+            CoroutineScope(Dispatchers.IO).launch {
+                handleIncomingPacket(packet)
             }
         }
 
-        // Phase 4: Handle Media Transfer failures
+        CoroutineScope(Dispatchers.IO).launch {
+            incomingMeshPayloads.collect { (_, packet) ->
+                handleIncomingPacket(packet)
+            }
+    }
+
+    // Phase 4: Handle Media Transfer failures
         CoroutineScope(Dispatchers.IO).launch {
             transferProgress.collect { progressMap ->
                 progressMap.forEach { (transferId, progress) ->
@@ -165,6 +137,92 @@ class BleRepository @Inject constructor(
                     retryPendingMessages()
                 }
             }
+        }
+        
+        // Phase 6: Broadcast Wi-Fi Direct capability
+        CoroutineScope(Dispatchers.IO).launch {
+            wifiDirectManager.localDeviceMac.collect { mac ->
+                if (mac != null) {
+                    val user = userRepository.getLocalUser()
+                    if (user != null) {
+                        val localPeerId = networkId(user.meshId)
+                        val wifiPayload = JSONObject().apply {
+                            put("wifiMac", mac)
+                        }.toString()
+                        val packet = MeshPacket(
+                            senderId = localPeerId,
+                            targetId = "BROADCAST",
+                            payload = wifiPayload,
+                            type = PacketType.WIFI_NEGOTIATION,
+                            encrypted = false,
+                            ttl = 15
+                        )
+                        meshRouter.sendMediaPacket(packet)
+                    }
+                }
+            }
+        }
+        
+        // Phase 6: Observe Wi-Fi Direct Connection Lifecycle
+        CoroutineScope(Dispatchers.IO).launch {
+            wifiDirectManager.connectionInfo.collect { info ->
+                if (info != null && info.groupFormed) {
+                    if (info.isGroupOwner) {
+                        wifiSocketTransport.startServer()
+                    } else if (info.groupOwnerAddress != null) {
+                        wifiSocketTransport.connectAsClient(info.groupOwnerAddress.hostAddress)
+                    }
+                } else {
+                    wifiSocketTransport.disconnect()
+                    wifiSocketTransport.stopServer()
+                }
+            }
+        }
+    }
+
+    private suspend fun handleIncomingPacket(packet: MeshPacket) {
+        try {
+            when (packet.type) {
+                PacketType.KEY_EXCHANGE -> {
+                    handleKeyExchange(packet)
+                }
+                PacketType.TEXT -> {
+                    if (packet.targetId == "BROADCAST") {
+                        receiveBroadcastTextMessage(packet)
+                    } else {
+                        receiveMessage(packet)
+                    }
+                }
+                PacketType.MEDIA_META,
+                PacketType.MEDIA_CHUNK,
+                PacketType.MEDIA_ACK,
+                PacketType.MEDIA_NACK -> {
+                    if (packet.type == PacketType.MEDIA_META && packet.transferId != null) {
+                        insertPlaceholderIncomingMedia(packet)
+                    }
+                    val completed = mediaTransferManager.handleIncomingMediaPacket(packet)
+                    if (completed != null) {
+                        receiveMediaMessage(completed)
+                    }
+                }
+                PacketType.LOCATION -> {
+                    receiveLocationMessage(packet)
+                }
+                PacketType.SOS -> {
+                    receiveSosMessage(packet)
+                }
+                PacketType.DELIVERY_ACK -> {
+                    chatDao.updateMessageStatus(packet.payload, DeliveryStatus.DELIVERED)
+                }
+                PacketType.READ_RECEIPT -> {
+                    chatDao.updateMessageStatus(packet.payload, DeliveryStatus.SEEN)
+                }
+                PacketType.WIFI_NEGOTIATION -> {
+                    handleWifiNegotiation(packet)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling packet: ${e.message}")
         }
     }
 
@@ -529,6 +587,30 @@ class BleRepository @Inject constructor(
         )
         chatDao.insertMessageAndUpdateChat(message, chatName)
 
+        // Phase 6: Use Wi-Fi Direct if available (high-speed data plane)
+        if (wifiSocketTransport.isConnected() && wifiDirectManager.connectedPeerMac.value != null) {
+            try {
+                Log.d(TAG, "sendImage: Sending via Wi-Fi Direct socket...")
+                val base64Data = android.util.Base64.encodeToString(compressedBytes, android.util.Base64.NO_WRAP)
+                val packet = MeshPacket(
+                    packetId = messageId,
+                    senderId = localPeerId,
+                    targetId = targetPeerId,
+                    payload = base64Data,
+                    type = PacketType.MEDIA_CHUNK,
+                    transferId = messageId,
+                    mimeType = "image/jpeg",
+                    encrypted = false,
+                    totalChunks = 1
+                )
+                wifiSocketTransport.sendPacket(packet)
+                chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
+                return
+            } catch (e: Exception) {
+                Log.e(TAG, "Wi-Fi Direct socket send failed, falling back to BLE: ${e.message}")
+            }
+        }
+
         // Use reliable createAndSendChunked (30ms inter-chunk delay, ACK tracking)
         withContext(Dispatchers.IO) {
             mediaTransferManager.createAndSendChunked(
@@ -657,6 +739,30 @@ class BleRepository @Inject constructor(
             mediaDurationMs = durationMs
         )
         chatDao.insertMessageAndUpdateChat(message, chatName)
+
+        // Phase 6: Use Wi-Fi Direct if available (high-speed data plane)
+        if (wifiSocketTransport.isConnected() && wifiDirectManager.connectedPeerMac.value != null) {
+            try {
+                Log.d(TAG, "sendVoiceNote: Sending via Wi-Fi Direct socket...")
+                val base64Data = android.util.Base64.encodeToString(voiceBytes, android.util.Base64.NO_WRAP)
+                val packet = MeshPacket(
+                    packetId = messageId,
+                    senderId = localPeerId,
+                    targetId = targetPeerId,
+                    payload = base64Data,
+                    type = PacketType.MEDIA_CHUNK,
+                    transferId = messageId,
+                    mimeType = "audio/m4a",
+                    encrypted = false,
+                    totalChunks = 1
+                )
+                wifiSocketTransport.sendPacket(packet)
+                chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
+                return
+            } catch (e: Exception) {
+                Log.e(TAG, "Wi-Fi Direct socket send failed, falling back to BLE: ${e.message}")
+            }
+        }
 
         val packets = withContext(Dispatchers.Default) {
             mediaTransferManager.createChunkedPackets(
@@ -891,6 +997,18 @@ class BleRepository @Inject constructor(
         )
         chatDao.insertMessage(message)
         NotificationHelper.showMessageNotification(context, packet.senderId, "📢 $senderName", plaintext)
+    }
+    
+    private suspend fun handleWifiNegotiation(packet: MeshPacket) {
+        // Automatically negotiate Wi-Fi Direct connection when receiving a peer's MAC
+        val json = try { JSONObject(packet.payload) } catch (_: Exception) { return }
+        val peerMac = json.optString("wifiMac")
+        if (peerMac.isNotEmpty()) {
+            Log.d(TAG, "Received Wi-Fi Direct MAC from peer: $peerMac, initiating connect...")
+            withContext(Dispatchers.Main) {
+                wifiDirectManager.connectToPeer(peerMac)
+            }
+        }
     }
 
 

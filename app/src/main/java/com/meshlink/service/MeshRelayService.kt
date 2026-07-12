@@ -108,12 +108,14 @@ class MeshRelayService : Service() {
         }
 
         // FIX Issue 5: Periodically refresh BLE advertising/scanning to prevent
-        // aggressive OEM battery managers from killing BLE
+        // aggressive OEM battery managers from killing BLE.
+        // Also renews the WakeLock so it never expires mid-session.
         serviceScope.launch {
             while (isActive) {
                 delay(BLE_REFRESH_INTERVAL_MS)
                 try {
                     bleRepository.autoStartMesh()
+                    renewWakeLock() // Renew every 2 min — lock was acquired for 10 min max
                     Log.d(TAG, "BLE refresh cycle completed")
                 } catch (e: Exception) {
                     Log.w(TAG, "BLE refresh failed: ${e.message}")
@@ -131,8 +133,21 @@ class MeshRelayService : Service() {
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "MeshLink::MeshRelayWakeLock"
             ).apply {
-                acquire(10 * 60 * 1000L) // 10 minutes max, renewed by BLE refresh loop
+                acquire(10 * 60 * 1000L) // 10 minutes initial acquisition
             }
+        }
+    }
+
+    /** Renew the WakeLock for another 10-minute window. Called every 2 minutes from BLE refresh. */
+    private fun renewWakeLock() {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        // Release old lock and acquire a fresh one to reset the timer
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = pm.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "MeshLink::MeshRelayWakeLock"
+        ).apply {
+            acquire(10 * 60 * 1000L)
         }
     }
 

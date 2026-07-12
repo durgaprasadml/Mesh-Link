@@ -22,7 +22,6 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import net.zetetic.database.sqlcipher.SQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import javax.inject.Singleton
 
@@ -38,10 +37,8 @@ object AppModule {
     @Provides
     @Singleton
     fun provideMeshDatabase(@ApplicationContext context: Context): MeshDatabase {
-        // Ensure SQLCipher native libraries are loaded
-        System.loadLibrary("sqlcipher")
-
-        // Generate a stable DB passphrase from the app's unique installation
+        // SQLCipher native libraries are loaded once in MeshLinkApp.onCreate().
+        // Generate a stable DB passphrase from the app's unique installation.
         val prefs = context.getSharedPreferences("mesh_db_config", Context.MODE_PRIVATE)
         var passphrase = prefs.getString("db_passphrase", null)
         if (passphrase == null) {
@@ -50,27 +47,6 @@ object AppModule {
         }
 
         val factory = SupportOpenHelperFactory(passphrase.toByteArray())
-
-        // Validate database file and passphrase
-        val dbFile = context.getDatabasePath("mesh_db")
-        if (dbFile.exists()) {
-            try {
-                // Attempt to open the database directly to verify the passphrase.
-                // SQLCipher for Android often uses a Hook or specific open method.
-                // We'll use the most common one for net.zetetic.database.sqlcipher
-                val db = SQLiteDatabase.openDatabase(
-                    dbFile.absolutePath,
-                    passphrase,
-                    null,
-                    SQLiteDatabase.OPEN_READONLY,
-                    null
-                )
-                db.close()
-            } catch (e: Exception) {
-                // If opening fails (e.g., wrong passphrase), delete the corrupted/unreadable DB
-                context.deleteDatabase("mesh_db")
-            }
-        }
 
         return Room.databaseBuilder(
             context,

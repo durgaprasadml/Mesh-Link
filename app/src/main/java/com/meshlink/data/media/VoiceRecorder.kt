@@ -21,6 +21,7 @@ class VoiceRecorder @Inject constructor(
         private const val TAG = "VoiceRecorder"
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var recorder: MediaRecorder? = null
     private var outputFile: File? = null
     private var timerJob: Job? = null
@@ -60,7 +61,7 @@ class VoiceRecorder @Inject constructor(
             _elapsedMs.value = 0L
 
             // Timer with auto-stop at 10 seconds
-            timerJob = CoroutineScope(Dispatchers.Default).launch {
+            timerJob = scope.launch {
                 val startTime = System.currentTimeMillis()
                 while (isActive && _isRecording.value) {
                     val elapsed = System.currentTimeMillis() - startTime

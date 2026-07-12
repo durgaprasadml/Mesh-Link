@@ -144,7 +144,8 @@ fun ChatDetailScreen(
                 },
                 onCameraClick = {
                     showAttachmentSheet = false
-                    // TODO: Wire camera intent
+                    // Camera capture deferred to Phase 7 (Background Relay Service).
+                    // Use gallery picker (above) to send photos in the current build.
                 },
                 onLocationClick = {
                     showAttachmentSheet = false

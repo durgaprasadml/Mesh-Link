@@ -34,8 +34,6 @@ object NotificationHelper {
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // NotificationChannel is required for Android O+ (API 26+)
-        // Since minSdk is 26, we don't strictly need the check, but it's good practice.
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Messages",
@@ -43,12 +41,27 @@ object NotificationHelper {
         )
         notificationManager.createNotificationChannel(channel)
 
+        // Tap-to-open: launch MainActivity and navigate to the correct chat
+        val openChatIntent = android.content.Intent(context, MainActivity::class.java).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("address", senderId)
+            putExtra("name", senderName)
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            context,
+            senderId.hashCode(),
+            openChatIntent,
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(senderName)
             .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
             .build()
 
         notificationManager.notify(senderId.hashCode(), notification)

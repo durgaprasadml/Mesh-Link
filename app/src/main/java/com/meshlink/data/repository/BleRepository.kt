@@ -100,19 +100,19 @@ class BleRepository @Inject constructor(
 
         // Wire WifiSocketTransport so it routes incoming packets just like MeshRouter
         wifiSocketTransport.onPacketReceived = { packet ->
-            CoroutineScope(Dispatchers.IO).launch {
+            scope.launch {
                 handleIncomingPacket(packet)
             }
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             incomingMeshPayloads.collect { (_, packet) ->
                 handleIncomingPacket(packet)
             }
-    }
+        }
 
-    // Phase 4: Handle Media Transfer failures
-        CoroutineScope(Dispatchers.IO).launch {
+        // Phase 4: Handle Media Transfer failures
+        scope.launch {
             transferProgress.collect { progressMap ->
                 progressMap.forEach { (transferId, progress) ->
                     if (progress < 0f) {
@@ -124,14 +124,14 @@ class BleRepository @Inject constructor(
         }
 
         // Periodically retry sending PENDING messages if we are connected to anyone
-        CoroutineScope(Dispatchers.IO).launch {
-            while (true) {
+        scope.launch {
+            while (scope.isActive) {
                 delay(15000)
                 retryPendingMessages()
             }
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             scannedDevices.collect { devices ->
                 if (devices.isNotEmpty()) {
                     retryPendingMessages()
@@ -140,7 +140,7 @@ class BleRepository @Inject constructor(
         }
         
         // Phase 6: Broadcast Wi-Fi Direct capability
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             wifiDirectManager.localDeviceMac.collect { mac ->
                 if (mac != null) {
                     val user = userRepository.getLocalUser()
@@ -164,7 +164,7 @@ class BleRepository @Inject constructor(
         }
         
         // Phase 6: Observe Wi-Fi Direct Connection Lifecycle
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             wifiDirectManager.connectionInfo.collect { info ->
                 if (info != null && info.groupFormed) {
                     if (info.isGroupOwner) {

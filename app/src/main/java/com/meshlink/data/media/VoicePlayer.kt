@@ -16,6 +16,7 @@ class VoicePlayer @Inject constructor() {
         private const val TAG = "VoicePlayer"
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var mediaPlayer: MediaPlayer? = null
     private var progressJob: Job? = null
 
@@ -63,7 +64,7 @@ class VoicePlayer @Inject constructor() {
             }
 
             // Progress tracking loop
-            progressJob = CoroutineScope(Dispatchers.Default).launch {
+            progressJob = scope.launch {
                 while (isActive) {
                     try {
                         val player = mediaPlayer ?: break

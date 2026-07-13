@@ -28,9 +28,50 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig = true
+        compose = true
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        create("internal") {
+            dimension = "environment"
+            applicationIdSuffix = ".internal"
+            versionNameSuffix = "-internal"
+            buildConfigField("String", "ENVIRONMENT", "\"INTERNAL\"")
+            buildConfigField("Boolean", "DEBUG_TOOLS_ENABLED", "true")
+        }
+        create("beta") {
+            dimension = "environment"
+            applicationIdSuffix = ".beta"
+            versionNameSuffix = "-beta"
+            buildConfigField("String", "ENVIRONMENT", "\"BETA\"")
+            buildConfigField("Boolean", "DEBUG_TOOLS_ENABLED", "false")
+        }
+        create("production") {
+            dimension = "environment"
+            buildConfigField("String", "ENVIRONMENT", "\"PRODUCTION\"")
+            buildConfigField("Boolean", "DEBUG_TOOLS_ENABLED", "false")
+        }
+    }
+
     buildTypes {
+        getByName("debug") {
+            buildConfigField("Boolean", "LOGGING_ENABLED", "true")
+        }
+        create("benchmark") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            buildConfigField("Boolean", "LOGGING_ENABLED", "false")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "benchmark-rules.pro"
+            )
+        }
         getByName("release") {
             isMinifyEnabled = false
+            buildConfigField("Boolean", "LOGGING_ENABLED", "false")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -51,9 +92,7 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
-    buildFeatures {
-        compose = true
-    }
+    // buildFeatures moved up
 
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
@@ -85,6 +124,7 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.0")
     implementation("androidx.activity:activity-compose")
 
     implementation("androidx.compose.ui:ui")
@@ -100,6 +140,12 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.51.1")
     ksp("com.google.dagger:hilt-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
+
+    // WorkManager
+    val workVersion = "2.9.0"
+    implementation("androidx.work:work-runtime-ktx:$workVersion")
 
     // Room
     val roomVersion = "2.6.1"

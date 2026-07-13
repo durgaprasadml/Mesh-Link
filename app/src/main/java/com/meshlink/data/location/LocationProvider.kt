@@ -5,11 +5,12 @@ import android.content.Context
 import android.location.Location
 import android.location.LocationManager
 import android.os.BatteryManager
-import android.util.Log
-import kotlinx.coroutines.suspendCancellableCoroutine
+import com.meshlink.common.logger.MeshLogger
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Offline GPS location provider. Uses the device's GPS hardware directly
@@ -17,7 +18,7 @@ import kotlin.coroutines.resume
  */
 @Singleton
 class LocationProvider @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     companion object {
         private const val TAG = "LocationProvider"
@@ -67,7 +68,7 @@ class LocationProvider @Inject constructor(
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Location fetch failed: ${e.message}")
+            MeshLogger.e(TAG, "Location fetch failed: ${e.message}")
             null
         }
     }

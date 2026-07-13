@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // Match app's established dark + neon green palette exactly (same as LoginScreen)
 private val BgColor       = Color(0xFF121212)
@@ -41,7 +42,7 @@ fun RegistrationScreen(
     onRegistrationSuccess: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
-    val authState by viewModel.authState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var name by remember { mutableStateOf("") }
     var phoneNumber by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
@@ -53,20 +54,29 @@ fun RegistrationScreen(
         label = "buttonScale"
     )
 
-    LaunchedEffect(authState) {
-        if (authState is AuthState.Success) {
-            viewModel.resetState()
-            onRegistrationSuccess()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(viewModel.uiEvent) {
+        viewModel.uiEvent.collect { event ->
+            when (event) {
+                is AuthEvent.RegistrationSuccess -> onRegistrationSuccess()
+                is AuthEvent.Error -> snackbarHostState.showSnackbar(event.message)
+                else -> {}
+            }
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BgColor)
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        containerColor = Color.Black
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
 
             // Mesh node logo mark — same as LoginScreen
@@ -206,7 +216,7 @@ fun RegistrationScreen(
                             containerColor = NeonGreen,
                             disabledContainerColor = NeonGreen.copy(alpha = 0.4f)
                         ),
-                        enabled = authState !is AuthState.Loading
+                        enabled = uiState !is AuthUiState.Loading
                     ) {
                         LaunchedEffect(buttonPressed) {
                             if (buttonPressed) {
@@ -214,7 +224,7 @@ fun RegistrationScreen(
                                 buttonPressed = false
                             }
                         }
-                        if (authState is AuthState.Loading) {
+                        if (uiState is AuthUiState.Loading) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.Black, strokeWidth = 2.dp)
                         } else {
                             Text("Register", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
@@ -226,17 +236,9 @@ fun RegistrationScreen(
                         Text("Already have an account? ", color = TextSecondary, fontSize = 13.sp)
                         Text("Login", color = NeonGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
-
-                    if (authState is AuthState.Error) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = (authState as AuthState.Error).message,
-                            color = Color(0xFFFF5252),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
                 }
             }
         }
     }
+}
 }

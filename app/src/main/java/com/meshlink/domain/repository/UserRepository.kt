@@ -1,6 +1,6 @@
 package com.meshlink.domain.repository
 
-import com.meshlink.data.local.UserEntity
+import com.meshlink.database.data.local.UserEntity
 import kotlinx.coroutines.flow.Flow
 
 interface UserRepository {

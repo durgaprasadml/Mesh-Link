@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -41,7 +42,7 @@ fun SosScreen(
     onBack: () -> Unit,
     viewModel: SosViewModel = hiltViewModel()
 ) {
-    val state by viewModel.sosState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     // Pulsing animation for SOS button
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")

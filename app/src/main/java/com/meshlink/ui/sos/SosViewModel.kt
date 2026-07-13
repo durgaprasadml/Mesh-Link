@@ -2,17 +2,17 @@ package com.meshlink.ui.sos
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.meshlink.data.repository.BleRepository
 import com.meshlink.data.location.LocationProvider
+import com.meshlink.domain.repository.MeshRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
-data class SosState(
+data class SosUiState(
     val isFetchingLocation: Boolean = false,
     val latitude: Double? = null,
     val longitude: Double? = null,
@@ -23,12 +23,12 @@ data class SosState(
 
 @HiltViewModel
 class SosViewModel @Inject constructor(
-    private val bleRepository: BleRepository,
+    private val meshRepository: MeshRepository,
     private val locationProvider: LocationProvider
 ) : ViewModel() {
 
-    private val _sosState = MutableStateFlow(SosState())
-    val sosState: StateFlow<SosState> = _sosState.asStateFlow()
+    private val _uiState = MutableStateFlow(SosUiState())
+    val uiState: StateFlow<SosUiState> = _uiState.asStateFlow()
 
     init {
         refreshLocation()
@@ -36,9 +36,9 @@ class SosViewModel @Inject constructor(
 
     fun refreshLocation() {
         viewModelScope.launch {
-            _sosState.update { it.copy(isFetchingLocation = true) }
+            _uiState.update { it.copy(isFetchingLocation = true) }
             val location = locationProvider.getCurrentLocation()
-            _sosState.update {
+            _uiState.update {
                 it.copy(
                     isFetchingLocation = false,
                     latitude = location?.latitude,
@@ -51,12 +51,12 @@ class SosViewModel @Inject constructor(
 
     fun sendSos() {
         viewModelScope.launch {
-            _sosState.update { it.copy(isSending = true) }
+            _uiState.update { it.copy(isSending = true) }
             try {
-                bleRepository.sendSos()
-                _sosState.update { it.copy(isSending = false, sosSent = true) }
+                meshRepository.sendSos()
+                _uiState.update { it.copy(isSending = false, sosSent = true) }
             } catch (e: Exception) {
-                _sosState.update { it.copy(isSending = false) }
+                _uiState.update { it.copy(isSending = false) }
             }
         }
     }

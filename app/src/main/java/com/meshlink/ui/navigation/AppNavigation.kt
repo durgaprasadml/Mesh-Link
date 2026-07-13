@@ -1,15 +1,15 @@
 package com.meshlink.ui.navigation
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.padding
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -17,19 +17,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.meshlink.messaging.presentation.ChatDetailScreen
+import com.meshlink.messaging.presentation.ChatsListScreen
+import com.meshlink.ui.analytics.AnalyticsScreen
 import com.meshlink.ui.auth.AuthViewModel
 import com.meshlink.ui.auth.LoginScreen
 import com.meshlink.ui.auth.RegistrationScreen
 import com.meshlink.ui.auth.SplashScreen
-import com.meshlink.ui.analytics.AnalyticsScreen
+import com.meshlink.ui.broadcast.BroadcastScreen
 import com.meshlink.ui.home.HomeScreen
-import com.meshlink.ui.chat.ChatsListScreen
-import com.meshlink.ui.chat.ChatDetailScreen
 import com.meshlink.ui.mesh.MeshDebugScreen
 import com.meshlink.ui.nearby.NearbyDevicesScreen
 import com.meshlink.ui.settings.SettingsScreen
 import com.meshlink.ui.sos.SosScreen
-import com.meshlink.ui.broadcast.BroadcastScreen
 import com.meshlink.util.NotificationHelper
 import java.net.URLEncoder
 

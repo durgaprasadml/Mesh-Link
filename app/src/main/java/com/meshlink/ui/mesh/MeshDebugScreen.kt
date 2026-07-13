@@ -16,10 +16,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import kotlinx.coroutines.delay
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
+import kotlinx.coroutines.delay
 
 // --- Theme Colors ---
 private val DarkBackground = Color(0xFF0D1117)
@@ -40,28 +41,19 @@ fun MeshDebugScreen(
     onBack: () -> Unit,
     viewModel: MeshDebugViewModel = hiltViewModel()
 ) {
-    val scannedDevices by viewModel.scannedDevices.collectAsState()
-    
-    // Poll the route table
-    var routeTable by remember { mutableStateOf(emptyMap<String, String>()) }
-    LaunchedEffect(Unit) {
-        while(true) {
-            routeTable = viewModel.getKnownRoutes()
-            delay(1000)
-        }
-    }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     // Build the dynamic nodes based on real scanned data + route table
-    val nodes = remember(scannedDevices, routeTable) {
-        val uniqueIds = (scannedDevices.keys + routeTable.keys).distinct()
+    val nodes = remember(uiState.scannedDevices, uiState.routeTable) {
+        val uniqueIds = (uiState.scannedDevices.keys + uiState.routeTable.keys).distinct()
         uniqueIds.mapIndexed { index, id ->
-            val isDirect = scannedDevices.containsKey(id)
+            val isDirect = uiState.scannedDevices.containsKey(id)
             val baseAngle = (index.toFloat() / uniqueIds.size.coerceAtLeast(1)) * (2 * Math.PI.toFloat())
             val randomOffset = Random(id.hashCode()).nextFloat() * 0.5f
             
             MeshNode(
                 id = id,
-                name = scannedDevices[id]?.name?.takeIf { it.isNotBlank() } ?: "Node ${id.takeLast(4)}",
+                name = uiState.scannedDevices[id]?.name?.takeIf { it.isNotBlank() } ?: "Node ${id.takeLast(4)}",
                 angle = baseAngle + randomOffset,
                 distance = if (isDirect) 0.4f + randomOffset * 0.3f else 0.7f + randomOffset * 0.3f,
                 signal = if (isDirect) 1.0f else 0.5f

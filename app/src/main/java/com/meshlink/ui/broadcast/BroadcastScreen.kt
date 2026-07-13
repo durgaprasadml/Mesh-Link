@@ -23,18 +23,19 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.meshlink.data.local.ChatDao
-import com.meshlink.data.local.MessageEntity
-import com.meshlink.data.repository.BleRepository
+import com.meshlink.domain.model.Message
+import com.meshlink.domain.repository.MeshRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private val DarkBackground = Color(0xFF121212)
 private val SurfaceDark    = Color(0xFF1E1E1E)
@@ -44,22 +45,27 @@ private val TextSecondary  = Color(0xFFAAAAAA)
 private val BubbleSent     = Color(0xFF1B3D2B)
 private val BubbleReceived = Color(0xFF2A2A2A)
 
+data class BroadcastUiState(
+    val messages: List<Message> = emptyList()
+)
+
 @HiltViewModel
 class BroadcastViewModel @Inject constructor(
-    private val bleRepository: BleRepository,
-    private val chatDao: ChatDao
+    private val meshRepository: MeshRepository,
+    private val getBroadcastMessagesUseCase: com.meshlink.domain.usecase.messaging.GetBroadcastMessagesUseCase
 ) : ViewModel() {
 
     fun sendBroadcast(message: String) {
         viewModelScope.launch {
-            bleRepository.broadcastMessage(message)
+            meshRepository.broadcastMessage(message)
         }
     }
 
     // FIX ERROR 3: Expose live broadcast messages from Room
-    val broadcastMessages: StateFlow<List<MessageEntity>> =
-        chatDao.getBroadcastMessages()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val uiState: StateFlow<BroadcastUiState> =
+        getBroadcastMessagesUseCase()
+            .map { BroadcastUiState(messages = it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BroadcastUiState())
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,12 +76,12 @@ fun BroadcastScreen(
 ) {
     var messageText by remember { mutableStateOf("") }
     val maxChars = 500
-    val messages by viewModel.broadcastMessages.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     // Auto-scroll to top (newest) when new messages arrive
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(0)
+    LaunchedEffect(uiState.messages.size) {
+        if (uiState.messages.isNotEmpty()) listState.animateScrollToItem(0)
     }
 
     Scaffold(
@@ -175,7 +181,7 @@ fun BroadcastScreen(
             }
         }
     ) { paddingValues ->
-        if (messages.isEmpty()) {
+        if (uiState.messages.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -200,7 +206,7 @@ fun BroadcastScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 reverseLayout = false
             ) {
-                items(messages, key = { it.localId }) { msg ->
+                items(uiState.messages, key = { it.messageId }) { msg ->
                     AnimatedVisibility(
                         visible = true,
                         enter = fadeIn() + slideInVertically { it / 2 }
@@ -214,7 +220,7 @@ fun BroadcastScreen(
 }
 
 @Composable
-private fun BroadcastBubble(msg: MessageEntity) {
+private fun BroadcastBubble(msg: Message) {
     val isMe = msg.isFromMe
     val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
     val bubbleColor = if (isMe) BubbleSent else BubbleReceived

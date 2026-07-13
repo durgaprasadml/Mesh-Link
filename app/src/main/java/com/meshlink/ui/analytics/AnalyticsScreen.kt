@@ -25,12 +25,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.meshlink.data.analytics.LogType
-import com.meshlink.data.analytics.MeshStats
-import com.meshlink.data.analytics.RelayLogEntry
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.meshlink.analytics.data.LogType
+import com.meshlink.analytics.data.MeshStats
+import com.meshlink.analytics.data.RelayLogEntry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.meshlink.common.logger.MeshLogger
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,10 +40,7 @@ fun AnalyticsScreen(
     onBack: () -> Unit,
     viewModel: AnalyticsViewModel = hiltViewModel()
 ) {
-    val stats by viewModel.stats.collectAsState()
-    val recentLog by viewModel.recentLog.collectAsState()
-    val activeNodes by viewModel.activeNodes.collectAsState()
-    val hopDist by viewModel.hopDistribution.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -64,7 +63,7 @@ fun AnalyticsScreen(
         ) {
             // ── Delivery Ring ──
             item {
-                DeliveryRateCard(stats)
+                DeliveryRateCard(uiState.stats)
             }
 
             // ── Stats Grid ──
@@ -77,14 +76,14 @@ fun AnalyticsScreen(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Send,
                         label = "Sent",
-                        value = stats.packetsSent.toString(),
+                        value = uiState.stats.packetsSent.toString(),
                         color = Color(0xFF3B82F6)
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.DoneAll,
                         label = "Delivered",
-                        value = stats.packetsDelivered.toString(),
+                        value = uiState.stats.packetsDelivered.toString(),
                         color = Color(0xFF10B981)
                     )
                 }
@@ -99,14 +98,14 @@ fun AnalyticsScreen(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.SyncAlt,
                         label = "Relayed",
-                        value = stats.packetsRelayed.toString(),
+                        value = uiState.stats.packetsRelayed.toString(),
                         color = Color(0xFF8B5CF6)
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Error,
-                        label = "Failed",
-                        value = stats.packetsFailed.toString(),
+                        icon = Icons.Default.Warning,
+                        label = "Dropped",
+                        value = uiState.stats.packetsFailed.toString(),
                         color = Color(0xFFEF4444)
                     )
                 }
@@ -122,44 +121,39 @@ fun AnalyticsScreen(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Timeline,
                         label = "Avg Hops",
-                        value = String.format(java.util.Locale.US, "%.1f", stats.avgHopCount),
+                        value = String.format(java.util.Locale.US, "%.1f", uiState.stats.avgHopCount),
                         color = Color(0xFFF59E0B)
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.People,
                         label = "Active Nodes",
-                        value = activeNodes.size.toString(),
+                        value = uiState.activeNodes.size.toString(),
                         color = Color(0xFF06B6D4)
                     )
                 }
             }
 
             // ── Hop Distribution Chart ──
-            if (hopDist.isNotEmpty()) {
+            if (uiState.hopDistribution.isNotEmpty()) {
                 item {
-                    HopDistributionCard(hopDist)
+                    HopDistributionCard(uiState.hopDistribution)
                 }
             }
 
             // ── Active Nodes List ──
-            if (activeNodes.isNotEmpty()) {
+            if (uiState.activeNodes.isNotEmpty()) {
                 item {
-                    ActiveNodesCard(activeNodes)
+                    ActiveNodesCard(uiState.activeNodes)
                 }
             }
 
             // ── Relay Log ──
             item {
-                Text(
-                    "Recent Activity",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Text("Recent Activity", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
 
-            if (recentLog.isEmpty()) {
+            if (uiState.recentLog.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -173,12 +167,11 @@ fun AnalyticsScreen(
                         }
                     }
                 }
-            }
-
-            items(recentLog.take(20)) { entry ->
-                RelayLogCard(entry)
-            }
-
+            } else {
+                items(uiState.recentLog) { entry ->
+                    RelayLogCard(entry)
+                }
+            } 
             // Bottom spacer
             item { Spacer(modifier = Modifier.height(32.dp)) }
         }

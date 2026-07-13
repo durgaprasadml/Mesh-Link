@@ -1,5 +1,7 @@
 package com.meshlink.domain.model
 
+
+
 data class BleDevice(
     val meshId: String,
     val name: String,

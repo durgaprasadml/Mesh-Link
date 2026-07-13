@@ -24,28 +24,22 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+private val DarkBackground = Color(0xFF121212)
+private val NeonGreen      = Color(0xFF00FF88)
+private val CardColor      = Color(0xFF1E1E1E)
+private val BorderGreen    = Color(0xFF00FF88)
+private val TextPrimary    = Color(0xFFFFFFFF)
+private val TextSecondary  = Color(0xFFAAAAAA)
 
-// FIX ERROR 2: Match app's established dark + neon green palette exactly
-private val BgColor       = Color(0xFF121212)
-private val CardColor     = Color(0xFF1E1E1E)
-private val NeonGreen     = Color(0xFF00FF88)
-private val NeonGreenDim  = Color(0xFF00CC6A)
-private val BorderGreen   = Color(0xFF00FF88)
-private val TextPrimary   = Color(0xFFFFFFFF)
-private val TextSecondary = Color(0xFFAAAAAA)
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     onNavigateToRegistration: () -> Unit,
     onLoginSuccess: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
-    val authState by viewModel.authState.collectAsState()
     var phoneNumber by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
-
-    // FIX: Animation — button scale on press
     var buttonPressed by remember { mutableStateOf(false) }
     val buttonScale by animateFloatAsState(
         targetValue = if (buttonPressed) 0.96f else 1f,
@@ -53,20 +47,32 @@ fun LoginScreen(
         label = "buttonScale"
     )
 
-    LaunchedEffect(authState) {
-        if (authState is AuthState.Success) {
-            viewModel.resetState()
-            onLoginSuccess()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    
+    // Snackbar for errors
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(viewModel.uiEvent) {
+        viewModel.uiEvent.collect { event ->
+            when (event) {
+                is AuthEvent.LoginSuccess -> onLoginSuccess()
+                is AuthEvent.Error -> snackbarHostState.showSnackbar(event.message)
+                else -> {}
+            }
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BgColor)
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        containerColor = Color.Black
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
 
             // Mesh node logo mark
@@ -187,7 +193,7 @@ fun LoginScreen(
                             containerColor = NeonGreen,
                             disabledContainerColor = NeonGreen.copy(alpha = 0.4f)
                         ),
-                        enabled = authState !is AuthState.Loading
+                        enabled = uiState !is AuthUiState.Loading
                     ) {
                         LaunchedEffect(buttonPressed) {
                             if (buttonPressed) {
@@ -195,7 +201,7 @@ fun LoginScreen(
                                 buttonPressed = false
                             }
                         }
-                        if (authState is AuthState.Loading) {
+                        if (uiState is AuthUiState.Loading) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.Black, strokeWidth = 2.dp)
                         } else {
                             Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
@@ -207,17 +213,9 @@ fun LoginScreen(
                         Text("Don't have an account? ", color = TextSecondary, fontSize = 13.sp)
                         Text("Register", color = NeonGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
-
-                    if (authState is AuthState.Error) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = (authState as AuthState.Error).message,
-                            color = Color(0xFFFF5252),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
                 }
             }
         }
     }
+}
 }

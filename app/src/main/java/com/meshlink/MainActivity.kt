@@ -4,36 +4,35 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.core.content.ContextCompat
+import androidx.core.os.bundleOf
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
-import com.meshlink.data.repository.BleRepository
+import com.google.firebase.analytics.FirebaseAnalytics
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.service.MeshRelayService
+import com.meshlink.ui.components.hasRequiredPermissions
 import com.meshlink.ui.navigation.AppNavigation
 import com.meshlink.ui.navigation.Screen
 import com.meshlink.ui.theme.MeshLinkTheme
 import com.meshlink.util.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import androidx.lifecycle.lifecycleScope
 import javax.inject.Inject
-import androidx.core.os.bundleOf
-import com.meshlink.ui.components.hasRequiredPermissions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 
 // Firebase
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.firebase.crashlytics.FirebaseCrashlytics
-
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     @Inject
-    lateinit var bleRepository: BleRepository
+    lateinit var meshRepository: MeshRepository
 
     private lateinit var firebaseAnalytics: FirebaseAnalytics
     
@@ -122,7 +121,7 @@ class MainActivity : ComponentActivity() {
             startRelayService()
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
-                    bleRepository.autoStartMesh()
+                    meshRepository.autoStartMesh()
                     firebaseAnalytics.logEvent("mesh_started", null)
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().recordException(e)

@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.meshlink.ui.home.HomeViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // --- Theme Colors ---
 private val DarkBackground = Color(0xFF121212)
@@ -36,17 +36,23 @@ private val ErrorRed = Color(0xFFFF5252)
 fun SettingsScreen(
     onBack: () -> Unit,
     onLoggedOut: () -> Unit,
-    viewModel: HomeViewModel = hiltViewModel()
+    viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val user by viewModel.user.collectAsState()
-    var userName by remember { mutableStateOf("User") }
-    LaunchedEffect(user) { user?.name?.let { userName = it } }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     
-    val encryptionEnabled by viewModel.isEncryptionEnabled.collectAsState()
-    val onlineVisibility by viewModel.isOnlineVisible.collectAsState(initial = true) // Fallback since it's stateflow
-    val selectedMeshMode by viewModel.meshMode.collectAsState()
+    var userName by remember { mutableStateOf("User") }
+    LaunchedEffect(uiState.user) { uiState.user?.name?.let { userName = it } }
     
     val meshModes = listOf("Auto", "Performance", "Battery Saver")
+
+    LaunchedEffect(viewModel.uiEvent) {
+        viewModel.uiEvent.collect { event ->
+            when (event) {
+                is SettingsEvent.LogoutSuccess -> onLoggedOut()
+                else -> {}
+            }
+        }
+    }
 
     Scaffold(
         containerColor = DarkBackground,
@@ -121,7 +127,7 @@ fun SettingsScreen(
                         ) {
                             Text("Encryption", color = TextPrimary, fontSize = 16.sp)
                             Switch(
-                                checked = encryptionEnabled,
+                                checked = uiState.isEncryptionEnabled,
                                 onCheckedChange = { viewModel.setEncryptionEnabled(it) },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.Black,
@@ -137,7 +143,7 @@ fun SettingsScreen(
                         ) {
                             Text("Online visibility", color = TextPrimary, fontSize = 16.sp)
                             Switch(
-                                checked = onlineVisibility,
+                                checked = uiState.isOnlineVisible,
                                 onCheckedChange = { viewModel.setOnlineVisible(it) },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.Black,
@@ -157,7 +163,7 @@ fun SettingsScreen(
                 ) {
                     meshModes.forEachIndexed { index, label ->
                         SegmentedButton(
-                            selected = label == selectedMeshMode,
+                            selected = label == uiState.meshMode,
                             onClick = { viewModel.setMeshMode(label) },
                             shape = SegmentedButtonDefaults.itemShape(index = index, count = meshModes.size),
                             colors = SegmentedButtonDefaults.colors(
@@ -168,7 +174,7 @@ fun SettingsScreen(
                                 inactiveBorderColor = SurfaceDark
                             )
                         ) {
-                            Text(label, fontSize = 12.sp, fontWeight = if (label == selectedMeshMode) FontWeight.Bold else FontWeight.Normal)
+                            Text(label, fontSize = 12.sp, fontWeight = if (label == uiState.meshMode) FontWeight.Bold else FontWeight.Normal)
                         }
                     }
                 }
@@ -188,9 +194,7 @@ fun SettingsScreen(
                         SettingsClickableRow("Clear cache")
                         HorizontalDivider(color = DarkBackground, thickness = 1.dp)
                         SettingsClickableRow("Logout", textColor = ErrorRed) {
-                            viewModel.logout {
-                                onLoggedOut()
-                            }
+                            viewModel.logout()
                         }
                     }
                 }

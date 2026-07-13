@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.ui.components.PermissionHandler
 
@@ -40,7 +41,7 @@ fun NearbyDevicesScreen(
     viewModel: NearbyViewModel = hiltViewModel()
 ) {
     PermissionHandler {
-        val devices by viewModel.nearbyDevices.collectAsState()
+        val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
         LaunchedEffect(Unit) {
             viewModel.startDiscovery()
@@ -88,7 +89,7 @@ fun NearbyDevicesScreen(
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(devices, key = { it.meshId }) { device ->
+                    items(uiState.devices, key = { it.meshId }) { device ->
                         DeviceCard(device = device, onClick = {
                             onNavigateToChat(
                                 device.meshId.ifBlank { device.address },

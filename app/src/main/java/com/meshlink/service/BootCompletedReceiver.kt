@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.util.Log
+import com.meshlink.common.logger.MeshLogger
 
 /**
  * FIX Issue 5 & 6: Auto-start the MeshRelayService after device boot.
@@ -20,9 +20,12 @@ class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == "android.intent.action.QUICKBOOT_POWERON" ||
-            intent.action == "android.intent.action.LOCKED_BOOT_COMPLETED"
+            intent.action == "android.intent.action.LOCKED_BOOT_COMPLETED" ||
+            intent.action == Intent.ACTION_MY_PACKAGE_REPLACED ||
+            intent.action == Intent.ACTION_TIME_CHANGED ||
+            intent.action == Intent.ACTION_TIMEZONE_CHANGED
         ) {
-            Log.d(TAG, "Boot completed — starting MeshRelayService")
+            MeshLogger.d(TAG, "Boot completed — starting MeshRelayService")
             val serviceIntent = Intent(context, MeshRelayService::class.java).apply {
                 action = MeshRelayService.ACTION_START
             }
@@ -33,7 +36,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
                     context.startService(serviceIntent)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start MeshRelayService on boot: ${e.message}")
+                MeshLogger.e(TAG, "Failed to start MeshRelayService on boot: ${e.message}")
             }
         }
     }

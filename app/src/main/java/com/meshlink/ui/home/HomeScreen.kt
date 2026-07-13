@@ -8,9 +8,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,8 +22,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.meshlink.data.local.ChatEntity
-import com.meshlink.ui.chat.ChatsListViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.meshlink.domain.model.Chat
+import com.meshlink.messaging.presentation.ChatsListViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -56,11 +56,10 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val chatsViewModel: ChatsListViewModel = hiltViewModel()
-    val nearbyDevices by viewModel.nearbyDevices.collectAsState()
-    val chats by chatsViewModel.chats.collectAsState()
-
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val chatsState by chatsViewModel.uiState.collectAsStateWithLifecycle()
     val connectionState = when {
-        nearbyDevices.isNotEmpty() -> ConnectionState.CONNECTED
+        uiState.nearbyDevices.isNotEmpty() -> ConnectionState.CONNECTED
         else -> ConnectionState.SEARCHING
     }
 
@@ -126,7 +125,7 @@ fun HomeScreen(
                     .fillMaxSize()
                     .padding(top = 8.dp)
             ) {
-                if (chats.isEmpty()) {
+                if (chatsState.chats.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier
@@ -142,7 +141,7 @@ fun HomeScreen(
                         }
                     }
                 }
-                items(chats, key = { it.id }) { chat ->
+                items(chatsState.chats, key = { it.id }) { chat ->
                     ChatItem(
                         chat = chat,
                         onClick = {
@@ -188,7 +187,7 @@ fun ConnectionBanner(state: ConnectionState) {
 }
 
 @Composable
-fun ChatItem(chat: ChatEntity, onClick: () -> Unit) {
+fun ChatItem(chat: Chat, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

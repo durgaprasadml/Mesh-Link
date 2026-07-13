@@ -9,7 +9,7 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.meshlink" />
+                  <option name="appId" value="com.meshlink.beta" />
                   <option name="mobileSdkAppId" value="1:709800822625:android:83cea23baf2c51adcf6720" />
                   <option name="projectId" value="mesh-link-3af24" />
                   <option name="projectNumber" value="709800822625" />

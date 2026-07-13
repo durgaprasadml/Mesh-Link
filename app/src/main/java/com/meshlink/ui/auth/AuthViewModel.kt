@@ -4,13 +4,26 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.meshlink.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
+
+sealed class AuthUiState {
+    object Idle : AuthUiState()
+    object Loading : AuthUiState()
+}
+
+sealed class AuthEvent {
+    object LoginSuccess : AuthEvent()
+    object RegistrationSuccess : AuthEvent()
+    data class Error(val message: String) : AuthEvent()
+}
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -23,30 +36,35 @@ class AuthViewModel @Inject constructor(
         initialValue = false
     )
 
-    private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
-    val authState: StateFlow<AuthState> = _authState.asStateFlow()
+    private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
+    val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+
+    private val _uiEvent = MutableSharedFlow<AuthEvent>(replay = 0)
+    val uiEvent = _uiEvent.asSharedFlow()
 
     fun resetState() {
-        _authState.value = AuthState.Idle
+        _uiState.value = AuthUiState.Idle
     }
 
     fun register(name: String, phoneNumber: String, pin: String) {
         if (pin.length != 4) {
-            _authState.value = AuthState.Error("PIN must be 4 digits")
+            viewModelScope.launch { _uiEvent.emit(AuthEvent.Error("PIN must be 4 digits")) }
             return
         }
         if (name.isBlank() || phoneNumber.isBlank()) {
-            _authState.value = AuthState.Error("Fields cannot be empty")
+            viewModelScope.launch { _uiEvent.emit(AuthEvent.Error("Fields cannot be empty")) }
             return
         }
         viewModelScope.launch {
-            _authState.value = AuthState.Loading
+            _uiState.value = AuthUiState.Loading
             userRepository.registerUser(name, phoneNumber, pin).fold(
                 onSuccess = { meshId ->
-                    _authState.value = AuthState.Success
+                    _uiState.value = AuthUiState.Idle
+                    _uiEvent.emit(AuthEvent.RegistrationSuccess)
                 },
                 onFailure = { error ->
-                    _authState.value = AuthState.Error(error.message ?: "Unknown error")
+                    _uiState.value = AuthUiState.Idle
+                    _uiEvent.emit(AuthEvent.Error(error.message ?: "Unknown error"))
                 }
             )
         }
@@ -54,26 +72,21 @@ class AuthViewModel @Inject constructor(
 
     fun login(phoneNumber: String, pin: String) {
         if (phoneNumber.isBlank() || pin.isBlank()) {
-            _authState.value = AuthState.Error("Fields cannot be empty")
+            viewModelScope.launch { _uiEvent.emit(AuthEvent.Error("Fields cannot be empty")) }
             return
         }
         viewModelScope.launch {
-            _authState.value = AuthState.Loading
+            _uiState.value = AuthUiState.Loading
             userRepository.loginUser(phoneNumber, pin).fold(
                 onSuccess = {
-                    _authState.value = AuthState.Success
+                    _uiState.value = AuthUiState.Idle
+                    _uiEvent.emit(AuthEvent.LoginSuccess)
                 },
                 onFailure = { error ->
-                    _authState.value = AuthState.Error(error.message ?: "Login failed")
+                    _uiState.value = AuthUiState.Idle
+                    _uiEvent.emit(AuthEvent.Error(error.message ?: "Login failed"))
                 }
             )
         }
     }
-}
-
-sealed class AuthState {
-    object Idle : AuthState()
-    object Loading : AuthState()
-    object Success : AuthState()
-    data class Error(val message: String) : AuthState()
 }

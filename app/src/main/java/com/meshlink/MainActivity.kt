@@ -22,6 +22,8 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
 import javax.inject.Inject
 import androidx.core.os.bundleOf
+import com.meshlink.ui.components.hasRequiredPermissions
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 // Firebase
 import com.google.firebase.analytics.FirebaseAnalytics
@@ -34,19 +36,19 @@ class MainActivity : ComponentActivity() {
     lateinit var bleRepository: BleRepository
 
     private lateinit var firebaseAnalytics: FirebaseAnalytics
+    
+    private val pendingIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            startRelayService()
+            checkAndStartMesh()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-     
 
         // ✅ Init Firebase
         firebaseAnalytics = FirebaseAnalytics.getInstance(this)
@@ -57,24 +59,37 @@ class MainActivity : ComponentActivity() {
 
         requestNotificationPermissionIfNeeded()
 
-        val startAddress = intent.getStringExtra("address")
-        val startName = intent.getStringExtra("name")
-
         setContent {
             MeshLinkTheme {
                 val navController = rememberNavController()
 
+                LaunchedEffect(Unit) {
+                    pendingIntents.collect { newIntent ->
+                        val address = newIntent.getStringExtra("address")
+                        val name = newIntent.getStringExtra("name")
+                        if (address != null && name != null) {
+                            firebaseAnalytics.logEvent(
+                                "chat_opened",
+                                bundleOf("device_name" to name)
+                            )
+                            navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                }
+                
                 LaunchedEffect(intent) {
-                    if (startAddress != null && startName != null) {
-
+                    val address = intent.getStringExtra("address")
+                    val name = intent.getStringExtra("name")
+                    if (address != null && name != null) {
                         firebaseAnalytics.logEvent(
                             "chat_opened",
-                            bundleOf("device_name" to startName)
+                            bundleOf("device_name" to name)
                         )
-
-                        navController.navigate(
-                            Screen.ChatDetail.createRoute(startAddress, startName)
-                        )
+                        navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
+                            launchSingleTop = true
+                        }
                     }
                 }
 
@@ -82,17 +97,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        startRelayService()
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                bleRepository.autoStartMesh()
-                firebaseAnalytics.logEvent("mesh_started", null)
-
-            } catch (e: Exception) {
-                FirebaseCrashlytics.getInstance().recordException(e)
-            }
-        }
+        checkAndStartMesh()
+    }
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingIntents.tryEmit(intent)
     }
 
     // FIX ERROR 1: suppress system notifications while app is in foreground
@@ -104,6 +115,20 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         NotificationHelper.setAppForeground(false)
+    }
+    
+    private fun checkAndStartMesh() {
+        if (hasRequiredPermissions(this)) {
+            startRelayService()
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    bleRepository.autoStartMesh()
+                    firebaseAnalytics.logEvent("mesh_started", null)
+                } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().recordException(e)
+                }
+            }
+        }
     }
 
     private fun startRelayService() {

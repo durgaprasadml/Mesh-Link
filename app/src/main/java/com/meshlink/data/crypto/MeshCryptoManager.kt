@@ -56,7 +56,7 @@ class MeshCryptoManager @Inject constructor(
     }
 
     // In-memory cache of derived AES keys per peer
-    private val derivedKeys = mutableMapOf<String, SecretKey>()
+    private val derivedKeys = java.util.concurrent.ConcurrentHashMap<String, SecretKey>()
 
     // EncryptedSharedPreferences for persistent peer public key storage
     private val peerKeyStore: SharedPreferences by lazy {
@@ -237,40 +237,35 @@ class MeshCryptoManager @Inject constructor(
      * Derive a shared AES-256 key from our private key + peer's public key.
      * Uses ECDH key agreement → SHA-256 hash → AES-256 key.
      */
-    private fun deriveSharedKey(peerId: String): SecretKey? {
+    private fun deriveSharedKey(peerId: String): SecretKey {
         // Check cache first
         derivedKeys[peerId]?.let { return it }
 
         val peerPublicKeyBase64 = getPeerPublicKey(peerId) ?: run {
-            Log.w(TAG, "No public key for peer: ${peerId.takeLast(8)}")
-            return null
+            throw IllegalStateException("No public key for peer: ${peerId.takeLast(8)}")
         }
 
-        return try {
-            // Decode peer's public key
-            val peerKeyBytes = Base64.decode(peerPublicKeyBase64, Base64.NO_WRAP)
-            val keyFactory = KeyFactory.getInstance("EC")
-            val peerPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(peerKeyBytes))
+        // Decode peer's public key
+        val peerKeyBytes = Base64.decode(peerPublicKeyBase64, Base64.NO_WRAP)
+        val keyFactory = KeyFactory.getInstance("EC")
+        val peerPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(peerKeyBytes))
 
-            // Perform ECDH key agreement
-            val keyAgreement = KeyAgreement.getInstance("ECDH")
-            keyAgreement.init(getPrivateKey())
-            keyAgreement.doPhase(peerPublicKey, true)
-            val sharedSecret = keyAgreement.generateSecret()
+        // Perform ECDH key agreement
+        val keyAgreement = KeyAgreement.getInstance("ECDH")
+        keyAgreement.init(getPrivateKey())
+        keyAgreement.doPhase(peerPublicKey, true)
+        val sharedSecret = keyAgreement.generateSecret()
 
-            // Hash shared secret → AES-256 key (32 bytes)
-            val digest = MessageDigest.getInstance("SHA-256")
-            val aesKeyBytes = digest.digest(sharedSecret)
-            val aesKey = SecretKeySpec(aesKeyBytes, "AES")
+        // Hash shared secret → AES-256 key (32 bytes)
+        val digest = MessageDigest.getInstance("SHA-256")
+        val aesKeyBytes = digest.digest(sharedSecret)
+        if (aesKeyBytes.size != 32) throw IllegalStateException("Derived key is not 256-bit (actual: ${aesKeyBytes.size})")
+        val aesKey = SecretKeySpec(aesKeyBytes, "AES")
 
-            // Cache for performance
-            derivedKeys[peerId] = aesKey
-            Log.d(TAG, "Derived AES-256 key for peer: ${peerId.takeLast(8)}")
-            aesKey
-        } catch (e: Exception) {
-            Log.e(TAG, "Key derivation failed for ${peerId.takeLast(8)}: ${e.message}")
-            null
-        }
+        // Cache for performance
+        derivedKeys[peerId] = aesKey
+        Log.d(TAG, "Derived AES-256 key for peer: ${peerId.takeLast(8)}")
+        return aesKey
     }
 
     // ────────── AES-256-GCM Encryption ──────────
@@ -279,26 +274,21 @@ class MeshCryptoManager @Inject constructor(
      * Encrypt a plaintext payload for a specific peer.
      * Returns Base64( IV[12] + Ciphertext + AuthTag[16] ), or null if encryption fails.
      */
-    fun encrypt(plaintext: String, peerId: String): String? {
-        val key = deriveSharedKey(peerId) ?: return null
+    fun encrypt(plaintext: String, peerId: String): String {
+        val key = deriveSharedKey(peerId)
 
-        return try {
-            val cipher = Cipher.getInstance(AES_GCM_CIPHER)
-            cipher.init(Cipher.ENCRYPT_MODE, key)
+        val cipher = Cipher.getInstance(AES_GCM_CIPHER)
+        cipher.init(Cipher.ENCRYPT_MODE, key)
 
-            val iv = cipher.iv // Auto-generated 12-byte IV
-            val ciphertextWithTag = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
+        val iv = cipher.iv // Auto-generated 12-byte IV
+        val ciphertextWithTag = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
 
-            // Concatenate: IV + ciphertext + tag
-            val combined = ByteArray(iv.size + ciphertextWithTag.size)
-            System.arraycopy(iv, 0, combined, 0, iv.size)
-            System.arraycopy(ciphertextWithTag, 0, combined, iv.size, ciphertextWithTag.size)
+        // Concatenate: IV + ciphertext + tag
+        val combined = ByteArray(iv.size + ciphertextWithTag.size)
+        System.arraycopy(iv, 0, combined, 0, iv.size)
+        System.arraycopy(ciphertextWithTag, 0, combined, iv.size, ciphertextWithTag.size)
 
-            Base64.encodeToString(combined, Base64.NO_WRAP)
-        } catch (e: Exception) {
-            Log.e(TAG, "Encryption failed: ${e.message}")
-            null
-        }
+        return Base64.encodeToString(combined, Base64.NO_WRAP)
     }
 
     /**
@@ -307,7 +297,12 @@ class MeshCryptoManager @Inject constructor(
      * Returns the decrypted plaintext, or null if decryption fails.
      */
     fun decrypt(ciphertext: String, peerId: String): String? {
-        val key = deriveSharedKey(peerId) ?: return null
+        val key = try {
+            deriveSharedKey(peerId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Key derivation failed during decrypt: ${e.message}")
+            return null
+        }
 
         return try {
             val combined = Base64.decode(ciphertext, Base64.NO_WRAP)
@@ -334,9 +329,37 @@ class MeshCryptoManager @Inject constructor(
      * Try to encrypt; if peer key not available, return plaintext as fallback.
      * This ensures messages still work before key exchange completes.
      */
-    fun encryptOrPassthrough(plaintext: String, peerId: String): Pair<String, Boolean> {
-        if (!hasPeerKey(peerId)) return plaintext to false
-        val encrypted = encrypt(plaintext, peerId) ?: return plaintext to false
+    fun encryptOrPassthrough(plaintext: String, peerId: String, requireEncryption: Boolean = false, messageId: String = "", retryCount: Int = 0): Pair<String, Boolean>? {
+        if (!hasPeerKey(peerId)) {
+            if (requireEncryption) {
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().apply {
+                    setCustomKey("peerId", peerId.takeLast(8))
+                    setCustomKey("messageId", messageId)
+                    setCustomKey("retryCount", retryCount)
+                    setCustomKey("keyPresent", false)
+                    setCustomKey("encryptionMode", "encrypt")
+                    recordException(IllegalStateException("Encryption required but peer key missing"))
+                }
+                return null
+            }
+            return plaintext to false
+        }
+        val encrypted = try {
+            encrypt(plaintext, peerId)
+        } catch (e: Exception) {
+            if (requireEncryption) {
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().apply {
+                    setCustomKey("peerId", peerId.takeLast(8))
+                    setCustomKey("messageId", messageId)
+                    setCustomKey("retryCount", retryCount)
+                    setCustomKey("keyPresent", true)
+                    setCustomKey("encryptionMode", "encrypt")
+                    recordException(e)
+                }
+                return null
+            }
+            return plaintext to false
+        }
         return encrypted to true
     }
 

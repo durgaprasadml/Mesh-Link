@@ -133,7 +133,7 @@ fun RegistrationScreen(
                         value = name,
                         onValueChange = { name = it },
                         label = { Text("Name", color = TextSecondary) },
-                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = NeonGreen) },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = "Person icon", tint = NeonGreen) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = TextPrimary,
@@ -153,7 +153,7 @@ fun RegistrationScreen(
                         value = phoneNumber,
                         onValueChange = { phoneNumber = it },
                         label = { Text("Phone Number", color = TextSecondary) },
-                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = NeonGreen) },
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = "Phone icon", tint = NeonGreen) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -174,7 +174,7 @@ fun RegistrationScreen(
                         value = pin,
                         onValueChange = { if (it.length <= 4) pin = it },
                         label = { Text("4-Digit PIN", color = TextSecondary) },
-                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = NeonGreen) },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Lock icon", tint = NeonGreen) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,

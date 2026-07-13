@@ -48,14 +48,18 @@ object AppModule {
 
         val factory = SupportOpenHelperFactory(passphrase.toByteArray())
 
-        return Room.databaseBuilder(
+        val builder = Room.databaseBuilder(
             context,
             MeshDatabase::class.java,
             "mesh_db"
         )
             .openHelperFactory(factory)
-            .fallbackToDestructiveMigration()
-            .build()
+            
+        if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            builder.fallbackToDestructiveMigration()
+        }
+        
+        return builder.build()
     }
 
     @Provides

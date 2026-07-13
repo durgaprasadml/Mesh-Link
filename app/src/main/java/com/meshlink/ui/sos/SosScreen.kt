@@ -98,7 +98,7 @@ fun SosScreen(
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = EmergencyOrange, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.LocationOn, contentDescription = "Location icon", tint = EmergencyOrange, modifier = Modifier.size(24.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("GPS Coordinates", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
                     }
@@ -113,13 +113,13 @@ fun SosScreen(
                         }
                     } else if (state.latitude != null && state.longitude != null) {
                         Text(
-                            text = "Lat: ${String.format("%.6f", state.latitude)}",
+                            text = "Lat: ${String.format(java.util.Locale.US, "%.6f", state.latitude)}",
                             color = Color.White,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "Lng: ${String.format("%.6f", state.longitude)}",
+                            text = "Lng: ${String.format(java.util.Locale.US, "%.6f", state.longitude)}",
                             color = Color.White,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium

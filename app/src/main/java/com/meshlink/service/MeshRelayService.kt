@@ -15,6 +15,8 @@ import android.os.PowerManager
 import android.util.Log
 import com.meshlink.MainActivity
 import com.meshlink.data.repository.BleRepository
+import com.meshlink.data.wifi.WifiDirectManager
+import com.meshlink.ui.components.hasRequiredPermissions
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,22 +27,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * Foreground service that keeps the mesh relay alive when the app is minimized or closed.
- *
- * FIX Issue 5: Keeps BLE advertising + scanning active so the device is visible
- *              in nearby devices even when the app UI is not open.
- * FIX Issue 6: Incoming messages are processed by BleRepository's init{} collector
- *              which runs on IO dispatcher and fires NotificationHelper for system notifications.
- *              This service ensures that collector stays alive.
- *
- * Key behaviors:
- * - Maintains BLE advertising + scanning + GATT server
- * - Shows a persistent "Mesh Relay Active" notification
- * - Survives screen lock and Doze mode via WakeLock
- * - Auto-restarts if killed by system (START_STICKY + AlarmManager)
- * - Periodically refreshes BLE advertising to prevent OS from killing it
- */
 @AndroidEntryPoint
 class MeshRelayService : Service() {
 
@@ -50,12 +36,14 @@ class MeshRelayService : Service() {
         private const val NOTIFICATION_ID = 7001
         const val ACTION_START = "com.meshlink.START_RELAY"
         const val ACTION_STOP = "com.meshlink.STOP_RELAY"
-        // Refresh BLE every 2 minutes to keep it alive on aggressive OEMs
         private const val BLE_REFRESH_INTERVAL_MS = 120_000L
     }
 
     @Inject
     lateinit var bleRepository: BleRepository
+    
+    @Inject
+    lateinit var wifiDirectManager: WifiDirectManager
 
     private var serviceJob: Job? = null
     private var restartOnDestroy = true
@@ -66,6 +54,7 @@ class MeshRelayService : Service() {
         super.onCreate()
         createNotificationChannel()
         acquireWakeLock()
+        wifiDirectManager.registerReceiver()
         Log.d(TAG, "MeshRelayService created")
     }
 
@@ -76,21 +65,31 @@ class MeshRelayService : Service() {
                 restartOnDestroy = false
                 bleRepository.stopMesh()
                 releaseWakeLock()
-                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopForeground(Service.STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
             else -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    startForeground(
-                        NOTIFICATION_ID,
-                        buildNotification(),
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-                    )
-                } else {
-                    startForeground(NOTIFICATION_ID, buildNotification())
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        startForeground(
+                            NOTIFICATION_ID,
+                            buildNotification(),
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                        )
+                    } else {
+                        startForeground(NOTIFICATION_ID, buildNotification())
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start foreground service", e)
                 }
-                startMeshRelay()
+                
+                if (hasRequiredPermissions(this)) {
+                    startMeshRelay()
+                } else {
+                    Log.w(TAG, "Cannot start mesh relay: missing permissions")
+                }
+                
                 return START_STICKY
             }
         }
@@ -105,17 +104,12 @@ class MeshRelayService : Service() {
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start mesh relay: ${e.message}")
             }
-        }
-
-        // FIX Issue 5: Periodically refresh BLE advertising/scanning to prevent
-        // aggressive OEM battery managers from killing BLE.
-        // Also renews the WakeLock so it never expires mid-session.
-        serviceScope.launch {
+            
             while (isActive) {
                 delay(BLE_REFRESH_INTERVAL_MS)
                 try {
                     bleRepository.autoStartMesh()
-                    renewWakeLock() // Renew every 2 min — lock was acquired for 10 min max
+                    renewWakeLock()
                     Log.d(TAG, "BLE refresh cycle completed")
                 } catch (e: Exception) {
                     Log.w(TAG, "BLE refresh failed: ${e.message}")
@@ -124,8 +118,6 @@ class MeshRelayService : Service() {
         }
     }
 
-    // FIX Issue 6: WakeLock prevents CPU from sleeping so BLE callbacks
-    // can fire and process incoming messages even in deep sleep
     private fun acquireWakeLock() {
         if (wakeLock == null) {
             val pm = getSystemService(POWER_SERVICE) as PowerManager
@@ -133,15 +125,13 @@ class MeshRelayService : Service() {
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "MeshLink::MeshRelayWakeLock"
             ).apply {
-                acquire(10 * 60 * 1000L) // 10 minutes initial acquisition
+                acquire(10 * 60 * 1000L)
             }
         }
     }
 
-    /** Renew the WakeLock for another 10-minute window. Called every 2 minutes from BLE refresh. */
     private fun renewWakeLock() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
-        // Release old lock and acquire a fresh one to reset the timer
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = pm.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
@@ -216,6 +206,7 @@ class MeshRelayService : Service() {
     override fun onDestroy() {
         serviceJob?.cancel()
         bleRepository.stopMesh()
+        wifiDirectManager.unregisterReceiver()
         releaseWakeLock()
         if (restartOnDestroy) {
             scheduleRestart()

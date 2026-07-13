@@ -35,16 +35,40 @@ class HomeViewModel @Inject constructor(
         .map { chats -> chats.sumOf { it.unreadCount } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    val isEncryptionEnabled: StateFlow<Boolean> = userRepository.isEncryptionEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val isOnlineVisible: StateFlow<Boolean> = userRepository.isOnlineVisible
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val meshMode: StateFlow<String> = userRepository.meshMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Auto")
+
     init {
         loadUser()
-        autoStartMesh()
     }
 
-    private fun autoStartMesh() {
+    fun setEncryptionEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            try {
-                bleRepository.autoStartMesh()
-            } catch (_: Exception) { }
+            userRepository.setEncryptionEnabled(enabled)
+        }
+    }
+
+    fun setOnlineVisible(visible: Boolean) {
+        viewModelScope.launch {
+            userRepository.setOnlineVisible(visible)
+        }
+    }
+
+    fun setMeshMode(mode: String) {
+        viewModelScope.launch {
+            userRepository.setMeshMode(mode)
+        }
+    }
+
+    fun updateUserName(name: String) {
+        viewModelScope.launch {
+            // Placeholder: ideally update in UserDao
         }
     }
 

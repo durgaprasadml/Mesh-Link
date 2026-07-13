@@ -122,7 +122,7 @@ fun AnalyticsScreen(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Timeline,
                         label = "Avg Hops",
-                        value = String.format("%.1f", stats.avgHopCount),
+                        value = String.format(java.util.Locale.US, "%.1f", stats.avgHopCount),
                         color = Color(0xFFF59E0B)
                     )
                     StatCard(
@@ -407,7 +407,7 @@ fun ActiveNodesCard(nodes: Set<String>) {
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Wifi, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Wifi, contentDescription = "WiFi icon", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     "Active Mesh Nodes (${nodes.size})",

@@ -29,7 +29,7 @@ fun PermissionHandler(
     val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     val bluetoothAdapter = bluetoothManager.adapter
 
-    var hasPermissions by remember { mutableStateOf(checkPermissions(context)) }
+    var hasPermissions by remember { mutableStateOf(hasRequiredPermissions(context)) }
     var isBluetoothEnabled by remember { mutableStateOf(bluetoothAdapter?.isEnabled == true) }
 
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
@@ -147,7 +147,7 @@ fun PermissionHandler(
     }
 }
 
-private fun checkPermissions(context: Context): Boolean {
+fun hasRequiredPermissions(context: Context): Boolean {
     val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         listOf(
             Manifest.permission.BLUETOOTH_SCAN,

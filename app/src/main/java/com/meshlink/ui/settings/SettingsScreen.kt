@@ -38,10 +38,13 @@ fun SettingsScreen(
     onLoggedOut: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
+    val user by viewModel.user.collectAsState()
     var userName by remember { mutableStateOf("User") }
-    var encryptionEnabled by remember { mutableStateOf(true) }
-    var onlineVisibility by remember { mutableStateOf(true) }
-    var selectedMeshMode by remember { mutableStateOf("Performance") }
+    LaunchedEffect(user) { user?.name?.let { userName = it } }
+    
+    val encryptionEnabled by viewModel.isEncryptionEnabled.collectAsState()
+    val onlineVisibility by viewModel.isOnlineVisible.collectAsState(initial = true) // Fallback since it's stateflow
+    val selectedMeshMode by viewModel.meshMode.collectAsState()
     
     val meshModes = listOf("Auto", "Performance", "Battery Saver")
 
@@ -119,7 +122,7 @@ fun SettingsScreen(
                             Text("Encryption", color = TextPrimary, fontSize = 16.sp)
                             Switch(
                                 checked = encryptionEnabled,
-                                onCheckedChange = { encryptionEnabled = it },
+                                onCheckedChange = { viewModel.setEncryptionEnabled(it) },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.Black,
                                     checkedTrackColor = PrimaryNeonGreen
@@ -135,7 +138,7 @@ fun SettingsScreen(
                             Text("Online visibility", color = TextPrimary, fontSize = 16.sp)
                             Switch(
                                 checked = onlineVisibility,
-                                onCheckedChange = { onlineVisibility = it },
+                                onCheckedChange = { viewModel.setOnlineVisible(it) },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.Black,
                                     checkedTrackColor = PrimaryNeonGreen
@@ -155,7 +158,7 @@ fun SettingsScreen(
                     meshModes.forEachIndexed { index, label ->
                         SegmentedButton(
                             selected = label == selectedMeshMode,
-                            onClick = { selectedMeshMode = label },
+                            onClick = { viewModel.setMeshMode(label) },
                             shape = SegmentedButtonDefaults.itemShape(index = index, count = meshModes.size),
                             colors = SegmentedButtonDefaults.colors(
                                 activeContainerColor = PrimaryNeonGreen,
@@ -235,6 +238,6 @@ fun SettingsClickableRow(title: String, textColor: Color = TextPrimary, onClick:
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(title, color = textColor, fontSize = 16.sp)
-        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary)
+        Icon(Icons.Default.ChevronRight, contentDescription = "Go to details", tint = TextSecondary)
     }
 }

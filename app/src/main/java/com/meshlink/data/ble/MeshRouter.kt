@@ -26,6 +26,7 @@ class MeshRouter @Inject constructor(
         private const val TAG = "MeshRouter"
         private const val RECONNECT_INTERVAL_MS = 10_000L
         private const val DEDUP_CACHE_SIZE = 2000
+        private const val MAX_RELAY_PACKETS = 1000
     }
 
     var localMeshId: String = ""
@@ -38,16 +39,14 @@ class MeshRouter @Inject constructor(
 
     val routeTable = ConcurrentHashMap<String, RouteEntry>()
 
-    private val processedPackets: MutableSet<String> = Collections.synchronizedSet(
-        object : LinkedHashSet<String>() {
-            override fun add(element: String): Boolean {
-                if (size >= DEDUP_CACHE_SIZE) {
-                    val first = iterator().next()
-                    remove(first)
+    private val processedPackets: MutableSet<String> = Collections.newSetFromMap(
+        Collections.synchronizedMap(
+            object : java.util.LinkedHashMap<String, Boolean>(DEDUP_CACHE_SIZE, 0.75f, true) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?): Boolean {
+                    return size > DEDUP_CACHE_SIZE
                 }
-                return super.add(element)
             }
-        }
+        )
     )
 
     private val _incomingPayloads =
@@ -62,6 +61,7 @@ class MeshRouter @Inject constructor(
         observeIncoming()
         startReconnectLoop()
         startRouteCleanupLoop()
+        startStoreAndForwardLoop()
     }
 
     // ─────────────────── Incoming Observation ───────────────────
@@ -88,6 +88,7 @@ class MeshRouter @Inject constructor(
                 try {
                     tryDeliverCachedPackets()
                     relayDao.deleteExpiredPackets(System.currentTimeMillis())
+                    relayDao.enforceStorageCap(MAX_RELAY_PACKETS)
                 } catch (e: Exception) {
                     Log.e(TAG, "Store-and-forward loop error: ${e.message}")
                 }

@@ -136,6 +136,13 @@ class WifiDirectManager @Inject constructor(
     fun connectToPeer(deviceAddress: String) {
         val config = WifiP2pConfig().apply {
             this.deviceAddress = deviceAddress
+            
+            // Deterministic Group Owner election based on MAC address comparison
+            val localMac = _localDeviceMac.value
+            if (localMac != null) {
+                // Higher MAC becomes Group Owner (intent = 15), lower becomes client (intent = 0)
+                groupOwnerIntent = if (localMac > deviceAddress) 15 else 0
+            }
         }
         
         manager?.connect(channel, config, object : WifiP2pManager.ActionListener {

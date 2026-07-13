@@ -82,6 +82,15 @@ fun ChatDetailScreen(
         uri?.let { viewModel.sendImage(it) }
     }
 
+    var cameraUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            cameraUri?.let { viewModel.sendImage(it) }
+        }
+    }
+
     // Audio permission launcher
     var hasAudioPermission by remember {
         mutableStateOf(
@@ -144,8 +153,16 @@ fun ChatDetailScreen(
                 },
                 onCameraClick = {
                     showAttachmentSheet = false
-                    // Camera capture deferred to Phase 7 (Background Relay Service).
-                    // Use gallery picker (above) to send photos in the current build.
+                    val dir = File(context.cacheDir, "images")
+                    dir.mkdirs()
+                    val tempFile = File(dir, "camera_${System.currentTimeMillis()}.jpg")
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        tempFile
+                    )
+                    cameraUri = uri
+                    cameraLauncher.launch(uri)
                 },
                 onLocationClick = {
                     showAttachmentSheet = false
@@ -209,7 +226,7 @@ fun ChatDetailScreen(
                                         viewModel.deleteChat()
                                         onBack()
                                     },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = "Delete") }
                                 )
                             }
                         }
@@ -434,7 +451,7 @@ fun MessageBubble(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
-                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(36.dp))
+                                Icon(Icons.Default.Image, contentDescription = "Image placeholder", modifier = Modifier.size(36.dp))
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(if (message.isFromMe) "Sending image..." else "Receiving image...", style = MaterialTheme.typography.labelSmall)
                                 if (message.status == DeliveryStatus.FAILED) {
@@ -535,14 +552,14 @@ fun MessageBubble(
                             }
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color(0xFF3B82F6), modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = Color(0xFF3B82F6), modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("📍 Location Shared", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         if (message.latitude != null && message.longitude != null) {
-                            Text("Lat: ${String.format("%.6f", message.latitude)}", color = textColor, style = MaterialTheme.typography.bodySmall)
-                            Text("Lng: ${String.format("%.6f", message.longitude)}", color = textColor, style = MaterialTheme.typography.bodySmall)
+                            Text("Lat: ${String.format(Locale.US, "%.6f", message.latitude)}", color = textColor, style = MaterialTheme.typography.bodySmall)
+                            Text("Lng: ${String.format(Locale.US, "%.6f", message.longitude)}", color = textColor, style = MaterialTheme.typography.bodySmall)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text("Tap to open in Maps", color = textColor.copy(alpha = 0.5f), style = MaterialTheme.typography.labelSmall)
                         }
@@ -563,8 +580,8 @@ fun MessageBubble(
                         Text("🚨 SOS EMERGENCY", color = Color.White, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(8.dp))
                         if (message.latitude != null && message.longitude != null) {
-                            Text("📍 Lat: ${String.format("%.6f", message.latitude)}", color = Color.White, style = MaterialTheme.typography.bodySmall)
-                            Text("📍 Lng: ${String.format("%.6f", message.longitude)}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                            Text("📍 Lat: ${String.format(Locale.US, "%.6f", message.latitude)}", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                            Text("📍 Lng: ${String.format(Locale.US, "%.6f", message.longitude)}", color = Color.White, style = MaterialTheme.typography.bodySmall)
                         }
                         if (message.batteryPercent != null && message.batteryPercent >= 0) {
                             Text("🔋 Battery: ${message.batteryPercent}%", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)

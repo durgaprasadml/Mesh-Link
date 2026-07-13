@@ -295,7 +295,7 @@ class MediaTransferManager(
         val progress = buffer.size.toFloat() / meta.totalChunks.coerceAtLeast(1)
         updateProgress(transferId, progress)
 
-        Log.d(TAG, "[$transferId] Chunk ${packet.chunkIndex + 1}/${meta.totalChunks} (${buffer.size} buffered, ${String.format("%.0f", progress * 100)}%)")
+        Log.d(TAG, "[$transferId] Chunk ${packet.chunkIndex + 1}/${meta.totalChunks} (${buffer.size} buffered, ${String.format(java.util.Locale.US, "%.0f", progress * 100)}%)")
 
         // Req. 4: Send ACK back to sender
         sendAck(packet.senderId, packet.targetId, transferId, packet.chunkIndex)

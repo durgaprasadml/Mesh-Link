@@ -21,4 +21,7 @@ interface RelayDao {
 
     @Query("DELETE FROM relay_packets WHERE expiryTimestamp < :now")
     suspend fun deleteExpiredPackets(now: Long)
+
+    @Query("DELETE FROM relay_packets WHERE packetId IN (SELECT packetId FROM relay_packets ORDER BY timestamp ASC LIMIT -1 OFFSET :maxSize)")
+    suspend fun enforceStorageCap(maxSize: Int)
 }

@@ -27,9 +27,12 @@ import com.meshlink.data.wifi.WifiSocketTransport
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -55,6 +58,8 @@ class BleRepository @Inject constructor(
     companion object {
         private const val TAG = "BleRepository"
     }
+
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     val scannedDevices: StateFlow<Map<String, BleDevice>> = scanner.scannedDevices
     val incomingMeshPayloads: SharedFlow<Pair<String, MeshPacket>> = meshRouter.incomingPayloads
@@ -236,6 +241,20 @@ class BleRepository @Inject constructor(
 
         Log.d(TAG, "Retrying ${pending.size} pending messages...")
         pending.forEach { msg ->
+            if (!hasDeliveryPath(msg.chatId)) {
+                return@forEach
+            }
+            val reqEncCheck = userRepository.isEncryptionEnabled.first()
+            if (reqEncCheck && !cryptoManager.hasPeerKey(msg.chatId)) {
+                Log.w(TAG, "Missing key for ${msg.chatId}, requesting key exchange and postponing retry")
+                val localUser = userRepository.getLocalUser()
+                if (localUser != null) {
+                    val localPeerId = networkId(localUser.meshId)
+                    val publicKey = cryptoManager.getOrCreatePublicKey()
+                    meshRouter.broadcastKeyExchange(localPeerId, publicKey)
+                }
+                return@forEach
+            }
             when (msg.messageType) {
                 MessageType.TEXT -> {
                     val user = userRepository.getLocalUser() ?: return@forEach
@@ -244,7 +263,10 @@ class BleRepository @Inject constructor(
                         put("text", msg.text)
                         put("senderName", user.name)
                     }.toString()
-                    val (payload, isEncrypted) = cryptoManager.encryptOrPassthrough(wrappedPayload, msg.chatId)
+                    val reqEnc = userRepository.isEncryptionEnabled.first()
+                    val result = cryptoManager.encryptOrPassthrough(wrappedPayload, msg.chatId, reqEnc, msg.messageId, 0)
+                    if (result == null) return@forEach
+                    val (payload, isEncrypted) = result
                     // FIX ISSUE 1: Pass original messageId as packetId so retries
                     // produce the same packet and receiver deduplicates them
                     if (dispatchTextMessage(msg.chatId, payload, localPeerId, isEncrypted, msg.messageId)) {
@@ -275,7 +297,10 @@ class BleRepository @Inject constructor(
                         put("timestamp", msg.timestamp)
                         put("senderName", "Me")
                     }.toString()
-                    val (encPayload, isEnc) = cryptoManager.encryptOrPassthrough(payloadJson, msg.chatId)
+                    val reqEnc = userRepository.isEncryptionEnabled.first()
+                    val result = cryptoManager.encryptOrPassthrough(payloadJson, msg.chatId, reqEnc, msg.messageId, 0)
+                    if (result == null) return@forEach
+                    val (encPayload, isEnc) = result
                     val packet = MeshPacket(
                         packetId = msg.messageId, // Use original messageId
                         senderId = networkId(msg.senderId),
@@ -485,7 +510,10 @@ class BleRepository @Inject constructor(
         }.toString()
 
         // Encrypt the payload
-        val (payload, isEncrypted) = cryptoManager.encryptOrPassthrough(wrappedPayload, targetPeerId)
+        val reqEnc = userRepository.isEncryptionEnabled.first()
+        val result = cryptoManager.encryptOrPassthrough(wrappedPayload, targetPeerId, reqEnc, messageId, 0)
+        if (result == null) return
+        val (payload, isEncrypted) = result
         // FIX ISSUE 1: Pass messageId as packetId so retries use the same ID
         if (dispatchTextMessage(targetPeerId, payload, localPeerId, isEncrypted, messageId)) {
             chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
@@ -592,6 +620,21 @@ class BleRepository @Inject constructor(
             try {
                 Log.d(TAG, "sendImage: Sending via Wi-Fi Direct socket...")
                 val base64Data = android.util.Base64.encodeToString(compressedBytes, android.util.Base64.NO_WRAP)
+                
+                val metaPacket = MeshPacket(
+                    senderId = localPeerId,
+                    targetId = targetPeerId,
+                    payload = "MEDIA:image/jpeg",
+                    type = PacketType.MEDIA_META,
+                    transferId = messageId,
+                    chunkIndex = 0,
+                    totalChunks = 1,
+                    mimeType = "image/jpeg",
+                    encrypted = false,
+                    ttl = 10
+                )
+                wifiSocketTransport.sendPacket(metaPacket)
+                
                 val packet = MeshPacket(
                     packetId = messageId,
                     senderId = localPeerId,
@@ -601,7 +644,8 @@ class BleRepository @Inject constructor(
                     transferId = messageId,
                     mimeType = "image/jpeg",
                     encrypted = false,
-                    totalChunks = 1
+                    totalChunks = 1,
+                    chunkIndex = 0
                 )
                 wifiSocketTransport.sendPacket(packet)
                 chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
@@ -745,6 +789,21 @@ class BleRepository @Inject constructor(
             try {
                 Log.d(TAG, "sendVoiceNote: Sending via Wi-Fi Direct socket...")
                 val base64Data = android.util.Base64.encodeToString(voiceBytes, android.util.Base64.NO_WRAP)
+                
+                val metaPacket = MeshPacket(
+                    senderId = localPeerId,
+                    targetId = targetPeerId,
+                    payload = "MEDIA:audio/m4a",
+                    type = PacketType.MEDIA_META,
+                    transferId = messageId,
+                    chunkIndex = 0,
+                    totalChunks = 1,
+                    mimeType = "audio/m4a",
+                    encrypted = false,
+                    ttl = 10
+                )
+                wifiSocketTransport.sendPacket(metaPacket)
+                
                 val packet = MeshPacket(
                     packetId = messageId,
                     senderId = localPeerId,
@@ -754,7 +813,8 @@ class BleRepository @Inject constructor(
                     transferId = messageId,
                     mimeType = "audio/m4a",
                     encrypted = false,
-                    totalChunks = 1
+                    totalChunks = 1,
+                    chunkIndex = 0
                 )
                 wifiSocketTransport.sendPacket(packet)
                 chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
@@ -802,9 +862,14 @@ class BleRepository @Inject constructor(
         }.toString()
 
         // Encrypt GPS coordinates
-        val (encPayload, isEnc) = cryptoManager.encryptOrPassthrough(payloadJson, targetPeerId)
+        val reqEnc = userRepository.isEncryptionEnabled.first()
+        val generatedMessageId = java.util.UUID.randomUUID().toString()
+        val result = cryptoManager.encryptOrPassthrough(payloadJson, targetPeerId, reqEnc, generatedMessageId, 0)
+        if (result == null) return
+        val (encPayload, isEnc) = result
 
         val packet = MeshPacket(
+            packetId = generatedMessageId,
             senderId = localPeerId,
             targetId = targetPeerId,
             payload = encPayload,

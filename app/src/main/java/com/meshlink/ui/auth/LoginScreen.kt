@@ -133,7 +133,7 @@ fun LoginScreen(
                         value = phoneNumber,
                         onValueChange = { phoneNumber = it },
                         label = { Text("Phone Number", color = TextSecondary) },
-                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = NeonGreen) },
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = "Phone icon", tint = NeonGreen) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -154,7 +154,7 @@ fun LoginScreen(
                         value = pin,
                         onValueChange = { if (it.length <= 4) pin = it },
                         label = { Text("4-Digit PIN", color = TextSecondary) },
-                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = NeonGreen) },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Lock icon", tint = NeonGreen) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,

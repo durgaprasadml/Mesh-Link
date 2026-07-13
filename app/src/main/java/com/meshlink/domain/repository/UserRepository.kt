@@ -9,4 +9,13 @@ interface UserRepository {
     suspend fun getLocalUser(): UserEntity?
     suspend fun logout()
     val isUserLoggedIn: Flow<Boolean>
+    
+    val isEncryptionEnabled: Flow<Boolean>
+    suspend fun setEncryptionEnabled(enabled: Boolean)
+    
+    val isOnlineVisible: Flow<Boolean>
+    suspend fun setOnlineVisible(visible: Boolean)
+    
+    val meshMode: Flow<String>
+    suspend fun setMeshMode(mode: String)
 }

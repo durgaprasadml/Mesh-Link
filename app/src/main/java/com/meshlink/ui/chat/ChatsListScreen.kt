@@ -91,7 +91,7 @@ fun ChatCard(chat: ChatEntity, onClick: () -> Unit) {
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                Icon(Icons.Default.Person, contentDescription = "User avatar", tint = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {

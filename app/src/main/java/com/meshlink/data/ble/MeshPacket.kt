@@ -41,10 +41,11 @@ object MeshPacketParser {
         json.put("senderId", packet.senderId)
         json.put("targetId", packet.targetId)
         json.put("payload", packet.payload)
-        json.put("type", packet.type.name)
-        json.put("encrypted", packet.encrypted)
-        json.put("ttl", packet.ttl)
-        json.put("hopCount", packet.hopCount)
+        
+        if (packet.type != PacketType.TEXT) json.put("type", packet.type.name)
+        if (packet.encrypted) json.put("encrypted", true)
+        if (packet.ttl != 10) json.put("ttl", packet.ttl)
+        if (packet.hopCount != 0) json.put("hopCount", packet.hopCount)
 
         packet.transferId?.let { json.put("transferId", it) }
         if (packet.type != PacketType.TEXT) {
@@ -53,9 +54,11 @@ object MeshPacketParser {
         }
         packet.mimeType?.let { json.put("mimeType", it) }
 
-        val array = JSONArray()
-        packet.visitedPath.forEach { array.put(it) }
-        json.put("visitedPath", array)
+        if (packet.visitedPath.isNotEmpty()) {
+            val array = JSONArray()
+            packet.visitedPath.forEach { array.put(it) }
+            json.put("visitedPath", array)
+        }
 
         return json.toString()
     }
@@ -63,10 +66,12 @@ object MeshPacketParser {
     fun fromJson(jsonString: String): MeshPacket? {
         return try {
             val json = JSONObject(jsonString)
-            val pathArray = json.getJSONArray("visitedPath")
             val path = mutableListOf<String>()
-            for (i in 0 until pathArray.length()) {
-                path.add(pathArray.getString(i))
+            val pathArray = json.optJSONArray("visitedPath")
+            if (pathArray != null) {
+                for (i in 0 until pathArray.length()) {
+                    path.add(pathArray.getString(i))
+                }
             }
             val typeName = json.optString("type", "TEXT")
             val packetType = try { PacketType.valueOf(typeName) } catch (_: Exception) { PacketType.TEXT }
@@ -82,8 +87,8 @@ object MeshPacketParser {
                 totalChunks = json.optInt("totalChunks", 0),
                 mimeType = json.optString("mimeType", null),
                 encrypted = json.optBoolean("encrypted", false),
-                ttl = json.getInt("ttl"),
-                hopCount = json.getInt("hopCount"),
+                ttl = json.optInt("ttl", 10),
+                hopCount = json.optInt("hopCount", 0),
                 visitedPath = path
             )
         } catch (e: Exception) {

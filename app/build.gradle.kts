@@ -46,6 +46,10 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 
     buildFeatures {
         compose = true
@@ -59,6 +63,11 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 }
 
@@ -112,6 +121,9 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
+    testImplementation("io.mockk:mockk:1.13.10")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

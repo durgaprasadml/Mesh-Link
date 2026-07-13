@@ -11,6 +11,7 @@ object SecurityConstants {
     const val ECDH_ALGORITHM = "ECDH"
     const val EC_ALGORITHM = "EC"
     const val SHA_256_ALGORITHM = "SHA-256"
+    const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
     
     // ────────── Sizes & Parameters ──────────
     const val AES_KEY_SIZE_BITS = 256
@@ -38,7 +39,11 @@ object SecurityConstants {
     
     // ────────── Mesh Crypto Keys ──────────
     const val MESH_KEYSTORE_ALIAS = "mesh_link_ecdh_key"
+    const val SIGNING_KEYSTORE_ALIAS = "mesh_link_signing_key"
     const val PEER_KEYS_PREF = "mesh_peer_keys"
+    const val PEER_SIGNING_KEYS_PREF = "mesh_peer_signing_keys"
     const val SELF_PRIVATE_KEY_KEY = "__self_private_key__"
     const val SELF_PUBLIC_KEY_KEY = "__self_public_key__"
+    const val SELF_SIGNING_PRIVATE_KEY_KEY = "__self_signing_private_key__"
+    const val SELF_SIGNING_PUBLIC_KEY_KEY = "__self_signing_public_key__"
 }

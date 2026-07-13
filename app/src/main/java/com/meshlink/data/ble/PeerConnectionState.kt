@@ -1,0 +1,16 @@
+package com.meshlink.data.ble
+
+enum class PeerConnectionState {
+    DISCONNECTED,
+    DISCOVERED,
+    CONNECTING,
+    CONNECTED,
+    SERVICES_DISCOVERED,
+    MTU_READY,
+    KEY_EXCHANGE_STARTED,
+    KEY_EXCHANGE_COMPLETE,
+    IDENTITY_VERIFIED,
+    KEY_VERIFIED,
+    SESSION_READY,
+    SESSION_ESTABLISHED
+}

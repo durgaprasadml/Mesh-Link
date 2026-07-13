@@ -15,7 +15,8 @@ enum class PacketType {
     KEY_EXCHANGE,
     DELIVERY_ACK,
     READ_RECEIPT,
-    WIFI_NEGOTIATION
+    WIFI_NEGOTIATION,
+    SESSION_REKEY
 }
 
 data class MeshPacket(

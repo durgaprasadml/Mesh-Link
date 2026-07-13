@@ -43,6 +43,16 @@ class BleGattManager(private val context: Context) {
     private val pendingClientWrites = mutableListOf<PendingClientWrite>()
     private var activeWriteAddress: String? = null
 
+    sealed class GattEvent {
+        data class Connected(val address: String) : GattEvent()
+        data class Disconnected(val address: String) : GattEvent()
+        data class MtuChanged(val address: String, val mtu: Int) : GattEvent()
+        data class ServicesDiscovered(val address: String) : GattEvent()
+    }
+
+    private val _gattEvents = MutableSharedFlow<GattEvent>(extraBufferCapacity = 100)
+    val gattEvents: SharedFlow<GattEvent> = _gattEvents.asSharedFlow()
+
     private val _incomingMessages = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 50)
     val incomingMessages: SharedFlow<Pair<String, String>> = _incomingMessages.asSharedFlow()
 
@@ -85,6 +95,14 @@ class BleGattManager(private val context: Context) {
         if (activeClients.containsKey(address)) return
         val device = bluetoothManager.adapter.getRemoteDevice(address)
         activeClients[address] = device.connectGatt(context, false, clientCallback)
+    }
+
+    fun disconnectDevice(address: String) {
+        activeClients[address]?.let {
+            it.disconnect()
+            it.close()
+        }
+        activeClients.remove(address)
     }
 
     fun broadcastPacket(jsonPacket: String, excludeAddress: String? = null, includeAddress: String? = null) {
@@ -277,10 +295,12 @@ class BleGattManager(private val context: Context) {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 connectedServers[device.address] = device
+                _gattEvents.tryEmit(GattEvent.Connected(device.address))
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connectedServers.remove(device.address)
                 deviceMtus.remove(device.address)
                 reassemblyBuffers.remove(device.address)
+                _gattEvents.tryEmit(GattEvent.Disconnected(device.address))
             }
         }
 
@@ -288,6 +308,7 @@ class BleGattManager(private val context: Context) {
             super.onMtuChanged(device, mtu)
             deviceMtus[device.address] = mtu
             Log.d("BleGatt", "Server MTU changed for ${device.address}: $mtu")
+            _gattEvents.tryEmit(GattEvent.MtuChanged(device.address, mtu))
         }
 
         override fun onCharacteristicWriteRequest(
@@ -327,6 +348,7 @@ class BleGattManager(private val context: Context) {
     private val clientCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
+                _gattEvents.tryEmit(GattEvent.Connected(gatt.device.address))
                 // Negotiate massive MTU for entire JSON packets
                 val mtuRequested = gatt.requestMtu(512)
                 if (!mtuRequested) {
@@ -344,6 +366,7 @@ class BleGattManager(private val context: Context) {
                 }
                 gatt.close()
                 flushClientWriteQueue()
+                _gattEvents.tryEmit(GattEvent.Disconnected(gatt.device.address))
             }
         }
 
@@ -352,12 +375,16 @@ class BleGattManager(private val context: Context) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 deviceMtus[gatt.device.address] = mtu
                 Log.d("BleGatt", "Client MTU changed for ${gatt.device.address}: $mtu")
+                _gattEvents.tryEmit(GattEvent.MtuChanged(gatt.device.address, mtu))
             }
             gatt.discoverServices()
         }
 
         @Suppress("DEPRECATION")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                _gattEvents.tryEmit(GattEvent.ServicesDiscovered(gatt.device.address))
+            }
             val char = gatt.getService(BleConstants.MESH_SERVICE_UUID)?.getCharacteristic(BleConstants.MSG_CHAR_UUID)
             if (char != null) {
                 gatt.setCharacteristicNotification(char, true)

@@ -87,6 +87,18 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideTrustDao(db: MeshDatabase): com.meshlink.data.local.TrustDao {
+        return db.trustDao
+    }
+
+    @Provides
+    @Singleton
+    fun provideAuditLogDao(db: MeshDatabase): com.meshlink.data.local.AuditLogDao {
+        return db.auditLogDao
+    }
+
+    @Provides
+    @Singleton
     fun provideDataStore(@ApplicationContext context: Context): DataStore<Preferences> {
         return PreferenceDataStoreFactory.create(
             produceFile = { context.preferencesDataStoreFile("mesh_preferences") }

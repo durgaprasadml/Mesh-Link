@@ -70,6 +70,8 @@ class MeshCryptoManagerTest {
         // Mock shared preferences to return null so it generates new ones
         every { sharedPrefs.getString("__self_private_key__", null) } returns null
         every { sharedPrefs.getString("__self_public_key__", null) } returns null
+        every { sharedPrefs.getString("__self_signing_private_key__", null) } returns null
+        every { sharedPrefs.getString("__self_signing_public_key__", null) } returns null
     }
 
     @After
@@ -93,5 +95,57 @@ class MeshCryptoManagerTest {
         
         assertEquals(originalPayload, encryptedText)
         assertFalse(wasEncrypted)
+    }
+
+    @Test
+    fun `test sign and verifySignature`() {
+        // Mock that the signing key is stored and returned
+        val privBase64Captor = slot<String>()
+        every { editor.putString("__self_signing_private_key__", capture(privBase64Captor)) } returns editor
+        every { sharedPrefs.getString("__self_signing_private_key__", null) } answers { 
+            if (privBase64Captor.isCaptured) privBase64Captor.captured else null 
+        }
+
+        val pubKeyBase64 = cryptoManager.getOrCreateSigningKey()
+
+        val dataToSign = "Test payload 123".toByteArray(Charsets.UTF_8)
+        val signature = cryptoManager.sign(dataToSign)
+        
+        val isValid = cryptoManager.verifySignature(pubKeyBase64, dataToSign, signature)
+        assertTrue("Signature should be valid", isValid)
+    }
+
+    @Test
+    fun `test invalid signature rejection`() {
+        // Mock that the signing key is stored and returned
+        val privBase64Captor = slot<String>()
+        every { editor.putString("__self_signing_private_key__", capture(privBase64Captor)) } returns editor
+        every { sharedPrefs.getString("__self_signing_private_key__", null) } answers { 
+            if (privBase64Captor.isCaptured) privBase64Captor.captured else null 
+        }
+
+        val pubKeyBase64 = cryptoManager.getOrCreateSigningKey()
+
+        val dataToSign = "Test payload 123".toByteArray(Charsets.UTF_8)
+        val signature = cryptoManager.sign(dataToSign)
+        
+        // Modify data
+        val tamperedData = "Test payload 124".toByteArray(Charsets.UTF_8)
+        val isValid = cryptoManager.verifySignature(pubKeyBase64, tamperedData, signature)
+        assertFalse("Tampered data signature should be invalid", isValid)
+        
+        // Modify signature
+        signature[0] = signature[0].inc()
+        val isSigValid = cryptoManager.verifySignature(pubKeyBase64, dataToSign, signature)
+        assertFalse("Tampered signature should be invalid", isSigValid)
+    }
+
+    @Test
+    fun `test fingerprint generation`() {
+        val pubKeyBase64 = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+A" // valid base64
+        val fingerprint = cryptoManager.getDeviceFingerprint(pubKeyBase64)
+        
+        assertNotNull(fingerprint)
+        assertTrue("Fingerprint should contain colons", fingerprint.contains(":"))
     }
 }

@@ -3,6 +3,8 @@ package com.meshlink.data.ble
 import android.util.Log
 import com.meshlink.data.analytics.MeshAnalytics
 import com.meshlink.data.local.RelayDao
+import com.meshlink.data.security.TrustManager
+import com.meshlink.data.security.TrustLevel
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -44,13 +46,15 @@ class MeshRouterTest {
 
         analytics = mockk(relaxed = true)
         relayDao = mockk(relaxed = true)
+        val trustManager = mockk<TrustManager>(relaxed = true)
+        every { trustManager.getTrustLevel(any()) } returns TrustLevel.TRUSTED
 
         val map = java.util.concurrent.ConcurrentHashMap<String, android.bluetooth.BluetoothDevice>()
         map["peer2"] = mockk(relaxed = true)
         every { gattManager.connectedServers } returns map
         every { gattManager.activeClients } returns java.util.concurrent.ConcurrentHashMap()
 
-        meshRouter = MeshRouter(gattManager, analytics, relayDao)
+        meshRouter = MeshRouter(gattManager, analytics, relayDao, trustManager)
         meshRouter.localMeshId = "local_node"
     }
 

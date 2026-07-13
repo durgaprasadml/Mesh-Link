@@ -15,11 +15,15 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import com.meshlink.data.security.TrustManager
+import com.meshlink.data.security.TrustLevel
+
 @Singleton
 class MeshRouter @Inject constructor(
     private val gattManager: BleGattManager,
     private val analytics: MeshAnalytics,
-    private val relayDao: RelayDao
+    private val relayDao: RelayDao,
+    private val trustManager: TrustManager
 ) {
 
     companion object {
@@ -114,6 +118,12 @@ class MeshRouter @Inject constructor(
                 return@forEach
             }
 
+            val targetTrustLevel = trustManager.getTrustLevel(entity.targetId)
+            if (targetTrustLevel == TrustLevel.BLOCKED || targetTrustLevel == TrustLevel.REVOKED) {
+                relayDao.deletePacket(entity.packetId)
+                return@forEach
+            }
+
             val packet = MeshPacket(
                 packetId = entity.packetId,
                 senderId = entity.senderId,
@@ -186,6 +196,13 @@ class MeshRouter @Inject constructor(
         val packet = MeshPacketParser.fromJson(json)
         if (packet == null) {
             Log.w(TAG, "JSON parse failed from $immediateSenderAddress")
+            return
+        }
+
+        // --- Trust Validation ---
+        val trustLevel = trustManager.getTrustLevel(packet.senderId)
+        if (trustLevel == TrustLevel.BLOCKED || trustLevel == TrustLevel.REVOKED) {
+            Log.w(TAG, "Dropped packet from rogue node ${packet.senderId}")
             return
         }
 
@@ -372,5 +389,22 @@ class MeshRouter @Inject constructor(
 
         sendMediaPacket(packet)
         Log.d(TAG, "KEY_EXCHANGE broadcast from ${myMeshId.takeLast(6)}")
+    }
+
+    fun sendKeyExchange(
+        targetId: String,
+        myMeshId: String,
+        publicKeyBase64: String
+    ) {
+        val packet = MeshPacket(
+            senderId = myMeshId,
+            targetId = targetId,
+            payload = publicKeyBase64,
+            type = PacketType.KEY_EXCHANGE,
+            ttl = 10
+        )
+
+        sendMediaPacket(packet)
+        Log.d(TAG, "KEY_EXCHANGE sent to ${targetId.takeLast(6)} from ${myMeshId.takeLast(6)}")
     }
 }

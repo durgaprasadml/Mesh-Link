@@ -24,6 +24,9 @@ import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.data.wifi.WifiDirectManager
 import com.meshlink.data.wifi.WifiSocketTransport
+import com.meshlink.data.ble.BleGattManager.GattEvent
+import com.meshlink.data.ble.PeerConnectionState
+import java.util.concurrent.ConcurrentHashMap
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +56,10 @@ class BleRepository @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
     private val wifiDirectManager: WifiDirectManager,
     private val wifiSocketTransport: WifiSocketTransport,
+    private val sessionManager: com.meshlink.data.crypto.SessionManager,
+    private val rekeyManager: com.meshlink.data.crypto.RekeyManager,
+    private val trustManager: com.meshlink.data.security.TrustManager,
+    private val securityMonitor: com.meshlink.data.security.MeshSecurityMonitor,
     @ApplicationContext private val context: Context
 ) {
     companion object {
@@ -60,6 +67,53 @@ class BleRepository @Inject constructor(
     }
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    private val peerStates = ConcurrentHashMap<String, PeerConnectionState>()
+
+    private fun updatePeerState(address: String, newState: PeerConnectionState) {
+        val current = peerStates[address] ?: PeerConnectionState.DISCONNECTED
+        peerStates[address] = newState
+        Log.d(TAG, "Peer $address state: $current -> $newState")
+        
+        if (newState == PeerConnectionState.SERVICES_DISCOVERED || newState == PeerConnectionState.MTU_READY) {
+            checkAndTriggerHandshake(address)
+        }
+    }
+
+    private fun checkAndTriggerHandshake(address: String) {
+        val state = peerStates[address] ?: return
+        if (state == PeerConnectionState.SERVICES_DISCOVERED || state == PeerConnectionState.MTU_READY) {
+            val peerId = scannedDevices.value.values.firstOrNull { it.address == address }?.meshId
+                ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == address }?.key
+                
+            if (peerId != null) {
+                scope.launch {
+                    val reqEnc = userRepository.isEncryptionEnabled.first()
+                    if (reqEnc) {
+                        if (cryptoManager.hasPeerKey(peerId)) {
+                            updatePeerState(address, PeerConnectionState.SESSION_READY)
+                            retryPendingMessages()
+                        } else {
+                            val currentState = peerStates[address]
+                            if (currentState != PeerConnectionState.KEY_EXCHANGE_STARTED) {
+                                peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
+                                val user = userRepository.getLocalUser()
+                                if (user != null) {
+                                    val localPeerId = networkId(user.meshId)
+                                    val packetBase = generateSignedKeyExchange(localPeerId)
+                                    val packet = packetBase.copy(targetId = peerId)
+                                    dispatchSinglePacket(peerId, packet)
+                                }
+                            }
+                        }
+                    } else {
+                        updatePeerState(address, PeerConnectionState.SESSION_READY)
+                        retryPendingMessages()
+                    }
+                }
+            }
+        }
+    }
 
     val scannedDevices: StateFlow<Map<String, BleDevice>> = scanner.scannedDevices
     val incomingMeshPayloads: SharedFlow<Pair<String, MeshPacket>> = meshRouter.incomingPayloads
@@ -98,6 +152,30 @@ class BleRepository @Inject constructor(
     }
 
     init {
+        // Wire RekeyManager
+        rekeyManager.sendPacketCallback = { peerId, packet ->
+            scope.launch {
+                val user = userRepository.getLocalUser()
+                val senderId = user?.let { networkId(it.meshId) } ?: ""
+                dispatchSinglePacket(peerId, packet.copy(senderId = senderId))
+            }
+        }
+        rekeyManager.forceKeyExchangeCallback = { peerId ->
+            scope.launch {
+                val address = resolvePeerAddress(peerId)
+                if (address != null) {
+                    peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
+                    val user = userRepository.getLocalUser()
+                    if (user != null) {
+                        val localPeerId = networkId(user.meshId)
+                        val packetBase = generateSignedKeyExchange(localPeerId)
+                        val packet = packetBase.copy(targetId = peerId)
+                        dispatchSinglePacket(peerId, packet)
+                    }
+                }
+            }
+        }
+
         // Wire MediaTransferManager so it can dispatch ACK/NACK/retried chunks via MeshRouter
         mediaTransferManager.onSendPacket = { packet ->
             meshRouter.sendMediaPacket(packet)
@@ -186,8 +264,55 @@ class BleRepository @Inject constructor(
     }
 
     private suspend fun handleIncomingPacket(packet: MeshPacket) {
+        if (packet.targetId == "BROADCAST") {
+            // Broadcasts are not encrypted
+        } else {
+            val myMeshId = userRepository.getLocalUser()?.meshId
+            if (myMeshId != null && packet.targetId != networkId(myMeshId)) {
+                // Not for me, just route it without decrypting
+                Log.d(TAG, "Routing packet to ${packet.targetId.takeLast(8)}")
+                return
+            }
+        }
+
+        var processedPacket = packet
+
+        if (packet.encrypted && packet.type != PacketType.KEY_EXCHANGE) {
+            var finalPayload = packet.payload
+            var validAad: ByteArray? = null
+
+            var usePreviousKey = false
+
+            if (finalPayload.startsWith("v2|")) {
+                val unwrapped = sessionManager.validateAndUnwrap(packet.senderId, finalPayload)
+                if (unwrapped == null) {
+                    Log.w(TAG, "Dropping packet: session validation failed")
+                    val address = resolvePeerAddress(packet.senderId)
+                    if (address != null) checkAndTriggerHandshake(address)
+                    return
+                }
+                validAad = unwrapped.first
+                finalPayload = unwrapped.second
+                val packetKv = unwrapped.third
+                val session = sessionManager.getSession(packet.senderId)
+                if (session != null && packetKv == session.previousKeyVersion) {
+                    usePreviousKey = true
+                }
+            }
+
+            val decrypted = cryptoManager.decryptOrPassthrough(finalPayload, packet.senderId, validAad, usePreviousKey)
+            if (decrypted == finalPayload && !finalPayload.startsWith("{")) {
+                Log.w(TAG, "Dropping packet: Failed to decrypt payload.")
+                val address = resolvePeerAddress(packet.senderId)
+                if (address != null) checkAndTriggerHandshake(address)
+                return
+            }
+            trustManager.increaseTrustScore(packet.senderId, 1)
+            processedPacket = packet.copy(payload = decrypted)
+        }
+
         try {
-            when (packet.type) {
+            when (processedPacket.type) {
                 PacketType.KEY_EXCHANGE -> {
                     handleKeyExchange(packet)
                 }
@@ -224,6 +349,9 @@ class BleRepository @Inject constructor(
                 }
                 PacketType.WIFI_NEGOTIATION -> {
                     handleWifiNegotiation(packet)
+                }
+                PacketType.SESSION_REKEY -> {
+                    rekeyManager.handleRekeyPacket(packet.senderId, packet.payload, cryptoManager.getPeerPublicKey(packet.senderId))
                 }
             }
         } catch (e: Exception) {
@@ -264,7 +392,7 @@ class BleRepository @Inject constructor(
                         put("senderName", user.name)
                     }.toString()
                     val reqEnc = userRepository.isEncryptionEnabled.first()
-                    val result = cryptoManager.encryptOrPassthrough(wrappedPayload, msg.chatId, reqEnc, msg.messageId, 0)
+                    val result = encryptAndWrapPayload(wrappedPayload, msg.chatId, reqEnc, msg.messageId)
                     if (result == null) return@forEach
                     val (payload, isEncrypted) = result
                     // FIX ISSUE 1: Pass original messageId as packetId so retries
@@ -298,7 +426,7 @@ class BleRepository @Inject constructor(
                         put("senderName", "Me")
                     }.toString()
                     val reqEnc = userRepository.isEncryptionEnabled.first()
-                    val result = cryptoManager.encryptOrPassthrough(payloadJson, msg.chatId, reqEnc, msg.messageId, 0)
+                    val result = encryptAndWrapPayload(payloadJson, msg.chatId, reqEnc, msg.messageId)
                     if (result == null) return@forEach
                     val (encPayload, isEnc) = result
                     val packet = MeshPacket(
@@ -388,22 +516,131 @@ class BleRepository @Inject constructor(
 
     // ────────── Crypto Helpers ──────────
 
-    /**
-     * Decrypt a packet's payload if the encrypted flag is set.
-     * Returns a copy of the packet with decrypted payload.
-     */
-    private fun decryptPacketPayload(packet: MeshPacket): MeshPacket {
-        if (!packet.encrypted) return packet
-        val decrypted = cryptoManager.decryptOrPassthrough(packet.payload, packet.senderId)
-        return packet.copy(payload = decrypted)
+    private fun encryptAndWrapPayload(
+        plaintext: String,
+        targetPeerId: String,
+        requireEncryption: Boolean,
+        messageId: String
+    ): Pair<String, Boolean>? {
+        var finalPlaintext = plaintext
+        var aadBytes: ByteArray? = null
+        var aadPrefix = ""
+
+        if (requireEncryption) {
+            val aadResult = sessionManager.generateAad(targetPeerId)
+            if (aadResult != null) {
+                aadBytes = aadResult.first
+                aadPrefix = aadResult.second
+            }
+        }
+
+        val result = cryptoManager.encryptOrPassthrough(finalPlaintext, targetPeerId, requireEncryption, messageId, 0, aadBytes)
+            ?: return null
+
+        val (ciphertext, isEncrypted) = result
+        if (isEncrypted && aadPrefix.isNotEmpty()) {
+            return Pair("$aadPrefix$ciphertext", true)
+        }
+        return result
     }
 
     /**
      * Handle incoming KEY_EXCHANGE: store the peer's ECDH public key.
      */
     private fun handleKeyExchange(packet: MeshPacket) {
-        cryptoManager.storePeerPublicKey(packet.senderId, packet.payload)
-        Log.d(TAG, "🔐 Key exchanged with: ${packet.senderId.takeLast(8)}")
+        try {
+            val parts = packet.payload.split("|")
+            if (parts.size >= 5 && parts[0] == "v2") {
+                // v2 format: v2|ecdhPub|timestamp|nonce|version|signatureBase64|signingPub
+                val ecdhPublicKey = parts[1]
+                val timestamp = parts[2].toLong()
+                val nonce = parts[3]
+                val version = parts[4].toInt()
+                val signatureBase64 = parts[5]
+                val signingPublicKey = parts[6]
+
+                val now = System.currentTimeMillis()
+                if (Math.abs(now - timestamp) > 120_000) {
+                    Log.e(TAG, "KEY_EXCHANGE timestamp expired or invalid")
+                    return
+                }
+
+                val dataToVerify = "${packet.packetId}|$ecdhPublicKey|$timestamp|$nonce|$version".toByteArray(Charsets.UTF_8)
+                val sigBytes = android.util.Base64.decode(signatureBase64, android.util.Base64.NO_WRAP)
+                if (!cryptoManager.verifySignature(signingPublicKey, dataToVerify, sigBytes)) {
+                    Log.e(TAG, "KEY_EXCHANGE signature verification failed")
+                    securityMonitor.reportEvent(packet.senderId, com.meshlink.data.security.SecurityEvent.InvalidSignature("KEY_EXCHANGE"))
+                    return
+                }
+
+                val fingerprint = cryptoManager.getDeviceFingerprint(signingPublicKey)
+                trustManager.updatePeerIdentity(packet.senderId, fingerprint, null)
+                val trustLevel = trustManager.getTrustLevel(packet.senderId)
+                if (trustLevel == com.meshlink.data.security.TrustLevel.BLOCKED || trustLevel == com.meshlink.data.security.TrustLevel.REVOKED) {
+                    Log.w(TAG, "Rejecting KEY_EXCHANGE from rogue node ${packet.senderId}")
+                    val address = resolvePeerAddress(packet.senderId)
+                    if (address != null) disconnectDevice(address)
+                    return
+                }
+
+                cryptoManager.storePeerPublicKey(packet.senderId, ecdhPublicKey)
+                cryptoManager.storePeerSigningKey(packet.senderId, signingPublicKey)
+                
+                sessionManager.createSession(
+                    peerId = packet.senderId,
+                    fingerprint = fingerprint,
+                    sessionVersion = version,
+                    verified = true
+                )
+
+                Log.d(TAG, "🔐 SECURE Key exchanged with: ${packet.senderId.takeLast(8)}")
+
+                val address = resolvePeerAddress(packet.senderId)
+                if (address != null) {
+                    updatePeerState(address, PeerConnectionState.SESSION_ESTABLISHED)
+                    scope.launch { retryPendingMessages() }
+                }
+            } else {
+                // Legacy unauthenticated key exchange
+                cryptoManager.storePeerPublicKey(packet.senderId, packet.payload)
+                Log.d(TAG, "🔐 LEGACY Key exchanged with: ${packet.senderId.takeLast(8)}")
+                val address = resolvePeerAddress(packet.senderId)
+                if (address != null) {
+                    updatePeerState(address, PeerConnectionState.SESSION_READY)
+                    scope.launch { retryPendingMessages() }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to handle KEY_EXCHANGE: ${e.message}")
+        }
+    }
+
+    private fun disconnectDevice(address: String) {
+        gattManager.disconnectDevice(address)
+        updatePeerState(address, PeerConnectionState.DISCONNECTED)
+    }
+
+    private fun generateSignedKeyExchange(localPeerId: String): MeshPacket {
+        val ecdhPublicKey = cryptoManager.getOrCreatePublicKey()
+        val signingPublicKey = cryptoManager.getOrCreateSigningKey()
+        val timestamp = System.currentTimeMillis()
+        val nonce = UUID.randomUUID().toString()
+        val version = 2
+        val uuid = UUID.randomUUID().toString()
+        
+        val dataToSign = "$uuid|$ecdhPublicKey|$timestamp|$nonce|$version".toByteArray(Charsets.UTF_8)
+        val signature = cryptoManager.sign(dataToSign)
+        val signatureBase64 = android.util.Base64.encodeToString(signature, android.util.Base64.NO_WRAP)
+
+        val payload = "v2|$ecdhPublicKey|$timestamp|$nonce|$version|$signatureBase64|$signingPublicKey"
+        return MeshPacket(
+            packetId = uuid,
+            senderId = localPeerId,
+            targetId = "",
+            payload = payload,
+            type = PacketType.KEY_EXCHANGE,
+            encrypted = false
+        )
     }
 
     // ────────── BLE Lifecycle ──────────
@@ -511,7 +748,7 @@ class BleRepository @Inject constructor(
 
         // Encrypt the payload
         val reqEnc = userRepository.isEncryptionEnabled.first()
-        val result = cryptoManager.encryptOrPassthrough(wrappedPayload, targetPeerId, reqEnc, messageId, 0)
+        val result = encryptAndWrapPayload(wrappedPayload, targetPeerId, reqEnc, messageId)
         if (result == null) return
         val (payload, isEncrypted) = result
         // FIX ISSUE 1: Pass messageId as packetId so retries use the same ID
@@ -864,7 +1101,7 @@ class BleRepository @Inject constructor(
         // Encrypt GPS coordinates
         val reqEnc = userRepository.isEncryptionEnabled.first()
         val generatedMessageId = java.util.UUID.randomUUID().toString()
-        val result = cryptoManager.encryptOrPassthrough(payloadJson, targetPeerId, reqEnc, generatedMessageId, 0)
+        val result = encryptAndWrapPayload(payloadJson, targetPeerId, reqEnc, generatedMessageId)
         if (result == null) return
         val (encPayload, isEnc) = result
 

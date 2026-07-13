@@ -31,31 +31,36 @@ object AppModule {
 
     /**
      * Encrypted Room database using SQLCipher.
-     * The passphrase is derived from a stable device-specific key
-     * to ensure local message cache is encrypted at rest.
+     * The passphrase is derived from a stable Keystore-backed seed
+     * to ensure local message cache is encrypted securely at rest.
      */
     @Provides
     @Singleton
-    fun provideMeshDatabase(@ApplicationContext context: Context): MeshDatabase {
+    fun provideMeshDatabase(
+        @ApplicationContext context: Context,
+        databaseSecurityManager: com.meshlink.data.crypto.DatabaseSecurityManager
+    ): MeshDatabase {
         // SQLCipher native libraries are loaded once in MeshLinkApp.onCreate().
-        // Generate a stable DB passphrase from the app's unique installation.
-        val prefs = context.getSharedPreferences("mesh_db_config", Context.MODE_PRIVATE)
-        var passphrase = prefs.getString("db_passphrase", null)
-        if (passphrase == null) {
-            passphrase = java.util.UUID.randomUUID().toString()
-            prefs.edit().putString("db_passphrase", passphrase).apply()
+        val passphraseBytes = try {
+            databaseSecurityManager.getDatabasePassphrase()
+        } catch (e: com.meshlink.data.crypto.SecurityRecoveryException) {
+            // Recovery is impossible. Return a controlled error state by providing
+            // an empty byte array. We also explicitly disable destructive migration 
+            // so SQLCipher throws an exception on query rather than silently deleting user data.
+            ByteArray(0)
         }
-
-        val factory = SupportOpenHelperFactory(passphrase.toByteArray())
+        
+        val factory = SupportOpenHelperFactory(passphraseBytes)
 
         val builder = Room.databaseBuilder(
             context,
             MeshDatabase::class.java,
-            "mesh_db"
-        )
-            .openHelperFactory(factory)
+            com.meshlink.data.crypto.SecurityConstants.DB_NAME
+        ).openHelperFactory(factory)
             
-        if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+        // Only allow destructive migration in debug builds IF we have a valid passphrase.
+        // If the passphrase is empty (Keystore failed), we MUST NOT allow destructive migration.
+        if (passphraseBytes.isNotEmpty() && (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             builder.fallbackToDestructiveMigration()
         }
         

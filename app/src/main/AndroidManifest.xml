@@ -27,6 +27,7 @@
 
     <!-- FIX Issue 5 & 6: Auto-start mesh after device boot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name=".MeshLinkApp"

@@ -21,11 +21,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 import kotlinx.coroutines.delay
-
-// --- Theme Colors ---
-private val DarkBackground = Color(0xFF0D1117)
-private val NeonGreen = Color(0xFF00FF88)
-private val TextPrimary = Color(0xFFFFFFFF)
+import com.meshlink.ui.designsystem.theme.MeshTheme
 
 data class MeshNode(
     val id: String,
@@ -62,15 +58,15 @@ fun MeshDebugScreen(
     }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
                     }
                 },
-                title = { Text("Network Topography", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text("Network Topography", color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         }
@@ -79,11 +75,11 @@ fun MeshDebugScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(DarkBackground),
+                .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center
         ) {
             if (nodes.isEmpty()) {
-                Text("No active mesh nodes detected.", color = NeonGreen.copy(alpha = 0.5f))
+                Text("No active mesh nodes detected.", color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), style = MaterialTheme.typography.bodyLarge)
             } else {
                 MeshGraph(nodes)
             }
@@ -117,6 +113,8 @@ fun MeshGraph(nodes: List<MeshNode>) {
         label = "Pulse"
     )
 
+    val primaryColor = MaterialTheme.colorScheme.primary
+
     Canvas(modifier = Modifier.fillMaxSize()) {
         val center = Offset(size.width / 2f, size.height / 2f)
         val maxRadius = minOf(size.width, size.height) / 2.5f
@@ -128,7 +126,7 @@ fun MeshGraph(nodes: List<MeshNode>) {
             
             // Connection to center
             drawLine(
-                color = NeonGreen.copy(alpha = node.signal * pulse),
+                color = primaryColor.copy(alpha = node.signal * pulse),
                 start = center,
                 end = Offset(nodeX, nodeY),
                 strokeWidth = (node.signal * 8f) * pulse,
@@ -141,7 +139,7 @@ fun MeshGraph(nodes: List<MeshNode>) {
                 val targetY = center.y + sin(targetNode.angle + rotation) * (targetNode.distance * maxRadius)
                 
                 drawLine(
-                    color = NeonGreen.copy(alpha = 0.15f * pulse),
+                    color = primaryColor.copy(alpha = 0.15f * pulse),
                     start = Offset(nodeX, nodeY),
                     end = Offset(targetX, targetY),
                     strokeWidth = 2f,
@@ -152,12 +150,12 @@ fun MeshGraph(nodes: List<MeshNode>) {
 
         // Draw Center Node (You)
         drawCircle(
-            color = NeonGreen.copy(alpha = 0.2f),
+            color = primaryColor.copy(alpha = 0.2f),
             radius = 40f * pulse,
             center = center
         )
         drawCircle(
-            color = NeonGreen,
+            color = primaryColor,
             radius = 20f,
             center = center
         )
@@ -169,13 +167,13 @@ fun MeshGraph(nodes: List<MeshNode>) {
             
             // Outer glow
             drawCircle(
-                color = NeonGreen.copy(alpha = 0.3f),
+                color = primaryColor.copy(alpha = 0.3f),
                 radius = 16f,
                 center = Offset(nodeX, nodeY)
             )
             // Inner core
             drawCircle(
-                color = NeonGreen,
+                color = primaryColor,
                 radius = 8f,
                 center = Offset(nodeX, nodeY)
             )

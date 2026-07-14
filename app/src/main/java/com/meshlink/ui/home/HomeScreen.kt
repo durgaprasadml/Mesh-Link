@@ -1,42 +1,44 @@
 package com.meshlink.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.domain.model.Chat
 import com.meshlink.messaging.presentation.ChatsListViewModel
+import com.meshlink.ui.components.ConnectionStatusPill
+import com.meshlink.ui.components.DashboardCard
+import com.meshlink.ui.components.EmptyState
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-val DarkBackground = Color(0xFF121212)
-val SurfaceDark = Color(0xFF1E1E1E)
-val PrimaryNeonGreen = Color(0xFF00FF88)
-val TextPrimary = Color(0xFFFFFFFF)
-val TextSecondary = Color(0xFFAAAAAA)
-val BannerConnected = Color(0xFF00FF88).copy(alpha = 0.15f)
-val BannerSearching = Color(0xFFFFC107).copy(alpha = 0.15f)
-val BannerNoDevices = Color(0xFFFF5252).copy(alpha = 0.15f)
 
 enum class ConnectionState {
     CONNECTED, SEARCHING, NO_DEVICES
@@ -58,55 +60,28 @@ fun HomeScreen(
     val chatsViewModel: ChatsListViewModel = hiltViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val chatsState by chatsViewModel.uiState.collectAsStateWithLifecycle()
+    
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+
     val connectionState = when {
         uiState.nearbyDevices.isNotEmpty() -> ConnectionState.CONNECTED
         else -> ConnectionState.SEARCHING
     }
+    
+    val filteredChats = if (searchQuery.isBlank()) {
+        chatsState.chats
+    } else {
+        chatsState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    }
 
     Scaffold(
-        containerColor = DarkBackground,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Mesh Link",
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onNavigateToMeshDebug) {
-                        Icon(
-                            imageVector = Icons.Default.Wifi,
-                            contentDescription = "Network Status",
-                            tint = TextPrimary
-                        )
-                    }
-                    IconButton(onClick = onNavigateToBroadcast) {
-                        Icon(
-                            imageVector = Icons.Default.Campaign,
-                            contentDescription = "Broadcast Message",
-                            tint = TextPrimary
-                        )
-                    }
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = TextPrimary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkBackground
-                )
-            )
-        },
+        containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToNearby,
-                containerColor = PrimaryNeonGreen,
-                contentColor = DarkBackground,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape
             ) {
                 Icon(Icons.Default.Add, contentDescription = "New Chat")
@@ -118,71 +93,153 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            ConnectionBanner(state = connectionState)
-            
-            LazyColumn(
+            // Search Bar & Header Section
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 8.dp)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)
             ) {
-                if (chatsState.chats.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "No recent chats.\nTap + to find nearby devices.",
-                                color = TextSecondary,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ConnectionStatusPill(state = connectionState)
+                    
+                    // Profile Avatar (Click to navigate to Settings)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .clickable(onClick = onNavigateToSettings),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val initial = uiState.user?.name?.firstOrNull()?.uppercase() ?: "U"
+                        Text(
+                            text = initial,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
+                
+                // SearchBar
+                SearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    onSearch = { isSearchActive = false },
+                    active = isSearchActive,
+                    onActiveChange = { isSearchActive = it },
+                    placeholder = { Text("Search chats or devices") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SearchBarDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    // Search results could go here if active, but for now we filter the main list
+                }
+            }
+
+            AnimatedVisibility(
+                visible = !isSearchActive && searchQuery.isBlank(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column {
+                    Text(
+                        text = "Dashboard",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)
+                    )
+                    
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = MeshTheme.spacing.mediumLarge),
+                        horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
+                    ) {
+                        item {
+                            DashboardCard(
+                                icon = Icons.Default.Wifi,
+                                title = "Nearby Devices",
+                                subtitle = "${uiState.nearbyDevices.size} available",
+                                onClick = onNavigateToNearby,
+                                iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                iconTintColor = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        item {
+                            DashboardCard(
+                                icon = Icons.Default.Campaign,
+                                title = "Broadcasts",
+                                subtitle = "Send to all",
+                                onClick = onNavigateToBroadcast,
+                                iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                iconTintColor = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                        item {
+                            DashboardCard(
+                                icon = Icons.Default.Warning,
+                                title = "SOS",
+                                subtitle = "Emergency",
+                                onClick = onNavigateToSos,
+                                iconContainerColor = MaterialTheme.colorScheme.errorContainer,
+                                iconTintColor = MaterialTheme.colorScheme.error
                             )
                         }
                     }
+                    
+                    Spacer(modifier = Modifier.height(MeshTheme.spacing.large))
                 }
-                items(chatsState.chats, key = { it.id }) { chat ->
-                    ChatItem(
-                        chat = chat,
-                        onClick = {
-                            val safeName = chat.name.ifBlank { chat.id.takeLast(8) }
-                            onNavigateToChat(chat.id, safeName)
-                        }
-                    )
+            }
+
+            Text(
+                text = "Recent Chats",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)
+            )
+
+            if (filteredChats.isEmpty()) {
+                EmptyState(
+                    icon = Icons.Outlined.ChatBubbleOutline,
+                    title = if (searchQuery.isNotBlank()) "No results found" else "No recent chats",
+                    description = if (searchQuery.isNotBlank()) "Try a different search term." else "Tap the + button to find nearby devices and start chatting.",
+                    primaryButtonText = if (searchQuery.isBlank()) "Find Nearby Devices" else null,
+                    onPrimaryButtonClick = if (searchQuery.isBlank()) onNavigateToNearby else null
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredChats, key = { it.id }) { chat ->
+                        ChatItem(
+                            chat = chat,
+                            onClick = {
+                                val safeName = chat.name.ifBlank { chat.id.takeLast(8) }
+                                onNavigateToChat(chat.id, safeName)
+                            }
+                        )
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun ConnectionBanner(state: ConnectionState) {
-    val (backgroundColor, dotColor, text) = when (state) {
-        ConnectionState.CONNECTED -> Triple(BannerConnected, PrimaryNeonGreen, "Connected to nearby devices")
-        ConnectionState.SEARCHING -> Triple(BannerSearching, Color(0xFFFFC107), "Searching for devices...")
-        ConnectionState.NO_DEVICES -> Triple(BannerNoDevices, Color(0xFFFF5252), "No devices found")
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(backgroundColor)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(dotColor)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = text,
-            color = dotColor,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium
-        )
     }
 }
 
@@ -192,54 +249,51 @@ fun ChatItem(chat: Chat, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Avatar
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(56.dp)
                 .clip(CircleShape)
-                .background(SurfaceDark),
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
             val displayInitial = chat.name.firstOrNull()?.toString()?.uppercase() ?: "?"
             Text(
                 text = displayInitial,
-                color = PrimaryNeonGreen,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Medium
             )
         }
         
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
         
         // Message Content
         Column(
             modifier = Modifier.weight(1f)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = chat.name.ifBlank { chat.id.takeLast(8) },
-                    color = TextPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = chat.name.ifBlank { chat.id.takeLast(8) },
+                color = MaterialTheme.colorScheme.onBackground,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
             Text(
                 text = chat.lastMessage ?: "No messages yet",
-                color = if (chat.unreadCount > 0) TextPrimary else TextSecondary,
-                fontSize = 14.sp,
+                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
         
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
         
         // Timestamp & Status
         Column(
@@ -247,22 +301,22 @@ fun ChatItem(chat: Chat, onClick: () -> Unit) {
         ) {
             Text(
                 text = formatTime(chat.lastMessageAt),
-                color = if (chat.unreadCount > 0) PrimaryNeonGreen else TextSecondary,
-                fontSize = 12.sp
+                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
             if (chat.unreadCount > 0) {
                 Box(
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
-                        .background(PrimaryNeonGreen),
+                        .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = chat.unreadCount.toString(),
-                        color = DarkBackground,
-                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold
                     )
                 }

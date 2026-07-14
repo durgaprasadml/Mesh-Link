@@ -1,35 +1,30 @@
 package com.meshlink.ui.settings
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.meshlink.ui.components.settings.SettingsItemRow
+import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.settings.screens.*
 
-// --- Theme Colors ---
-private val DarkBackground = Color(0xFF121212)
-private val SurfaceDark = Color(0xFF1E1E1E)
-private val PrimaryNeonGreen = Color(0xFF00FF88)
-private val TextPrimary = Color(0xFFFFFFFF)
-private val TextSecondary = Color(0xFFAAAAAA)
-private val ErrorRed = Color(0xFFFF5252)
+enum class SettingsDestination {
+    HOME, PROFILE, SECURITY, NETWORK, STORAGE, APPEARANCE, DIAGNOSTICS, DEVELOPER
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,11 +34,10 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    
-    var userName by remember { mutableStateOf("User") }
-    LaunchedEffect(uiState.user) { uiState.user?.name?.let { userName = it } }
-    
-    val meshModes = listOf("Auto", "Performance", "Battery Saver")
+    var currentDestination by remember { mutableStateOf(SettingsDestination.HOME) }
+
+    val userName = uiState.user?.name ?: "User"
+    val meshId = uiState.user?.meshId ?: ""
 
     LaunchedEffect(viewModel.uiEvent) {
         viewModel.uiEvent.collect { event ->
@@ -54,17 +48,74 @@ fun SettingsScreen(
         }
     }
 
+    AnimatedContent(
+        targetState = currentDestination,
+        transitionSpec = {
+            if (targetState != SettingsDestination.HOME) {
+                slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn() togetherWith
+                        slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) + fadeOut()
+            } else {
+                slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300)) + fadeIn() togetherWith
+                        slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut()
+            }
+        },
+        label = "SettingsNav"
+    ) { dest ->
+        when (dest) {
+            SettingsDestination.HOME -> SettingsHome(
+                userName = userName,
+                meshId = meshId,
+                onNavigate = { currentDestination = it },
+                onBack = onBack,
+                onLogout = { viewModel.logout() }
+            )
+            SettingsDestination.PROFILE -> ProfileScreen(
+                userName = userName,
+                meshId = meshId,
+                onBack = { currentDestination = SettingsDestination.HOME }
+            )
+            SettingsDestination.SECURITY -> SecurityCenterScreen(
+                onBack = { currentDestination = SettingsDestination.HOME }
+            )
+            SettingsDestination.NETWORK -> NetworkSettingsScreen(
+                onBack = { currentDestination = SettingsDestination.HOME }
+            )
+            SettingsDestination.STORAGE -> StorageSettingsScreen(
+                onBack = { currentDestination = SettingsDestination.HOME }
+            )
+            SettingsDestination.APPEARANCE -> AppearanceSettingsScreen(
+                onBack = { currentDestination = SettingsDestination.HOME }
+            )
+            SettingsDestination.DIAGNOSTICS -> DiagnosticsScreen(
+                onBack = { currentDestination = SettingsDestination.HOME }
+            )
+            SettingsDestination.DEVELOPER -> DeveloperOptionsScreen(
+                onBack = { currentDestination = SettingsDestination.HOME }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsHome(
+    userName: String,
+    meshId: String,
+    onNavigate: (SettingsDestination) -> Unit,
+    onBack: () -> Unit,
+    onLogout: () -> Unit
+) {
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
-                title = { Text("Settings", fontWeight = FontWeight.Bold, color = TextPrimary) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
     ) { paddingValues ->
@@ -72,176 +123,128 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+                .padding(horizontal = MeshTheme.spacing.mediumLarge),
+            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumLarge)
         ) {
-            
-            // --- Profile Section ---
             item {
-                SettingsSectionTitle("Profile")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                // Profile Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigate(SettingsDestination.PROFILE) },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
                 ) {
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(SurfaceDark),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(MeshTheme.spacing.mediumLarge),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(userName.take(1).uppercase(), color = PrimaryNeonGreen, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = userName.take(1).uppercase(),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(userName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Mesh ID: ${meshId.take(8).ifBlank { "Unassigned" }}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Icon(Icons.Default.QrCode, contentDescription = "QR Code", tint = MaterialTheme.colorScheme.primary)
                     }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    OutlinedTextField(
-                        value = userName,
-                        onValueChange = { userName = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PrimaryNeonGreen,
-                            unfocusedBorderColor = SurfaceDark,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
-                        ),
-                        trailingIcon = {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit Name", tint = TextSecondary, modifier = Modifier.size(18.dp))
-                        },
-                        shape = RoundedCornerShape(12.dp)
-                    )
                 }
             }
 
-            // --- Privacy Section ---
             item {
-                SettingsSectionTitle("Privacy")
+                // Main Settings Group
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Encryption", color = TextPrimary, fontSize = 16.sp)
-                            Switch(
-                                checked = uiState.isEncryptionEnabled,
-                                onCheckedChange = { viewModel.setEncryptionEnabled(it) },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.Black,
-                                    checkedTrackColor = PrimaryNeonGreen
-                                )
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Online visibility", color = TextPrimary, fontSize = 16.sp)
-                            Switch(
-                                checked = uiState.isOnlineVisible,
-                                onCheckedChange = { viewModel.setOnlineVisible(it) },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.Black,
-                                    checkedTrackColor = PrimaryNeonGreen
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-
-            // --- Mesh Settings Section ---
-            item {
-                SettingsSectionTitle("Mesh Settings")
-                SingleChoiceSegmentedButtonRow(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    meshModes.forEachIndexed { index, label ->
-                        SegmentedButton(
-                            selected = label == uiState.meshMode,
-                            onClick = { viewModel.setMeshMode(label) },
-                            shape = SegmentedButtonDefaults.itemShape(index = index, count = meshModes.size),
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = PrimaryNeonGreen,
-                                activeContentColor = Color.Black,
-                                inactiveContainerColor = DarkBackground,
-                                inactiveContentColor = TextPrimary,
-                                inactiveBorderColor = SurfaceDark
-                            )
-                        ) {
-                            Text(label, fontSize = 12.sp, fontWeight = if (label == uiState.meshMode) FontWeight.Bold else FontWeight.Normal)
-                        }
-                    }
-                }
-            }
-
-            // --- Storage & Account Section ---
-            item {
-                SettingsSectionTitle("Storage & Account")
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
                 ) {
                     Column {
-                        SettingsClickableRow("Clear chats", textColor = ErrorRed)
-                        HorizontalDivider(color = DarkBackground, thickness = 1.dp)
-                        SettingsClickableRow("Clear cache")
-                        HorizontalDivider(color = DarkBackground, thickness = 1.dp)
-                        SettingsClickableRow("Logout", textColor = ErrorRed) {
-                            viewModel.logout()
-                        }
+                        SettingsItemRow(
+                            title = "Security Center",
+                            subtitle = "Encryption, Identity, App Lock",
+                            icon = Icons.Default.Security,
+                            onClick = { onNavigate(SettingsDestination.SECURITY) }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Network & Transport",
+                            subtitle = "BLE, Wi-Fi Direct, Relaying",
+                            icon = Icons.Default.WifiTethering,
+                            onClick = { onNavigate(SettingsDestination.NETWORK) }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Storage & Data",
+                            subtitle = "Database, Media Cache",
+                            icon = Icons.Default.Storage,
+                            onClick = { onNavigate(SettingsDestination.STORAGE) }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Appearance",
+                            subtitle = "Theme, Dynamic Color",
+                            icon = Icons.Default.Palette,
+                            onClick = { onNavigate(SettingsDestination.APPEARANCE) }
+                        )
                     }
                 }
             }
 
-            // --- About Section ---
             item {
-                SettingsSectionTitle("About")
+                // System Group
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("App version", color = TextPrimary, fontSize = 16.sp)
-                        Text("v1.5.0", color = TextSecondary, fontSize = 14.sp)
+                    Column {
+                        SettingsItemRow(
+                            title = "Diagnostics",
+                            subtitle = "Health metrics and exports",
+                            icon = Icons.Default.HealthAndSafety,
+                            onClick = { onNavigate(SettingsDestination.DIAGNOSTICS) }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Developer Options",
+                            subtitle = "Simulators and packet viewers",
+                            icon = Icons.Default.Code,
+                            onClick = { onNavigate(SettingsDestination.DEVELOPER) }
+                        )
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(32.dp))
+            }
+
+            item {
+                // Logout Group
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
+                ) {
+                    SettingsItemRow(
+                        title = "Log Out",
+                        icon = Icons.Default.ExitToApp,
+                        iconTint = MaterialTheme.colorScheme.error,
+                        textColor = MaterialTheme.colorScheme.error,
+                        onClick = onLogout,
+                        trailingContent = null
+                    )
+                }
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.giant))
             }
         }
-    }
-}
-
-@Composable
-fun SettingsSectionTitle(title: String) {
-    Text(
-        text = title,
-        color = TextPrimary,
-        fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
-        modifier = Modifier.padding(bottom = 8.dp)
-    )
-}
-
-@Composable
-fun SettingsClickableRow(title: String, textColor: Color = TextPrimary, onClick: () -> Unit = {}) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(title, color = textColor, fontSize = 16.sp)
-        Icon(Icons.Default.ChevronRight, contentDescription = "Go to details", tint = TextSecondary)
     }
 }

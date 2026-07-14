@@ -16,15 +16,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.repository.MeshRepository
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -36,14 +35,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-
-private val DarkBackground = Color(0xFF121212)
-private val SurfaceDark    = Color(0xFF1E1E1E)
-private val NeonGreen      = Color(0xFF00FF88)
-private val TextPrimary    = Color(0xFFFFFFFF)
-private val TextSecondary  = Color(0xFFAAAAAA)
-private val BubbleSent     = Color(0xFF1B3D2B)
-private val BubbleReceived = Color(0xFF2A2A2A)
 
 data class BroadcastUiState(
     val messages: List<Message> = emptyList()
@@ -85,71 +76,71 @@ fun BroadcastScreen(
     }
 
     Scaffold(
-        containerColor = DarkBackground,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
                     }
                 },
                 title = {
                     Column {
-                        Text("Broadcast", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
-                        Text("All nearby devices", color = NeonGreen, fontSize = 12.sp)
+                        Text("Broadcast", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+                        Text("All nearby devices", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
         bottomBar = {
-            Surface(color = SurfaceDark, tonalElevation = 4.dp) {
+            Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = MeshTheme.elevation.level1) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp)
+                        .padding(MeshTheme.spacing.medium)
                         .navigationBarsPadding()
                 ) {
                     // Info pill
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(NeonGreen.copy(alpha = 0.08f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .clip(MeshTheme.shapes.small)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                            .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
                         Text(
                             "Message will be sent to all nearby devices",
-                            color = NeonGreen,
-                            fontSize = 11.sp
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelSmall
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
 
                     Row(verticalAlignment = Alignment.Bottom) {
                         OutlinedTextField(
                             value = messageText,
                             onValueChange = { if (it.length <= maxChars) messageText = it },
                             modifier = Modifier.weight(1f),
-                            placeholder = { Text("Type a broadcast...", color = TextSecondary, fontSize = 14.sp) },
+                            placeholder = { Text("Type a broadcast...", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = NeonGreen,
-                                unfocusedBorderColor = Color(0xFF333333),
-                                focusedContainerColor = Color(0xFF2A2A2A),
-                                unfocusedContainerColor = Color(0xFF2A2A2A),
-                                cursorColor = NeonGreen,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                cursorColor = MaterialTheme.colorScheme.primary,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                             ),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = MeshTheme.shapes.large,
                             maxLines = 4,
-                            textStyle = LocalTextStyle.current.copy(fontSize = 15.sp)
+                            textStyle = MaterialTheme.typography.bodyLarge
                         )
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
 
                         IconButton(
                             onClick = {
@@ -160,22 +151,22 @@ fun BroadcastScreen(
                                 }
                             },
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(if (messageText.isNotBlank()) NeonGreen else Color(0xFF333333))
+                                .size(MeshTheme.spacing.giant)
+                                .clip(MeshTheme.shapes.pill)
+                                .background(if (messageText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
                         ) {
                             Icon(
                                 Icons.Default.Send,
                                 contentDescription = "Send",
-                                tint = if (messageText.isNotBlank()) Color.Black else TextSecondary
+                                tint = if (messageText.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     Text(
                         text = "${messageText.length}/$maxChars",
-                        color = TextSecondary,
-                        fontSize = 11.sp,
-                        modifier = Modifier.align(Alignment.End).padding(top = 2.dp)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.align(Alignment.End).padding(top = MeshTheme.spacing.extraSmall)
                     )
                 }
             }
@@ -189,11 +180,11 @@ fun BroadcastScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("📡", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("No broadcasts yet", color = TextSecondary, fontWeight = FontWeight.Medium)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Messages you send will appear here", color = TextSecondary.copy(alpha = 0.6f), fontSize = 13.sp)
+                    Text("📡", style = MaterialTheme.typography.displayMedium)
+                    Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
+                    Text("No broadcasts yet", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                    Text("Messages you send will appear here", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         } else {
@@ -202,8 +193,8 @@ fun BroadcastScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall),
+                verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumSmall),
                 reverseLayout = false
             ) {
                 items(uiState.messages, key = { it.messageId }) { msg ->
@@ -223,11 +214,23 @@ fun BroadcastScreen(
 private fun BroadcastBubble(msg: Message) {
     val isMe = msg.isFromMe
     val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
-    val bubbleColor = if (isMe) BubbleSent else BubbleReceived
+    val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
+    val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
+    
     val shape = if (isMe) {
-        RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp, bottomStart = 14.dp, bottomEnd = 4.dp)
+        RoundedCornerShape(
+            topStart = MeshTheme.spacing.mediumLarge, 
+            topEnd = MeshTheme.spacing.mediumLarge, 
+            bottomStart = MeshTheme.spacing.mediumLarge, 
+            bottomEnd = MeshTheme.spacing.small
+        )
     } else {
-        RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp, bottomStart = 4.dp, bottomEnd = 14.dp)
+        RoundedCornerShape(
+            topStart = MeshTheme.spacing.mediumLarge, 
+            topEnd = MeshTheme.spacing.mediumLarge, 
+            bottomStart = MeshTheme.spacing.small, 
+            bottomEnd = MeshTheme.spacing.mediumLarge
+        )
     }
 
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
@@ -236,23 +239,22 @@ private fun BroadcastBubble(msg: Message) {
                 .widthIn(max = 280.dp)
                 .clip(shape)
                 .background(bubbleColor)
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
         ) {
             if (!isMe) {
                 Text(
                     text = msg.senderId.takeLast(8),
-                    color = NeonGreen,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
             }
-            Text(text = msg.text, color = TextPrimary, fontSize = 14.sp)
-            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = msg.text, color = textColor, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
             Text(
                 text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.timestamp)),
-                color = TextSecondary,
-                fontSize = 10.sp,
+                color = textColor.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.End)
             )
         }

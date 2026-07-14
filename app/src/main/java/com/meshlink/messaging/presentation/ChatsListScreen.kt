@@ -1,7 +1,6 @@
 package com.meshlink.messaging.presentation
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,18 +9,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.domain.model.Chat
+import com.meshlink.ui.components.EmptyState
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,11 +38,20 @@ fun ChatsListScreen(
     viewModel: ChatsListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+
+    val filteredChats = if (searchQuery.isBlank()) {
+        uiState.chats
+    } else {
+        uiState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Recent Chats") },
+                title = { Text("Messages", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -47,23 +60,55 @@ fun ChatsListScreen(
             )
         }
     ) { paddingValues ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (uiState.chats.isEmpty()) {
-                item {
-                    Text("No recent chats. Start scanning for nearby devices!", modifier = Modifier.padding(16.dp))
+            // Search Bar
+            Box(modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)) {
+                SearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    onSearch = { isSearchActive = false },
+                    active = isSearchActive,
+                    onActiveChange = { isSearchActive = it },
+                    placeholder = { Text("Search conversations") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SearchBarDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    // Could put real-time search results here, for now it filters the list below
                 }
             }
-            items(uiState.chats, key = { it.id }) { chat ->
-                ChatCard(chat) {
-                    val safeName = chat.name.ifBlank { chat.id.takeLast(8) }
-                    onNavigateToChat(chat.id, safeName)
+
+            if (filteredChats.isEmpty()) {
+                EmptyState(
+                    icon = Icons.Outlined.ChatBubbleOutline,
+                    title = if (searchQuery.isBlank()) "No Messages" else "No results found",
+                    description = if (searchQuery.isBlank()) "You haven't started any conversations yet." else "Try a different search term.",
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp)
+                ) {
+                    items(filteredChats, key = { it.id }) { chat ->
+                        ChatListItem(chat = chat, onClick = {
+                            val safeName = chat.name.ifBlank { chat.id.takeLast(8) }
+                            onNavigateToChat(chat.id, safeName)
+                        })
+                    }
                 }
             }
         }
@@ -71,62 +116,74 @@ fun ChatsListScreen(
 }
 
 @Composable
-fun ChatCard(chat: Chat, onClick: () -> Unit) {
-    Card(
-        shape = MaterialTheme.shapes.large,
+fun ChatListItem(chat: Chat, onClick: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick)
+            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Person, contentDescription = "User avatar", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = chat.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                Text(
-                    text = chat.lastMessage ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.Normal
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = formatTime(chat.lastMessageAt),
-                    style = MaterialTheme.typography.labelSmall
-                )
-                if (chat.unreadCount > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = chat.unreadCount.toString(),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
+            val displayInitial = chat.name.firstOrNull()?.toString()?.uppercase() ?: "?"
+            Text(
+                text = displayInitial,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        
+        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = chat.name, 
+                style = MaterialTheme.typography.titleMedium, 
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = chat.lastMessage ?: "",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        
+        Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+        
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = formatTime(chat.lastMessageAt),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (chat.unreadCount > 0) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = chat.unreadCount.toString(),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -135,8 +192,6 @@ fun ChatCard(chat: Chat, onClick: () -> Unit) {
 
 private fun formatTime(timeInMillis: Long): String {
     if (timeInMillis == 0L) return ""
-    val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+    val sdf = SimpleDateFormat("MMM dd", Locale.getDefault()) // Keeping consistent
     return sdf.format(Date(timeInMillis))
 }
-
-

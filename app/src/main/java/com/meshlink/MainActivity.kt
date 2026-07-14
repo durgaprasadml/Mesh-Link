@@ -19,7 +19,7 @@ import com.meshlink.service.MeshRelayService
 import com.meshlink.ui.components.hasRequiredPermissions
 import com.meshlink.ui.navigation.AppNavigation
 import com.meshlink.ui.navigation.Screen
-import com.meshlink.ui.theme.MeshLinkTheme
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
 
         setContent {
-            MeshLinkTheme {
+            MeshTheme {
                 val navController = rememberNavController()
 
                 LaunchedEffect(Unit) {

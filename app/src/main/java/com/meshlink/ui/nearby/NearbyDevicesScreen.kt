@@ -1,37 +1,27 @@
 package com.meshlink.ui.nearby
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.SignalCellular4Bar
-import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.BluetoothSearching
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.meshlink.domain.model.BleDevice
+import com.meshlink.ui.components.EmptyState
 import com.meshlink.ui.components.PermissionHandler
-
-val DarkBackground = Color(0xFF121212)
-val SurfaceDark = Color(0xFF1E1E1E)
-val PrimaryNeonGreen = Color(0xFF00FF88)
-val TextPrimary = Color(0xFFFFFFFF)
-val CardBackground = Color(0xFF242424)
+import com.meshlink.ui.components.nearby.MeshDeviceCard
+import com.meshlink.ui.components.nearby.MeshTopologyCanvas
+import com.meshlink.ui.designsystem.theme.MeshTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,15 +37,25 @@ fun NearbyDevicesScreen(
             viewModel.startDiscovery()
         }
 
+        var searchQuery by remember { mutableStateOf("") }
+        var isSearchActive by remember { mutableStateOf(false) }
+
+        val filteredDevices = if (searchQuery.isBlank()) {
+            uiState.devices
+        } else {
+            uiState.devices.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
+
         Scaffold(
-            containerColor = DarkBackground,
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
                     title = { 
                         Text(
-                            text = "Nearby Devices",
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            text = "Mesh Network",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.Bold
                         )
                     },
                     navigationIcon = {
@@ -63,12 +63,12 @@ fun NearbyDevicesScreen(
                             Icon(
                                 Icons.Default.ArrowBack, 
                                 contentDescription = "Back",
-                                tint = TextPrimary
+                                tint = MaterialTheme.colorScheme.onBackground
                             )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = DarkBackground
+                        containerColor = MaterialTheme.colorScheme.background
                     )
                 )
             }
@@ -76,160 +76,78 @@ fun NearbyDevicesScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(paddingValues)
             ) {
-                // Radar Scanning Animation
-                RadarScanner(modifier = Modifier.padding(vertical = 32.dp))
-                
-                // Device List
-                LazyColumn(
+                // Interactive Mesh Visualization Header
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .weight(0.35f)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(uiState.devices, key = { it.meshId }) { device ->
-                        DeviceCard(device = device, onClick = {
-                            onNavigateToChat(
-                                device.meshId.ifBlank { device.address },
-                                device.name.ifBlank { device.address.takeLast(8) }
-                            )
-                        })
+                    MeshTopologyCanvas(
+                        devices = uiState.devices, // Always show all devices in the canvas, regardless of search filter
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                // Search and Filter Bar
+                Box(modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)) {
+                    SearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onSearch = { isSearchActive = false },
+                        active = isSearchActive,
+                        onActiveChange = { isSearchActive = it },
+                        placeholder = { Text("Search mesh peers") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = SearchBarDefaults.colors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        // Realtime results handled below
                     }
                 }
-            }
-        }
-    }
-}
 
-@Composable
-fun RadarScanner(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "RadarPulse")
-    
-    // Scale animation for the expanding rings
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 2.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "RadarScale"
-    )
-
-    // Alpha animation for fading out as rings expand
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "RadarAlpha"
-    )
-
-    Box(
-        modifier = modifier
-            .size(200.dp)
-            .clip(CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        // Outer pulsing ring
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .scale(scale)
-                .clip(CircleShape)
-                .background(PrimaryNeonGreen.copy(alpha = alpha))
-        )
-        
-        // Secondary ring
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .scale(scale * 0.6f)
-                .clip(CircleShape)
-                .background(PrimaryNeonGreen.copy(alpha = (alpha * 1.5f).coerceAtMost(1f)))
-        )
-        
-        // Center static dot
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(CircleShape)
-                .background(PrimaryNeonGreen)
-        )
-    }
-}
-
-@Composable
-fun DeviceCard(device: BleDevice, onClick: () -> Unit) {
-    // Assuming RSSI > -70 is strong/connected visually
-    val isStrongSignal = device.rssi > -70
-    val statusColor = if (isStrongSignal) PrimaryNeonGreen else TextPrimary
-    val displayName = device.name.ifBlank { "Unknown Device" }
-    
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(CardBackground)
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Avatar
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(SurfaceDark),
-            contentAlignment = Alignment.Center
-        ) {
-            val initials = displayName.split(" ")
-                .mapNotNull { it.firstOrNull()?.toString() }
-                .take(2)
-                .joinToString("")
-                .uppercase()
-            
-            Text(
-                text = initials.ifBlank { "?" },
-                color = PrimaryNeonGreen,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(16.dp))
-        
-        // Device Name
-        Text(
-            text = displayName,
-            color = TextPrimary,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f)
-        )
-        
-        // Signal and Status
-        Column(
-            horizontalAlignment = Alignment.End
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (isStrongSignal) Icons.Default.Wifi else Icons.Default.SignalCellular4Bar,
-                    contentDescription = "Signal",
-                    tint = statusColor,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (isStrongSignal) "Connected" else "Available",
-                    color = statusColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                // Device List or Empty State
+                if (filteredDevices.isEmpty()) {
+                    EmptyState(
+                        icon = Icons.Outlined.BluetoothSearching,
+                        title = if (searchQuery.isBlank()) "Scanning for Peers" else "No matching peers",
+                        description = if (searchQuery.isBlank()) "Looking for active Mesh Link nodes in your vicinity..." else "Adjust your search terms.",
+                        modifier = Modifier.weight(0.65f)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(0.65f)
+                            .padding(horizontal = MeshTheme.spacing.mediumLarge),
+                        verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
+                    ) {
+                        items(filteredDevices, key = { it.meshId }) { device ->
+                            MeshDeviceCard(
+                                device = device, 
+                                onClick = {
+                                    onNavigateToChat(
+                                        device.meshId.ifBlank { device.address },
+                                        device.name.ifBlank { device.address.takeLast(8) }
+                                    )
+                                }
+                            )
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+                }
             }
         }
     }

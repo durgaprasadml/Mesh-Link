@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,16 +22,15 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.analytics.data.LogType
 import com.meshlink.analytics.data.MeshStats
 import com.meshlink.analytics.data.RelayLogEntry
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.meshlink.common.logger.MeshLogger
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,8 +56,8 @@ fun AnalyticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(MeshTheme.spacing.mediumLarge),
+            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumLarge)
         ) {
             // ── Delivery Ring ──
             item {
@@ -70,21 +68,21 @@ fun AnalyticsScreen(
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                 ) {
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Send,
                         label = "Sent",
                         value = uiState.stats.packetsSent.toString(),
-                        color = Color(0xFF3B82F6)
+                        color = MaterialTheme.colorScheme.primary
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.DoneAll,
                         label = "Delivered",
                         value = uiState.stats.packetsDelivered.toString(),
-                        color = Color(0xFF10B981)
+                        color = MeshTheme.colors.success
                     )
                 }
             }
@@ -92,21 +90,21 @@ fun AnalyticsScreen(
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                 ) {
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.SyncAlt,
                         label = "Relayed",
                         value = uiState.stats.packetsRelayed.toString(),
-                        color = Color(0xFF8B5CF6)
+                        color = MaterialTheme.colorScheme.secondary
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Warning,
                         label = "Dropped",
                         value = uiState.stats.packetsFailed.toString(),
-                        color = Color(0xFFEF4444)
+                        color = MeshTheme.colors.error
                     )
                 }
             }
@@ -115,21 +113,21 @@ fun AnalyticsScreen(
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                 ) {
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Timeline,
                         label = "Avg Hops",
                         value = String.format(java.util.Locale.US, "%.1f", uiState.stats.avgHopCount),
-                        color = Color(0xFFF59E0B)
+                        color = MeshTheme.colors.warning
                     )
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.People,
                         label = "Active Nodes",
                         value = uiState.activeNodes.size.toString(),
-                        color = Color(0xFF06B6D4)
+                        color = MeshTheme.colors.info
                     )
                 }
             }
@@ -150,7 +148,7 @@ fun AnalyticsScreen(
 
             // ── Relay Log ──
             item {
-                Text("Recent Activity", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Recent Activity", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
             }
 
             if (uiState.recentLog.isEmpty()) {
@@ -160,7 +158,7 @@ fun AnalyticsScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Box(
-                            modifier = Modifier.fillMaxWidth().padding(32.dp),
+                            modifier = Modifier.fillMaxWidth().padding(MeshTheme.spacing.huge),
                             contentAlignment = Alignment.Center
                         ) {
                             Text("No activity yet. Start messaging!", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -173,7 +171,7 @@ fun AnalyticsScreen(
                 }
             } 
             // Bottom spacer
-            item { Spacer(modifier = Modifier.height(32.dp)) }
+            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 }
@@ -189,19 +187,19 @@ fun DeliveryRateCard(stats: MeshStats) {
     )
 
     val ringColor = when {
-        stats.deliveryRate >= 80f -> Color(0xFF10B981)
-        stats.deliveryRate >= 50f -> Color(0xFFF59E0B)
-        stats.deliveryRate > 0f -> Color(0xFFEF4444)
-        else -> Color(0xFF6B7280)
+        stats.deliveryRate >= 80f -> MeshTheme.colors.success
+        stats.deliveryRate >= 50f -> MeshTheme.colors.warning
+        stats.deliveryRate > 0f -> MeshTheme.colors.error
+        else -> MaterialTheme.colorScheme.outline
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = MeshTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = MeshTheme.elevation.level2)
     ) {
         Row(
             modifier = Modifier
@@ -214,7 +212,7 @@ fun DeliveryRateCard(stats: MeshStats) {
                         )
                     )
                 )
-                .padding(24.dp),
+                .padding(MeshTheme.spacing.extraLarge),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Animated ring
@@ -248,7 +246,7 @@ fun DeliveryRateCard(stats: MeshStats) {
                 )
             }
 
-            Spacer(modifier = Modifier.width(24.dp))
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.extraLarge))
 
             Column {
                 Text(
@@ -256,17 +254,17 @@ fun DeliveryRateCard(stats: MeshStats) {
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                 Text(
                     "${stats.packetsDelivered} of ${stats.packetsSent} packets",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                 Text(
                     "${stats.packetsRelayed} relayed through mesh",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF8B5CF6)
+                    color = MaterialTheme.colorScheme.secondary
                 )
             }
         }
@@ -285,9 +283,9 @@ fun StatCard(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = MeshTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = MeshTheme.elevation.level1)
     ) {
         Column(
             modifier = Modifier
@@ -297,14 +295,14 @@ fun StatCard(
                         colors = listOf(color.copy(alpha = 0.06f), Color.Transparent)
                     )
                 )
-                .padding(16.dp),
+                .padding(MeshTheme.spacing.mediumLarge),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
                 icon, contentDescription = label,
                 tint = color, modifier = Modifier.size(28.dp)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
             Text(
                 value,
                 style = MaterialTheme.typography.headlineSmall,
@@ -326,22 +324,26 @@ fun StatCard(
 fun HopDistributionCard(distribution: Map<Int, Int>) {
     val maxCount = distribution.values.maxOrNull() ?: 1
     val barColors = listOf(
-        Color(0xFF3B82F6), Color(0xFF10B981), Color(0xFFF59E0B),
-        Color(0xFFEF4444), Color(0xFF8B5CF6), Color(0xFF06B6D4)
+        MaterialTheme.colorScheme.primary,
+        MeshTheme.colors.success,
+        MeshTheme.colors.warning,
+        MeshTheme.colors.error,
+        MaterialTheme.colorScheme.secondary,
+        MeshTheme.colors.info
     )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = MeshTheme.shapes.large,
+        elevation = CardDefaults.cardElevation(defaultElevation = MeshTheme.elevation.level1)
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(MeshTheme.spacing.large)) {
             Text(
                 "Hop Distribution",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
 
             distribution.entries.sortedBy { it.key }.forEachIndexed { idx, (hopCount, count) ->
                 val fraction = count.toFloat() / maxCount
@@ -349,7 +351,7 @@ fun HopDistributionCard(distribution: Map<Int, Int>) {
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                    modifier = Modifier.padding(vertical = MeshTheme.spacing.small)
                 ) {
                     Text(
                         "${hopCount}h",
@@ -361,14 +363,14 @@ fun HopDistributionCard(distribution: Map<Int, Int>) {
                         modifier = Modifier
                             .weight(1f)
                             .height(20.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(MeshTheme.shapes.pill)
                             .background(color.copy(alpha = 0.12f))
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
                                 .fillMaxWidth(fraction)
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(MeshTheme.shapes.pill)
                                 .background(
                                     Brush.horizontalGradient(
                                         colors = listOf(color, color.copy(alpha = 0.7f))
@@ -379,7 +381,7 @@ fun HopDistributionCard(distribution: Map<Int, Int>) {
                     Text(
                         "$count",
                         style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.width(36.dp).padding(start = 8.dp),
+                        modifier = Modifier.width(36.dp).padding(start = MeshTheme.spacing.mediumSmall),
                         fontWeight = FontWeight.Bold,
                         color = color
                     )
@@ -395,51 +397,50 @@ fun HopDistributionCard(distribution: Map<Int, Int>) {
 fun ActiveNodesCard(nodes: Set<String>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = MeshTheme.shapes.large,
+        elevation = CardDefaults.cardElevation(defaultElevation = MeshTheme.elevation.level1)
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(MeshTheme.spacing.large)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Wifi, contentDescription = "WiFi icon", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.Default.Wifi, contentDescription = "WiFi icon", tint = MeshTheme.colors.success, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
                 Text(
                     "Active Mesh Nodes (${nodes.size})",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
 
             // Node chips
             val nodesList = nodes.toList()
             val rows = nodesList.chunked(3)
             rows.forEach { row ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth().padding(vertical = MeshTheme.spacing.small),
+                    horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumSmall)
                 ) {
                     row.forEach { nodeId ->
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = Color(0xFF10B981).copy(alpha = 0.12f)
+                            shape = MeshTheme.shapes.pill,
+                            color = MeshTheme.colors.success.copy(alpha = 0.12f)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.small),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Pulsing dot
                                 Box(
                                     modifier = Modifier
-                                        .size(8.dp)
+                                        .size(MeshTheme.spacing.mediumSmall)
                                         .clip(CircleShape)
-                                        .background(Color(0xFF10B981))
+                                        .background(MeshTheme.colors.success)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                                 Text(
                                     nodeId.takeLast(8),
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 11.sp
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
@@ -455,28 +456,28 @@ fun ActiveNodesCard(nodes: Set<String>) {
 @Composable
 fun RelayLogCard(entry: RelayLogEntry) {
     val (bgColor, accentColor) = when (entry.type) {
-        LogType.RELAY -> Color(0xFF8B5CF6).copy(alpha = 0.06f) to Color(0xFF8B5CF6)
-        LogType.FAILURE -> Color(0xFFEF4444).copy(alpha = 0.06f) to Color(0xFFEF4444)
-        LogType.SECURITY -> Color(0xFF3B82F6).copy(alpha = 0.06f) to Color(0xFF3B82F6)
-        LogType.SOS -> Color(0xFFDC2626).copy(alpha = 0.1f) to Color(0xFFDC2626)
+        LogType.RELAY -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f) to MaterialTheme.colorScheme.secondary
+        LogType.FAILURE -> MeshTheme.colors.error.copy(alpha = 0.06f) to MeshTheme.colors.error
+        LogType.SECURITY -> MaterialTheme.colorScheme.primary.copy(alpha = 0.06f) to MaterialTheme.colorScheme.primary
+        LogType.SOS -> MeshTheme.colors.danger.copy(alpha = 0.1f) to MeshTheme.colors.danger
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = MeshTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = bgColor)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(MeshTheme.spacing.medium),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(4.dp, 32.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(MeshTheme.shapes.extraSmall)
                     .background(accentColor)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     entry.event,

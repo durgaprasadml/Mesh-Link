@@ -10,7 +10,7 @@ interface BleMeshDataSource {
     val isAdvertising: Boolean
     val isScanning: Boolean
 
-    fun startAdvertising(name: String, meshId: String)
+    fun startAdvertising(name: String, meshId: String, capabilities: Byte = 0)
     fun stopAdvertising()
     fun startScanning()
     fun stopScanning()

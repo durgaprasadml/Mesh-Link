@@ -23,8 +23,8 @@ class BleMeshDataSourceImpl @Inject constructor(
     private val _incomingPayloads = MutableSharedFlow<Pair<String, String>>()
     override val incomingPayloads: SharedFlow<Pair<String, String>> = _incomingPayloads
 
-    override fun startAdvertising(name: String, meshId: String) {
-        advertiser.startAdvertising(name, meshId)
+    override fun startAdvertising(name: String, meshId: String, capabilities: Byte) {
+        advertiser.startAdvertising(name, meshId, capabilities)
     }
 
     override fun stopAdvertising() {

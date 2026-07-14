@@ -141,7 +141,11 @@ data class MeshStats(
     val packetsRelayed: Int = 0,
     val deliveryRate: Float = 0f,
     val avgHopCount: Float = 0f,
-    val activeNodeCount: Int = 0
+    val activeNodeCount: Int = 0,
+    val averageLatencyMs: Long = 0L,
+    val networkDiameter: Int = 0,
+    val congestionScore: Int = 0,
+    val healthScore: Int = 100
 )
 
 data class RelayLogEntry(

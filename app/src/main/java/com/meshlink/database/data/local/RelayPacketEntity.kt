@@ -17,6 +17,8 @@ data class RelayPacketEntity(
     val targetId: String,
     val payload: String,
     val type: String,
+    val priority: String = "NORMAL",
+    val broadcastType: String = "NONE",
     val timestamp: Long = System.currentTimeMillis(),
     val expiryTimestamp: Long = System.currentTimeMillis() + (24 * 60 * 60 * 1000), // 24h TTL
     val ttl: Int,

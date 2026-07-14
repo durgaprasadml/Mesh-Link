@@ -22,10 +22,12 @@ import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.media.data.ImageCompressor
-import com.meshlink.media.data.MediaTransferManager
+import com.meshlink.transfer.TransferManager
 import com.meshlink.routing.data.MeshRouter
 import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.util.NotificationHelper
+import com.meshlink.voice.transport.VoiceTransport
+import com.meshlink.video.transport.VideoTransport
 import com.meshlink.wifi.data.WifiDirectManager
 import com.meshlink.wifi.data.WifiSocketTransport
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -56,7 +58,7 @@ class BleRepositoryImpl @Inject constructor(
     override val meshRouter: MeshRouter,
     private val chatDao: ChatDao,
     private val userRepository: UserRepository,
-    private val mediaTransferManager: MediaTransferManager,
+    private val transferManager: TransferManager,
     private val locationProvider: LocationProvider,
     private val cryptoManager: MeshCryptoManager,
     private val wifiDirectManager: WifiDirectManager,
@@ -65,6 +67,9 @@ class BleRepositoryImpl @Inject constructor(
     private val rekeyManager: com.meshlink.security.data.RekeyManager,
     private val trustManager: com.meshlink.security.data.TrustManager,
     private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
+    private val discoveryEngine: com.meshlink.ble.discovery.DiscoveryEngine,
+    private val voiceTransport: VoiceTransport,
+    private val videoTransport: VideoTransport,
     @ApplicationContext private val context: Context
 ) : MeshRepository {
     companion object {
@@ -80,9 +85,26 @@ class BleRepositoryImpl @Inject constructor(
         peerStates[address] = newState
         MeshLogger.d(TAG, "Peer $address state: $current -> $newState")
         
+        if (newState == PeerConnectionState.CONNECTED) {
+            discoveryEngine.notifyConnectionSuccess(address)
+            updateAnalyticsConnectionCount()
+        } else if (newState == PeerConnectionState.DISCONNECTED) {
+            discoveryEngine.notifyConnectionFailure(address)
+            updateAnalyticsConnectionCount()
+        }
+        
         if (newState == PeerConnectionState.SERVICES_DISCOVERED || newState == PeerConnectionState.MTU_READY) {
             checkAndTriggerHandshake(address)
         }
+    }
+    
+    private fun updateAnalyticsConnectionCount() {
+        val count = peerStates.values.count { 
+            it == PeerConnectionState.CONNECTED || 
+            it == PeerConnectionState.SESSION_READY || 
+            it == PeerConnectionState.SESSION_ESTABLISHED 
+        }
+        discoveryEngine.analytics.updateActiveConnections(count)
     }
 
     private fun checkAndTriggerHandshake(address: String) {
@@ -186,9 +208,25 @@ class BleRepositoryImpl @Inject constructor(
             }
         }
 
-        // Wire MediaTransferManager so it can dispatch ACK/NACK/retried chunks via MeshRouter
-        mediaTransferManager.onSendPacket = { packet ->
+        // Wire TransferManager so it can dispatch ACK/NACK/retried chunks via MeshRouter
+        transferManager.onSendPacket = { packet ->
             meshRouter.sendMediaPacket(packet)
+        }
+        
+        transferManager.onTransferCompleted = { session ->
+            scope.launch {
+                receiveMediaMessage(session.transferId, session.filePath!!, session.mimeType, session.senderId)
+            }
+        }
+
+        // Wire VoiceTransport for outbound real-time voice packets
+        voiceTransport.onSendPacket = { packet ->
+            meshRouter.sendMediaPacket(packet) // Reuse high-priority routing
+        }
+
+        // Wire VideoTransport for outbound real-time video packets
+        videoTransport.onSendPacket = { packet ->
+            meshRouter.sendMediaPacket(packet) // High priority routing
         }
 
         // Wire WifiSocketTransport so it routes incoming packets just like MeshRouter
@@ -204,17 +242,8 @@ class BleRepositoryImpl @Inject constructor(
             }
         }
 
-        // Phase 4: Handle Media Transfer failures
-        scope.launch {
-            transferProgress.collect { progressMap ->
-                progressMap.forEach { (transferId, progress) ->
-                    if (progress < 0f) {
-                        // Transfer failed (e.g. timeout)
-                        chatDao.updateMessageStatus(transferId, DeliveryStatus.FAILED)
-                    }
-                }
-            }
-        }
+        // Note: Transfer progress is now handled by TransferManager's scheduler.
+        // We will collect state flow updates from TransferScheduler if UI needs it.
 
         // Periodically retry sending PENDING messages if we are connected to anyone
         scope.launch {
@@ -268,6 +297,23 @@ class BleRepositoryImpl @Inject constructor(
                 } else {
                     wifiSocketTransport.disconnect()
                     wifiSocketTransport.stopServer()
+                }
+            }
+        }
+        
+        // Phase E2: Observe DiscoveryEngine events for Smart Connect
+        scope.launch {
+            discoveryEngine.engineEvents.collect { record ->
+                val state = peerStates[record.macAddress] ?: PeerConnectionState.DISCONNECTED
+                val isConnected = state == PeerConnectionState.CONNECTED || 
+                                  state == PeerConnectionState.SESSION_READY || 
+                                  state == PeerConnectionState.SESSION_ESTABLISHED
+                
+                if (discoveryEngine.connectionPolicy.canConnect(record, isConnected)) {
+                    if (state == PeerConnectionState.DISCONNECTED || state == PeerConnectionState.DISCOVERED) {
+                        discoveryEngine.notifyConnectionAttempt(record.macAddress)
+                        connectToDevice(record.macAddress)
+                    }
                 }
             }
         }
@@ -340,10 +386,7 @@ class BleRepositoryImpl @Inject constructor(
                     if (packet.type == PacketType.MEDIA_META && packet.transferId != null) {
                         insertPlaceholderIncomingMedia(packet)
                     }
-                    val completed = mediaTransferManager.handleIncomingMediaPacket(packet)
-                    if (completed != null) {
-                        receiveMediaMessage(completed)
-                    }
+                    transferManager.handleIncomingPacket(packet)
                 }
                 PacketType.LOCATION -> {
                     receiveLocationMessage(packet)
@@ -362,6 +405,14 @@ class BleRepositoryImpl @Inject constructor(
                 }
                 PacketType.SESSION_REKEY -> {
                     rekeyManager.handleRekeyPacket(packet.senderId, packet.payload, cryptoManager.getPeerPublicKey(packet.senderId))
+                }
+                PacketType.VOICE_SIGNAL,
+                PacketType.VOICE_FRAME -> {
+                    voiceTransport.handleIncomingPacket(packet)
+                }
+                PacketType.VIDEO_SIGNAL,
+                PacketType.VIDEO_FRAME -> {
+                    videoTransport.handleIncomingPacket(packet)
                 }
             }
         } catch (e: Exception) {
@@ -656,7 +707,7 @@ class BleRepositoryImpl @Inject constructor(
     // ────────── BLE Lifecycle ──────────
 
     override fun startAdvertising(name: String, meshId: String) {
-        bleDataSource.startAdvertising(name, meshId)
+        bleDataSource.startAdvertising(name, meshId, 0x01) // 0x01 = Routing Support
     }
 
     override fun stopAdvertising() {
@@ -665,6 +716,8 @@ class BleRepositoryImpl @Inject constructor(
 
     override fun startScanning() {
         bleDataSource.startScanning()
+        // Start the intelligent engine loop
+        // (Assuming BleScannerManager delegates this internally, but we can also trigger engine here)
     }
 
     override fun stopScanning() {
@@ -702,7 +755,9 @@ class BleRepositoryImpl @Inject constructor(
         val user = userRepository.getLocalUser() ?: return
         val localPeerId = networkId(user.meshId)
         meshRouter.localMeshId = localPeerId
-        startAdvertising(user.name, user.meshId)
+        
+        // Broadcast routing capabilities
+        bleDataSource.startAdvertising(user.name, user.meshId, 0x01)
         startServer()
         startScanning()
 
@@ -855,63 +910,21 @@ class BleRepositoryImpl @Inject constructor(
         )
         chatDao.insertMessageAndUpdateChat(message, chatName)
 
-        // Phase 6: Use Wi-Fi Direct if available (high-speed data plane)
-        if (wifiSocketTransport.isConnected() && wifiDirectManager.connectedPeerMac.value != null) {
-            try {
-                MeshLogger.d(TAG, "sendImage: Sending via Wi-Fi Direct socket...")
-                val base64Data = android.util.Base64.encodeToString(compressedBytes, android.util.Base64.NO_WRAP)
-                
-                val metaPacket = MeshPacket(
+                transferManager.sendFile(
+                    file = localFile,
                     senderId = localPeerId,
                     targetId = targetPeerId,
-                    payload = "MEDIA:image/jpeg",
-                    type = PacketType.MEDIA_META,
-                    transferId = messageId,
-                    chunkIndex = 0,
-                    totalChunks = 1,
-                    mimeType = "image/jpeg",
-                    encrypted = false,
-                    ttl = 10
+                    transferId = messageId
                 )
-                wifiSocketTransport.sendPacket(metaPacket)
-                
-                val packet = MeshPacket(
-                    packetId = messageId,
-                    senderId = localPeerId,
-                    targetId = targetPeerId,
-                    payload = base64Data,
-                    type = PacketType.MEDIA_CHUNK,
-                    transferId = messageId,
-                    mimeType = "image/jpeg",
-                    encrypted = false,
-                    totalChunks = 1,
-                    chunkIndex = 0
-                )
-                wifiSocketTransport.sendPacket(packet)
-                chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
-                return
-            } catch (e: Exception) {
-                MeshLogger.e(TAG, "Wi-Fi Direct socket send failed, falling back to BLE: ${e.message}")
             }
-        }
-
-        // Use reliable createAndSendChunked (30ms inter-chunk delay, ACK tracking)
-        withContext(Dispatchers.IO) {
-            mediaTransferManager.createAndSendChunked(
-                data       = compressedBytes,
-                senderId   = localPeerId,
-                targetId   = targetPeerId,
-                mimeType   = "image/jpeg",
-                transferId = messageId
-            )
         }
 
         chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
     }
 
-    private suspend fun receiveMediaMessage(completed: MediaTransferManager.CompletedTransfer) {
-        val isImage = completed.mimeType.contains("image")
-        val isVoice = completed.mimeType.contains("audio")
+    private suspend fun receiveMediaMessage(completedTransferId: String, completedFilePath: String, completedMimeType: String, completedSenderId: String) {
+        val isImage = completedMimeType.contains("image")
+        val isVoice = completedMimeType.contains("audio")
 
         val messageType = when {
             isImage -> MessageType.IMAGE
@@ -925,19 +938,19 @@ class BleRepositoryImpl @Inject constructor(
             else -> "📎 File"
         }
 
-        val chatId = incomingChatId(completed.senderId)
-        val senderName = completed.senderId.takeLast(8)
+        val chatId = incomingChatId(completedSenderId)
+        val senderName = completedSenderId.takeLast(8)
 
         val message = MessageEntity(
-            messageId = completed.transferId,
+            messageId = completedTransferId,
             chatId = chatId,
-            senderId = completed.senderId,
+            senderId = completedSenderId,
             text = previewText,
             timestamp = System.currentTimeMillis(),
             isFromMe = false,
             status = DeliveryStatus.DELIVERED,
             messageType = messageType,
-            mediaPath = completed.filePath
+            mediaPath = completedFilePath
         )
         chatDao.insertMessageAndUpdateChat(message, senderName)
         
@@ -946,15 +959,15 @@ class BleRepositoryImpl @Inject constructor(
             val localPeerId = networkId(user.meshId)
             val ackPacket = MeshPacket(
                 senderId = localPeerId,
-                targetId = completed.senderId,
-                payload = completed.transferId,
+                targetId = completedSenderId,
+                payload = completedTransferId,
                 type = PacketType.DELIVERY_ACK,
                 encrypted = false
             )
-            dispatchSinglePacket(completed.senderId, ackPacket)
+            dispatchSinglePacket(completedSenderId, ackPacket)
         }
 
-        NotificationHelper.showMessageNotification(context, completed.senderId, senderName, previewText)
+        NotificationHelper.showMessageNotification(context, completedSenderId, senderName, previewText)
     }
 
     private suspend fun insertPlaceholderIncomingMedia(packet: MeshPacket) {
@@ -1024,59 +1037,17 @@ class BleRepositoryImpl @Inject constructor(
         )
         chatDao.insertMessageAndUpdateChat(message, chatName)
 
-        // Phase 6: Use Wi-Fi Direct if available (high-speed data plane)
-        if (wifiSocketTransport.isConnected() && wifiDirectManager.connectedPeerMac.value != null) {
-            try {
-                MeshLogger.d(TAG, "sendVoiceNote: Sending via Wi-Fi Direct socket...")
-                val base64Data = android.util.Base64.encodeToString(voiceBytes, android.util.Base64.NO_WRAP)
-                
-                val metaPacket = MeshPacket(
+                transferManager.sendFile(
+                    file = File(filePath),
                     senderId = localPeerId,
                     targetId = targetPeerId,
-                    payload = "MEDIA:audio/m4a",
-                    type = PacketType.MEDIA_META,
                     transferId = messageId,
-                    chunkIndex = 0,
-                    totalChunks = 1,
-                    mimeType = "audio/m4a",
-                    encrypted = false,
-                    ttl = 10
+                    priority = com.meshlink.transfer.TransferPriority.HIGH
                 )
-                wifiSocketTransport.sendPacket(metaPacket)
-                
-                val packet = MeshPacket(
-                    packetId = messageId,
-                    senderId = localPeerId,
-                    targetId = targetPeerId,
-                    payload = base64Data,
-                    type = PacketType.MEDIA_CHUNK,
-                    transferId = messageId,
-                    mimeType = "audio/m4a",
-                    encrypted = false,
-                    totalChunks = 1,
-                    chunkIndex = 0
-                )
-                wifiSocketTransport.sendPacket(packet)
-                chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
-                return
-            } catch (e: Exception) {
-                MeshLogger.e(TAG, "Wi-Fi Direct socket send failed, falling back to BLE: ${e.message}")
             }
         }
-
-        val packets = withContext(Dispatchers.Default) {
-            mediaTransferManager.createChunkedPackets(
-                data = voiceBytes,
-                senderId = localPeerId,
-                targetId = targetPeerId,
-                mimeType = "audio/m4a",
-                transferId = messageId
-            )
-        }
-        // Media chunks: do NOT encrypt — too heavy for BLE
-        if (dispatchMediaPackets(targetPeerId, packets)) {
-            chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
-        }
+        
+        chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
     }
 
     // ────────── Location (ENCRYPTED GPS payload) ──────────

@@ -28,7 +28,7 @@ class BleAdvertiserManager @Inject constructor(@ApplicationContext private val c
     }
     private var advertiseCallback: AdvertiseCallback? = null
 
-    fun startAdvertising(name: String, meshId: String) {
+    fun startAdvertising(name: String, meshId: String, capabilities: Byte = 0) {
         stopAdvertising()
 
         val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return
@@ -58,11 +58,14 @@ class BleAdvertiserManager @Inject constructor(@ApplicationContext private val c
             .setConnectable(true)
             .build()
 
-        // Legacy BLE advertising is capped at 31 bytes per packet. With a 128-bit UUID,
-        // only a very small preview fits in service data without triggering DATA_TOO_LARGE.
-        val meshIdPart = BleConstants.toNetworkId(meshId)
-        val namePart = name.take(NAME_PREVIEW_LENGTH)
-        val combinedData = "$meshIdPart|$namePart".toByteArray(Charsets.UTF_8)
+        // Legacy BLE advertising is capped at 31 bytes per packet.
+        // We pack 8 bytes Mesh ID, 1 byte Capabilities, 3 bytes Name preview
+        val meshIdBytes = BleConstants.toNetworkId(meshId).toByteArray(Charsets.UTF_8).copyOf(8)
+        val nameBytes = name.take(NAME_PREVIEW_LENGTH).padEnd(NAME_PREVIEW_LENGTH, ' ').toByteArray(Charsets.UTF_8).copyOf(3)
+        val combinedData = ByteArray(12)
+        System.arraycopy(meshIdBytes, 0, combinedData, 0, 8)
+        combinedData[8] = capabilities
+        System.arraycopy(nameBytes, 0, combinedData, 9, 3)
 
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
@@ -82,15 +85,25 @@ class BleAdvertiserManager @Inject constructor(@ApplicationContext private val c
                 MeshLogger.e(TAG, "Advertising failed with error code: $errorCode")
             }
         }
-        advertiser.startAdvertising(settings, data, scanResponse, advertiseCallback)
+        try {
+            advertiser.startAdvertising(settings, data, scanResponse, advertiseCallback)
+        } catch (e: SecurityException) {
+            MeshLogger.e(TAG, "SecurityException: Missing BLE advertise permission", e)
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Exception starting advertising: ${e.message}", e)
+        }
     }
 
     fun stopAdvertising() {
         val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return
-        advertiseCallback?.let {
-            advertiser.stopAdvertising(it)
-            advertiseCallback = null
-            MeshLogger.d(TAG, "Advertising stopped")
+        try {
+            advertiseCallback?.let {
+                advertiser.stopAdvertising(it)
+                advertiseCallback = null
+                MeshLogger.d(TAG, "Advertising stopped")
+            }
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Error stopping advertising: ${e.message}", e)
         }
     }
 }

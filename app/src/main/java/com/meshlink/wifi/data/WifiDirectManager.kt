@@ -122,14 +122,20 @@ class WifiDirectManager @Inject constructor(
 
     @SuppressLint("MissingPermission")
     fun startDiscovery() {
-        manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                MeshLogger.d(TAG, "P2P Discovery Started")
-            }
-            override fun onFailure(reasonCode: Int) {
-                MeshLogger.e(TAG, "P2P Discovery Failed: $reasonCode")
-            }
-        })
+        try {
+            manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    MeshLogger.d(TAG, "P2P Discovery Started")
+                }
+                override fun onFailure(reasonCode: Int) {
+                    MeshLogger.e(TAG, "P2P Discovery Failed: $reasonCode")
+                }
+            })
+        } catch (e: SecurityException) {
+            MeshLogger.e(TAG, "SecurityException: Missing WiFi Direct permission", e)
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Exception starting WiFi discovery: ${e.message}", e)
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -145,13 +151,19 @@ class WifiDirectManager @Inject constructor(
             }
         }
         
-        manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                MeshLogger.d(TAG, "P2P Connect Initiated to $deviceAddress")
-            }
-            override fun onFailure(reason: Int) {
-                MeshLogger.e(TAG, "P2P Connect Failed to $deviceAddress: $reason")
-            }
-        })
+        try {
+            manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    MeshLogger.d(TAG, "P2P Connect Initiated to $deviceAddress")
+                }
+                override fun onFailure(reason: Int) {
+                    MeshLogger.e(TAG, "P2P Connect Failed to $deviceAddress: $reason")
+                }
+            })
+        } catch (e: SecurityException) {
+            MeshLogger.e(TAG, "SecurityException: Missing WiFi Direct permission for connect", e)
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Exception connecting to WiFi peer: ${e.message}", e)
+        }
     }
 }

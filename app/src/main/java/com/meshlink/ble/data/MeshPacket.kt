@@ -8,23 +8,53 @@ enum class PacketType {
     TEXT,
     MEDIA_META,
     MEDIA_CHUNK,
-    MEDIA_ACK,   // Receiver acknowledges a chunk was received
-    MEDIA_NACK,  // Receiver requests resend of missing chunks
+    MEDIA_ACK,
+    MEDIA_NACK,
     LOCATION,
     SOS,
     KEY_EXCHANGE,
     DELIVERY_ACK,
     READ_RECEIPT,
     WIFI_NEGOTIATION,
-    SESSION_REKEY
+    SESSION_REKEY,
+    VOICE_SIGNAL,
+    VOICE_FRAME,
+    VIDEO_SIGNAL,
+    VIDEO_FRAME,
+    BEACON,
+    INCIDENT_REPORT,
+    CHECK_IN,
+    FORM_SYNC,
+    RESOURCE_SYNC,
+    MAP_SYNC
+}
+
+enum class PacketPriority(val level: Int) {
+    CRITICAL(4),
+    HIGH(3),
+    NORMAL(2),
+    LOW(1),
+    BACKGROUND(0)
+}
+
+enum class BroadcastType {
+    NONE,
+    GLOBAL,
+    REGIONAL,
+    LOCAL,
+    COMMAND,
+    MEDICAL,
+    SOS
 }
 
 data class MeshPacket(
     val packetId: String = UUID.randomUUID().toString(),
     val senderId: String,
-    val targetId: String,
+    val targetId: String, // Can be "BROADCAST"
     val payload: String,
     val type: PacketType = PacketType.TEXT,
+    val priority: PacketPriority = PacketPriority.NORMAL,
+    val broadcastType: BroadcastType = BroadcastType.NONE,
     val transferId: String? = null,
     val chunkIndex: Int = 0,
     val totalChunks: Int = 0,
@@ -44,6 +74,8 @@ object MeshPacketParser {
         json.put("payload", packet.payload)
         
         if (packet.type != PacketType.TEXT) json.put("type", packet.type.name)
+        if (packet.priority != PacketPriority.NORMAL) json.put("priority", packet.priority.name)
+        if (packet.broadcastType != BroadcastType.NONE) json.put("broadcastType", packet.broadcastType.name)
         if (packet.encrypted) json.put("encrypted", true)
         if (packet.ttl != 10) json.put("ttl", packet.ttl)
         if (packet.hopCount != 0) json.put("hopCount", packet.hopCount)
@@ -76,6 +108,12 @@ object MeshPacketParser {
             }
             val typeName = json.optString("type", "TEXT")
             val packetType = try { PacketType.valueOf(typeName) } catch (_: Exception) { PacketType.TEXT }
+            
+            val priorityName = json.optString("priority", "NORMAL")
+            val packetPriority = try { PacketPriority.valueOf(priorityName) } catch (_: Exception) { PacketPriority.NORMAL }
+            
+            val broadcastName = json.optString("broadcastType", "NONE")
+            val broadcastType = try { BroadcastType.valueOf(broadcastName) } catch (_: Exception) { BroadcastType.NONE }
 
             MeshPacket(
                 packetId = json.getString("packetId"),
@@ -83,6 +121,8 @@ object MeshPacketParser {
                 targetId = json.getString("targetId"),
                 payload = json.getString("payload"),
                 type = packetType,
+                priority = packetPriority,
+                broadcastType = broadcastType,
                 transferId = json.optString("transferId", null),
                 chunkIndex = json.optInt("chunkIndex", 0),
                 totalChunks = json.optInt("totalChunks", 0),

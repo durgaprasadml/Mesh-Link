@@ -62,22 +62,28 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
 
     fun startServer() {
         if (gattServer != null) return
-        gattServer = bluetoothManager.openGattServer(context, serverCallback)
-        val service = BluetoothGattService(BleConstants.MESH_SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-        
-        val msgChar = BluetoothGattCharacteristic(
-            BleConstants.MSG_CHAR_UUID,
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-            BluetoothGattCharacteristic.PERMISSION_READ or BluetoothGattCharacteristic.PERMISSION_WRITE
-        )
-        val cccd = BluetoothGattDescriptor(
-            UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"),
-            BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
-        )
-        msgChar.addDescriptor(cccd)
-        service.addCharacteristic(msgChar)
-        gattServer?.addService(service)
-        MeshLogger.d("BleGatt", "GATT Server started")
+        try {
+            gattServer = bluetoothManager.openGattServer(context, serverCallback)
+            val service = BluetoothGattService(BleConstants.MESH_SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+            
+            val msgChar = BluetoothGattCharacteristic(
+                BleConstants.MSG_CHAR_UUID,
+                BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+                BluetoothGattCharacteristic.PERMISSION_READ or BluetoothGattCharacteristic.PERMISSION_WRITE
+            )
+            val cccd = BluetoothGattDescriptor(
+                UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"),
+                BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
+            )
+            msgChar.addDescriptor(cccd)
+            service.addCharacteristic(msgChar)
+            gattServer?.addService(service)
+            MeshLogger.d("BleGatt", "GATT Server started")
+        } catch (e: SecurityException) {
+            MeshLogger.e("BleGatt", "SecurityException starting GATT server", e)
+        } catch (e: Exception) {
+            MeshLogger.e("BleGatt", "Exception starting GATT server: ${e.message}", e)
+        }
     }
 
     fun stopServer() {
@@ -97,8 +103,14 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
 
     fun connectToDevice(address: String) {
         if (activeClients.containsKey(address)) return
-        val device = bluetoothManager.adapter.getRemoteDevice(address)
-        activeClients[address] = device.connectGatt(context, false, clientCallback)
+        try {
+            val device = bluetoothManager.adapter.getRemoteDevice(address)
+            activeClients[address] = device.connectGatt(context, false, clientCallback)
+        } catch (e: SecurityException) {
+            MeshLogger.e("BleGatt", "SecurityException connecting to $address", e)
+        } catch (e: Exception) {
+            MeshLogger.e("BleGatt", "Exception connecting to $address: ${e.message}", e)
+        }
     }
 
     fun disconnectDevice(address: String) {

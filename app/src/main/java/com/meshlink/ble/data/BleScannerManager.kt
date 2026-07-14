@@ -11,26 +11,17 @@ import android.content.Context
 import android.os.ParcelUuid
 import android.os.PowerManager
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.domain.model.BleDevice
+import com.meshlink.ble.discovery.DiscoveryEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 
 @Singleton
 @SuppressLint("MissingPermission")
-class BleScannerManager @Inject constructor(@ApplicationContext private val context: Context) {
+class BleScannerManager @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val discoveryEngine: DiscoveryEngine
+) {
     companion object {
         private const val TAG = "BleScanner"
     }
@@ -40,33 +31,34 @@ class BleScannerManager @Inject constructor(@ApplicationContext private val cont
         bluetoothManager.adapter
     }
 
-    private val _scannedDevices = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
-    val scannedDevices: StateFlow<Map<String, BleDevice>> = _scannedDevices.asStateFlow()
-    
-    private val lastSeenMap = ConcurrentHashMap<String, Long>()
+    val scannedDevices = discoveryEngine.scannedDevices
 
     private var scanCallback: ScanCallback? = null
-    private var cleanupJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
+    init {
+        // Wire up hardware delegates to the Discovery Engine
+        discoveryEngine.startScanAction = { startHardwareScan() }
+        discoveryEngine.stopScanAction = { stopHardwareScan() }
+    }
+    
     fun startScanning() {
-        stopScanning()
+        discoveryEngine.start()
+    }
+    
+    fun stopScanning() {
+        discoveryEngine.stop()
+    }
+
+    private fun startHardwareScan() {
+        stopHardwareScan()
 
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
         if (bluetoothAdapter?.isEnabled != true) {
-            MeshLogger.w(TAG, "Bluetooth is disabled; skipping scan")
+            MeshLogger.w(TAG, "Bluetooth is disabled; skipping hardware scan")
             return
         }
         
-        // FIX Issue 3: Do NOT reset scannedDevices on scan restart.
-        // The stale device cleanup coroutine below handles removing
-        // devices not seen for 15 seconds. Resetting here was causing
-        // the connection status to flicker to OFFLINE on every scan cycle.
-        
-        // Use an empty filter to ensure aggressive discovery to catch all packets.
-        // We will manually identify our Mesh UUID in the results to bypass OEM filter drop bugs.
         val filter = ScanFilter.Builder().build()
-
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val isPowerSave = powerManager.isPowerSaveMode
 
@@ -94,51 +86,24 @@ class BleScannerManager @Inject constructor(@ApplicationContext private val cont
             }
         }
         
-        scanner.startScan(listOf(filter), settings, scanCallback)
-        
-        // Stale Device Cleanup Coroutine Loop & Scan Timeout Recovery
-        cleanupJob = scope.launch {
-            var lastScanRestartTime = System.currentTimeMillis()
-            while (isActive) {
-                delay(5000)
-                val now = System.currentTimeMillis()
-                val keysToRemove = lastSeenMap.entries
-                    .filter { now - it.value > 15000 }
-                    .map { it.key }
-                
-                if (keysToRemove.isNotEmpty()) {
-                    keysToRemove.forEach { lastSeenMap.remove(it) }
-                    _scannedDevices.update { current ->
-                        current.filterKeys { it !in keysToRemove }
-                    }
-                }
-
-                // FIX: Scan timeout recovery - Android downgrades scans >30 mins to opportunistic.
-                // Restart scan every 15 minutes to keep it in low latency mode continuously.
-                if (now - lastScanRestartTime > 15 * 60 * 1000L) {
-                    MeshLogger.d(TAG, "15-minute scan refresh to avoid opportunistic downgrade.")
-                    lastScanRestartTime = now
-                    try {
-                        scanCallback?.let {
-                            scanner.stopScan(it)
-                            delay(1000)
-                            scanner.startScan(listOf(filter), settings, it)
-                        }
-                    } catch (e: Exception) {
-                        MeshLogger.e(TAG, "Failed to refresh scan: ${e.message}")
-                    }
-                }
-            }
+        try {
+            scanner.startScan(listOf(filter), settings, scanCallback)
+        } catch (e: SecurityException) {
+            MeshLogger.e(TAG, "SecurityException: Missing BLE scan permission", e)
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Exception starting hardware scan: ${e.message}", e)
         }
     }
 
-    fun stopScanning() {
-        cleanupJob?.cancel()
-        cleanupJob = null
+    private fun stopHardwareScan() {
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
-        scanCallback?.let {
-            scanner.stopScan(it)
-            scanCallback = null
+        try {
+            scanCallback?.let {
+                scanner.stopScan(it)
+                scanCallback = null
+            }
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Error stopping hardware scan: ${e.message}", e)
         }
     }
 
@@ -150,39 +115,37 @@ class BleScannerManager @Inject constructor(@ApplicationContext private val cont
         val deviceAddress = result.device.address
         val rssi = result.rssi
         val serviceData = record.getServiceData(ParcelUuid(BleConstants.MESH_SERVICE_UUID))
-        val dataString = serviceData
-            ?.takeIf { it.isNotEmpty() }
-            ?.toString(Charsets.UTF_8)
-            
-        if (dataString == null) {
-            // Ignore incomplete scans (e.g. passive scan hits without scanResponse data)
-            // We MUST have the meshId to route messages to them.
+        
+        if (serviceData == null || serviceData.size < 12) {
+            // Ignore if missing data or old format
             return
         }
 
-        val parts = dataString.split("|", limit = 2)
-        val meshPreview = parts.getOrNull(0)
-            ?.ifBlank { null }
-            ?.let(BleConstants::toNetworkId)
-            ?: return // Must have a meshId
-
-        val displayName = parts.getOrNull(1)?.ifBlank { null }
-            ?: record.deviceName
-            ?: result.device.name
-            ?: "Peer ${meshPreview.takeLast(5)}"
-
-        val bleDevice = BleDevice(
-            meshId = meshPreview,
-            name = displayName,
-            address = deviceAddress,
-            rssi = rssi
-        )
-
-        lastSeenMap[meshPreview] = System.currentTimeMillis()
-        _scannedDevices.update { current ->
-            val mutableMap = current.toMutableMap()
-            mutableMap[meshPreview] = bleDevice
-            mutableMap
+        // New payload format:
+        // 0-7: Mesh ID bytes
+        // 8: Capabilities byte
+        // 9-11: Name preview bytes
+        val meshIdBytes = ByteArray(8)
+        System.arraycopy(serviceData, 0, meshIdBytes, 0, 8)
+        val meshId = String(meshIdBytes, Charsets.UTF_8).trim()
+        
+        val capabilities = serviceData[8]
+        
+        val nameBytes = ByteArray(3)
+        System.arraycopy(serviceData, 9, nameBytes, 0, 3)
+        var name = String(nameBytes, Charsets.UTF_8).trim()
+        
+        if (name.isBlank()) {
+            name = record.deviceName ?: result.device.name ?: "Peer"
         }
+        
+        // Pass to Discovery Engine
+        discoveryEngine.onDeviceDiscovered(
+            macAddress = deviceAddress,
+            meshId = meshId,
+            name = name,
+            rssi = rssi,
+            capabilities = capabilities
+        )
     }
 }

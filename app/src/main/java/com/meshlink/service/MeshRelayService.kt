@@ -100,6 +100,9 @@ class MeshRelayService : Service() {
                     } else {
                         startForeground(NOTIFICATION_ID, buildNotification())
                     }
+                } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                    MeshLogger.e(TAG, "Not allowed to start foreground service from background", e)
+                    _serviceState.value = ServiceState.ERROR
                 } catch (e: Exception) {
                     MeshLogger.e(TAG, "Failed to start foreground service", e)
                     _serviceState.value = ServiceState.ERROR
@@ -257,10 +260,19 @@ class MeshRelayService : Service() {
             restartIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        alarmManager.setAndAllowWhileIdle(
-            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-            SystemClock.elapsedRealtime() + 3000L,
-            restartPendingIntent
-        )
+        try {
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + 3000L,
+                restartPendingIntent
+            )
+        } catch (e: SecurityException) {
+            MeshLogger.w(TAG, "Exact alarm permission missing. Falling back to inexact alarm.")
+            alarmManager.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + 3000L,
+                restartPendingIntent
+            )
+        }
     }
 }

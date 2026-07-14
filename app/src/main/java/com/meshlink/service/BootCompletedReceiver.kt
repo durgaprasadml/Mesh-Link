@@ -35,6 +35,8 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 } else {
                     context.startService(serviceIntent)
                 }
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                MeshLogger.e(TAG, "Foreground service start not allowed from boot receiver: ${e.message}")
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Failed to start MeshRelayService on boot: ${e.message}")
             }

@@ -17,6 +17,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
         private const val TAG = "BootReceiver"
     }
 
+    @android.annotation.SuppressLint("NewApi")
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == "android.intent.action.QUICKBOOT_POWERON" ||

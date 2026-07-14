@@ -70,6 +70,7 @@ class MeshRelayService : Service() {
         MeshLogger.d(TAG, "MeshRelayService created")
     }
 
+    @android.annotation.SuppressLint("NewApi")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {

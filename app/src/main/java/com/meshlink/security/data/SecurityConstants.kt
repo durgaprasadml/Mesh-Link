@@ -35,7 +35,11 @@ object SecurityConstants {
     const val KEY_LEGACY_PASSPHRASE = "db_passphrase"
     const val KEY_ENCRYPTED_SEED = "db_encrypted_seed"
     const val KEY_SALT = "db_salt"
-    const val KEY_MIGRATION_COMPLETE = "db_migration_complete"
+    const val KEY_MIGRATION_STATE = "db_migration_state"
+    const val STATE_NOT_STARTED = "NOT_STARTED"
+    const val STATE_IN_PROGRESS = "IN_PROGRESS"
+    const val STATE_VERIFIED = "VERIFIED"
+    const val STATE_FAILED = "FAILED"
     
     const val DB_NAME = "mesh_db"
     

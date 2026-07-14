@@ -1,5 +1,6 @@
 package com.meshlink.di
 
+import android.app.KeyguardManager
 import android.content.Context
 import androidx.room.Room
 import com.meshlink.database.data.local.ChatDao
@@ -16,6 +17,7 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import net.zetetic.database.sqlcipher.SQLiteConnection
 import net.zetetic.database.sqlcipher.SQLiteDatabaseHook
+import net.zetetic.database.sqlcipher.SQLiteNotADatabaseException
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Module
@@ -28,6 +30,25 @@ object DatabaseModule {
         @ApplicationContext context: Context,
         databaseSecurityManager: com.meshlink.security.data.DatabaseSecurityManager
     ): MeshDatabase {
+        com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Starting DatabaseModule.provideMeshDatabase()")
+        val dbFile = context.getDatabasePath(com.meshlink.security.data.SecurityConstants.DB_NAME)
+        
+        // Header inspection
+        if (dbFile.exists()) {
+            try {
+                val bytes = ByteArray(16)
+                java.io.FileInputStream(dbFile).use { it.read(bytes) }
+                val headerStr = String(bytes, Charsets.UTF_8)
+                if (headerStr.startsWith("SQLite format 3")) {
+                    com.meshlink.common.logger.MeshLogger.w("DbSecurity", "Database Header Inspection: PLAINTEXT SQLITE")
+                } else {
+                    com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Database Header Inspection: ENCRYPTED/UNKNOWN")
+                }
+            } catch (e: Exception) {
+                com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Database Header Inspection: FAILED TO READ", e)
+            }
+        }
+        
         val passphraseBytes = try {
             databaseSecurityManager.getDatabasePassphrase()
         } catch (e: com.meshlink.security.data.SecurityRecoveryException) {
@@ -38,10 +59,17 @@ object DatabaseModule {
             override fun preKey(connection: SQLiteConnection?) {}
             override fun postKey(connection: SQLiteConnection?) {
                 try {
+                    com.meshlink.common.logger.MeshLogger.d("DbSecurity", "SQLCipher postKey hook started")
+                    connection?.execute("PRAGMA cipher_version;", null, null)
+                    connection?.execute("PRAGMA journal_mode;", null, null)
+                    connection?.execute("PRAGMA integrity_check;", null, null)
+                    connection?.execute("SELECT COUNT(*) FROM sqlite_schema;", null, null)
+                    com.meshlink.common.logger.MeshLogger.d("DbSecurity", "SQLCipher postKey diagnostics completed successfully")
+                    
                     connection?.execute("PRAGMA journal_mode = WAL;", null, null)
                     connection?.execute("PRAGMA synchronous = NORMAL;", null, null)
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    com.meshlink.common.logger.MeshLogger.e("DbSecurity", "SQLCipher postKey diagnostic failure: ${e.message}", e)
                 }
             }
         }
@@ -58,7 +86,80 @@ object DatabaseModule {
             builder.fallbackToDestructiveMigration()
         }
         
-        return builder.build()
+        return try {
+            val db = builder.build()
+            // Force open to test connection immediately
+            db.openHelper.writableDatabase
+            db
+        } catch (e: Exception) {
+            com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Room build failed. Initiating Recovery Diagnostics.", e)
+
+            val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            val isLocked = keyguardManager.isDeviceLocked
+            if (isLocked) {
+                com.meshlink.common.logger.MeshLogger.e("DbSecurity", "CRITICAL: Database access attempted while device is LOCKED. This is likely the cause of SQLiteNotADatabaseException due to FBE.")
+            }
+
+            // Specific handling for SQLiteNotADatabaseException
+            if (e is SQLiteNotADatabaseException || e.cause is SQLiteNotADatabaseException) {
+                if (isLocked) {
+                    com.meshlink.common.logger.MeshLogger.w("DbSecurity", "Database is not recognized but device is locked. Deferring recovery to avoid false corruption detection.")
+                } else {
+                    com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Database file is not a database or corrupted while unlocked. Attempting to delete and re-create.")
+                    if (dbFile.exists()) {
+                        val deleted = context.deleteDatabase(com.meshlink.security.data.SecurityConstants.DB_NAME)
+                        com.meshlink.common.logger.MeshLogger.w("DbSecurity", "Corrupted database file deleted: $deleted")
+                        if (deleted) {
+                            try {
+                                val newDb = builder.build()
+                                newDb.openHelper.writableDatabase
+                                return newDb
+                            } catch (retryEx: Exception) {
+                                com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Failed to re-create database after corruption deletion", retryEx)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Try new key manually
+            try {
+                com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Recovery: Trying new key")
+                net.zetetic.database.sqlcipher.SQLiteDatabase.openDatabase(
+                    dbFile.path,
+                    passphraseBytes,
+                    null as net.zetetic.database.sqlcipher.SQLiteDatabase.CursorFactory?,
+                    net.zetetic.database.sqlcipher.SQLiteDatabase.OPEN_READWRITE,
+                    null
+                ).close()
+                com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Recovery: New key succeeded")
+            } catch (ex: Exception) {
+                com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Recovery: New key failed", ex)
+            }
+            
+            // Try legacy key manually
+            val legacyPrefs = context.getSharedPreferences(com.meshlink.security.data.SecurityConstants.DB_PREFS_NAME_LEGACY, Context.MODE_PRIVATE)
+            val legacyPassphrase = legacyPrefs.getString(com.meshlink.security.data.SecurityConstants.KEY_LEGACY_PASSPHRASE, null)
+            if (legacyPassphrase != null) {
+                try {
+                    com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Recovery: Trying legacy key")
+                    net.zetetic.database.sqlcipher.SQLiteDatabase.openDatabase(
+                        dbFile.path,
+                        legacyPassphrase.toByteArray(Charsets.UTF_8),
+                        null as net.zetetic.database.sqlcipher.SQLiteDatabase.CursorFactory?,
+                        net.zetetic.database.sqlcipher.SQLiteDatabase.OPEN_READWRITE,
+                        null
+                    ).close()
+                    com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Recovery: Legacy key succeeded. Migration is proven incomplete.")
+                } catch (ex: Exception) {
+                    com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Recovery: Legacy key failed. Database may be corrupted.", ex)
+                }
+            } else {
+                com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Recovery: No legacy key available.")
+            }
+            
+            throw e
+        }
     }
 
     @Provides

@@ -147,16 +147,16 @@ class WifiDirectManagerTest {
         every { intent.getParcelableExtra(any(), eq(WifiP2pDevice::class.java)) } returns localDevice
         receiver.onReceive(context, intent)
 
-        val configSlot = slot<WifiP2pConfig>()
+        val configList = mutableListOf<WifiP2pConfig>()
         
         // Target MAC is smaller -> local should have GO intent 15
         manager.connectToPeer("11:11:11:11:11:11")
-        verify { mockWifiP2pManager.connect(any(), capture(configSlot), any()) }
-        assertEquals(15, configSlot.captured.groupOwnerIntent)
+        verify { mockWifiP2pManager.connect(any(), capture(configList), any()) }
+        assertEquals(15, configList.last().groupOwnerIntent)
 
         // Target MAC is larger -> local should have GO intent 0
         manager.connectToPeer("33:33:33:33:33:33")
-        verify(exactly = 2) { mockWifiP2pManager.connect(any(), capture(configSlot), any()) }
-        assertEquals(0, configSlot.captured.groupOwnerIntent)
+        verify(exactly = 2) { mockWifiP2pManager.connect(any(), capture(configList), any()) }
+        assertEquals(0, configList.last().groupOwnerIntent)
     }
 }

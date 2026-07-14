@@ -99,7 +99,7 @@ class BleRepositoryImplTest {
     @Test
     fun `startAdvertising delegates to bleDataSource`() {
         repository.startAdvertising("TestName", "mesh_1")
-        coVerify(exactly = 1) { bleDataSource.startAdvertising("TestName", "mesh_1") }
+        coVerify(exactly = 1) { bleDataSource.startAdvertising("TestName", "mesh_1", 0x01) }
     }
 
     @Test

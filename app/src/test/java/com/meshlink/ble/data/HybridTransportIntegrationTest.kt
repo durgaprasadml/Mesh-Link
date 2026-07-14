@@ -33,6 +33,7 @@ import io.mockk.spyk
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [33])
 class HybridTransportIntegrationTest {
 
     private lateinit var repository: BleRepositoryImpl

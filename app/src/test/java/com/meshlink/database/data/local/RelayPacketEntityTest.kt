@@ -27,9 +27,9 @@ class RelayPacketEntityTest {
 
     @Test
     fun `test relay packet entity equality`() {
-        val packet1 = RelayPacketEntity("p1", "s1", "t1", "payload", "text", 1000L, 2000L, 3, 1, true, null, 0, 0, null)
-        val packet2 = RelayPacketEntity("p1", "s1", "t1", "payload", "text", 1000L, 2000L, 3, 1, true, null, 0, 0, null)
-        val packet3 = RelayPacketEntity("p2", "s1", "t1", "payload", "text", 1000L, 2000L, 3, 1, true, null, 0, 0, null)
+        val packet1 = RelayPacketEntity("p1", "s1", "t1", "payload", "text", "NORMAL", "NONE", 1000L, 2000L, 3, 1, true, null, 0, 0, null)
+        val packet2 = RelayPacketEntity("p1", "s1", "t1", "payload", "text", "NORMAL", "NONE", 1000L, 2000L, 3, 1, true, null, 0, 0, null)
+        val packet3 = RelayPacketEntity("p2", "s1", "t1", "payload", "text", "NORMAL", "NONE", 1000L, 2000L, 3, 1, true, null, 0, 0, null)
 
         assertEquals(packet1, packet2)
         assertEquals(packet1.hashCode(), packet2.hashCode())

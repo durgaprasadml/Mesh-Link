@@ -85,8 +85,9 @@ class BleRepositoryImplTest {
 
         repository = BleRepositoryImpl(
             application, bleDataSource, meshRouter, chatDao, userRepository,
-            mediaTransferManager, locationProvider, cryptoManager, wifiDirectManager,
-            wifiSocketTransport, sessionManager, rekeyManager, trustManager, securityMonitor, context
+            mockk(relaxed = true), mediaTransferManager, locationProvider, cryptoManager, wifiDirectManager,
+            wifiSocketTransport, sessionManager, rekeyManager, trustManager, securityMonitor,
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), context
         )
     }
 

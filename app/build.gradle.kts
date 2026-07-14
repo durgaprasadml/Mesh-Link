@@ -149,7 +149,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     // CameraX
-    val cameraxVersion = "1.3.3"
+    val cameraxVersion = "1.4.0"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
@@ -173,7 +173,7 @@ dependencies {
     ksp("androidx.room:room-compiler:$roomVersion")
 
     // DataStore
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
 
     // Coil
     implementation("io.coil-kt:coil-compose:2.6.0")
@@ -182,7 +182,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
 
     // SQLCipher
-    implementation("net.zetetic:sqlcipher-android:4.6.1")
+    implementation("net.zetetic:sqlcipher-android:4.9.0")
     implementation("androidx.sqlite:sqlite-ktx:2.4.0")
 
     // Security

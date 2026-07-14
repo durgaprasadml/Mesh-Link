@@ -79,9 +79,11 @@ class HybridTransportIntegrationTest {
 
         repository = BleRepositoryImpl(
             app, bleDataSource, meshRouter, chatDao, userRepository,
-            mediaTransferManager, locationProvider, cryptoManager,
+            mockk(relaxed = true), mediaTransferManager, locationProvider, cryptoManager,
             wifiDirectManager, wifiSocketTransport, sessionManager,
-            rekeyManager, trustManager, securityMonitor, context
+            rekeyManager, trustManager, securityMonitor,
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            context
         )
     }
 

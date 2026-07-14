@@ -96,7 +96,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        checkAndStartMesh()
+        lifecycleScope.launch {
+            kotlinx.coroutines.delay(500)
+            checkAndStartMesh()
+        }
     }
     
     override fun onNewIntent(intent: Intent) {

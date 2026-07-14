@@ -82,6 +82,9 @@ class WifiSocketTransport @Inject constructor() {
 
     private fun handleSocketConnection(socket: Socket) {
         activeSocket?.close()
+        socket.tcpNoDelay = true
+        socket.sendBufferSize = 1024 * 1024 // 1 MB
+        socket.receiveBufferSize = 1024 * 1024 // 1 MB
         activeSocket = socket
         
         try {
@@ -129,7 +132,11 @@ class WifiSocketTransport @Inject constructor() {
     }
 
     suspend fun sendPacket(packet: MeshPacket) = withContext(Dispatchers.IO) {
-        val currentWriter = writer ?: throw IllegalStateException("Socket is not connected")
+        val currentWriter = writer
+        if (currentWriter == null) {
+            MeshLogger.w(TAG, "Cannot send packet: Socket is not connected")
+            return@withContext
+        }
         val json = MeshPacketParser.toJson(packet)
         currentWriter.println(json)
         MeshLogger.d(TAG, "Sent packet over Wi-Fi Direct: ${packet.packetId}")

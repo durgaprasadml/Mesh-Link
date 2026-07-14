@@ -26,6 +26,7 @@ enum class ConnectionState {
     DIRECT, RELAY, OFFLINE
 }
 
+@androidx.compose.runtime.Immutable
 data class ChatDetailUiState(
     val messages: List<Message> = emptyList(),
     val connectionStatus: ConnectionState = ConnectionState.OFFLINE,

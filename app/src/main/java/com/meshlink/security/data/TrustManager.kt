@@ -76,6 +76,10 @@ class TrustManager @Inject constructor(
         }
     }
 
+    fun getTrustScore(peerId: String): Int {
+        return trustCache[peerId]?.trustScore ?: 50
+    }
+
     fun getVerificationStatus(peerId: String): VerificationStatus {
         val entity = trustCache[peerId] ?: return VerificationStatus.NOT_VERIFIED
         return try {

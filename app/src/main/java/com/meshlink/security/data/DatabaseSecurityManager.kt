@@ -114,7 +114,8 @@ class DatabaseSecurityManager @Inject constructor(
             
             val decryptedSeed = decryptWithKeystore(encryptedSeed)
             if (decryptedSeed.isEmpty()) {
-                throw SecurityRecoveryException("Database seed cannot be recovered. Aborting to prevent data destruction.")
+                com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Database seed cannot be recovered. Aborting to prevent data destruction.")
+                return ""
             }
             seed = decryptedSeed
         }
@@ -258,7 +259,8 @@ class DatabaseSecurityManager @Inject constructor(
                     generateKeystoreKeyWithStrongBoxFallback()
                 } catch (ignore: Exception) {}
                 // Bubble up failure to avoid destructive Room fallback
-                throw SecurityRecoveryException("Keystore DB key permanently invalidated", e)
+                com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Keystore DB key permanently invalidated", e)
+                return ByteArray(0)
             } catch (e: Exception) {
                 attempt++
                 if (attempt >= 3) {

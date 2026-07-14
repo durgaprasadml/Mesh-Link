@@ -58,7 +58,8 @@ class BleRepositoryImpl @Inject constructor(
     override val meshRouter: MeshRouter,
     private val chatDao: ChatDao,
     private val userRepository: UserRepository,
-    private val transferManager: TransferManager,
+    private val transferManager: com.meshlink.transfer.TransferManager,
+    private val mediaTransferManager: com.meshlink.media.data.MediaTransferManager,
     private val locationProvider: LocationProvider,
     private val cryptoManager: MeshCryptoManager,
     private val wifiDirectManager: WifiDirectManager,
@@ -413,6 +414,17 @@ class BleRepositoryImpl @Inject constructor(
                 PacketType.VIDEO_SIGNAL,
                 PacketType.VIDEO_FRAME -> {
                     videoTransport.handleIncomingPacket(packet)
+                }
+                PacketType.BEACON,
+                PacketType.INCIDENT_REPORT,
+                PacketType.CHECK_IN,
+                PacketType.FORM_SYNC,
+                PacketType.RESOURCE_SYNC,
+                PacketType.MAP_SYNC -> {
+                    // Handled elsewhere or not needed right now
+                }
+                else -> {
+                    // Fallback
                 }
             }
         } catch (e: Exception) {
@@ -909,16 +921,12 @@ class BleRepositoryImpl @Inject constructor(
             mediaPath   = localFile.absolutePath
         )
         chatDao.insertMessageAndUpdateChat(message, chatName)
-
-                transferManager.sendFile(
-                    file = localFile,
-                    senderId = localPeerId,
-                    targetId = targetPeerId,
-                    transferId = messageId
-                )
-            }
-        }
-
+        transferManager.sendFile(
+            file = localFile,
+            senderId = localPeerId,
+            targetId = targetPeerId,
+            transferId = messageId
+        )
         chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
     }
 
@@ -1036,17 +1044,13 @@ class BleRepositoryImpl @Inject constructor(
             mediaDurationMs = durationMs
         )
         chatDao.insertMessageAndUpdateChat(message, chatName)
-
-                transferManager.sendFile(
-                    file = File(filePath),
-                    senderId = localPeerId,
-                    targetId = targetPeerId,
-                    transferId = messageId,
-                    priority = com.meshlink.transfer.TransferPriority.HIGH
-                )
-            }
-        }
-        
+        transferManager.sendFile(
+            file = File(filePath),
+            senderId = localPeerId,
+            targetId = targetPeerId,
+            transferId = messageId,
+            priority = com.meshlink.transfer.TransferPriority.HIGH
+        )
         chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
     }
 

@@ -5,6 +5,7 @@ import com.meshlink.ble.data.PacketType
 import java.util.PriorityQueue
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.cancel
 
 @Singleton
 class QueueOptimizer @Inject constructor() {
@@ -40,8 +41,14 @@ class QueueOptimizer @Inject constructor() {
         }
     }
 
+    private val MAX_QUEUE_SIZE = 10000
+
     @Synchronized
     fun enqueue(packet: MeshPacket) {
+        if (packetQueue.size >= MAX_QUEUE_SIZE) {
+            com.meshlink.common.logger.MeshLogger.w("QueueOptimizer", "Queue full, dropping packet ${packet.packetId}")
+            return
+        }
         packetQueue.offer(packet)
     }
 

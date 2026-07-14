@@ -34,7 +34,7 @@ class VideoTransport @Inject constructor(
     fun sendSignal(senderId: String, targetId: String, signalJson: String) {
         scope.launch {
             try {
-                val encrypted = cryptoManager.encryptPayload(signalJson, targetId)
+                val encrypted = cryptoManager.encrypt(signalJson, targetId)
                 if (encrypted != null) {
                     val packet = MeshPacket(
                         senderId = senderId,
@@ -55,7 +55,7 @@ class VideoTransport @Inject constructor(
         try {
             // Encode the frame along with its metadata
             val payloadString = "${seqNum}:${ptsUs}:${Base64.encodeToString(nalUnit, Base64.NO_WRAP)}"
-            val encrypted = cryptoManager.encryptPayload(payloadString, targetId)
+            val encrypted = cryptoManager.encrypt(payloadString, targetId)
             
             if (encrypted != null) {
                 val packet = MeshPacket(

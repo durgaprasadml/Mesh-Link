@@ -58,6 +58,9 @@ class MediaTransferManager @Inject constructor(
         // Max retries per chunk on NACK (Req. 4 / Req. 7)
         private const val MAX_CHUNK_RETRIES = 3
 
+        // Max concurrent outbound transfers
+        private const val MAX_CONCURRENT_TRANSFERS = 10
+
         private val ALLOWED_MIME_PREFIXES = listOf("image/", "audio/")
     }
 
@@ -130,11 +133,24 @@ class MediaTransferManager @Inject constructor(
         val packets = buildPacketList(data, senderId, targetId, mimeType, transferId)
         if (packets.isEmpty()) return transferId
 
+        if (pendingTransfers.size >= MAX_CONCURRENT_TRANSFERS) {
+            MeshLogger.w(TAG, "Transfer queue full, rejecting transfer $transferId")
+            return transferId
+        }
+
         pendingTransfers[transferId] = PendingOutbound(packets, targetId)
         updateProgress(transferId, 0f)
 
         scope.launch {
             dispatchAllPackets(transferId, packets)
+            
+            // Sender-side timeout to prevent unbounded pendingTransfers leaks
+            delay(TRANSFER_TIMEOUT_MS * 2)
+            if (pendingTransfers.remove(transferId) != null) {
+                MeshLogger.w(TAG, "[$transferId] Sender timeout reached, cleaning up pending outbound transfer")
+                updateProgress(transferId, -1f) // Signal failure
+                chunkRetryCount.keys.removeIf { it.startsWith("$transferId:") }
+            }
         }
 
         return transferId
@@ -199,7 +215,7 @@ class MediaTransferManager @Inject constructor(
 
         MeshLogger.d(TAG, "[$transferId] Building: ${data.size}B raw → ${base64.length}B B64 → $totalChunks chunks")
 
-        val packets = mutableListOf<MeshPacket>()
+        val packets = java.util.ArrayList<MeshPacket>(totalChunks + 1)
 
         // Compute SHA-256 of raw data
         val md = java.security.MessageDigest.getInstance("SHA-256")
@@ -323,6 +339,7 @@ class MediaTransferManager @Inject constructor(
         if (ackedIndex >= total - 1) {
             // All chunks ACKed
             pendingTransfers.remove(transferId)
+            chunkRetryCount.keys.removeIf { it.startsWith("$transferId:") }
             MeshLogger.d(TAG, "[$transferId] All $total chunks ACKed by receiver")
         }
         return null

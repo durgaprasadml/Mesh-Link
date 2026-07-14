@@ -36,7 +36,7 @@ class VoiceTransport @Inject constructor(
         scope.launch {
             try {
                 // Signals are encrypted like normal messages
-                val encrypted = cryptoManager.encryptPayload(signalJson, targetId)
+                val encrypted = cryptoManager.encrypt(signalJson, targetId)
                 if (encrypted != null) {
                     val packet = MeshPacket(
                         senderId = senderId,
@@ -61,7 +61,7 @@ class VoiceTransport @Inject constructor(
             // but for now we stick to MeshCryptoManager's encryptPayload (or just raw Base64 for PTT if performance drops)
             
             val payloadString = "${callId}:${seqNum}:${Base64.encodeToString(pcmData, Base64.NO_WRAP)}"
-            val encrypted = cryptoManager.encryptPayload(payloadString, targetId)
+            val encrypted = cryptoManager.encrypt(payloadString, targetId)
             
             if (encrypted != null) {
                 val packet = MeshPacket(

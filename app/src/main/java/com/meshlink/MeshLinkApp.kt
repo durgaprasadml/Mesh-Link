@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import com.meshlink.service.work.BackgroundTaskScheduler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 @HiltAndroidApp
 class MeshLinkApp : Application(), Configuration.Provider {
@@ -21,16 +22,21 @@ class MeshLinkApp : Application(), Configuration.Provider {
             .setWorkerFactory(workerFactory)
             .build()
 
+    private val applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
-        // Load SQLCipher native library
-        try {
-            System.loadLibrary("sqlcipher")
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
         
-        // Schedule periodic background maintenance
-        backgroundTaskScheduler.schedulePeriodicWork()
+        applicationScope.launch {
+            // Load SQLCipher native library off the main thread
+            try {
+                System.loadLibrary("sqlcipher")
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            
+            // Schedule periodic background maintenance off the main thread
+            backgroundTaskScheduler.schedulePeriodicWork()
+        }
     }
 }

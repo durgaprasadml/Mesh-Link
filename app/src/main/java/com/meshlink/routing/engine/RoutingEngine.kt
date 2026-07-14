@@ -22,7 +22,7 @@ class RoutingEngine @Inject constructor(
 ) {
     companion object {
         private const val TAG = "RoutingEngine"
-        private const val DEDUP_CACHE_SIZE = 2000
+        private const val DEDUP_CACHE_SIZE = 20000
     }
     
     // Tracks processed packets to prevent broadcast storms and routing loops

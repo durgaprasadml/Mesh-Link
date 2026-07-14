@@ -20,6 +20,7 @@ class QoSManager @Inject constructor() {
             PacketType.KEY_EXCHANGE, PacketType.WIFI_NEGOTIATION, PacketType.SESSION_REKEY -> QoSPriority.HIGH
             PacketType.TEXT, PacketType.DELIVERY_ACK, PacketType.READ_RECEIPT -> QoSPriority.MEDIUM
             PacketType.MEDIA_META, PacketType.MEDIA_CHUNK, PacketType.MEDIA_ACK, PacketType.MEDIA_NACK, PacketType.LOCATION -> QoSPriority.LOW
+            else -> QoSPriority.MEDIUM
         }
     }
 

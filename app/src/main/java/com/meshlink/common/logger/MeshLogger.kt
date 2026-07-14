@@ -26,8 +26,8 @@ object MeshLogger {
         val fullMessage = "[$category] $sanitizedMessage$metadataString"
 
         when (level) {
-            LogLevel.VERBOSE -> Log.v(category.name, fullMessage, t)
-            LogLevel.DEBUG -> Log.d(category.name, fullMessage, t)
+            LogLevel.VERBOSE -> if (com.meshlink.BuildConfig.DEBUG) Log.v(category.name, fullMessage, t)
+            LogLevel.DEBUG -> if (com.meshlink.BuildConfig.DEBUG) Log.d(category.name, fullMessage, t)
             LogLevel.INFO -> Log.i(category.name, fullMessage, t)
             LogLevel.WARNING -> Log.w(category.name, fullMessage, t)
             LogLevel.ERROR -> {

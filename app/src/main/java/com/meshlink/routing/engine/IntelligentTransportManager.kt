@@ -48,8 +48,8 @@ class IntelligentTransportManager @Inject constructor(
     private fun isHighBandwidthRequired(packetType: PacketType): Boolean {
         return when (packetType) {
             PacketType.VIDEO_FRAME, 
-            PacketType.VOICE, 
-            PacketType.FILE_CHUNK -> true
+            PacketType.VOICE_FRAME, 
+            PacketType.MEDIA_CHUNK -> true
             else -> false
         }
     }

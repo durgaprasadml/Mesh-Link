@@ -11,13 +11,18 @@ import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Singleton
 @SuppressLint("MissingPermission")
 class BleGattManager @Inject constructor(@ApplicationContext private val context: Context) {
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val mutex = Mutex()
     private companion object {
         const val DEFAULT_MTU = 23
         const val GATT_HEADER_SIZE = 3
@@ -134,7 +139,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         }
         
         // Dispatch to Nodes that connected to us
-        synchronized(this) {
+        scope.launch {
             val service = gattServer?.getService(BleConstants.MESH_SERVICE_UUID)
             val char = service?.getCharacteristic(BleConstants.MSG_CHAR_UUID)
             
@@ -151,35 +156,37 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
     }
 
     private fun sendFragmentedNotification(device: BluetoothDevice, char: BluetoothGattCharacteristic, data: ByteArray) {
-        val mtu = deviceMtus[device.address] ?: DEFAULT_MTU
-        // Ensure maxPayload respects GATT 512-byte value limit and MTU
-        val maxPayload = (minOf(mtu - GATT_HEADER_SIZE, MAX_ATTRIBUTE_VALUE_SIZE) - FRAG_HEADER_SIZE).coerceAtLeast(1)
-        
-        if (data.size <= maxPayload) {
-            val packet = ByteArray(data.size + 1)
-            packet[0] = TYPE_FULL
-            System.arraycopy(data, 0, packet, 1, data.size)
-            notify(device, char, packet)
-        } else {
-            var offset = 0
-            while (offset < data.size) {
-                val isFirst = offset == 0
-                val remaining = data.size - offset
-                val chunkSize = minOf(remaining, maxPayload)
-                val isLast = offset + chunkSize >= data.size
-                
-                val packet = ByteArray(chunkSize + 1)
-                packet[0] = when {
-                    isFirst -> TYPE_START
-                    isLast -> TYPE_END
-                    else -> TYPE_CONT
-                }
-                System.arraycopy(data, offset, packet, 1, chunkSize)
+        scope.launch {
+            val mtu = deviceMtus[device.address] ?: DEFAULT_MTU
+            // Ensure maxPayload respects GATT 512-byte value limit and MTU
+            val maxPayload = (minOf(mtu - GATT_HEADER_SIZE, MAX_ATTRIBUTE_VALUE_SIZE) - FRAG_HEADER_SIZE).coerceAtLeast(1)
+            
+            if (data.size <= maxPayload) {
+                val packet = ByteArray(data.size + 1)
+                packet[0] = TYPE_FULL
+                System.arraycopy(data, 0, packet, 1, data.size)
                 notify(device, char, packet)
-                offset += chunkSize
-                
-                // Small delay to prevent dropping packets on some devices
-                try { Thread.sleep(10) } catch (_: Exception) {}
+            } else {
+                var offset = 0
+                while (offset < data.size) {
+                    val isFirst = offset == 0
+                    val remaining = data.size - offset
+                    val chunkSize = minOf(remaining, maxPayload)
+                    val isLast = offset + chunkSize >= data.size
+                    
+                    val packet = ByteArray(chunkSize + 1)
+                    packet[0] = when {
+                        isFirst -> TYPE_START
+                        isLast -> TYPE_END
+                        else -> TYPE_CONT
+                    }
+                    System.arraycopy(data, offset, packet, 1, chunkSize)
+                    notify(device, char, packet)
+                    offset += chunkSize
+                    
+                    // Small delay to prevent dropping packets on some devices
+                    delay(10)
+                }
             }
         }
     }
@@ -229,41 +236,47 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         }
     }
 
-    @Synchronized
     private fun enqueueClientWrite(address: String, bytes: ByteArray) {
-        val mtu = deviceMtus[address] ?: DEFAULT_MTU
-        val maxPayload = (minOf(mtu - GATT_HEADER_SIZE, MAX_ATTRIBUTE_VALUE_SIZE) - FRAG_HEADER_SIZE).coerceAtLeast(1)
-        
-        if (bytes.size <= maxPayload) {
-            val packet = ByteArray(bytes.size + 1)
-            packet[0] = TYPE_FULL
-            System.arraycopy(bytes, 0, packet, 1, bytes.size)
-            pendingClientWrites.add(PendingClientWrite(address, packet))
-        } else {
-            var offset = 0
-            while (offset < bytes.size) {
-                val isFirst = offset == 0
-                val remaining = bytes.size - offset
-                val chunkSize = minOf(remaining, maxPayload)
-                val isLast = offset + chunkSize >= bytes.size
+        scope.launch {
+            mutex.withLock {
+                val mtu = deviceMtus[address] ?: DEFAULT_MTU
+                val maxPayload = (minOf(mtu - GATT_HEADER_SIZE, MAX_ATTRIBUTE_VALUE_SIZE) - FRAG_HEADER_SIZE).coerceAtLeast(1)
                 
-                val packet = ByteArray(chunkSize + 1)
-                packet[0] = when {
-                    isFirst -> TYPE_START
-                    isLast -> TYPE_END
-                    else -> TYPE_CONT
+                if (bytes.size <= maxPayload) {
+                    val packet = ByteArray(bytes.size + 1)
+                    packet[0] = TYPE_FULL
+                    System.arraycopy(bytes, 0, packet, 1, bytes.size)
+                    pendingClientWrites.add(PendingClientWrite(address, packet))
+                } else {
+                    var offset = 0
+                    while (offset < bytes.size) {
+                        val isFirst = offset == 0
+                        val remaining = bytes.size - offset
+                        val chunkSize = minOf(remaining, maxPayload)
+                        val isLast = offset + chunkSize >= bytes.size
+                        
+                        val packet = ByteArray(chunkSize + 1)
+                        packet[0] = when {
+                            isFirst -> TYPE_START
+                            isLast -> TYPE_END
+                            else -> TYPE_CONT
+                        }
+                        System.arraycopy(bytes, offset, packet, 1, chunkSize)
+                        pendingClientWrites.add(PendingClientWrite(address, packet))
+                        offset += chunkSize
+                    }
                 }
-                System.arraycopy(bytes, offset, packet, 1, chunkSize)
-                pendingClientWrites.add(PendingClientWrite(address, packet))
-                offset += chunkSize
+                flushClientWriteQueueLocked()
             }
         }
-        flushClientWriteQueueLocked()
     }
 
-    @Synchronized
     private fun flushClientWriteQueue() {
-        flushClientWriteQueueLocked()
+        scope.launch {
+            mutex.withLock {
+                flushClientWriteQueueLocked()
+            }
+        }
     }
 
     private fun flushClientWriteQueueLocked() {
@@ -293,6 +306,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
             try {
                 val method = char.javaClass.getMethod("setValue", ByteArray::class.java)
                 method.invoke(char, pending.bytes)
+                char.writeType = android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                 val writeStarted = gatt.writeCharacteristic(char)
                 iterator.remove()
                 if (writeStarted) {
@@ -374,14 +388,18 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                 activeClients.remove(gatt.device.address)
                 deviceMtus.remove(gatt.device.address)
                 reassemblyBuffers.remove(gatt.device.address)
-                synchronized(this@BleGattManager) {
-                    pendingClientWrites.removeAll { it.address == gatt.device.address }
-                    if (activeWriteAddress == gatt.device.address) {
-                        activeWriteAddress = null
+                
+                scope.launch {
+                    mutex.withLock {
+                        pendingClientWrites.removeAll { it.address == gatt.device.address }
+                        if (activeWriteAddress == gatt.device.address) {
+                            activeWriteAddress = null
+                        }
+                        flushClientWriteQueueLocked()
                     }
                 }
+                
                 gatt.close()
-                flushClientWriteQueue()
                 _gattEvents.tryEmit(GattEvent.Disconnected(gatt.device.address))
             }
         }
@@ -442,12 +460,14 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     MeshLogger.w("BleGatt", "Characteristic write failed for ${gatt.device.address}: $status")
                 }
-                synchronized(this@BleGattManager) {
-                    if (activeWriteAddress == gatt.device.address) {
-                        activeWriteAddress = null
+                scope.launch {
+                    mutex.withLock {
+                        if (activeWriteAddress == gatt.device.address) {
+                            activeWriteAddress = null
+                        }
+                        flushClientWriteQueueLocked()
                     }
                 }
-                flushClientWriteQueue()
             }
         }
     }

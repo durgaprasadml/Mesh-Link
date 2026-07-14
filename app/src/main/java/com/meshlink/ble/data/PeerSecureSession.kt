@@ -3,6 +3,7 @@ package com.meshlink.ble.data
 import java.util.BitSet
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.concurrent.withLock
 
 data class PeerSecureSession(
     val peerId: String,
@@ -28,12 +29,14 @@ data class PeerSecureSession(
         expirationTime = now + 30 * 60 * 1000L
     }
 
+    private val lock = java.util.concurrent.locks.ReentrantLock()
+
     /**
      * Replay protection validation.
      * Sliding window of 64 packets.
      */
     fun isReplay(sequence: Long): Boolean {
-        synchronized(replayWindow) {
+        lock.withLock {
             val highestReceived = receiveCounter.get()
             
             // Too old (outside window)
@@ -54,7 +57,7 @@ data class PeerSecureSession(
     }
 
     fun markReceived(sequence: Long) {
-        synchronized(replayWindow) {
+        lock.withLock {
             val highestReceived = receiveCounter.get()
             
             if (sequence > highestReceived) {

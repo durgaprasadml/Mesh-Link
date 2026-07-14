@@ -5,7 +5,7 @@ import javax.inject.Singleton
 
 @Singleton
 class RouteManager @Inject constructor(
-    private val routeCache: RouteCache,
+    val routeCache: RouteCache,
     private val routeScorer: RouteScorer,
     private val routeOptimizer: RouteOptimizer
 ) {

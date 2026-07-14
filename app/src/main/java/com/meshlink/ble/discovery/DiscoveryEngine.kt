@@ -97,6 +97,7 @@ class DiscoveryEngine @Inject constructor(
         MeshLogger.d(TAG, "Stopping Discovery Engine")
         scanJob?.cancel()
         scanJob = null
+        engineScope.cancel()
         try { stopScanAction?.invoke() } catch (_: Exception) {}
         duplicateFilter.clear()
     }

@@ -40,7 +40,7 @@ class DisasterRecoveryEngine @Inject constructor(
             }
             
             // 2. Clear stale queues that might be causing a jam
-            routingEngine.routeManager.routeCache.clearAllRoutes()
+            routingEngine.routeManager.routeCache.clear()
             
             // 3. Keep high power discovery running for 2 minutes to reform mesh
             delay(120_000L)

@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -153,7 +154,7 @@ class MeshRelayService : Service() {
                     "MeshLink::MeshRelayWakeLock"
                 ).apply {
                     setReferenceCounted(false)
-                    acquire(10 * 60 * 1000L)
+                    acquire(30 * 1000L) // 30 seconds max for a sync pulse
                 }
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Failed to acquire WakeLock", e)
@@ -237,7 +238,7 @@ class MeshRelayService : Service() {
 
     override fun onDestroy() {
         _serviceState.value = ServiceState.STOPPED
-        serviceScope.coroutineContext.cancelChildren()
+        serviceScope.cancel()
         serviceJob?.cancel()
         meshRepository.stopMesh()
         wifiDirectManager.unregisterReceiver()

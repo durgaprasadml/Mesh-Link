@@ -41,6 +41,11 @@ class MeshRouter @Inject constructor(
     private val _incomingPayloads = MutableSharedFlow<Pair<String, MeshPacket>>(extraBufferCapacity = 200)
     val incomingPayloads: SharedFlow<Pair<String, MeshPacket>> = _incomingPayloads.asSharedFlow()
 
+    val routeTable: Map<String, com.meshlink.routing.engine.RouteEntry>
+        get() = routingEngine.routeManager.routeCache.getAllDestinations().mapNotNull { dest ->
+            routingEngine.routeManager.getOptimalRoute(dest)?.let { dest to it }
+        }.toMap()
+
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     init {

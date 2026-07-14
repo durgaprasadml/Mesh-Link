@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
+@androidx.compose.runtime.Immutable
 data class ChatsListUiState(
     val chats: List<Chat> = emptyList()
 )

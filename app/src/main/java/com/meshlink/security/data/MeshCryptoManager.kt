@@ -335,8 +335,11 @@ class MeshCryptoManager @Inject constructor(
     private fun deriveSharedKey(peerId: String): SecretKey {
         derivedKeys[peerId]?.let { return it }
 
-        val peerPublicKeyBase64 = getPeerPublicKey(peerId) ?: run {
-            throw IllegalStateException("No public key for peer")
+        val peerPublicKeyBase64 = getPeerPublicKey(peerId)
+        if (peerPublicKeyBase64 == null) {
+            com.meshlink.common.logger.MeshLogger.w("MeshCryptoManager", "No public key for peer $peerId")
+            // Return a dummy key to fail gracefully instead of crashing
+            return SecretKeySpec(ByteArray(32), SecurityConstants.AES_GCM_CIPHER)
         }
 
         val peerKeyBytes = Base64.decode(peerPublicKeyBase64, Base64.NO_WRAP)

@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 @Singleton
 class RouteCache @Inject constructor() {
@@ -25,10 +27,11 @@ class RouteCache @Inject constructor() {
         return routes.keys().toList()
     }
 
+    private val lock = ReentrantLock()
+
     fun addOrUpdateRoute(entry: RouteEntry) {
-        val destRoutes = routes.getOrPut(entry.destinationId) { mutableListOf() }
-        
-        synchronized(destRoutes) {
+        lock.withLock {
+            val destRoutes = routes.getOrPut(entry.destinationId) { mutableListOf() }
             val existing = destRoutes.find { it.nextHop == entry.nextHop }
             if (existing != null) {
                 // Update existing route metrics and freshness
@@ -47,8 +50,8 @@ class RouteCache @Inject constructor() {
     }
 
     fun recordDeliverySuccess(destinationId: String, nextHop: String, latencyMs: Long) {
-        routes[destinationId]?.let { list ->
-            synchronized(list) {
+        lock.withLock {
+            routes[destinationId]?.let { list ->
                 list.find { it.nextHop == nextHop }?.let { route ->
                     route.metrics.recordSuccess(latencyMs)
                     route.isVerified = true
@@ -59,8 +62,8 @@ class RouteCache @Inject constructor() {
     }
 
     fun recordDeliveryFailure(destinationId: String, nextHop: String) {
-        routes[destinationId]?.let { list ->
-            synchronized(list) {
+        lock.withLock {
+            routes[destinationId]?.let { list ->
                 list.find { it.nextHop == nextHop }?.metrics?.recordFailure()
             }
         }
@@ -70,13 +73,13 @@ class RouteCache @Inject constructor() {
         val now = System.currentTimeMillis()
         var evictedCount = 0
         
-        routes.entries.removeIf { (_, destRoutes) ->
-            synchronized(destRoutes) {
+        lock.withLock {
+            routes.entries.removeIf { (_, destRoutes) ->
                 val originalSize = destRoutes.size
                 destRoutes.removeIf { now - it.lastSeen > staleThresholdMs }
                 evictedCount += (originalSize - destRoutes.size)
+                destRoutes.isEmpty()
             }
-            destRoutes.isEmpty()
         }
         
         if (evictedCount > 0) {
@@ -88,16 +91,15 @@ class RouteCache @Inject constructor() {
     
     fun removeRoutesViaHop(nextHop: String) {
         var removed = false
-        routes.values.forEach { list ->
-            synchronized(list) {
+        lock.withLock {
+            routes.values.forEach { list ->
                 if (list.removeIf { it.nextHop == nextHop }) {
                     removed = true
                 }
             }
+            // Clean up empty destinations
+            routes.entries.removeIf { it.value.isEmpty() }
         }
-        
-        // Clean up empty destinations
-        routes.entries.removeIf { it.value.isEmpty() }
         
         if (removed) {
             _routeCount.update { routes.values.sumOf { it.size } }
@@ -105,7 +107,9 @@ class RouteCache @Inject constructor() {
     }
     
     fun clear() {
-        routes.clear()
+        lock.withLock {
+            routes.clear()
+        }
         _routeCount.value = 0
     }
 }

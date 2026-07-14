@@ -20,3 +20,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "MeshLink"   // ⚠️ Removed space (IMPORTANT)
 include(":app")
+include(":benchmark")

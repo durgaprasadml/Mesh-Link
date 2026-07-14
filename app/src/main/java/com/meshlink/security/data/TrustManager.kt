@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import androidx.annotation.VisibleForTesting
+import kotlinx.coroutines.cancel
 
 @Singleton
 class TrustManager @Inject constructor(
@@ -233,5 +235,10 @@ class TrustManager @Inject constructor(
                 MeshLogger.e(TAG, "Failed to verify device: ${e.message}")
             }
         }
+    }
+
+    @VisibleForTesting
+    fun cancelScope() {
+        scope.cancel()
     }
 }

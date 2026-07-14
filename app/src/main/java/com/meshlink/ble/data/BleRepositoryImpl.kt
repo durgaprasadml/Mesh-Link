@@ -43,8 +43,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import androidx.annotation.VisibleForTesting
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.withContext
 
 @Singleton
 
@@ -261,7 +263,7 @@ class BleRepositoryImpl @Inject constructor(
                     if (info.isGroupOwner) {
                         wifiSocketTransport.startServer()
                     } else if (info.groupOwnerAddress != null) {
-                        wifiSocketTransport.connectAsClient(info.groupOwnerAddress.hostAddress)
+                        wifiSocketTransport.connectAsClient(info.groupOwnerAddress.hostAddress ?: "")
                     }
                 } else {
                     wifiSocketTransport.disconnect()
@@ -720,6 +722,11 @@ class BleRepositoryImpl @Inject constructor(
         stopAdvertising()
         stopScanning()
         stopServer()
+    }
+
+    @VisibleForTesting
+    fun cancelScope() {
+        scope.cancel()
     }
 
     // ────────── Text Messages (ENCRYPTED) ──────────

@@ -1,7 +1,12 @@
 package com.meshlink.data.security
 
-import com.meshlink.data.local.TrustDao
-import com.meshlink.data.local.TrustEntity
+import com.meshlink.database.data.local.TrustDao
+import com.meshlink.database.data.local.TrustEntity
+import com.meshlink.security.data.MeshSecurityMonitor
+import com.meshlink.security.data.SecurityEvent
+import com.meshlink.security.data.TrustLevel
+import com.meshlink.security.data.TrustManager
+import com.meshlink.security.data.VerificationStatus
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -10,6 +15,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
@@ -29,6 +35,11 @@ class TrustManagerTest {
         coEvery { trustDao.getPeerByFingerprint(any()) } returns null
         
         trustManager = TrustManager(trustDao, securityMonitor, UnconfinedTestDispatcher())
+    }
+
+    @After
+    fun teardown() {
+        trustManager.cancelScope()
     }
 
     @Test

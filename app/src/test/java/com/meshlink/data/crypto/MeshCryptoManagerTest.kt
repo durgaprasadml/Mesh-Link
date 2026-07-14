@@ -1,4 +1,4 @@
-package com.meshlink.data.crypto
+package com.meshlink.security.data
 
 import android.content.Context
 import android.content.SharedPreferences

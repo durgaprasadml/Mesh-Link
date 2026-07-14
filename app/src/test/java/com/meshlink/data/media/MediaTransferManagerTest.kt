@@ -1,8 +1,9 @@
-package com.meshlink.data.media
+package com.meshlink.media.data
 
 import android.content.Context
-import com.meshlink.data.ble.MeshPacket
-import com.meshlink.data.ble.PacketType
+import com.meshlink.ble.data.MeshPacket
+import com.meshlink.ble.data.PacketType
+import com.meshlink.media.data.MediaTransferManager
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -43,7 +44,7 @@ class MediaTransferManagerTest {
             java.util.Base64.getDecoder().decode(str)
         }
 
-        manager = MediaTransferManager(context)
+        manager = MediaTransferManager(context, testDispatcher)
     }
 
     @After

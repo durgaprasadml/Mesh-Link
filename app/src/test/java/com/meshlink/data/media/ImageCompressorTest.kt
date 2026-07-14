@@ -1,4 +1,4 @@
-package com.meshlink.data.media
+package com.meshlink.media.data
 
 import android.content.Context
 import android.graphics.Bitmap

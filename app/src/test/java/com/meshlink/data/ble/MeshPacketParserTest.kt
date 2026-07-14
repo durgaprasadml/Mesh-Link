@@ -1,4 +1,4 @@
-package com.meshlink.data.ble
+package com.meshlink.ble.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull

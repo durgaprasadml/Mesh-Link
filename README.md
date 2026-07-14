@@ -4,6 +4,10 @@ Mesh Link is a secure, reliable, and privacy-first Android application designed 
 
 ## Features
 
+- Fully offline peer-to-peer (P2P) communication.
+- End-to-end AES-256-GCM encryption with ECDH key exchange.
+- Automated Wi-Fi Direct socket failover for media transfers.
+- **[Certified Enterprise-Grade Security](file:///Users/durgaprasadml/Documents/Mesh%20Link%20/docs/FINAL_SECURITY_CERTIFICATION.md)**.
 - **Secure Mesh Communication:** End-to-end encrypted messaging over decentralized mesh networks.
 - **Robust Trust Management:** Local trust verification using a hardened Room database backed by SQLCipher.
 - **Reliable Messaging:** Advanced network retry logic and message queues ensure reliable delivery.

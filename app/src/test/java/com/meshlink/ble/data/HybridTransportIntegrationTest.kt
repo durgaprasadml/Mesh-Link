@@ -78,12 +78,15 @@ class HybridTransportIntegrationTest {
         every { wifiDirectManager.connectedPeerMac } returns MutableStateFlow(null)
         every { wifiDirectManager.discoveredPeers } returns MutableStateFlow(emptyMap())
 
+        val discoveryEngine = mockk<com.meshlink.ble.discovery.DiscoveryEngine>(relaxed = true)
+        every { discoveryEngine.engineEvents } returns MutableSharedFlow()
+
         repository = BleRepositoryImpl(
             app, bleDataSource, meshRouter, chatDao, userRepository,
             mockk(relaxed = true), mediaTransferManager, locationProvider, cryptoManager,
             wifiDirectManager, wifiSocketTransport, sessionManager,
             rekeyManager, trustManager, securityMonitor,
-            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+            discoveryEngine, mockk(relaxed = true), mockk(relaxed = true),
             context
         )
     }

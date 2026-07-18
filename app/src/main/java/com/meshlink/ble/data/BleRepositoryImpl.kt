@@ -9,8 +9,10 @@ import com.meshlink.ble.data.BleConstants
 import com.meshlink.ble.data.BleGattManager
 import com.meshlink.ble.data.BleGattManager.GattEvent
 import com.meshlink.ble.data.BleScannerManager
-import com.meshlink.ble.data.MeshPacket
-import com.meshlink.ble.data.PacketType
+import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
+import com.meshlink.domain.model.PacketPriority
+import com.meshlink.domain.model.BroadcastType
 import com.meshlink.ble.data.PeerConnectionState
 import com.meshlink.ble.data.source.BleMeshDataSource
 import com.meshlink.data.location.LocationProvider
@@ -55,7 +57,7 @@ import kotlinx.coroutines.withContext
 class BleRepositoryImpl @Inject constructor(
     private val application: Application,
     private val bleDataSource: BleMeshDataSource,
-    override val meshRouter: MeshRouter,
+    private val meshRouter: MeshRouter,
     private val chatDao: ChatDao,
     private val userRepository: UserRepository,
     private val transferManager: com.meshlink.transfer.TransferManager,
@@ -68,7 +70,8 @@ class BleRepositoryImpl @Inject constructor(
     private val rekeyManager: com.meshlink.security.data.RekeyManager,
     private val trustManager: com.meshlink.security.data.TrustManager,
     private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
-    private val discoveryEngine: com.meshlink.ble.discovery.DiscoveryEngine,
+    private val discoveryManager: DiscoveryManager,
+    private val connectionManager: BleConnectionManager,
     private val voiceTransport: VoiceTransport,
     private val videoTransport: VideoTransport,
     @ApplicationContext private val context: Context
@@ -79,37 +82,17 @@ class BleRepositoryImpl @Inject constructor(
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-    private val peerStates = ConcurrentHashMap<String, PeerConnectionState>()
+    private val discoveryEngine get() = discoveryManager.discoveryEngine
 
     private fun updatePeerState(address: String, newState: PeerConnectionState) {
-        val current = peerStates[address] ?: PeerConnectionState.DISCONNECTED
-        peerStates[address] = newState
-        MeshLogger.d(TAG, "Peer $address state: $current -> $newState")
-        
-        if (newState == PeerConnectionState.CONNECTED) {
-            discoveryEngine.notifyConnectionSuccess(address)
-            updateAnalyticsConnectionCount()
-        } else if (newState == PeerConnectionState.DISCONNECTED) {
-            discoveryEngine.notifyConnectionFailure(address)
-            updateAnalyticsConnectionCount()
-        }
-        
+        connectionManager.updatePeerState(address, newState)
         if (newState == PeerConnectionState.SERVICES_DISCOVERED || newState == PeerConnectionState.MTU_READY) {
             checkAndTriggerHandshake(address)
         }
     }
-    
-    private fun updateAnalyticsConnectionCount() {
-        val count = peerStates.values.count { 
-            it == PeerConnectionState.CONNECTED || 
-            it == PeerConnectionState.SESSION_READY || 
-            it == PeerConnectionState.SESSION_ESTABLISHED 
-        }
-        discoveryEngine.analytics.updateActiveConnections(count)
-    }
 
     private fun checkAndTriggerHandshake(address: String) {
-        val state = peerStates[address] ?: return
+        val state = connectionManager.peerStates[address] ?: return
         if (state == PeerConnectionState.SERVICES_DISCOVERED || state == PeerConnectionState.MTU_READY) {
             val peerId = scannedDevices.value.values.firstOrNull { it.address == address }?.meshId
                 ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == address }?.key
@@ -122,9 +105,9 @@ class BleRepositoryImpl @Inject constructor(
                             updatePeerState(address, PeerConnectionState.SESSION_READY)
                             retryPendingMessages()
                         } else {
-                            val currentState = peerStates[address]
+                            val currentState = connectionManager.peerStates[address]
                             if (currentState != PeerConnectionState.KEY_EXCHANGE_STARTED) {
-                                peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
+                                connectionManager.peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
                                 val user = userRepository.getLocalUser()
                                 if (user != null) {
                                     val localPeerId = networkId(user.meshId)
@@ -143,7 +126,7 @@ class BleRepositoryImpl @Inject constructor(
         }
     }
 
-    override val scannedDevices: StateFlow<Map<String, BleDevice>> = bleDataSource.scannedDevices
+    override val scannedDevices: StateFlow<Map<String, BleDevice>> = discoveryManager.scannedDevices
     override val incomingMeshPayloads: SharedFlow<Pair<String, MeshPacket>> = meshRouter.incomingPayloads
     override val transferProgress = mediaTransferManager.transferProgress
 
@@ -197,7 +180,7 @@ class BleRepositoryImpl @Inject constructor(
             scope.launch {
                 val address = resolvePeerAddress(peerId)
                 if (address != null) {
-                    peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
+                    connectionManager.peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
                     val user = userRepository.getLocalUser()
                     if (user != null) {
                         val localPeerId = networkId(user.meshId)
@@ -305,7 +288,7 @@ class BleRepositoryImpl @Inject constructor(
         // Phase E2: Observe DiscoveryEngine events for Smart Connect
         scope.launch {
             discoveryEngine.engineEvents.collect { record ->
-                val state = peerStates[record.macAddress] ?: PeerConnectionState.DISCONNECTED
+                val state = connectionManager.peerStates[record.macAddress] ?: PeerConnectionState.DISCONNECTED
                 val isConnected = state == PeerConnectionState.CONNECTED || 
                                   state == PeerConnectionState.SESSION_READY || 
                                   state == PeerConnectionState.SESSION_ESTABLISHED
@@ -520,7 +503,7 @@ class BleRepositoryImpl @Inject constructor(
     }
 
     override fun isAnyPeerConnected(): Boolean {
-        return bleDataSource.connectedServers.isNotEmpty() || bleDataSource.activeClients.isNotEmpty()
+        return connectionManager.connectedServers.isNotEmpty() || connectionManager.activeClients.isNotEmpty()
     }
 
     /**
@@ -531,8 +514,8 @@ class BleRepositoryImpl @Inject constructor(
     override fun connectToAllScannedDevices() {
         scannedDevices.value.values.forEach { device ->
             try {
-                if (!bleDataSource.activeClients.contains(device.address)) {
-                    bleDataSource.connectToDevice(device.address)
+                if (!connectionManager.activeClients.contains(device.address)) {
+                    connectionManager.connectToDevice(device.address)
                 }
             } catch (e: Exception) {
                 MeshLogger.w(TAG, "Auto-connect failed for ${device.name}: ${e.message}")
@@ -541,7 +524,7 @@ class BleRepositoryImpl @Inject constructor(
     }
 
     private fun hasDeliveryPath(targetPeerIdOrAddress: String): Boolean {
-        val connectedNodes = bleDataSource.connectedServers + bleDataSource.activeClients
+        val connectedNodes = connectionManager.connectedServers + connectionManager.activeClients
         val directReachable = resolvePeerAddress(targetPeerIdOrAddress) != null
         return directReachable || connectedNodes.isNotEmpty()
     }
@@ -689,7 +672,7 @@ class BleRepositoryImpl @Inject constructor(
     }
 
     private fun disconnectDevice(address: String) {
-        bleDataSource.disconnectFromDevice(address)
+        connectionManager.disconnectFromDevice(address)
         updatePeerState(address, PeerConnectionState.DISCONNECTED)
     }
 
@@ -719,33 +702,33 @@ class BleRepositoryImpl @Inject constructor(
     // ────────── BLE Lifecycle ──────────
 
     override fun startAdvertising(name: String, meshId: String) {
-        bleDataSource.startAdvertising(name, meshId, 0x01) // 0x01 = Routing Support
+        discoveryManager.startAdvertising(name, meshId, 0x01) // 0x01 = Routing Support
     }
 
     override fun stopAdvertising() {
-        bleDataSource.stopAdvertising()
+        discoveryManager.stopAdvertising()
     }
 
     override fun startScanning() {
-        bleDataSource.startScanning()
+        discoveryManager.startScanning()
         // Start the intelligent engine loop
         // (Assuming BleScannerManager delegates this internally, but we can also trigger engine here)
     }
 
     override fun stopScanning() {
-        bleDataSource.stopScanning()
+        discoveryManager.stopScanning()
     }
 
     override fun startServer() {
-        bleDataSource.startServer()
+        connectionManager.startServer()
     }
 
     override fun stopServer() {
-        bleDataSource.stopServer()
+        connectionManager.stopServer()
     }
 
     override fun connectToDevice(address: String) {
-        bleDataSource.connectToDevice(address)
+        connectionManager.connectToDevice(address)
     }
 
     override fun connectToPeer(peerIdOrAddress: String): Boolean {
@@ -769,7 +752,7 @@ class BleRepositoryImpl @Inject constructor(
         meshRouter.localMeshId = localPeerId
         
         // Broadcast routing capabilities
-        bleDataSource.startAdvertising(user.name, user.meshId, 0x01)
+        discoveryManager.startAdvertising(user.name, user.meshId, 0x01)
         startServer()
         startScanning()
 
@@ -1317,5 +1300,22 @@ class BleRepositoryImpl @Inject constructor(
             batteryPercent = battery
         )
         chatDao.insertMessageAndUpdateChat(message, "🚨 $senderName")
+    }
+
+    override fun getMeshStatus(): com.meshlink.domain.model.MeshStatus {
+        return com.meshlink.domain.model.MeshStatus(
+            isBleAdvertising = discoveryManager.isAdvertising(),
+            isBleScanning = discoveryManager.isScanning(),
+            connectedPeersCount = connectionManager.connectedServers.size + connectionManager.activeClients.size,
+            isServerRunning = true
+        )
+    }
+
+    override fun getRouteTable(): Map<String, String> {
+        return meshRouter.routeTable.mapValues { it.value.nextHop }
+    }
+
+    override fun getLocalMeshId(): String {
+        return meshRouter.localMeshId
     }
 }

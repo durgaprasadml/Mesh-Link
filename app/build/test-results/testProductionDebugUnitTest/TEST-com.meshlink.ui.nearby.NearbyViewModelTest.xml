@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.meshlink.ui.nearby.NearbyViewModelTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:15.422Z" hostname="Durgaprasads-MacBook-Air.local" time="0.012">
-  <properties/>
-  <testcase name="startDiscovery does nothing when user is null" classname="com.meshlink.ui.nearby.NearbyViewModelTest" time="0.005"/>
-  <testcase name="uiState emits sorted devices by rssi descending" classname="com.meshlink.ui.nearby.NearbyViewModelTest" time="0.004"/>
-  <testcase name="startDiscovery calls meshRepository and wifiDirectManager when user is not null" classname="com.meshlink.ui.nearby.NearbyViewModelTest" time="0.003"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

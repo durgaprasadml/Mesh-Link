@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.meshlink.ui.home.HomeViewModelTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:15.400Z" hostname="Durgaprasads-MacBook-Air.local" time="0.02">
-  <properties/>
-  <testcase name="uiState combines data correctly" classname="com.meshlink.ui.home.HomeViewModelTest" time="0.015"/>
-  <testcase name="loadUser sets user state correctly" classname="com.meshlink.ui.home.HomeViewModelTest" time="0.005"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

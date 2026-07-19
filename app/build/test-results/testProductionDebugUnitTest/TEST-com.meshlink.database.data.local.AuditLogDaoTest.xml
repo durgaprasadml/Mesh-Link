@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.meshlink.database.data.local.AuditLogDaoTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:10.326Z" hostname="Durgaprasads-MacBook-Air.local" time="1.626">
-  <properties/>
-  <testcase name="delete oldest logs" classname="com.meshlink.database.data.local.AuditLogDaoTest" time="1.599"/>
-  <testcase name="get audit log count" classname="com.meshlink.database.data.local.AuditLogDaoTest" time="0.015"/>
-  <testcase name="insert and retrieve logs ordered by timestamp desc" classname="com.meshlink.database.data.local.AuditLogDaoTest" time="0.012"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="gcm_defaultSenderId" translatable="false">709800822625</string>
-    <string name="google_api_key" translatable="false">AIzaSyC_aEjrDEileFpc6OiJnud7FPmD_WIHpfM</string>
-    <string name="google_app_id" translatable="false">1:709800822625:android:83cea23baf2c51adcf6720</string>
-    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyC_aEjrDEileFpc6OiJnud7FPmD_WIHpfM</string>
-    <string name="google_storage_bucket" translatable="false">mesh-link-3af24.firebasestorage.app</string>
-    <string name="project_id" translatable="false">mesh-link-3af24</string>
-</resources>

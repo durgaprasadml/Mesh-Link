@@ -1,4 +1,3 @@
-google-services.json
 *.iml
 .gradle
 /local.properties
@@ -10,12 +9,19 @@ google-services.json
 /.idea/assetWizardSettings.xml
 .DS_Store
 /build
-build/
 /captures
-captures/
 .externalNativeBuild
 .cxx
 local.properties
-*.apk
-*.aab
-app/build/
+
+# Log files
+*.log
+
+# vscode
+.vscode/
+
+# temp & cache
+tmp/
+cache/
+*reports/
+*exports/

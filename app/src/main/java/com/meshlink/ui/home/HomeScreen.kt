@@ -47,13 +47,10 @@ enum class ConnectionState {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onNavigateToChats: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToNearby: () -> Unit,
     onNavigateToChat: (String, String) -> Unit,
-    onNavigateToMeshDebug: () -> Unit,
     onNavigateToSos: () -> Unit,
-    onNavigateToAnalytics: () -> Unit,
     onNavigateToBroadcast: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
@@ -130,20 +127,26 @@ fun HomeScreen(
                 
                 // SearchBar
                 SearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    onSearch = { isSearchActive = false },
-                    active = isSearchActive,
-                    onActiveChange = { isSearchActive = it },
-                    placeholder = { Text("Search chats or devices") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                    inputField = {
+                        SearchBarDefaults.InputField(
+                            query = searchQuery,
+                            onQueryChange = { searchQuery = it },
+                            onSearch = { isSearchActive = false },
+                            expanded = isSearchActive,
+                            onExpandedChange = { isSearchActive = it },
+                            placeholder = { Text("Search chats or devices") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    }
+                                }
                             }
-                        }
+                        )
                     },
+                    expanded = isSearchActive,
+                    onExpandedChange = { isSearchActive = it },
                     modifier = Modifier.fillMaxWidth(),
                     colors = SearchBarDefaults.colors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)

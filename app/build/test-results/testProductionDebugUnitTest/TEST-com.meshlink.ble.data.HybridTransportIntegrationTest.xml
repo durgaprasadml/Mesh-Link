@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.meshlink.ble.data.HybridTransportIntegrationTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:06.960Z" hostname="Durgaprasads-MacBook-Air.local" time="3.079">
+  <properties/>
+  <testcase name="when wifi socket receives packet, it is handled as incoming payload" classname="com.meshlink.ble.data.HybridTransportIntegrationTest" time="3.079"/>
+  <system-out><![CDATA[WARNING: No manifest file found at ./AndroidManifest.xml.
+Falling back to the Android OS resources only.
+To remove this warning, annotate your test class with @Config(manifest=Config.NONE).
+]]></system-out>
+  <system-err><![CDATA[No such manifest file: ./AndroidManifest.xml
+Exception in thread "DefaultDispatcher-worker-3 @coroutine#5" kotlin.KotlinNothingValueException
+	at com.meshlink.ble.data.BleRepositoryImpl$10.invokeSuspend(BleRepositoryImpl.kt:218)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:108)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:584)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:793)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:697)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:684)
+	Suppressed: kotlinx.coroutines.internal.DiagnosticCoroutineContextException: [CoroutineId(5), "coroutine#5":StandaloneCoroutine{Cancelling}@6402c7b0, Dispatchers.Default]
+Exception in thread "DefaultDispatcher-worker-5 @coroutine#8" kotlin.KotlinNothingValueException
+	at com.meshlink.ble.data.BleRepositoryImpl$13.invokeSuspend(BleRepositoryImpl.kt:267)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:108)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:584)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:793)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:697)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:684)
+	Suppressed: kotlinx.coroutines.internal.DiagnosticCoroutineContextException: [CoroutineId(8), "coroutine#8":StandaloneCoroutine{Cancelling}@fded359, Dispatchers.Default]
+]]></system-err>
+</testsuite>

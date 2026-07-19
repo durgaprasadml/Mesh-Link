@@ -5,10 +5,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.BluetoothSearching
+import androidx.compose.material.icons.automirrored.outlined.BluetoothSearching
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -61,7 +61,7 @@ fun NearbyDevicesScreen(
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
-                                Icons.Default.ArrowBack, 
+                                Icons.AutoMirrored.Filled.ArrowBack, 
                                 contentDescription = "Back",
                                 tint = MaterialTheme.colorScheme.onBackground
                             )
@@ -95,20 +95,26 @@ fun NearbyDevicesScreen(
                 // Search and Filter Bar
                 Box(modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)) {
                     SearchBar(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        onSearch = { isSearchActive = false },
-                        active = isSearchActive,
-                        onActiveChange = { isSearchActive = it },
-                        placeholder = { Text("Search mesh peers") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                        inputField = {
+                            SearchBarDefaults.InputField(
+                                query = searchQuery,
+                                onQueryChange = { searchQuery = it },
+                                onSearch = { isSearchActive = false },
+                                expanded = isSearchActive,
+                                onExpandedChange = { isSearchActive = it },
+                                placeholder = { Text("Search mesh peers") },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                        }
+                                    }
                                 }
-                            }
+                            )
                         },
+                        expanded = isSearchActive,
+                        onExpandedChange = { isSearchActive = it },
                         modifier = Modifier.fillMaxWidth(),
                         colors = SearchBarDefaults.colors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -121,7 +127,7 @@ fun NearbyDevicesScreen(
                 // Device List or Empty State
                 if (filteredDevices.isEmpty()) {
                     EmptyState(
-                        icon = Icons.Outlined.BluetoothSearching,
+                        icon = Icons.AutoMirrored.Outlined.BluetoothSearching,
                         title = if (searchQuery.isBlank()) "Scanning for Peers" else "No matching peers",
                         description = if (searchQuery.isBlank()) "Looking for active Mesh Link nodes in your vicinity..." else "Adjust your search terms.",
                         modifier = Modifier.weight(0.65f)

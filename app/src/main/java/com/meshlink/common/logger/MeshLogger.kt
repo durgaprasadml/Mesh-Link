@@ -12,6 +12,29 @@ object MeshLogger {
         this.crashReporter = reporter
     }
 
+    fun logEvent(event: LogEvent) {
+        val redactedMessage = PrivacyLogInterceptor.redact(event.message)
+        val redactedMetadata = PrivacyLogInterceptor.redactMetadata(event.metadata)
+        
+        val finalEvent = event.copy(message = redactedMessage, metadata = redactedMetadata)
+        val fullMessage = finalEvent.toString()
+
+        when (finalEvent.severity) {
+            LogLevel.VERBOSE -> Log.v(finalEvent.category.name, fullMessage, finalEvent.exception)
+            LogLevel.DEBUG -> Log.d(finalEvent.category.name, fullMessage, finalEvent.exception)
+            LogLevel.INFO -> Log.i(finalEvent.category.name, fullMessage, finalEvent.exception)
+            LogLevel.WARNING -> Log.w(finalEvent.category.name, fullMessage, finalEvent.exception)
+            LogLevel.ERROR -> Log.e(finalEvent.category.name, fullMessage, finalEvent.exception)
+            LogLevel.CRITICAL -> {
+                Log.e(finalEvent.category.name, "CRITICAL: $fullMessage", finalEvent.exception)
+                crashReporter?.logNonFatal(finalEvent.exception ?: Exception(fullMessage), redactedMetadata)
+            }
+        }
+        
+        // Pass to TelemetryStore in Phase 5
+        TelemetryStore.record(finalEvent)
+    }
+
     fun log(
         level: LogLevel,
         category: LogCategory,
@@ -19,26 +42,24 @@ object MeshLogger {
         metadata: Map<String, String>? = null,
         t: Throwable? = null
     ) {
-        val sanitizedMessage = SanitizationInterceptor.sanitize(message)
-        val sanitizedMetadata = SanitizationInterceptor.sanitizeMetadata(metadata)
-        
-        val metadataString = if (sanitizedMetadata.isNotEmpty()) " | Metadata: $sanitizedMetadata" else ""
-        val fullMessage = "[$category] $sanitizedMessage$metadataString"
-
-        when (level) {
-            LogLevel.VERBOSE -> if (com.meshlink.BuildConfig.DEBUG) Log.v(category.name, fullMessage, t)
-            LogLevel.DEBUG -> if (com.meshlink.BuildConfig.DEBUG) Log.d(category.name, fullMessage, t)
-            LogLevel.INFO -> Log.i(category.name, fullMessage, t)
-            LogLevel.WARNING -> Log.w(category.name, fullMessage, t)
-            LogLevel.ERROR -> {
-                if (t != null) Log.e(category.name, fullMessage, t) else Log.e(category.name, fullMessage)
-            }
-            LogLevel.CRITICAL -> {
-                if (t != null) Log.e(category.name, "CRITICAL: $fullMessage", t) else Log.e(category.name, "CRITICAL: $fullMessage")
-                crashReporter?.logNonFatal(t ?: Exception(fullMessage), sanitizedMetadata)
-            }
-        }
+        val event = LogEvent(
+            timestamp = System.currentTimeMillis(),
+            category = category,
+            severity = level,
+            module = "Unknown",
+            component = "Legacy",
+            sessionId = null,
+            peerIdHash = null,
+            operationId = TraceManager.currentOperationId,
+            threadName = Thread.currentThread().name,
+            message = message,
+            metadata = metadata,
+            exception = t
+        )
+        logEvent(event)
     }
+
+
 
     // Legacy wrappers for backward compatibility during the refactoring process
     fun d(tag: String, message: String) {

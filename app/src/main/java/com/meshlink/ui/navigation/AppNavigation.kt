@@ -122,15 +122,12 @@ fun AppNavigation(
 
             composable(Screen.Home.route) {
                 HomeScreen(
-                    onNavigateToChats = { navController.navigate(Screen.ChatsList.route) },
                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                     onNavigateToNearby = { navController.navigate(Screen.Nearby.route) },
                     onNavigateToChat = { address, name ->
                         navController.navigate(Screen.ChatDetail.createRoute(address, name))
                     },
-                    onNavigateToMeshDebug = { navController.navigate(Screen.DebugMesh.route) },
                     onNavigateToSos = { navController.navigate(Screen.Sos.route) },
-                    onNavigateToAnalytics = { navController.navigate(Screen.Analytics.route) },
                     onNavigateToBroadcast = { navController.navigate(Screen.Broadcast.route) }
                 )
             }

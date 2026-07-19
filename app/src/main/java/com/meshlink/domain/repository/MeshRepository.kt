@@ -2,14 +2,12 @@ package com.meshlink.domain.repository
 
 import android.net.Uri
 import com.meshlink.domain.model.BleDevice
-import com.meshlink.routing.data.MeshRouter
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 interface MeshRepository {
-    val meshRouter: MeshRouter
     val scannedDevices: StateFlow<Map<String, BleDevice>>
-    val incomingMeshPayloads: SharedFlow<Pair<String, com.meshlink.ble.data.MeshPacket>>
+    val incomingMeshPayloads: SharedFlow<Pair<String, com.meshlink.domain.model.MeshPacket>>
     val transferProgress: StateFlow<Map<String, Float>>
 
     fun resolveChatId(peerIdOrAddress: String): String
@@ -27,6 +25,7 @@ interface MeshRepository {
     
     suspend fun autoStartMesh()
     fun stopMesh()
+    fun getMeshStatus(): com.meshlink.domain.model.MeshStatus
     
     suspend fun sendMessage(message: com.meshlink.domain.model.Message, chatName: String)
     suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String)
@@ -39,4 +38,8 @@ interface MeshRepository {
     suspend fun setLocalMeshId(meshId: String)
     fun connectToAllScannedDevices()
     fun dispatchTextMessage(targetPeerId: String, payload: String, localPeerId: String, encrypted: Boolean, packetId: String?): Boolean
+
+    // Debug / Analytics accessors
+    fun getRouteTable(): Map<String, String>
+    fun getLocalMeshId(): String
 }

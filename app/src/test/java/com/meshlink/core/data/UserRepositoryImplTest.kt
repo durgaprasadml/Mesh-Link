@@ -1,7 +1,9 @@
 package com.meshlink.core.data
 
-import com.meshlink.core.data.source.UserLocalDataSource
 import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.model.User
+
+import com.meshlink.core.data.source.UserLocalDataSource
 import com.meshlink.security.data.source.CryptoDataSource
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -67,7 +69,7 @@ class UserRepositoryImplTest {
         val result = repository.loginUser(phone, pin)
 
         assertTrue(result.isSuccess)
-        assertEquals(mockUser, result.getOrNull())
+        assertEquals(User(mockUser.meshId, mockUser.name, mockUser.phoneNumber), result.getOrNull())
         coVerify(exactly = 1) { localDataSource.setLoginState(true) }
     }
 
@@ -94,7 +96,7 @@ class UserRepositoryImplTest {
         coEvery { cryptoDataSource.generateLegacyHash(phone) } returns "mesh_id_1"
         coEvery { localDataSource.getUser("mesh_id_1") } returns null
 
-        val result = repository.loginUser(phone, "1234")
+        val result = repository.loginUser(phone, "salt_1:hash_1")
 
         assertFalse(result.isSuccess)
     }

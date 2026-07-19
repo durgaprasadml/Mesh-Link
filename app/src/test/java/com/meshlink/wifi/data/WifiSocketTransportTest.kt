@@ -1,7 +1,7 @@
 package com.meshlink.wifi.data
 
-import com.meshlink.ble.data.MeshPacket
-import com.meshlink.ble.data.PacketType
+import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking

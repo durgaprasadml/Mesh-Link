@@ -119,7 +119,7 @@ fun MeshDeviceCard(
 
             if (expanded) {
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-                Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
                 
                 Row(

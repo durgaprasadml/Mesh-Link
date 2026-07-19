@@ -12,13 +12,12 @@ import kotlinx.coroutines.flow.StateFlow
 import io.mockk.mockk
 
 class FakeMeshRepository : MeshRepository {
-    override val meshRouter: MeshRouter = mockk(relaxed = true) // Uses mock for complex classes if needed, or replace with FakeMeshRouter later
-    
+    // meshRouter removed from interface
     private val _scannedDevices = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
     override val scannedDevices: StateFlow<Map<String, BleDevice>> = _scannedDevices
     
-    private val _incomingMeshPayloads = MutableSharedFlow<Pair<String, com.meshlink.ble.data.MeshPacket>>()
-    override val incomingMeshPayloads: SharedFlow<Pair<String, com.meshlink.ble.data.MeshPacket>> = _incomingMeshPayloads
+    private val _incomingMeshPayloads = MutableSharedFlow<Pair<String, com.meshlink.domain.model.MeshPacket>>()
+    override val incomingMeshPayloads: SharedFlow<Pair<String, com.meshlink.domain.model.MeshPacket>> = _incomingMeshPayloads
     
     private val _transferProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
     override val transferProgress: StateFlow<Map<String, Float>> = _transferProgress
@@ -58,4 +57,16 @@ class FakeMeshRepository : MeshRepository {
         current[device.address] = device
         _scannedDevices.value = current
     }
+
+    override fun getMeshStatus(): com.meshlink.domain.model.MeshStatus {
+        return com.meshlink.domain.model.MeshStatus(
+            isBleAdvertising = false,
+            isBleScanning = false,
+            connectedPeersCount = if (isConnected) 1 else 0,
+            isServerRunning = false
+        )
+    }
+
+    override fun getRouteTable(): Map<String, String> = emptyMap()
+    override fun getLocalMeshId(): String = "fake_local_mesh_id"
 }

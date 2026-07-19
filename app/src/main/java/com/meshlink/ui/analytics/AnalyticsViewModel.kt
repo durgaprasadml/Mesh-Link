@@ -25,7 +25,7 @@ data class AnalyticsUiState(
 @HiltViewModel
 class AnalyticsViewModel @Inject constructor(
     private val analytics: MeshAnalytics,
-    private val meshRouter: MeshRouter
+    private val meshRepository: com.meshlink.domain.repository.MeshRepository
 ) : ViewModel() {
 
     val uiState: StateFlow<AnalyticsUiState> = combine(
@@ -39,8 +39,8 @@ class AnalyticsViewModel @Inject constructor(
             recentLog = recentLog,
             activeNodes = activeNodes,
             hopDistribution = hopDistribution,
-            routeTableSize = meshRouter.routeTable.size,
-            routeTable = meshRouter.routeTable.mapValues { it.value.nextHop }
+            routeTableSize = meshRepository.getRouteTable().size,
+            routeTable = meshRepository.getRouteTable()
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AnalyticsUiState())
 }

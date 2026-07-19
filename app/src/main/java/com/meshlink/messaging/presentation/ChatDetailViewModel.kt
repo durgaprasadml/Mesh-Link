@@ -82,8 +82,8 @@ class ChatDetailViewModel @Inject constructor(
             if (isDirect) return@map ConnectionState.DIRECT
 
             // Check active BLE connections (GATT clients and connected servers)
-            val gattConnected = meshRepository.meshRouter.routeTable.containsKey(rawPeerIdOrAddress) ||
-                               meshRepository.meshRouter.routeTable.containsKey(address)
+            val gattConnected = meshRepository.getRouteTable().containsKey(rawPeerIdOrAddress) ||
+                               meshRepository.getRouteTable().containsKey(address)
             val hasLiveConnection = meshRepository.isAnyPeerConnected()
 
             if (gattConnected || hasLiveConnection) {

@@ -1,7 +1,7 @@
 package com.meshlink.routing.engine
 
-import com.meshlink.ble.data.MeshPacket
-import com.meshlink.ble.data.PacketType
+import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
 import java.util.PriorityQueue
 import javax.inject.Inject
 import javax.inject.Singleton

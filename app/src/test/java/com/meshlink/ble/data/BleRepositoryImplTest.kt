@@ -42,7 +42,9 @@ class BleRepositoryImplTest {
     private lateinit var locationProvider: LocationProvider
     private lateinit var cryptoManager: MeshCryptoManager
     private lateinit var wifiDirectManager: WifiDirectManager
-    private lateinit var wifiSocketTransport: WifiSocketTransport
+        private lateinit var wifiSocketTransport: WifiSocketTransport
+    private lateinit var discoveryManager: com.meshlink.ble.data.DiscoveryManager
+    private lateinit var connectionManager: com.meshlink.ble.data.BleConnectionManager
     private lateinit var sessionManager: SessionManager
     private lateinit var rekeyManager: RekeyManager
     private lateinit var trustManager: TrustManager
@@ -62,7 +64,9 @@ class BleRepositoryImplTest {
         locationProvider = mockk(relaxed = true)
         cryptoManager = mockk(relaxed = true)
         wifiDirectManager = mockk(relaxed = true)
-        wifiSocketTransport = mockk(relaxed = true)
+                wifiSocketTransport = mockk(relaxed = true)
+        discoveryManager = mockk(relaxed = true)
+        connectionManager = mockk(relaxed = true)
         sessionManager = mockk(relaxed = true)
         rekeyManager = mockk(relaxed = true)
         trustManager = mockk(relaxed = true)
@@ -84,10 +88,28 @@ class BleRepositoryImplTest {
         every { wifiDirectManager.connectionInfo } returns MutableStateFlow(null)
 
         repository = BleRepositoryImpl(
-            application, bleDataSource, meshRouter, chatDao, userRepository,
-            mockk(relaxed = true), mediaTransferManager, locationProvider, cryptoManager, wifiDirectManager,
-            wifiSocketTransport, sessionManager, rekeyManager, trustManager, securityMonitor,
-            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), context
+            application = application,
+            bleDataSource = bleDataSource,
+            meshRouter = meshRouter,
+            chatDao = chatDao,
+            userRepository = userRepository,
+            transferManager = mockk(relaxed = true),
+            mediaTransferManager = mediaTransferManager,
+            locationProvider = locationProvider,
+            cryptoManager = cryptoManager,
+            wifiDirectManager = wifiDirectManager,
+            wifiSocketTransport = wifiSocketTransport,
+            sessionManager = sessionManager,
+            rekeyManager = rekeyManager,
+                        trustManager = trustManager,
+            securityMonitor = securityMonitor,
+            discoveryManager = discoveryManager,
+            connectionManager = connectionManager,
+            routingCoordinator = mockk(relaxed = true),
+            meshMessagingManager = mockk(relaxed = true),
+            voiceTransport = mockk(relaxed = true),
+            videoTransport = mockk(relaxed = true),
+            context = context
         )
     }
 
@@ -99,50 +121,50 @@ class BleRepositoryImplTest {
     @Test
     fun `startAdvertising delegates to bleDataSource`() {
         repository.startAdvertising("TestName", "mesh_1")
-        coVerify(exactly = 1) { bleDataSource.startAdvertising("TestName", "mesh_1", 0x01) }
+        coVerify(exactly = 1) { discoveryManager.startAdvertising("TestName", "mesh_1", 0x01) }
     }
 
     @Test
     fun `stopAdvertising delegates to bleDataSource`() {
         repository.stopAdvertising()
-        coVerify(exactly = 1) { bleDataSource.stopAdvertising() }
+        coVerify(exactly = 1) { discoveryManager.stopAdvertising() }
     }
 
     @Test
     fun `startScanning delegates to bleDataSource`() {
         repository.startScanning()
-        coVerify(exactly = 1) { bleDataSource.startScanning() }
+        coVerify(exactly = 1) { discoveryManager.startScanning() }
     }
 
     @Test
     fun `stopScanning delegates to bleDataSource`() {
         repository.stopScanning()
-        coVerify(exactly = 1) { bleDataSource.stopScanning() }
+        coVerify(exactly = 1) { discoveryManager.stopScanning() }
     }
 
     @Test
     fun `startServer delegates to bleDataSource`() {
         repository.startServer()
-        coVerify(exactly = 1) { bleDataSource.startServer() }
+        coVerify(exactly = 1) { connectionManager.startServer() }
     }
 
     @Test
     fun `stopServer delegates to bleDataSource`() {
         repository.stopServer()
-        coVerify(exactly = 1) { bleDataSource.stopServer() }
+        coVerify(exactly = 1) { connectionManager.stopServer() }
     }
 
     @Test
     fun `connectToDevice delegates to bleDataSource`() {
         repository.connectToDevice("00:11:22:33:44:55")
-        coVerify(exactly = 1) { bleDataSource.connectToDevice("00:11:22:33:44:55") }
+        coVerify(exactly = 1) { connectionManager.connectToDevice("00:11:22:33:44:55") }
     }
     
     @Test
     fun `stopMesh calls all stop methods`() {
         repository.stopMesh()
-        coVerify(exactly = 1) { bleDataSource.stopAdvertising() }
-        coVerify(exactly = 1) { bleDataSource.stopScanning() }
-        coVerify(exactly = 1) { bleDataSource.stopServer() }
+        coVerify(exactly = 1) { discoveryManager.stopAdvertising() }
+        coVerify(exactly = 1) { discoveryManager.stopScanning() }
+        coVerify(exactly = 1) { connectionManager.stopServer() }
     }
 }

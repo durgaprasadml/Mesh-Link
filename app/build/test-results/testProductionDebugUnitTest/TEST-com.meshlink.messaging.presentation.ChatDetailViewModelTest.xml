@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.meshlink.messaging.presentation.ChatDetailViewModelTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:13.336Z" hostname="Durgaprasads-MacBook-Air.local" time="0.282">
+  <properties/>
+  <testcase name="markChatAsRead should call markChatAsReadUseCase and sendReadReceipts" classname="com.meshlink.messaging.presentation.ChatDetailViewModelTest" time="0.265"/>
+  <testcase name="deleteSelectedMessages should call use case and clear selection" classname="com.meshlink.messaging.presentation.ChatDetailViewModelTest" time="0.006"/>
+  <testcase name="sendMessage should not call usecase if text is blank" classname="com.meshlink.messaging.presentation.ChatDetailViewModelTest" time="0.006"/>
+  <testcase name="sendMessage should call sendMessageUseCase" classname="com.meshlink.messaging.presentation.ChatDetailViewModelTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

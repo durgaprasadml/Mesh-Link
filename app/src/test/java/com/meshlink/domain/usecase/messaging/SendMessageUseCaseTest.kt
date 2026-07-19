@@ -3,7 +3,7 @@ package com.meshlink.domain.usecase.messaging
 import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
-import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.model.User
 import com.meshlink.domain.repository.ChatRepository
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
@@ -50,11 +50,10 @@ class SendMessageUseCaseTest {
     @Test
     fun `invoke should create message and call repositories if user exists`() = runTest {
         // Arrange
-        val myUser = UserEntity(
+        val myUser = User(
             meshId = "my_id",
             name = "Me",
-            phoneNumber = "123",
-            pinHash = ""
+            phoneNumber = "123"
         )
         coEvery { userRepository.getLocalUser() } returns myUser
 

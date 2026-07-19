@@ -1,6 +1,6 @@
 package com.meshlink.routing.engine
 
-import com.meshlink.ble.data.PacketType
+import com.meshlink.domain.model.PacketType
 import javax.inject.Inject
 import javax.inject.Singleton
 

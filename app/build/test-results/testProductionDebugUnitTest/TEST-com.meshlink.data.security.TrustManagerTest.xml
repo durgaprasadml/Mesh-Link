@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.meshlink.data.security.TrustManagerTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:10.197Z" hostname="Durgaprasads-MacBook-Air.local" time="0.125">
+  <properties/>
+  <testcase name="test new peer is DISCOVERED and starts with neutral score" classname="com.meshlink.data.security.TrustManagerTest" time="0.108"/>
+  <testcase name="test identity change detection" classname="com.meshlink.data.security.TrustManagerTest" time="0.012"/>
+  <testcase name="test trust score increase to TRUSTED when verified" classname="com.meshlink.data.security.TrustManagerTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

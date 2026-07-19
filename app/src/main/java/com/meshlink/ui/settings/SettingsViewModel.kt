@@ -2,7 +2,7 @@ package com.meshlink.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.model.User
 import com.meshlink.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
-    val user: UserEntity? = null,
+    val user: User? = null,
     val isEncryptionEnabled: Boolean = true,
     val isOnlineVisible: Boolean = true,
     val meshMode: String = "Auto"

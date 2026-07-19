@@ -13,7 +13,10 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.common.power.PowerState
+import com.meshlink.common.power.PowerStateManager
 import com.meshlink.MainActivity
+import com.meshlink.common.diagnostics.RuntimeWatchdog
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.ui.components.hasRequiredPermissions
 import com.meshlink.wifi.data.WifiDirectManager
@@ -57,15 +60,19 @@ class MeshRelayService : Service() {
     @Inject
     lateinit var wifiDirectManager: WifiDirectManager
 
+    @Inject
+    lateinit var powerStateManager: PowerStateManager
+
+    @Inject
+    lateinit var runtimeWatchdog: RuntimeWatchdog
+
     private var serviceJob: Job? = null
     private var restartOnDestroy = true
-    private var wakeLock: PowerManager.WakeLock? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        acquireWakeLock()
         wifiDirectManager.registerReceiver()
         MeshLogger.d(TAG, "MeshRelayService created")
     }
@@ -78,7 +85,6 @@ class MeshRelayService : Service() {
                 restartOnDestroy = false
                 _serviceState.value = ServiceState.STOPPED
                 meshRepository.stopMesh()
-                releaseWakeLock()
                 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     stopForeground(Service.STOP_FOREGROUND_REMOVE)
@@ -133,52 +139,43 @@ class MeshRelayService : Service() {
                 MeshLogger.e(TAG, "Failed to start mesh relay: ${e.message}")
             }
             
+            var lastRefresh = System.currentTimeMillis()
             while (isActive) {
-                delay(BLE_REFRESH_INTERVAL_MS)
-                try {
-                    meshRepository.autoStartMesh()
-                    renewWakeLock()
-                    MeshLogger.d(TAG, "BLE refresh cycle completed")
-                } catch (e: Exception) {
-                    MeshLogger.w(TAG, "BLE refresh failed: ${e.message}")
+                runtimeWatchdog.ping("MeshRelayService")
+                delay(15_000L)
+                if (System.currentTimeMillis() - lastRefresh >= BLE_REFRESH_INTERVAL_MS) {
+                    val currentState = powerStateManager.powerState.value
+                    if (currentState == PowerState.DOZE_MODE || currentState == PowerState.RESTRICTED) {
+                        MeshLogger.d(TAG, "Skipping BLE refresh due to power state: $currentState")
+                        lastRefresh = System.currentTimeMillis()
+                        continue
+                    }
+                    withWakeLock(30_000L) {
+                        try {
+                            meshRepository.autoStartMesh()
+                            lastRefresh = System.currentTimeMillis()
+                            MeshLogger.d(TAG, "BLE refresh cycle completed under scoped WakeLock")
+                        } catch (e: Exception) {
+                            MeshLogger.w(TAG, "BLE refresh failed: ${e.message}")
+                        }
+                    }
                 }
             }
         }
     }
 
-    private fun acquireWakeLock() {
-                if (wakeLock == null) {
-            try {
-                val pm = getSystemService(POWER_SERVICE) as PowerManager
-                wakeLock = pm.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK,
-                    "MeshLink::MeshRelayWakeLock"
-                ).apply {
-                    setReferenceCounted(false)
-                    acquire(30 * 1000L) // 30 seconds max for a sync pulse
-                }
-            } catch (e: Exception) {
-                MeshLogger.e(TAG, "Failed to acquire WakeLock", e)
-            }
+    private suspend fun withWakeLock(timeoutMs: Long, block: suspend () -> Unit) {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        val lock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MeshLink::ScopedWakeLock").apply {
+            setReferenceCounted(false)
         }
-    }
-
-    private fun renewWakeLock() {
-        releaseWakeLock()
-        acquireWakeLock()
-    }
-
-    private fun releaseWakeLock() {
         try {
-            wakeLock?.let {
-                if (it.isHeld) {
-                    it.release()
-                }
-            }
-        } catch (e: Exception) {
-            MeshLogger.e(TAG, "Failed to release WakeLock", e)
+            lock.acquire(timeoutMs)
+            block()
         } finally {
-            wakeLock = null
+            if (lock.isHeld) {
+                lock.release()
+            }
         }
     }
 
@@ -243,7 +240,7 @@ class MeshRelayService : Service() {
         serviceJob?.cancel()
         meshRepository.stopMesh()
         wifiDirectManager.unregisterReceiver()
-        releaseWakeLock()
+        runtimeWatchdog.remove("MeshRelayService")
         if (restartOnDestroy) {
             scheduleRestart()
         }
@@ -269,10 +266,11 @@ class MeshRelayService : Service() {
                 restartPendingIntent
             )
         } catch (e: SecurityException) {
-            MeshLogger.w(TAG, "Exact alarm permission missing. Falling back to inexact alarm.")
-            alarmManager.set(
+            MeshLogger.w(TAG, "Exact alarm permission missing. Falling back to setWindow inexact alarm.")
+            alarmManager.setWindow(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                 SystemClock.elapsedRealtime() + 3000L,
+                3000L,
                 restartPendingIntent
             )
         }

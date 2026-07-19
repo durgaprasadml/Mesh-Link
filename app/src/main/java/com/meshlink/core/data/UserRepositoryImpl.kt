@@ -3,6 +3,7 @@ package com.meshlink.core.data
 import com.meshlink.core.data.source.UserLocalDataSource
 import com.meshlink.database.data.local.UserEntity
 import com.meshlink.domain.repository.UserRepository
+import com.meshlink.domain.model.User
 import com.meshlink.security.data.source.CryptoDataSource
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -47,7 +48,7 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun loginUser(phoneNumber: String, pin: String): Result<UserEntity> {
+    override suspend fun loginUser(phoneNumber: String, pin: String): Result<User> {
         return try {
             val meshId = cryptoDataSource.generateLegacyHash(phoneNumber)
             val user = localDataSource.getUser(meshId)
@@ -77,7 +78,7 @@ class UserRepositoryImpl @Inject constructor(
                 
                 if (verified) {
                     localDataSource.setLoginState(true)
-                    return Result.success(user)
+                    return Result.success(com.meshlink.domain.model.User(meshId = user.meshId, name = user.name, phoneNumber = user.phoneNumber))
                 }
             }
             
@@ -87,8 +88,9 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getLocalUser(): UserEntity? {
-        return localDataSource.getLocalUser()
+    override suspend fun getLocalUser(): com.meshlink.domain.model.User? {
+        val userEntity = localDataSource.getLocalUser()
+        return userEntity?.let { com.meshlink.domain.model.User(meshId = it.meshId, name = it.name, phoneNumber = it.phoneNumber) }
     }
 
     override suspend fun logout() {

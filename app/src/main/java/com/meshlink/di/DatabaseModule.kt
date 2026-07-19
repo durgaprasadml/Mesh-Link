@@ -30,6 +30,13 @@ object DatabaseModule {
         @ApplicationContext context: Context,
         databaseSecurityManager: com.meshlink.security.data.DatabaseSecurityManager
     ): MeshDatabase {
+        // Double-check native library loading
+        try {
+            System.loadLibrary("sqlcipher")
+        } catch (e: UnsatisfiedLinkError) {
+            com.meshlink.common.logger.MeshLogger.e("DbSecurity", "SQLCipher native library load failed", e)
+        }
+
         com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Starting DatabaseModule.provideMeshDatabase()")
         val dbFile = context.getDatabasePath(com.meshlink.security.data.SecurityConstants.DB_NAME)
         
@@ -62,7 +69,6 @@ object DatabaseModule {
                     com.meshlink.common.logger.MeshLogger.d("DbSecurity", "SQLCipher postKey hook started")
                     connection?.execute("PRAGMA cipher_version;", null, null)
                     connection?.execute("PRAGMA journal_mode;", null, null)
-                    connection?.execute("PRAGMA integrity_check;", null, null)
                     connection?.execute("SELECT COUNT(*) FROM sqlite_schema;", null, null)
                     com.meshlink.common.logger.MeshLogger.d("DbSecurity", "SQLCipher postKey diagnostics completed successfully")
                     
@@ -89,7 +95,20 @@ object DatabaseModule {
         return try {
             val db = builder.build()
             // Force open to test connection immediately
-            db.openHelper.writableDatabase
+            val writableDb = db.openHelper.writableDatabase
+            
+            // Active Integrity Check
+            writableDb.query("PRAGMA integrity_check").use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val result = cursor.getString(0)
+                    if (!result.equals("ok", ignoreCase = true)) {
+                        com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Database integrity check failed: $result")
+                        throw SQLiteNotADatabaseException("Database integrity check failed: $result")
+                    } else {
+                        com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Database integrity check passed.")
+                    }
+                }
+            }
             db
         } catch (e: Exception) {
             com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Room build failed. Initiating Recovery Diagnostics.", e)
@@ -105,20 +124,8 @@ object DatabaseModule {
                 if (isLocked) {
                     com.meshlink.common.logger.MeshLogger.w("DbSecurity", "Database is not recognized but device is locked. Deferring recovery to avoid false corruption detection.")
                 } else {
-                    com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Database file is not a database or corrupted while unlocked. Attempting to delete and re-create.")
-                    if (dbFile.exists()) {
-                        val deleted = context.deleteDatabase(com.meshlink.security.data.SecurityConstants.DB_NAME)
-                        com.meshlink.common.logger.MeshLogger.w("DbSecurity", "Corrupted database file deleted: $deleted")
-                        if (deleted) {
-                            try {
-                                val newDb = builder.build()
-                                newDb.openHelper.writableDatabase
-                                return newDb
-                            } catch (retryEx: Exception) {
-                                com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Failed to re-create database after corruption deletion", retryEx)
-                            }
-                        }
-                    }
+                    com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Database file is not a database or corrupted while unlocked. ABORTING automatic deletion to preserve potential recovery forensics. Halting database initialization.")
+                    throw RuntimeException("Database corruption detected. Manual recovery required. Database recreation aborted.", e)
                 }
             }
             

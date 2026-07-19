@@ -1,6 +1,6 @@
 package com.meshlink.routing.engine
 
-import com.meshlink.ble.data.MeshPacket
+import com.meshlink.domain.model.MeshPacket
 import com.meshlink.common.logger.MeshLogger
 import java.util.Collections
 import javax.inject.Inject
@@ -62,7 +62,7 @@ class RoutingEngine @Inject constructor(
      * Calculates the dynamic TTL for a new outgoing packet.
      * Incorporates Battery awareness (reduce TTL if battery is low to prevent network abuse).
      */
-    fun calculateInitialTtl(packetType: com.meshlink.ble.data.PacketType): Int {
+    fun calculateInitialTtl(packetType: com.meshlink.domain.model.PacketType): Int {
         var baseTtl = routeOptimizer.calculateDynamicTtl()
         
         if (batteryAwareNetworking.powerState.value == PowerState.CRITICAL) {
@@ -75,8 +75,8 @@ class RoutingEngine @Inject constructor(
     /**
      * Probabilistic Relay for broadcasts.
      */
-    fun shouldRelayBroadcast(packetType: com.meshlink.ble.data.PacketType): Boolean {
-        if (packetType == com.meshlink.ble.data.PacketType.SOS) return true // Always relay SOS
+    fun shouldRelayBroadcast(packetType: com.meshlink.domain.model.PacketType): Boolean {
+        if (packetType == com.meshlink.domain.model.PacketType.SOS) return true // Always relay SOS
         
         if (!batteryAwareNetworking.canRelayBackgroundTraffic()) {
             return false // Drop if battery is critical
@@ -94,7 +94,7 @@ class RoutingEngine @Inject constructor(
      */
     fun getNextHopForForwarding(packet: MeshPacket, connectedNodes: Set<String>, excludeHop: String): String? {
         // SOS packets ignore directed forwarding and always broadcast to maximize delivery chances
-        if (packet.type == com.meshlink.ble.data.PacketType.SOS) return null
+        if (packet.type == com.meshlink.domain.model.PacketType.SOS) return null
 
         val optimalRoute = routeManager.getOptimalRoute(packet.targetId, setOf(excludeHop))
         if (optimalRoute != null && connectedNodes.contains(optimalRoute.nextHop)) {

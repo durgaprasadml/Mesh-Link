@@ -1,12 +1,12 @@
 package com.meshlink.domain.repository
 
-import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.model.User
 import kotlinx.coroutines.flow.Flow
 
 interface UserRepository {
     suspend fun registerUser(name: String, phoneNumber: String, pin: String): Result<String>
-    suspend fun loginUser(phoneNumber: String, pin: String): Result<UserEntity>
-    suspend fun getLocalUser(): UserEntity?
+    suspend fun loginUser(phoneNumber: String, pin: String): Result<User>
+    suspend fun getLocalUser(): User?
     suspend fun logout()
     val isUserLoggedIn: Flow<Boolean>
     

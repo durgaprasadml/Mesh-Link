@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
-class UserEntityTest {
+class UserTest {
 
     @Test
     fun `test user entity creation and fields`() {

@@ -1,7 +1,7 @@
 package com.meshlink.ui.nearby
 
 import app.cash.turbine.test
-import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.model.User
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
@@ -71,7 +71,7 @@ class NearbyViewModelTest {
 
     @Test
     fun `startDiscovery calls meshRepository and wifiDirectManager when user is not null`() = runTest {
-        val user = UserEntity("mesh1", "Alice", "123", "hash")
+        val user = User("mesh1", "Alice", "123")
         coEvery { userRepository.getLocalUser() } returns user
 
         viewModel.startDiscovery()

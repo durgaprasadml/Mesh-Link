@@ -16,7 +16,7 @@ class DiscoveryManager @Inject constructor(
     val discoveryEngine: DiscoveryEngine
 ) {
 
-    val scannedDevices: StateFlow<Map<String, BleDevice>> = bleDataSource.scannedDevices
+    public val scannedDevices: StateFlow<Map<String, BleDevice>> = bleDataSource.scannedDevices
 
     fun startAdvertising(localUserName: String, localMeshId: String, batteryLevel: Int = 100) {
         bleDataSource.startAdvertising(localUserName, localMeshId, batteryLevel.toByte())

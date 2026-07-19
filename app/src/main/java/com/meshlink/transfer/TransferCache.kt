@@ -100,4 +100,12 @@ class TransferCache @Inject constructor(
             MeshLogger.d(TAG, "Cleaned up cache for $transferId")
         }
     }
+
+    suspend fun clearCache() = withContext(Dispatchers.IO) {
+        if (stagingDir.exists()) {
+            stagingDir.deleteRecursively()
+            stagingDir.mkdirs()
+            MeshLogger.w(TAG, "Transfer cache fully cleared due to memory pressure")
+        }
+    }
 }

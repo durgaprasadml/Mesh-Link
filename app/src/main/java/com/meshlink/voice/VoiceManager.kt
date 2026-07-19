@@ -1,6 +1,6 @@
 package com.meshlink.voice
 
-import com.meshlink.ble.data.MeshPacket
+import com.meshlink.domain.model.MeshPacket
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.di.IoDispatcher
 import com.meshlink.voice.models.CallState

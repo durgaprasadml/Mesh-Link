@@ -4,10 +4,10 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.routing.data.MeshRouter
 import com.meshlink.routing.engine.BatteryAwareNetworking
 import com.meshlink.routing.engine.PowerState
-import com.meshlink.ble.data.MeshPacket
-import com.meshlink.ble.data.PacketType
-import com.meshlink.ble.data.PacketPriority
-import com.meshlink.ble.data.BroadcastType
+import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
+import com.meshlink.domain.model.PacketPriority
+import com.meshlink.domain.model.BroadcastType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

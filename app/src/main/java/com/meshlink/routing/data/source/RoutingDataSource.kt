@@ -1,6 +1,6 @@
 package com.meshlink.routing.data.source
 
-import com.meshlink.ble.data.MeshPacket
+import com.meshlink.domain.model.MeshPacket
 import kotlinx.coroutines.flow.SharedFlow
 
 interface RoutingDataSource {

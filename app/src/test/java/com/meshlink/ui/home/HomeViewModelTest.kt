@@ -3,7 +3,7 @@ package com.meshlink.ui.home
 import app.cash.turbine.test
 import com.meshlink.database.data.local.ChatDao
 import com.meshlink.database.data.local.ChatEntity
-import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.model.User
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
@@ -38,7 +38,7 @@ class HomeViewModelTest {
 
     @Test
     fun `loadUser sets user state correctly`() = runTest {
-        val userEntity = UserEntity("mesh_1", "John", "123", "hash")
+        val userEntity = User("mesh_1", "John", "123")
         coEvery { userRepository.getLocalUser() } returns userEntity
         every { meshRepository.scannedDevices } returns MutableStateFlow(emptyMap())
         every { chatDao.getAllChats() } returns flowOf(emptyList())
@@ -57,7 +57,7 @@ class HomeViewModelTest {
 
     @Test
     fun `uiState combines data correctly`() = runTest {
-        val userEntity = UserEntity("mesh_1", "John", "123", "hash")
+        val userEntity = User("mesh_1", "John", "123")
         val device = BleDevice("mesh_id", "TestDevice", "00:11:22", -50, 1000L)
         val chatEntity = ChatEntity("chat_1", "Chat 1", "msg_1", 1000L, unreadCount = 2)
         

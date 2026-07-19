@@ -7,19 +7,19 @@ import javax.inject.Singleton
 
 @Singleton
 class DeveloperSettingsManager @Inject constructor(
-    context: Context
+    private val context: Context
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(StorageConfig.PREFS_NAME, Context.MODE_PRIVATE)
 
     fun isVerboseLoggingEnabled(): Boolean {
-        return com.meshlink.BuildConfig.DEBUG_TOOLS_ENABLED && prefs.getBoolean("dev_verbose_logging", false)
+        return (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) && prefs.getBoolean("dev_verbose_logging", false)
     }
 
     fun isForceBleOnly(): Boolean {
-        return com.meshlink.BuildConfig.DEBUG_TOOLS_ENABLED && prefs.getBoolean("dev_force_ble", false)
+        return (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) && prefs.getBoolean("dev_force_ble", false)
     }
 
     fun isForceWifiOnly(): Boolean {
-        return com.meshlink.BuildConfig.DEBUG_TOOLS_ENABLED && prefs.getBoolean("dev_force_wifi", false)
+        return (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) && prefs.getBoolean("dev_force_wifi", false)
     }
 }

@@ -1,8 +1,8 @@
 package com.meshlink.media.data
 
 import android.content.Context
-import com.meshlink.ble.data.MeshPacket
-import com.meshlink.ble.data.PacketType
+import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
 import com.meshlink.media.data.MediaTransferManager
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers

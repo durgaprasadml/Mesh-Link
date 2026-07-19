@@ -11,10 +11,10 @@
 -keep @dagger.hilt.android.lifecycle.HiltViewModel class *
 
 # Room & SQLCipher
--keep class net.sqlcipher.** { *; }
--keep class net.sqlcipher.database.** { *; }
--keep class org.sqlite.database.** { *; }
+-keep class net.zetetic.database.sqlcipher.** { *; }
+-keep class net.zetetic.database.** { *; }
 -keep class androidx.room.** { *; }
+-dontwarn net.zetetic.database.sqlcipher.**
 
 # Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}

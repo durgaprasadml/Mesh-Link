@@ -23,7 +23,8 @@ class DiagnosticsManager @Inject constructor(
         val isDatabaseHealthy: Boolean = true,
         val activePeersCount: Int = 0,
         val foregroundServiceUptime: Long = 0L,
-        val memoryUsageMb: Int = 0
+        val memoryUsageMb: Int = 0,
+        val healthScore: String = "EXCELLENT"
     )
 
     fun updateHealthState(modifier: (SystemHealthState) -> SystemHealthState) {
@@ -39,6 +40,9 @@ class DiagnosticsManager @Inject constructor(
         health.put("isWifiHealthy", _healthState.value.isWifiHealthy)
         health.put("isDatabaseHealthy", _healthState.value.isDatabaseHealthy)
         health.put("activePeersCount", _healthState.value.activePeersCount)
+        health.put("foregroundServiceUptime", _healthState.value.foregroundServiceUptime)
+        health.put("memoryUsageMb", _healthState.value.memoryUsageMb)
+        health.put("healthScore", _healthState.value.healthScore)
         json.put("health", health)
 
         // 2. Metrics
@@ -58,6 +62,18 @@ class DiagnosticsManager @Inject constructor(
             eventsArray.put(eventJson)
         }
         json.put("timeline", eventsArray)
+
+        // 4. Telemetry and Tracing
+        val telemetryArray = org.json.JSONArray()
+        com.meshlink.common.logger.TelemetryStore.getRecentLogs(50).forEach { log ->
+            val logJson = JSONObject()
+            logJson.put("timestamp", log.timestamp)
+            logJson.put("level", log.severity.name)
+            logJson.put("message", log.message)
+            logJson.put("traceId", log.operationId ?: "none")
+            telemetryArray.put(logJson)
+        }
+        json.put("recentTelemetry", telemetryArray)
 
         return json.toString(4) // Pretty print with indent 4
     }

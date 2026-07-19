@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:ns1="http://schemas.android.com/tools">
+    <color name="ic_launcher_background">#FF121212</color>
+    <string name="app_name">Mesh Link</string>
+    <string name="com.google.firebase.crashlytics.mapping_file_id" ns1:ignore="UnusedResources,TypographyDashes" translatable="false">00000000000000000000000000000000</string>
+    <string name="com.google.firebase.crashlytics.version_control_info">""</string>
+    <string name="gcm_defaultSenderId" translatable="false">709800822625</string>
+    <string name="google_api_key" translatable="false">AIzaSyC_aEjrDEileFpc6OiJnud7FPmD_WIHpfM</string>
+    <string name="google_app_id" translatable="false">1:709800822625:android:83cea23baf2c51adcf6720</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyC_aEjrDEileFpc6OiJnud7FPmD_WIHpfM</string>
+    <string name="google_storage_bucket" translatable="false">mesh-link-3af24.firebasestorage.app</string>
+    <string name="project_id" translatable="false">mesh-link-3af24</string>
+    <style name="Theme.MeshLink" parent="android:Theme.Material.Light.NoActionBar"/>
+</resources>

@@ -1,7 +1,7 @@
 package com.meshlink.ui.settings
 
 import app.cash.turbine.test
-import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.model.User
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.util.MainDispatcherRule
 import io.mockk.coEvery
@@ -28,11 +28,10 @@ class SettingsViewModelTest {
     private val isEncryptionEnabledFlow = MutableStateFlow(true)
     private val isOnlineVisibleFlow = MutableStateFlow(true)
     private val meshModeFlow = MutableStateFlow("Auto")
-    private val testUser = UserEntity(
+    private val testUser = User(
         meshId = "user1",
         name = "Test User",
-        phoneNumber = "1234567890",
-        pinHash = "hash"
+        phoneNumber = "1234567890"
     )
 
     @Before

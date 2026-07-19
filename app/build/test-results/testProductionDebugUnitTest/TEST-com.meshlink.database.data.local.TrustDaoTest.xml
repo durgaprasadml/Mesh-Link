@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.meshlink.database.data.local.TrustDaoTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:12.347Z" hostname="Durgaprasads-MacBook-Air.local" time="0.047">
+  <properties/>
+  <testcase name="insert and retrieve peer trust" classname="com.meshlink.database.data.local.TrustDaoTest" time="0.02"/>
+  <testcase name="update trust score and level" classname="com.meshlink.database.data.local.TrustDaoTest" time="0.009"/>
+  <testcase name="get all peers returns all inserted peers" classname="com.meshlink.database.data.local.TrustDaoTest" time="0.01"/>
+  <testcase name="update peer trust updates existing record" classname="com.meshlink.database.data.local.TrustDaoTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -7,20 +7,20 @@ import javax.inject.Singleton
 
 @Singleton
 class FeatureFlagManager @Inject constructor(
-    context: Context
+    private val context: Context
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences(StorageConfig.PREFS_NAME, Context.MODE_PRIVATE)
 
     fun isFeatureEnabled(feature: FeatureFlag): Boolean {
         // Developer overrides take precedence in debug/internal builds
-        if (com.meshlink.BuildConfig.DEBUG_TOOLS_ENABLED && prefs.contains(feature.key)) {
+        if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) && prefs.contains(feature.key)) {
             return prefs.getBoolean(feature.key, feature.defaultValue)
         }
         return feature.defaultValue
     }
 
     fun setFeatureEnabled(feature: FeatureFlag, enabled: Boolean) {
-        if (com.meshlink.BuildConfig.DEBUG_TOOLS_ENABLED) {
+        if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             prefs.edit().putBoolean(feature.key, enabled).apply()
         }
     }

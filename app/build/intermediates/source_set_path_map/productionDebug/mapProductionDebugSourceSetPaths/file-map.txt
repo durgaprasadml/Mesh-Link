@@ -1,0 +1,98 @@
+com.meshlink.app-material3-release-0 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/01d5cec8317410b5767811928d229c8a/transformed/material3-release/res
+com.meshlink.app-room-runtime-2.6.1-1 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/04b3cd64d2b3baad9ebe25a90eec3f11/transformed/room-runtime-2.6.1/res
+com.meshlink.app-runtime-saveable-release-2 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/09b0955036e04abc88bd259f58e814bc/transformed/runtime-saveable-release/res
+com.meshlink.app-hilt-navigation-compose-1.2.0-3 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/0b3e99b1d13d6cf00096fd7a1d25c463/transformed/hilt-navigation-compose-1.2.0/res
+com.meshlink.app-lifecycle-viewmodel-savedstate-2.8.7-4 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/0cd8e9060c7d5552f6dc0ef71b2b5e7d/transformed/lifecycle-viewmodel-savedstate-2.8.7/res
+com.meshlink.app-lifecycle-livedata-core-ktx-2.8.7-5 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/0cf4441f680fd8b15194ad9ec6cc3b6e/transformed/lifecycle-livedata-core-ktx-2.8.7/res
+com.meshlink.app-tracing-ktx-1.2.0-6 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/110428ca3f4f3e8827113b52642d1c28/transformed/tracing-ktx-1.2.0/res
+com.meshlink.app-camera-view-1.4.0-7 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/116419e1110577365dcf6c3448f3e0c0/transformed/camera-view-1.4.0/res
+com.meshlink.app-runtime-release-8 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/11edb8e8824eebc47d287321a65ccc1b/transformed/runtime-release/res
+com.meshlink.app-datastore-release-9 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/12b1c15503014e6f2dad5a66e23471d9/transformed/datastore-release/res
+com.meshlink.app-foundation-release-10 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/165d6fe3283fdfc078925a0b0eeee856/transformed/foundation-release/res
+com.meshlink.app-ui-tooling-preview-release-11 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/17abfb838bb753b249f44ca8000a9bfc/transformed/ui-tooling-preview-release/res
+com.meshlink.app-emoji2-views-helper-1.3.0-12 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/18f29e6dba19757ecaaff43b8d5fc7d6/transformed/emoji2-views-helper-1.3.0/res
+com.meshlink.app-ui-text-release-13 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/19e9ed05f5a97ac61b409b0b47d05053/transformed/ui-text-release/res
+com.meshlink.app-emoji2-1.3.0-14 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/1d7fb158941bd0fddcb1f4b6abf6bc2a/transformed/emoji2-1.3.0/res
+com.meshlink.app-lifecycle-runtime-compose-release-15 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/1dbab912f1b929f1ab82bb8c658c149c/transformed/lifecycle-runtime-compose-release/res
+com.meshlink.app-firebase-crashlytics-19.2.1-16 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/20866b910613deaed50b42ea41ec5290/transformed/firebase-crashlytics-19.2.1/res
+com.meshlink.app-lifecycle-viewmodel-release-17 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/22dbdfa17dc792891e9cb41ea096df7d/transformed/lifecycle-viewmodel-release/res
+com.meshlink.app-core-ktx-1.13.1-18 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/273a7adc41886e93fc5aba90767e9e8e/transformed/core-ktx-1.13.1/res
+com.meshlink.app-ui-tooling-data-release-19 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/28e4e849f93f4bf4eb68863f8bd85b1d/transformed/ui-tooling-data-release/res
+com.meshlink.app-material-ripple-release-20 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/2934d33ff00ff67e496c59d600ef923c/transformed/material-ripple-release/res
+com.meshlink.app-activity-compose-1.9.3-21 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/2c720daf519b6e5fb5fbc5110d7d95f5/transformed/activity-compose-1.9.3/res
+com.meshlink.app-graphics-path-1.0.1-22 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/2f5d00e49270a64939b2579665ad9e6c/transformed/graphics-path-1.0.1/res
+com.meshlink.app-savedstate-1.2.1-23 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/318a7d804edce835fba4006cf97a4070/transformed/savedstate-1.2.1/res
+com.meshlink.app-lifecycle-viewmodel-compose-release-24 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/32181cba1a7bad7f826c02a352fcccb4/transformed/lifecycle-viewmodel-compose-release/res
+com.meshlink.app-ui-geometry-release-25 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/32892394e77cca3bb702f80e434b5225/transformed/ui-geometry-release/res
+com.meshlink.app-sqlite-2.4.0-26 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/3d051da06ff12b46bdb8bc0785aa45ec/transformed/sqlite-2.4.0/res
+com.meshlink.app-core-runtime-2.2.0-27 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/3f88478b97556f6ea0bc53749b79b4d3/transformed/core-runtime-2.2.0/res
+com.meshlink.app-animation-core-release-28 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/4486b0a581e49dc6149aa5189c48e06a/transformed/animation-core-release/res
+com.meshlink.app-datastore-preferences-core-release-29 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/4b1e703e749fe36bef85b3febb1827c2/transformed/datastore-preferences-core-release/res
+com.meshlink.app-camera-core-1.4.0-30 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/4d03e02499d19713c925bcb0952dc5d1/transformed/camera-core-1.4.0/res
+com.meshlink.app-security-crypto-1.1.0-alpha06-31 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/4d336e764bb1339daa22f8845eb3fb91/transformed/security-crypto-1.1.0-alpha06/res
+com.meshlink.app-sqlite-ktx-2.4.0-32 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/518dd9c9072f62196618e09f0dfb494b/transformed/sqlite-ktx-2.4.0/res
+com.meshlink.app-fragment-1.5.1-33 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/532671afbfd65d0364db7f3a23e3f122/transformed/fragment-1.5.1/res
+com.meshlink.app-camera-lifecycle-1.4.0-34 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/53f3fef611a971d0525f1e044445ccf6/transformed/camera-lifecycle-1.4.0/res
+com.meshlink.app-hilt-navigation-1.2.0-35 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/551cc35d8c2c65128da50745c3674437/transformed/hilt-navigation-1.2.0/res
+com.meshlink.app-tracing-1.2.0-36 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/55dccdaa3a86a2252b80f4dd984309f6/transformed/tracing-1.2.0/res
+com.meshlink.app-play-services-measurement-api-22.1.2-37 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/5877b48e5992a496e463fe4858595870/transformed/play-services-measurement-api-22.1.2/res
+com.meshlink.app-work-runtime-ktx-2.9.0-38 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/59946ebc226920ba3f80916ae8a67e14/transformed/work-runtime-ktx-2.9.0/res
+com.meshlink.app-sqlcipher-android-4.9.0-39 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/5a5d9656bd6a439dcada15d6b252b380/transformed/sqlcipher-android-4.9.0/res
+com.meshlink.app-lifecycle-service-2.8.7-40 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/5b8af555f6ed8e35505107deff910972/transformed/lifecycle-service-2.8.7/res
+com.meshlink.app-firebase-common-21.0.0-41 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/64012a1b834fffd922049d93734958f4/transformed/firebase-common-21.0.0/res
+com.meshlink.app-lifecycle-runtime-ktx-release-42 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/651f5789001a1c5033dd0f0b10229bfd/transformed/lifecycle-runtime-ktx-release/res
+com.meshlink.app-sqlite-framework-2.4.0-43 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/65ebe7d2cf7a6205233418e7efceeebf/transformed/sqlite-framework-2.4.0/res
+com.meshlink.app-navigation-common-2.8.3-44 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/6626a45301afd9fd349d3c4a70880354/transformed/navigation-common-2.8.3/res
+com.meshlink.app-annotation-experimental-1.4.1-45 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/674292995d9a73e3bee2448fc07d3260/transformed/annotation-experimental-1.4.1/res
+com.meshlink.app-savedstate-ktx-1.2.1-46 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/6b41195772878498908ad152eebc4329/transformed/savedstate-ktx-1.2.1/res
+com.meshlink.app-hilt-work-1.2.0-47 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/6eab945b3452f8ea54100f5d20b9a744/transformed/hilt-work-1.2.0/res
+com.meshlink.app-lifecycle-livedata-2.8.7-48 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/70fcafbe0153876459e4f6fb9737477e/transformed/lifecycle-livedata-2.8.7/res
+com.meshlink.app-ui-util-release-49 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/790bba0e0e69dad07a39578278a2db70/transformed/ui-util-release/res
+com.meshlink.app-animation-release-50 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/7a6a4d364bd3d1c78039f7a0f1ce0b5d/transformed/animation-release/res
+com.meshlink.app-camera-camera2-1.4.0-51 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/83a1a7a873ab08a90217fbe824cff4f8/transformed/camera-camera2-1.4.0/res
+com.meshlink.app-startup-runtime-1.1.1-52 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8672eae9a3d8549683e2e76ad92e5926/transformed/startup-runtime-1.1.1/res
+com.meshlink.app-datastore-preferences-release-53 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/868666f8a47f85638a8ddcdaa60e0a74/transformed/datastore-preferences-release/res
+com.meshlink.app-ui-test-manifest-1.7.4-54 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/87a44e0b7cbeffffbfacf919bd627c9e/transformed/ui-test-manifest-1.7.4/res
+com.meshlink.app-ads-adservices-1.0.0-beta05-55 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/88d1aa31f75ebc7a5544cb3030b240fa/transformed/ads-adservices-1.0.0-beta05/res
+com.meshlink.app-activity-ktx-1.9.3-56 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8ab0777c2299b3ec01768e7577a7ae31/transformed/activity-ktx-1.9.3/res
+com.meshlink.app-customview-poolingcontainer-1.0.0-57 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8bb1eef9866257a4404d3f41f227eb49/transformed/customview-poolingcontainer-1.0.0/res
+com.meshlink.app-foundation-layout-release-58 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/8e30d7ee09908c8cedcde6d8649f39a4/transformed/foundation-layout-release/res
+com.meshlink.app-material-release-59 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9cbc832b0c24b18efcb793ae3ebed2ef/transformed/material-release/res
+com.meshlink.app-ui-unit-release-60 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/9ee5ba64ea9f342b27c5fbcb36e3788b/transformed/ui-unit-release/res
+com.meshlink.app-profileinstaller-1.3.1-61 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/a99fef23b9280c7b24551612bf71c3a8/transformed/profileinstaller-1.3.1/res
+com.meshlink.app-appcompat-resources-1.6.1-62 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ab2c129b52e26fa561b341d8b27ce5b5/transformed/appcompat-resources-1.6.1/res
+com.meshlink.app-ui-tooling-release-63 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ae2ce2366b35f26822a71a3bb2709033/transformed/ui-tooling-release/res
+com.meshlink.app-lifecycle-livedata-core-2.8.7-64 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/af0eb549f189ceb32c2c98a2627374a3/transformed/lifecycle-livedata-core-2.8.7/res
+com.meshlink.app-datastore-core-release-65 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ba5fc52690edfea989c2ef5062003119/transformed/datastore-core-release/res
+com.meshlink.app-lifecycle-viewmodel-ktx-2.8.7-66 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ba6d21807ba3e3ecec7377d28360b162/transformed/lifecycle-viewmodel-ktx-2.8.7/res
+com.meshlink.app-activity-1.9.3-67 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/bb123de79f38f1e852c7a201c5b03242/transformed/activity-1.9.3/res
+com.meshlink.app-play-services-basement-18.4.0-68 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/bf066c8f5ecd813ef30c7fb834aca66f/transformed/play-services-basement-18.4.0/res
+com.meshlink.app-camera-video-1.4.0-69 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/bffc4359b626aadf02ee33dcc901cffa/transformed/camera-video-1.4.0/res
+com.meshlink.app-navigation-compose-2.8.3-70 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/c0c5fe5d5d23f5b08b849583457fb9f4/transformed/navigation-compose-2.8.3/res
+com.meshlink.app-lifecycle-process-2.8.7-71 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/c2c3b5f06d3e0260c52247b8760b5f6b/transformed/lifecycle-process-2.8.7/res
+com.meshlink.app-lifecycle-runtime-release-72 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/c2f6bac4ad27918888caaf14987c2ac5/transformed/lifecycle-runtime-release/res
+com.meshlink.app-core-1.13.1-73 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/c41d49117e0ce6d67188627300a7a515/transformed/core-1.13.1/res
+com.meshlink.app-ui-release-74 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/c51fecf1acefcb1d0ff3d6c97e81c21f/transformed/ui-release/res
+com.meshlink.app-room-ktx-2.6.1-75 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/c8c5325b6231add6c93d745626ae4cf7/transformed/room-ktx-2.6.1/res
+com.meshlink.app-coil-base-2.6.0-76 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/ca03993936fb477bc6afb04cb6a000ca/transformed/coil-base-2.6.0/res
+com.meshlink.app-material-icons-extended-release-77 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/cbf3aea803c2d9d4dcaf55e030716bde/transformed/material-icons-extended-release/res
+com.meshlink.app-ui-graphics-release-78 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/cc4d15c47cc99fe8b430f50ac1c7d12b/transformed/ui-graphics-release/res
+com.meshlink.app-material-icons-core-release-79 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/cf8dc068124691580c81e8580882c8c6/transformed/material-icons-core-release/res
+com.meshlink.app-appcompat-1.6.1-80 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/e243af107bbf63e5cee0533dd63c1529/transformed/appcompat-1.6.1/res
+com.meshlink.app-work-runtime-2.9.0-81 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/e55c1b4146a378e81cbcf79fa2f5ad16/transformed/work-runtime-2.9.0/res
+com.meshlink.app-navigation-common-ktx-2.8.3-82 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/e89e430c1a0b570d7e16863141a313f8/transformed/navigation-common-ktx-2.8.3/res
+com.meshlink.app-navigation-runtime-ktx-2.8.3-83 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/eb8500d4bd59040ff100666b3fef4248/transformed/navigation-runtime-ktx-2.8.3/res
+com.meshlink.app-play-services-base-18.5.0-84 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/f815926df045766e7f4b5181e6cf1bff/transformed/play-services-base-18.5.0/res
+com.meshlink.app-navigation-runtime-2.8.3-85 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/fa0957bc9c246bd2f608fb5c292625a5/transformed/navigation-runtime-2.8.3/res
+com.meshlink.app-ads-adservices-java-1.0.0-beta05-86 /Users/durgaprasadml/.gradle/caches/9.0.0/transforms/fdb2b504d312af634dd6616d64379196/transformed/ads-adservices-java-1.0.0-beta05/res
+com.meshlink.app-res-87 /Users/durgaprasadml/Documents/Mesh Link /app/build/generated/res/injectCrashlyticsMappingFileIdProductionDebug
+com.meshlink.app-res-88 /Users/durgaprasadml/Documents/Mesh Link /app/build/generated/res/injectCrashlyticsVersionControlInfoProductionDebug
+com.meshlink.app-res-89 /Users/durgaprasadml/Documents/Mesh Link /app/build/generated/res/processProductionDebugGoogleServices
+com.meshlink.app-production-90 /Users/durgaprasadml/Documents/Mesh Link /app/build/generated/res/resValues/production/debug
+com.meshlink.app-packageProductionDebugResources-91 /Users/durgaprasadml/Documents/Mesh Link /app/build/intermediates/incremental/productionDebug/packageProductionDebugResources/merged.dir
+com.meshlink.app-packageProductionDebugResources-92 /Users/durgaprasadml/Documents/Mesh Link /app/build/intermediates/incremental/productionDebug/packageProductionDebugResources/stripped.dir
+com.meshlink.app-productionDebug-93 /Users/durgaprasadml/Documents/Mesh Link /app/build/intermediates/merged_res/productionDebug/mergeProductionDebugResources
+com.meshlink.app-debug-94 /Users/durgaprasadml/Documents/Mesh Link /app/src/debug/res
+com.meshlink.app-main-95 /Users/durgaprasadml/Documents/Mesh Link /app/src/main/res
+com.meshlink.app-production-96 /Users/durgaprasadml/Documents/Mesh Link /app/src/production/res
+com.meshlink.app-productionDebug-97 /Users/durgaprasadml/Documents/Mesh Link /app/src/productionDebug/res

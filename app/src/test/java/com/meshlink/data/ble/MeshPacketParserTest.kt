@@ -1,5 +1,7 @@
 package com.meshlink.ble.data
 
+import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull

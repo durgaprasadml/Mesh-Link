@@ -3,7 +3,7 @@ package com.meshlink.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.meshlink.database.data.local.ChatDao
-import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.model.User
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
-    val user: UserEntity? = null,
+    val user: User? = null,
     val nearbyDevices: List<BleDevice> = emptyList(),
     val unreadChatsCount: Int = 0
 )
@@ -30,8 +30,8 @@ class HomeViewModel @Inject constructor(
     chatDao: ChatDao
 ) : ViewModel() {
 
-    private val _user = MutableStateFlow<UserEntity?>(null)
-    val user: StateFlow<UserEntity?> = _user.asStateFlow()
+    private val _user = MutableStateFlow<User?>(null)
+    val user: StateFlow<User?> = _user.asStateFlow()
 
     val uiState: StateFlow<HomeUiState> = combine(
         _user,

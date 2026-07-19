@@ -2,8 +2,8 @@ package com.meshlink.security.data
 
 import android.util.Base64
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.ble.data.MeshPacket
-import com.meshlink.ble.data.PacketType
+import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
 import com.meshlink.di.DefaultDispatcher
 import com.meshlink.domain.repository.UserRepository
 import java.security.PrivateKey

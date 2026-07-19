@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.meshlink.media.data.MediaTransferManagerTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:13.043Z" hostname="Durgaprasads-MacBook-Air.local" time="0.229">
+  <properties/>
+  <testcase name="test chunk creation generates META and CHUNK packets" classname="com.meshlink.media.data.MediaTransferManagerTest" time="0.119"/>
+  <testcase name="test receive META packet initiates tracking" classname="com.meshlink.media.data.MediaTransferManagerTest" time="0.11"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

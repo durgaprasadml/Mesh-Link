@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.meshlink.domain.usecase.messaging.MessagingUseCasesTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:12.435Z" hostname="Durgaprasads-MacBook-Air.local" time="0.132">
+  <properties/>
+  <testcase name="DeleteMessagesUseCase should call repository deleteMessages" classname="com.meshlink.domain.usecase.messaging.MessagingUseCasesTest" time="0.039"/>
+  <testcase name="GetBroadcastMessagesUseCase should emit broadcast messages" classname="com.meshlink.domain.usecase.messaging.MessagingUseCasesTest" time="0.046"/>
+  <testcase name="GetMessageUseCase should return message from repository" classname="com.meshlink.domain.usecase.messaging.MessagingUseCasesTest" time="0.006"/>
+  <testcase name="GetChatMessagesUseCase should emit messages from repository" classname="com.meshlink.domain.usecase.messaging.MessagingUseCasesTest" time="0.004"/>
+  <testcase name="DeleteChatUseCase should call repository deleteChat" classname="com.meshlink.domain.usecase.messaging.MessagingUseCasesTest" time="0.003"/>
+  <testcase name="MarkChatAsReadUseCase should call repository markChatAsRead" classname="com.meshlink.domain.usecase.messaging.MessagingUseCasesTest" time="0.002"/>
+  <testcase name="GetAllChatsUseCase should emit all chats" classname="com.meshlink.domain.usecase.messaging.MessagingUseCasesTest" time="0.032"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

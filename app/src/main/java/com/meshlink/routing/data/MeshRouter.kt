@@ -3,9 +3,9 @@ package com.meshlink.routing.data
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.analytics.data.MeshAnalytics
 import com.meshlink.ble.data.BleGattManager
-import com.meshlink.ble.data.MeshPacket
+import com.meshlink.domain.model.MeshPacket
 import com.meshlink.ble.data.MeshPacketParser
-import com.meshlink.ble.data.PacketType
+import com.meshlink.domain.model.PacketType
 import com.meshlink.database.data.local.RelayDao
 import com.meshlink.database.data.local.RelayPacketEntity
 import com.meshlink.di.IoDispatcher
@@ -118,8 +118,8 @@ class MeshRouter @Inject constructor(
                 targetId = entity.targetId,
                 payload = entity.payload,
                 type = try { PacketType.valueOf(entity.type) } catch (_: Exception) { PacketType.TEXT },
-                priority = try { com.meshlink.ble.data.PacketPriority.valueOf(entity.priority) } catch (_: Exception) { com.meshlink.ble.data.PacketPriority.NORMAL },
-                broadcastType = try { com.meshlink.ble.data.BroadcastType.valueOf(entity.broadcastType) } catch (_: Exception) { com.meshlink.ble.data.BroadcastType.NONE },
+                priority = try { com.meshlink.domain.model.PacketPriority.valueOf(entity.priority) } catch (_: Exception) { com.meshlink.domain.model.PacketPriority.NORMAL },
+                broadcastType = try { com.meshlink.domain.model.BroadcastType.valueOf(entity.broadcastType) } catch (_: Exception) { com.meshlink.domain.model.BroadcastType.NONE },
                 transferId = entity.transferId,
                 chunkIndex = entity.chunkIndex,
                 totalChunks = entity.totalChunks,

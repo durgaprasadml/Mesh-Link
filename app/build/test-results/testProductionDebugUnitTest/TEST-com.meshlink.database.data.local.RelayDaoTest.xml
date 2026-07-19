@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.meshlink.database.data.local.RelayDaoTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:12.297Z" hostname="Durgaprasads-MacBook-Air.local" time="0.043">
+  <properties/>
+  <testcase name="insert and retrieve packets for target" classname="com.meshlink.database.data.local.RelayDaoTest" time="0.018"/>
+  <testcase name="delete expired packets" classname="com.meshlink.database.data.local.RelayDaoTest" time="0.011"/>
+  <testcase name="enforce storage cap" classname="com.meshlink.database.data.local.RelayDaoTest" time="0.014"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

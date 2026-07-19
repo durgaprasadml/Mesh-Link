@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.meshlink.database.data.local.DatabaseConcurrencyTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:12.116Z" hostname="Durgaprasads-MacBook-Air.local" time="0.169">
+  <properties/>
+  <testcase name="concurrent transactions execute safely" classname="com.meshlink.database.data.local.DatabaseConcurrencyTest" time="0.083"/>
+  <testcase name="concurrent inserts into same table do not lose data or corrupt database" classname="com.meshlink.database.data.local.DatabaseConcurrencyTest" time="0.086"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

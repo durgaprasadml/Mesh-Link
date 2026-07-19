@@ -1,7 +1,7 @@
 package com.meshlink.ui.mesh
 
 import androidx.lifecycle.ViewModel
-import com.meshlink.ble.data.MeshPacket
+import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.repository.MeshRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -33,7 +33,7 @@ class MeshDebugViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             while (true) {
-                _routeTable.value = meshRepository.meshRouter.routeTable.mapValues { it.value.nextHop }
+                _routeTable.value = meshRepository.getRouteTable()
                 delay(1000)
             }
         }
@@ -46,7 +46,7 @@ class MeshDebugViewModel @Inject constructor(
         MeshDebugUiState(
             scannedDevices = devices,
             routeTable = routes,
-            localIdentifier = meshRepository.meshRouter.localMeshId
+            localIdentifier = meshRepository.getLocalMeshId()
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MeshDebugUiState())
 }

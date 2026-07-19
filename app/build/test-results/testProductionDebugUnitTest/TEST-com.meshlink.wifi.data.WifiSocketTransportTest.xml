@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.meshlink.wifi.data.WifiSocketTransportTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-19T03:24:16.166Z" hostname="Durgaprasads-MacBook-Air.local" time="3.925">
+  <properties/>
+  <testcase name="massive packet serialization handles large payloads over TCP" classname="com.meshlink.wifi.data.WifiSocketTransportTest" time="2.076"/>
+  <testcase name="disconnect cleans up streams and socket state" classname="com.meshlink.wifi.data.WifiSocketTransportTest" time="0.409"/>
+  <testcase name="startServer and connectAsClient establishes successful socket connection" classname="com.meshlink.wifi.data.WifiSocketTransportTest" time="1.44"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

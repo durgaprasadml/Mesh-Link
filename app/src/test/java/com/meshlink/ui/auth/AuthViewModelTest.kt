@@ -1,7 +1,7 @@
 package com.meshlink.ui.auth
 
 import app.cash.turbine.test
-import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.model.User
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.util.MainDispatcherRule
 import io.mockk.coEvery
@@ -111,7 +111,7 @@ class AuthViewModelTest {
 
     @Test
     fun `login success emits LoginSuccess`() = runTest {
-        val user = UserEntity("mesh123", "Alice", "123", "hash")
+        val user = User("mesh123", "Alice", "123")
         coEvery { userRepository.loginUser("1234567890", "1234") } returns Result.success(user)
         
         viewModel.uiEvent.test {

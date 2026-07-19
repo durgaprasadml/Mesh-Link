@@ -1,0 +1,38 @@
+[
+    {
+        "merged": "com.meshlink.app-productionDebug-94:/xml_file_paths.xml.flat",
+        "source": "com.meshlink.app-main-96:/xml/file_paths.xml"
+    },
+    {
+        "merged": "com.meshlink.app-productionDebug-94:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.meshlink.app-main-96:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.meshlink.app-productionDebug-94:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.meshlink.app-main-96:/drawable/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "com.meshlink.app-productionDebug-94:/xml_data_extraction_rules.xml.flat",
+        "source": "com.meshlink.app-main-96:/xml/data_extraction_rules.xml"
+    },
+    {
+        "merged": "com.meshlink.app-productionDebug-94:/mipmap-xxxhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.meshlink.app-main-96:/mipmap-xxxhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.meshlink.app-productionDebug-94:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "com.meshlink.app-main-96:/mipmap-xxxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.meshlink.app-productionDebug-94:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "com.meshlink.app-main-96:/mipmap-xxxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.meshlink.app-productionDebug-94:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.meshlink.app-main-96:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.meshlink.app-productionDebug-94:/xml_backup_rules.xml.flat",
+        "source": "com.meshlink.app-main-96:/xml/backup_rules.xml"
+    }
+]

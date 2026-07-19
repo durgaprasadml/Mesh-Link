@@ -72,6 +72,8 @@ class BleRepositoryImpl @Inject constructor(
     private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
     private val discoveryManager: DiscoveryManager,
     private val connectionManager: BleConnectionManager,
+    private val routingCoordinator: RoutingCoordinator,
+    private val meshMessagingManager: MeshMessagingManager,
     private val voiceTransport: VoiceTransport,
     private val videoTransport: VideoTransport,
     @ApplicationContext private val context: Context
@@ -113,7 +115,7 @@ class BleRepositoryImpl @Inject constructor(
                                     val localPeerId = networkId(user.meshId)
                                     val packetBase = generateSignedKeyExchange(localPeerId)
                                     val packet = packetBase.copy(targetId = peerId)
-                                    dispatchSinglePacket(peerId, packet)
+                                    meshMessagingManager.dispatchSinglePacket(peerId, packet)
                                 }
                             }
                         }
@@ -130,37 +132,12 @@ class BleRepositoryImpl @Inject constructor(
     override val incomingMeshPayloads: SharedFlow<Pair<String, MeshPacket>> = meshRouter.incomingPayloads
     override val transferProgress = mediaTransferManager.transferProgress
 
-    private fun networkId(peerId: String): String = BleConstants.toNetworkId(peerId)
-    private fun normalizePeerId(peerIdOrAddress: String): String {
-        if (BleConstants.isBluetoothAddress(peerIdOrAddress)) {
-            val routedPeerId = meshRouter.routeTable.entries
-                .firstOrNull { it.value.nextHop == peerIdOrAddress }?.key
-            if (routedPeerId != null) return routedPeerId
-
-            return scannedDevices.value.values
-                .firstOrNull { it.address == peerIdOrAddress }
-                ?.meshId
-                ?: peerIdOrAddress
-        }
-        return networkId(peerIdOrAddress)
-    }
-    override fun resolveChatId(peerIdOrAddress: String): String = normalizePeerId(peerIdOrAddress)
-    private fun outgoingChatId(targetMeshId: String): String = normalizePeerId(targetMeshId)
-    private fun incomingChatId(senderMeshId: String): String = normalizePeerId(senderMeshId)
-
-    private fun resolvePeerAddress(peerIdOrAddress: String): String? {
-        if (BleConstants.isBluetoothAddress(peerIdOrAddress)) return peerIdOrAddress
-
-        val targetId = networkId(peerIdOrAddress)
-        val routeAddress = meshRouter.routeTable[targetId]?.nextHop
-        if (routeAddress != null && BleConstants.isBluetoothAddress(routeAddress)) {
-            return routeAddress
-        }
-
-        return scannedDevices.value.values
-            .firstOrNull { it.meshId == targetId }
-            ?.address
-    }
+    private fun networkId(peerId: String): String = routingCoordinator.networkId(peerId)
+    private fun normalizePeerId(peerIdOrAddress: String): String = routingCoordinator.normalizePeerId(peerIdOrAddress)
+    override fun resolveChatId(peerIdOrAddress: String): String = routingCoordinator.resolveChatId(peerIdOrAddress)
+    private fun outgoingChatId(targetMeshId: String): String = routingCoordinator.outgoingChatId(targetMeshId)
+    private fun incomingChatId(senderMeshId: String): String = routingCoordinator.incomingChatId(senderMeshId)
+    private fun resolvePeerAddress(peerIdOrAddress: String): String? = routingCoordinator.resolvePeerAddress(peerIdOrAddress)
 
     
     override suspend fun setLocalMeshId(meshId: String) {
@@ -173,7 +150,7 @@ class BleRepositoryImpl @Inject constructor(
             scope.launch {
                 val user = userRepository.getLocalUser()
                 val senderId = user?.let { networkId(it.meshId) } ?: ""
-                dispatchSinglePacket(peerId, packet.copy(senderId = senderId))
+                meshMessagingManager.dispatchSinglePacket(peerId, packet.copy(senderId = senderId))
             }
         }
         rekeyManager.forceKeyExchangeCallback = { peerId ->
@@ -186,7 +163,7 @@ class BleRepositoryImpl @Inject constructor(
                         val localPeerId = networkId(user.meshId)
                         val packetBase = generateSignedKeyExchange(localPeerId)
                         val packet = packetBase.copy(targetId = peerId)
-                        dispatchSinglePacket(peerId, packet)
+                        meshMessagingManager.dispatchSinglePacket(peerId, packet)
                     }
                 }
             }
@@ -199,7 +176,7 @@ class BleRepositoryImpl @Inject constructor(
         
         transferManager.onTransferCompleted = { session ->
             scope.launch {
-                receiveMediaMessage(session.transferId, session.filePath!!, session.mimeType, session.senderId)
+                meshMessagingManager.receiveMediaMessage(session.transferId, session.filePath!!, session.mimeType, session.senderId)
             }
         }
 
@@ -216,13 +193,13 @@ class BleRepositoryImpl @Inject constructor(
         // Wire WifiSocketTransport so it routes incoming packets just like MeshRouter
         wifiSocketTransport.onPacketReceived = { packet ->
             scope.launch {
-                handleIncomingPacket(packet)
+                meshMessagingManager.handleIncomingPacket(packet)
             }
         }
 
         scope.launch {
             incomingMeshPayloads.collect { (_, packet) ->
-                handleIncomingPacket(packet)
+                meshMessagingManager.handleIncomingPacket(packet)
             }
         }
 
@@ -303,118 +280,7 @@ class BleRepositoryImpl @Inject constructor(
         }
     }
 
-    private suspend fun handleIncomingPacket(packet: MeshPacket) {
-        if (packet.targetId == "BROADCAST") {
-            // Broadcasts are not encrypted
-        } else {
-            val myMeshId = userRepository.getLocalUser()?.meshId
-            if (myMeshId != null && packet.targetId != networkId(myMeshId)) {
-                // Not for me, just route it without decrypting
-                MeshLogger.d(TAG, "Routing packet to ${packet.targetId.takeLast(8)}")
-                return
-            }
-        }
-
-        var processedPacket = packet
-
-        if (packet.encrypted && packet.type != PacketType.KEY_EXCHANGE) {
-            var finalPayload = packet.payload
-            var validAad: ByteArray? = null
-
-            var usePreviousKey = false
-
-            if (finalPayload.startsWith("v2|")) {
-                val unwrapped = sessionManager.validateAndUnwrap(packet.senderId, finalPayload)
-                if (unwrapped == null) {
-                    MeshLogger.w(TAG, "Dropping packet: session validation failed")
-                    val address = resolvePeerAddress(packet.senderId)
-                    if (address != null) checkAndTriggerHandshake(address)
-                    return
-                }
-                validAad = unwrapped.first
-                finalPayload = unwrapped.second
-                val packetKv = unwrapped.third
-                val session = sessionManager.getSession(packet.senderId)
-                if (session != null && packetKv == session.previousKeyVersion) {
-                    usePreviousKey = true
-                }
-            }
-
-            val decrypted = cryptoManager.decryptOrPassthrough(finalPayload, packet.senderId, validAad, usePreviousKey)
-            if (decrypted == finalPayload && !finalPayload.startsWith("{")) {
-                MeshLogger.w(TAG, "Dropping packet: Failed to decrypt payload.")
-                val address = resolvePeerAddress(packet.senderId)
-                if (address != null) checkAndTriggerHandshake(address)
-                return
-            }
-            trustManager.increaseTrustScore(packet.senderId, 1)
-            processedPacket = packet.copy(payload = decrypted)
-        }
-
-        try {
-            when (processedPacket.type) {
-                PacketType.KEY_EXCHANGE -> {
-                    handleKeyExchange(packet)
-                }
-                PacketType.TEXT -> {
-                    if (packet.targetId == "BROADCAST") {
-                        receiveBroadcastTextMessage(packet)
-                    } else {
-                        receiveMessage(packet)
-                    }
-                }
-                PacketType.MEDIA_META,
-                PacketType.MEDIA_CHUNK,
-                PacketType.MEDIA_ACK,
-                PacketType.MEDIA_NACK -> {
-                    if (packet.type == PacketType.MEDIA_META && packet.transferId != null) {
-                        insertPlaceholderIncomingMedia(packet)
-                    }
-                    transferManager.handleIncomingPacket(packet)
-                }
-                PacketType.LOCATION -> {
-                    receiveLocationMessage(packet)
-                }
-                PacketType.SOS -> {
-                    receiveSosMessage(packet)
-                }
-                PacketType.DELIVERY_ACK -> {
-                    chatDao.updateMessageStatus(packet.payload, DeliveryStatus.DELIVERED)
-                }
-                PacketType.READ_RECEIPT -> {
-                    chatDao.updateMessageStatus(packet.payload, DeliveryStatus.SEEN)
-                }
-                PacketType.WIFI_NEGOTIATION -> {
-                    handleWifiNegotiation(packet)
-                }
-                PacketType.SESSION_REKEY -> {
-                    rekeyManager.handleRekeyPacket(packet.senderId, packet.payload, cryptoManager.getPeerPublicKey(packet.senderId))
-                }
-                PacketType.VOICE_SIGNAL,
-                PacketType.VOICE_FRAME -> {
-                    voiceTransport.handleIncomingPacket(packet)
-                }
-                PacketType.VIDEO_SIGNAL,
-                PacketType.VIDEO_FRAME -> {
-                    videoTransport.handleIncomingPacket(packet)
-                }
-                PacketType.BEACON,
-                PacketType.INCIDENT_REPORT,
-                PacketType.CHECK_IN,
-                PacketType.FORM_SYNC,
-                PacketType.RESOURCE_SYNC,
-                PacketType.MAP_SYNC -> {
-                    // Handled elsewhere or not needed right now
-                }
-                else -> {
-                    // Fallback
-                }
-            }
-        } catch (e: Exception) {
-            MeshLogger.e(TAG, "Error handling packet: ${e.message}")
-        }
-    }
-
+    
     private suspend fun retryPendingMessages() {
         val pending = chatDao.getMessagesByStatus(DeliveryStatus.PENDING)
         if (pending.isEmpty()) return
@@ -468,7 +334,7 @@ class BleRepositoryImpl @Inject constructor(
                             mimeType = if (msg.messageType == MessageType.IMAGE) "image/jpeg" else "audio/m4a",
                             transferId = msg.messageId
                         )
-                        if (dispatchMediaPackets(msg.chatId, packets)) {
+                        if (meshMessagingManager.dispatchMediaPackets(msg.chatId, packets)) {
                             chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
                         }
                     }
@@ -493,7 +359,7 @@ class BleRepositoryImpl @Inject constructor(
                         type = PacketType.LOCATION,
                         encrypted = isEnc
                     )
-                    if (dispatchSinglePacket(msg.chatId, packet)) {
+                    if (meshMessagingManager.dispatchSinglePacket(msg.chatId, packet)) {
                         chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
                     }
                 }
@@ -523,11 +389,7 @@ class BleRepositoryImpl @Inject constructor(
         }
     }
 
-    private fun hasDeliveryPath(targetPeerIdOrAddress: String): Boolean {
-        val connectedNodes = connectionManager.connectedServers + connectionManager.activeClients
-        val directReachable = resolvePeerAddress(targetPeerIdOrAddress) != null
-        return directReachable || connectedNodes.isNotEmpty()
-    }
+    private fun hasDeliveryPath(targetPeerIdOrAddress: String): Boolean = routingCoordinator.hasDeliveryPath(targetPeerIdOrAddress)
 
     /**
      * FIX ISSUE 1 & 2: Dispatch text via mesh.
@@ -552,26 +414,8 @@ class BleRepositoryImpl @Inject constructor(
         return true
     }
 
-    private fun dispatchMediaPackets(targetPeerId: String, packets: List<MeshPacket>): Boolean {
-        connectToPeer(targetPeerId)
-        connectToAllScannedDevices()
-        if (!hasDeliveryPath(targetPeerId)) return false
-        packets.forEach { pkt ->
-            meshRouter.sendMediaPacket(pkt.copy(encrypted = false))
-        }
-        return true
-    }
-
-    private fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): Boolean {
-        connectToPeer(targetPeerId)
-        connectToAllScannedDevices()
-        if (!hasDeliveryPath(targetPeerId)) return false
-        meshRouter.sendMediaPacket(packet)
-        return true
-    }
-
-    // ────────── Crypto Helpers ──────────
-
+    
+    
     private fun encryptAndWrapPayload(
         plaintext: String,
         targetPeerId: String,
@@ -782,524 +626,31 @@ class BleRepositoryImpl @Inject constructor(
     // ────────── Text Messages (ENCRYPTED) ──────────
 
     override suspend fun sendMessage(message: com.meshlink.domain.model.Message, chatName: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = networkId(user.meshId)
-        val targetPeerId = outgoingChatId(message.chatId)
-        meshRouter.localMeshId = localPeerId
-
-        // FIX ISSUE 2: Connect to target AND all scanned devices for mesh relay
-        connectToPeer(message.chatId)
-        connectToAllScannedDevices()
-
-        val messageId = message.messageId
-
-        // Wrap text + sender name in JSON so receiver knows who we are
-        val wrappedPayload = JSONObject().apply {
-            put("text", message.text)
-            put("senderName", user.name)
-        }.toString()
-
-        // Encrypt the payload
-        val reqEnc = userRepository.isEncryptionEnabled.first()
-        val result = encryptAndWrapPayload(wrappedPayload, targetPeerId, reqEnc, messageId)
-        if (result == null) return
-        val (payload, isEncrypted) = result
-        // FIX ISSUE 1: Pass messageId as packetId so retries use the same ID
-        if (dispatchTextMessage(targetPeerId, payload, localPeerId, isEncrypted, messageId)) {
-            chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
-        }
+        meshMessagingManager.sendMessage(message, chatName)
     }
-
-    private suspend fun receiveMessage(packet: MeshPacket) {
-        val chatId = incomingChatId(packet.senderId)
-
-        // Decrypt if encrypted
-        val rawPayload = if (packet.encrypted) {
-            cryptoManager.decryptOrPassthrough(packet.payload, packet.senderId)
-        } else {
-            packet.payload
-        }
-
-        // Try to parse as JSON (new format with senderName), fall back to plain text
-        val (plaintext, senderName) = try {
-            val json = JSONObject(rawPayload)
-            val text = json.optString("text", rawPayload)
-            val name = json.optString("senderName", packet.senderId.takeLast(8))
-            text to name
-        } catch (_: Exception) {
-            // Legacy plain text packet
-            rawPayload to packet.senderId.takeLast(8)
-        }
-
-        val message = MessageEntity(
-            messageId = packet.packetId,
-            chatId = chatId,
-            senderId = packet.senderId,
-            text = plaintext,
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = MessageType.TEXT
-        )
-        chatDao.insertMessageAndUpdateChat(message, senderName)
-
-        // FIX: Phase 3 - Send Delivery ACK
-        userRepository.getLocalUser()?.let { user ->
-            val localPeerId = networkId(user.meshId)
-            val ackPacket = MeshPacket(
-                senderId = localPeerId,
-                targetId = packet.senderId,
-                payload = packet.packetId,
-                type = PacketType.DELIVERY_ACK,
-                encrypted = false
-            )
-            dispatchSinglePacket(packet.senderId, ackPacket)
-        }
-
-        NotificationHelper.showMessageNotification(context, packet.senderId, senderName, plaintext)
-    }
-
-    // ────────── Image Messages (ENCRYPTED metadata) ──────────
 
     override suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = networkId(user.meshId)
-        val targetPeerId = outgoingChatId(targetMeshId)
-        meshRouter.localMeshId = localPeerId
-
-        // Connect to target and all mesh peers for relay
-        connectToPeer(targetMeshId)
-        connectToAllScannedDevices()
-
-        // Compress image: max 800px, ≤200KB JPEG
-        val compressedBytes = withContext(Dispatchers.IO) {
-            ImageCompressor.compress(context, imageUri)
-        }
-        if (compressedBytes == null) {
-            MeshLogger.e(TAG, "sendImage: compression failed for $imageUri")
-            return
-        }
-        MeshLogger.d(TAG, "sendImage: compressed to ${compressedBytes.size / 1000}KB")
-
-        // Save local copy
-        val localFile = withContext(Dispatchers.IO) {
-            val mediaDir = File(context.filesDir, "mesh_media")
-            if (!mediaDir.exists()) mediaDir.mkdirs()
-            File(mediaDir, "img_${System.currentTimeMillis()}.jpg").apply {
-                writeBytes(compressedBytes)
-            }
-        }
-
-        val chatId = targetPeerId
-        val messageId = UUID.randomUUID().toString()
-        val message = MessageEntity(
-            messageId   = messageId,
-            chatId      = chatId,
-            senderId    = localPeerId,
-            text        = "📷 Image",
-            timestamp   = System.currentTimeMillis(),
-            isFromMe    = true,
-            status      = DeliveryStatus.PENDING,
-            messageType = MessageType.IMAGE,
-            mediaPath   = localFile.absolutePath
-        )
-        chatDao.insertMessageAndUpdateChat(message, chatName)
-        transferManager.sendFile(
-            file = localFile,
-            senderId = localPeerId,
-            targetId = targetPeerId,
-            transferId = messageId
-        )
-        chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
+        meshMessagingManager.sendImage(targetMeshId, imageUri, chatName)
     }
-
-    private suspend fun receiveMediaMessage(completedTransferId: String, completedFilePath: String, completedMimeType: String, completedSenderId: String) {
-        val isImage = completedMimeType.contains("image")
-        val isVoice = completedMimeType.contains("audio")
-
-        val messageType = when {
-            isImage -> MessageType.IMAGE
-            isVoice -> MessageType.VOICE
-            else -> MessageType.TEXT
-        }
-
-        val previewText = when {
-            isImage -> "📷 Image"
-            isVoice -> "🎤 Voice Note"
-            else -> "📎 File"
-        }
-
-        val chatId = incomingChatId(completedSenderId)
-        val senderName = completedSenderId.takeLast(8)
-
-        val message = MessageEntity(
-            messageId = completedTransferId,
-            chatId = chatId,
-            senderId = completedSenderId,
-            text = previewText,
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = messageType,
-            mediaPath = completedFilePath
-        )
-        chatDao.insertMessageAndUpdateChat(message, senderName)
-        
-        // FIX: Phase 3 - Send Delivery ACK for Media
-        userRepository.getLocalUser()?.let { user ->
-            val localPeerId = networkId(user.meshId)
-            val ackPacket = MeshPacket(
-                senderId = localPeerId,
-                targetId = completedSenderId,
-                payload = completedTransferId,
-                type = PacketType.DELIVERY_ACK,
-                encrypted = false
-            )
-            dispatchSinglePacket(completedSenderId, ackPacket)
-        }
-
-        NotificationHelper.showMessageNotification(context, completedSenderId, senderName, previewText)
-    }
-
-    private suspend fun insertPlaceholderIncomingMedia(packet: MeshPacket) {
-        val transferId = packet.transferId ?: return
-        if (chatDao.getMessageByUuid(transferId) != null) return // Already have a placeholder or completed message
-
-        val isImage = packet.mimeType?.contains("image") == true
-        val isVoice = packet.mimeType?.contains("audio") == true
-
-        val messageType = when {
-            isImage -> MessageType.IMAGE
-            isVoice -> MessageType.VOICE
-            else -> MessageType.TEXT
-        }
-
-        val previewText = when {
-            isImage -> "📷 Receiving Image..."
-            isVoice -> "🎤 Receiving Voice Note..."
-            else -> "📎 Receiving File..."
-        }
-
-        val chatId = incomingChatId(packet.senderId)
-        val senderName = packet.senderId.takeLast(8)
-
-        val message = MessageEntity(
-            messageId = transferId,
-            chatId = chatId,
-            senderId = packet.senderId,
-            text = previewText,
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.PENDING,
-            messageType = messageType,
-            mediaPath = null // Missing until complete
-        )
-        chatDao.insertMessageAndUpdateChat(message, senderName)
-    }
-
-    // ────────── Voice Notes (ENCRYPTED metadata) ──────────
 
     override suspend fun sendVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = networkId(user.meshId)
-        val targetPeerId = outgoingChatId(targetMeshId)
-        meshRouter.localMeshId = localPeerId
-        connectToPeer(targetMeshId)
-
-        val voiceBytes = withContext(Dispatchers.IO) {
-            val voiceFile = File(filePath)
-            if (!voiceFile.exists()) return@withContext null
-            voiceFile.readBytes()
-        } ?: return
-
-        val chatId = targetPeerId
-        val messageId = UUID.randomUUID().toString()
-        val message = MessageEntity(
-            messageId = messageId,
-            chatId = chatId,
-            senderId = localPeerId,
-            text = "🎤 Voice Note",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = true,
-            status = DeliveryStatus.PENDING,
-            messageType = MessageType.VOICE,
-            mediaPath = filePath,
-            mediaDurationMs = durationMs
-        )
-        chatDao.insertMessageAndUpdateChat(message, chatName)
-        transferManager.sendFile(
-            file = File(filePath),
-            senderId = localPeerId,
-            targetId = targetPeerId,
-            transferId = messageId,
-            priority = com.meshlink.transfer.TransferPriority.HIGH
-        )
-        chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
+        meshMessagingManager.sendVoiceNote(targetMeshId, filePath, durationMs, chatName)
     }
-
-    // ────────── Location (ENCRYPTED GPS payload) ──────────
 
     override suspend fun sendLocation(targetMeshId: String, chatName: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = networkId(user.meshId)
-        val targetPeerId = outgoingChatId(targetMeshId)
-        meshRouter.localMeshId = localPeerId
-        connectToPeer(targetMeshId)
-
-        val location = locationProvider.getCurrentLocation()
-        val lat = location?.latitude ?: 0.0
-        val lng = location?.longitude ?: 0.0
-        val battery = location?.batteryPercent ?: locationProvider.getBatteryPercent()
-
-        val payloadJson = JSONObject().apply {
-            put("lat", lat)
-            put("lng", lng)
-            put("battery", battery)
-            put("timestamp", System.currentTimeMillis())
-            put("senderName", user.name)
-        }.toString()
-
-        // Encrypt GPS coordinates
-        val reqEnc = userRepository.isEncryptionEnabled.first()
-        val generatedMessageId = java.util.UUID.randomUUID().toString()
-        val result = encryptAndWrapPayload(payloadJson, targetPeerId, reqEnc, generatedMessageId)
-        if (result == null) return
-        val (encPayload, isEnc) = result
-
-        val packet = MeshPacket(
-            packetId = generatedMessageId,
-            senderId = localPeerId,
-            targetId = targetPeerId,
-            payload = encPayload,
-            type = PacketType.LOCATION,
-            encrypted = isEnc
-        )
-        val locationDispatched = dispatchSinglePacket(targetPeerId, packet)
-
-        val chatId = targetPeerId
-        val messageId = packet.packetId
-        val message = MessageEntity(
-            messageId = messageId,
-            chatId = chatId,
-            senderId = localPeerId,
-            text = "📍 Location: $lat, $lng",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = true,
-            status = if (locationDispatched) DeliveryStatus.SENT else DeliveryStatus.PENDING,
-            messageType = MessageType.LOCATION,
-            latitude = lat,
-            longitude = lng,
-            batteryPercent = battery
-        )
-        chatDao.insertMessageAndUpdateChat(message, chatName)
+        meshMessagingManager.sendLocation(targetMeshId, chatName)
     }
-
-    private suspend fun receiveLocationMessage(packet: MeshPacket) {
-        // Decrypt GPS payload
-        val rawPayload = if (packet.encrypted) {
-            cryptoManager.decryptOrPassthrough(packet.payload, packet.senderId)
-        } else {
-            packet.payload
-        }
-
-        val json = try { JSONObject(rawPayload) } catch (_: Exception) { return }
-        val lat = json.optDouble("lat", 0.0)
-        val lng = json.optDouble("lng", 0.0)
-        val battery = json.optInt("battery", -1)
-        val senderName = json.optString("senderName", packet.senderId.takeLast(8))
-
-        val chatId = incomingChatId(packet.senderId)
-
-        val message = MessageEntity(
-            messageId = packet.packetId,
-            chatId = chatId,
-            senderId = packet.senderId,
-            text = "📍 Location: $lat, $lng",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = MessageType.LOCATION,
-            latitude = lat,
-            longitude = lng,
-            batteryPercent = battery
-        )
-        chatDao.insertMessageAndUpdateChat(message, senderName)
-        
-        // FIX: Phase 3 - Send Delivery ACK for Location
-        userRepository.getLocalUser()?.let { user ->
-            val localPeerId = networkId(user.meshId)
-            val ackPacket = MeshPacket(
-                senderId = localPeerId,
-                targetId = packet.senderId,
-                payload = packet.packetId,
-                type = PacketType.DELIVERY_ACK,
-                encrypted = false
-            )
-            dispatchSinglePacket(packet.senderId, ackPacket)
-        }
-    }
-
-    // ────────── Read Receipts ──────────
 
     override suspend fun sendReadReceipts(chatId: String) {
-        val unreadIds = chatDao.getUnreadIncomingMessages(chatId)
-        if (unreadIds.isEmpty()) return
-
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = networkId(user.meshId)
-
-        // Mark as seen locally
-        chatDao.markMessagesAsSeen(unreadIds)
-
-        // Send READ_RECEIPT packets
-        // The chatId is the target meshId (for direct chats)
-        val targetPeerId = outgoingChatId(chatId)
-        if (targetPeerId == "BROADCAST") return // No read receipts for broadcasts
-
-        unreadIds.forEach { msgId ->
-            val receiptPacket = MeshPacket(
-                senderId = localPeerId,
-                targetId = targetPeerId,
-                payload = msgId, // The ID of the message being marked as seen
-                type = PacketType.READ_RECEIPT,
-                encrypted = false
-            )
-            dispatchSinglePacket(targetPeerId, receiptPacket)
-        }
+        meshMessagingManager.sendReadReceipts(chatId)
     }
 
-    // ────────── SOS Broadcast (UNENCRYPTED — emergency must be readable by all) ──────────
-
     override suspend fun sendSos() {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = networkId(user.meshId)
-        meshRouter.localMeshId = localPeerId
-
-        val location = locationProvider.getCurrentLocation()
-        val lat = location?.latitude ?: 0.0
-        val lng = location?.longitude ?: 0.0
-        val battery = location?.batteryPercent ?: locationProvider.getBatteryPercent()
-
-        val payloadJson = JSONObject().apply {
-            put("lat", lat)
-            put("lng", lng)
-            put("battery", battery)
-            put("timestamp", System.currentTimeMillis())
-            put("senderName", user.name)
-        }.toString()
-
-        // SOS is intentionally NOT encrypted — all nodes must be able to read it
-        val packet = MeshPacket(
-            senderId = localPeerId,
-            targetId = "BROADCAST",
-            payload = payloadJson,
-            type = PacketType.SOS,
-            encrypted = false,
-            ttl = 15
-        )
-        meshRouter.sendMediaPacket(packet)
+        meshMessagingManager.sendSos()
     }
 
     override suspend fun broadcastMessage(messageText: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = networkId(user.meshId)
-        meshRouter.localMeshId = localPeerId
-
-        val payloadJson = JSONObject().apply {
-            put("text", "[BROADCAST] $messageText")
-            put("senderName", user.name)
-            put("timestamp", System.currentTimeMillis())
-        }.toString()
-
-        val packet = MeshPacket(
-            senderId = localPeerId,
-            targetId = "BROADCAST",
-            payload = payloadJson,
-            type = PacketType.TEXT,
-            encrypted = false,
-            ttl = 15
-        )
-        meshRouter.sendMediaPacket(packet)
-
-        // FIX ERROR 3: Store sent broadcast in Room so BroadcastScreen can display it
-        val messageId = packet.packetId
-        val message = MessageEntity(
-            messageId = messageId,
-            chatId = "BROADCAST",
-            senderId = localPeerId,
-            text = "[BROADCAST] $messageText",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = true,
-            status = DeliveryStatus.SENT,
-            messageType = MessageType.TEXT
-        )
-        chatDao.insertMessage(message)
-    }
-
-    // FIX ERROR 3: Store received broadcast TEXT packets in the BROADCAST chatId
-    private suspend fun receiveBroadcastTextMessage(packet: MeshPacket) {
-        if (chatDao.getMessageByUuid(packet.packetId) != null) return // Ignore duplicate
-
-        val rawPayload = packet.payload
-        val (plaintext, senderName) = try {
-            val json = JSONObject(rawPayload)
-            json.optString("text", rawPayload) to json.optString("senderName", packet.senderId.takeLast(8))
-        } catch (_: Exception) {
-            rawPayload to packet.senderId.takeLast(8)
-        }
-
-        val message = MessageEntity(
-            messageId = packet.packetId,
-            chatId = "BROADCAST",
-            senderId = packet.senderId,
-            text = plaintext,
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = MessageType.TEXT
-        )
-        chatDao.insertMessage(message)
-        NotificationHelper.showMessageNotification(context, packet.senderId, "📢 $senderName", plaintext)
-    }
-    
-    private suspend fun handleWifiNegotiation(packet: MeshPacket) {
-        // Automatically negotiate Wi-Fi Direct connection when receiving a peer's MAC
-        val json = try { JSONObject(packet.payload) } catch (_: Exception) { return }
-        val peerMac = json.optString("wifiMac")
-        if (peerMac.isNotEmpty()) {
-            MeshLogger.d(TAG, "Received Wi-Fi Direct MAC from peer: $peerMac, initiating connect...")
-            withContext(Dispatchers.Main) {
-                wifiDirectManager.connectToPeer(peerMac)
-            }
-        }
-    }
-
-
-    private suspend fun receiveSosMessage(packet: MeshPacket) {
-        if (chatDao.getMessageByUuid(packet.packetId) != null) return // Ignore duplicate
-
-        val json = try { JSONObject(packet.payload) } catch (_: Exception) { return }
-        val lat = json.optDouble("lat", 0.0)
-        val lng = json.optDouble("lng", 0.0)
-        val battery = json.optInt("battery", -1)
-        val senderName = json.optString("senderName", packet.senderId.takeLast(8))
-
-        val chatId = incomingChatId(packet.senderId)
-
-        val message = MessageEntity(
-            messageId = packet.packetId,
-            chatId = chatId,
-            senderId = packet.senderId,
-            text = "🚨 SOS EMERGENCY from $senderName — Lat: $lat, Lng: $lng — Battery: $battery%",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = MessageType.SOS,
-            latitude = lat,
-            longitude = lng,
-            batteryPercent = battery
-        )
-        chatDao.insertMessageAndUpdateChat(message, "🚨 $senderName")
+        meshMessagingManager.broadcastMessage(messageText)
     }
 
     override fun getMeshStatus(): com.meshlink.domain.model.MeshStatus {

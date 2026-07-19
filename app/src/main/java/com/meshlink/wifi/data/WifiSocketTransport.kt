@@ -1,7 +1,7 @@
 package com.meshlink.wifi.data
 
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.ble.data.MeshPacket
+import com.meshlink.domain.model.MeshPacket
 import com.meshlink.ble.data.MeshPacketParser
 import java.io.BufferedReader
 import java.io.InputStreamReader

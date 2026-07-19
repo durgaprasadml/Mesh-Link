@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.meshlink.app-mergeProductionDebugResources-92:/values-land/values-land.xml",
+            "map": [
+                {
+                    "source": "/Users/durgaprasadml/.gradle/caches/9.0.0/transforms/e243af107bbf63e5cee0533dd63c1529/transformed/appcompat-1.6.1/res/values-land/values-land.xml",
+                    "from": {
+                        "startLines": "2,3,4",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,125,196",
+                        "endColumns": "69,70,67",
+                        "endOffsets": "120,191,259"
+                    }
+                }
+            ]
+        }
+    ]
+}

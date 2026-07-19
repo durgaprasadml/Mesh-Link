@@ -72,7 +72,7 @@ fun SettingsItemRow(
                 fontWeight = FontWeight.SemiBold
             )
             if (subtitle != null) {
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
                 Text(
                     text = subtitle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

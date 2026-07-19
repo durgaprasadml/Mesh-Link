@@ -1,5 +1,6 @@
 package com.meshlink.ui.components.nearby
 
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -54,8 +55,8 @@ fun MeshTopologyCanvas(
         label = "RadarAlpha"
     )
     
-    val nodeRadius = with(LocalDensity.current) { 12.dp.toPx() }
-    val centerRadius = with(LocalDensity.current) { 16.dp.toPx() }
+    val nodeRadius = with(LocalDensity.current) { MeshTheme.spacing.medium.toPx() }
+    val centerRadius = with(LocalDensity.current) { MeshTheme.spacing.mediumLarge.toPx() }
 
     Box(modifier = modifier) {
         Canvas(modifier = Modifier.matchParentSize()) {

@@ -69,8 +69,8 @@ fun ProfileScreen(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(bottom = 8.dp, end = 8.dp)
-                        .size(24.dp)
+                        .padding(bottom = MeshTheme.spacing.mediumSmall, end = MeshTheme.spacing.mediumSmall)
+                        .size(MeshTheme.spacing.extraLarge)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.background),
                     contentAlignment = Alignment.Center
@@ -79,7 +79,7 @@ fun ProfileScreen(
                         imageVector = Icons.Default.CheckCircle, 
                         contentDescription = "Verified",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(MeshTheme.spacing.large)
                     )
                 }
             }

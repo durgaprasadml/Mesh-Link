@@ -32,7 +32,7 @@ fun StorageUsageBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(24.dp)
+                .height(MeshTheme.spacing.extraLarge)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             verticalAlignment = Alignment.CenterVertically
@@ -70,11 +70,11 @@ fun StorageUsageBar(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(12.dp)
+                                .size(MeshTheme.spacing.medium)
                                 .clip(CircleShape)
                                 .background(category.color)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
                         Column {
                             Text(
                                 text = category.name,
@@ -91,7 +91,7 @@ fun StorageUsageBar(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
         }
     }
 }

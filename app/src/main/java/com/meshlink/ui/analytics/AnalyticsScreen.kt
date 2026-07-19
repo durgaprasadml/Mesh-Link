@@ -364,7 +364,7 @@ fun HopDistributionCard(distribution: Map<Int, Int>) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(20.dp)
+                            .height(MeshTheme.spacing.large)
                             .clip(MeshTheme.shapes.pill)
                             .background(color.copy(alpha = 0.12f))
                     ) {
@@ -404,7 +404,7 @@ fun ActiveNodesCard(nodes: Set<String>) {
     ) {
         Column(modifier = Modifier.padding(MeshTheme.spacing.large)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Wifi, contentDescription = "WiFi icon", tint = MeshTheme.colors.success, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Wifi, contentDescription = "WiFi icon", tint = MeshTheme.colors.success, modifier = Modifier.size(MeshTheme.spacing.large))
                 Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
                 Text(
                     "Active Mesh Nodes (${nodes.size})",
@@ -475,7 +475,7 @@ fun RelayLogCard(entry: RelayLogEntry) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(4.dp, 32.dp)
+                    .size(MeshTheme.spacing.small, MeshTheme.spacing.huge)
                     .clip(MeshTheme.shapes.extraSmall)
                     .background(accentColor)
             )

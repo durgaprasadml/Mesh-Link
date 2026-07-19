@@ -45,7 +45,7 @@ fun DashboardCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Surface(
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(MeshTheme.spacing.giant),
                     shape = CircleShape,
                     color = iconContainerColor
                 ) {
@@ -54,7 +54,7 @@ fun DashboardCard(
                             imageVector = icon,
                             contentDescription = title,
                             tint = iconTintColor,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(MeshTheme.spacing.extraLarge)
                         )
                     }
                 }

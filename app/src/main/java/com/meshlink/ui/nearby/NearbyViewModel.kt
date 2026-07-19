@@ -8,14 +8,18 @@ import com.meshlink.domain.repository.UserRepository
 import com.meshlink.wifi.data.WifiDirectManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+enum class SortOption { RSSI, NAME, STATUS }
+
 data class NearbyUiState(
-    val devices: List<BleDevice> = emptyList()
+    val devices: List<BleDevice> = emptyList(),
+    val sortOption: SortOption = SortOption.RSSI
 )
 
 @HiltViewModel
@@ -25,11 +29,24 @@ class NearbyViewModel @Inject constructor(
     private val wifiDirectManager: WifiDirectManager
 ) : ViewModel() {
 
-    val uiState: StateFlow<NearbyUiState> = meshRepository.scannedDevices
-        .map { devicesMap ->
-            NearbyUiState(devices = devicesMap.values.toList().sortedByDescending { it.rssi })
+    private val _sortOption = MutableStateFlow(SortOption.RSSI)
+
+    val uiState: StateFlow<NearbyUiState> = combine(
+        meshRepository.scannedDevices,
+        _sortOption
+    ) { devicesMap, sortOption ->
+        val sortedList = when (sortOption) {
+            SortOption.RSSI -> devicesMap.values.toList().sortedByDescending { it.rssi }
+            SortOption.NAME -> devicesMap.values.toList().sortedBy { it.name.ifBlank { "~" } }
+            SortOption.STATUS -> devicesMap.values.toList().sortedByDescending { it.rssi > -70 }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NearbyUiState())
+        NearbyUiState(devices = sortedList, sortOption = sortOption)
+    }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NearbyUiState())
+
+    fun setSortOption(option: SortOption) {
+        _sortOption.value = option
+    }
 
     fun startDiscovery() {
         viewModelScope.launch {

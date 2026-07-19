@@ -31,7 +31,7 @@ fun DateSeparator(timestamp: Long, modifier: Modifier = Modifier) {
     ) {
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(MeshTheme.spacing.medium))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f))
                 .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
         ) {

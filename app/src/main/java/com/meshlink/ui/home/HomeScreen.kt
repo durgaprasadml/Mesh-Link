@@ -311,7 +311,7 @@ fun ChatItem(chat: Chat, onClick: () -> Unit) {
             if (chat.unreadCount > 0) {
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(MeshTheme.spacing.extraLarge)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center

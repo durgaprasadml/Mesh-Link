@@ -19,7 +19,7 @@ class FleetManagementManager @Inject constructor() {
     fun generateLocalFleetStatus(nodeId: String, batteryPercent: Int, storageMb: Long, compliance: Float): FleetStatus {
         return FleetStatus(
             nodeId = nodeId,
-            appVersion = "1.8.0-enterprise", // This would normally be pulled from BuildConfig
+            appVersion = com.meshlink.BuildConfig.VERSION_NAME,
             osVersion = Build.VERSION.RELEASE,
             batteryPercent = batteryPercent,
             storageAvailableMb = storageMb,

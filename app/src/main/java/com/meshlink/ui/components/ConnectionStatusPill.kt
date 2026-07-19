@@ -41,7 +41,7 @@ fun ConnectionStatusPill(
     ) {
         Box(
             modifier = Modifier
-                .size(8.dp)
+                .size(MeshTheme.spacing.mediumSmall)
                 .clip(CircleShape)
                 .background(animatedDotColor)
         )

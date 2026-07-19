@@ -107,10 +107,10 @@ fun PinInput(
 
                 Box(
                     modifier = Modifier
-                        .size(16.dp)
+                        .size(MeshTheme.spacing.mediumLarge)
                         .clip(CircleShape)
                         .background(color)
-                        .border(2.dp, borderColor, CircleShape)
+                        .border(MeshTheme.spacing.extraSmall, borderColor, CircleShape)
                 )
             }
         }

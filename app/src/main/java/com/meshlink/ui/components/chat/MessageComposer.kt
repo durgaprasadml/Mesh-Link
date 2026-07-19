@@ -83,7 +83,7 @@ fun MessageComposer(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(12.dp)
+                        .size(MeshTheme.spacing.medium)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.error)
                 )
@@ -126,7 +126,7 @@ fun MessageComposer(
                         hapticManager.performLightClick()
                         onAttachClick()
                     },
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    modifier = Modifier.padding(bottom = MeshTheme.spacing.small)
                 ) {
                     Icon(Icons.Default.AttachFile, contentDescription = "Attach file", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -136,7 +136,7 @@ fun MessageComposer(
                     onValueChange = onInputTextChanged,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 4.dp)
+                        .padding(horizontal = MeshTheme.spacing.small)
                         .semantics { contentDescription = "Message input field" },
                     placeholder = { Text("Message") },
                     colors = TextFieldDefaults.colors(
@@ -145,11 +145,11 @@ fun MessageComposer(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     ),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(MeshTheme.spacing.extraLarge),
                     maxLines = 6
                 )
 
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
 
                 AnimatedContent(
                     targetState = inputText.isNotBlank(),
@@ -165,7 +165,7 @@ fun MessageComposer(
                                 onSendText(inputText) 
                             },
                             modifier = Modifier
-                                .padding(bottom = 4.dp)
+                                .padding(bottom = MeshTheme.spacing.small)
                                 .background(MaterialTheme.colorScheme.primary, CircleShape)
                         ) {
                             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send message", tint = MaterialTheme.colorScheme.onPrimary)
@@ -181,7 +181,7 @@ fun MessageComposer(
                                 }
                             },
                             modifier = Modifier
-                                .padding(bottom = 4.dp)
+                                .padding(bottom = MeshTheme.spacing.small)
                                 .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                         ) {
                             Icon(Icons.Default.Mic, contentDescription = "Record voice note", tint = MaterialTheme.colorScheme.onSecondaryContainer)

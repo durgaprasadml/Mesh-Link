@@ -1,5 +1,6 @@
 package com.meshlink.ui.components
 
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
@@ -87,7 +88,7 @@ fun PermissionHandler(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -96,7 +97,7 @@ fun PermissionHandler(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
             Button(onClick = { permissionLauncher.launch(permissionsToRequest) }) {
                 Text("Grant Permissions")
             }
@@ -105,7 +106,7 @@ fun PermissionHandler(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -114,7 +115,7 @@ fun PermissionHandler(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
             Button(onClick = { 
                 val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
                 bluetoothEnableLauncher.launch(enableBtIntent)
@@ -126,7 +127,7 @@ fun PermissionHandler(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -135,7 +136,7 @@ fun PermissionHandler(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
             Button(onClick = { 
                 val enableLocationIntent = Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
                 locationEnableLauncher.launch(enableLocationIntent)

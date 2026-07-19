@@ -178,9 +178,9 @@ fun LoginScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
+                                            modifier = Modifier.size(MeshTheme.spacing.extraLarge),
                                             color = MaterialTheme.colorScheme.primary,
-                                            strokeWidth = 2.dp
+                                            strokeWidth = MeshTheme.spacing.extraSmall
                                         )
                                     }
                                 } else {

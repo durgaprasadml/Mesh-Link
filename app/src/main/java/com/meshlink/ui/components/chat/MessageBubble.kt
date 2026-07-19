@@ -27,6 +27,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import coil.compose.AsyncImage
 import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
@@ -55,6 +57,7 @@ fun MessageBubble(
 ) {
     val isMe = message.isFromMe
     val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
+    val haptic = LocalHapticFeedback.current
 
     val baseBubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val selectedColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
@@ -66,9 +69,9 @@ fun MessageBubble(
 
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     val shape = if (isMe) {
-        RoundedCornerShape(topStart = 20.dp, topEnd = 4.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
+        RoundedCornerShape(topStart = MeshTheme.spacing.large, topEnd = MeshTheme.spacing.small, bottomStart = MeshTheme.spacing.large, bottomEnd = MeshTheme.spacing.large)
     } else {
-        RoundedCornerShape(topStart = 4.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
+        RoundedCornerShape(topStart = MeshTheme.spacing.small, topEnd = MeshTheme.spacing.large, bottomStart = MeshTheme.spacing.large, bottomEnd = MeshTheme.spacing.large)
     }
 
     val semanticDescription = buildString {
@@ -94,7 +97,10 @@ fun MessageBubble(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = { if (isSelectionMode) onToggleSelection() },
-                onLongClick = { onToggleSelection() },
+                onLongClick = { 
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggleSelection() 
+                },
                 role = Role.Button
             )
             .semantics(mergeDescendants = true) {
@@ -107,7 +113,7 @@ fun MessageBubble(
             modifier = Modifier
                 .clip(shape)
                 .background(bgColor)
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
                 .widthIn(max = 300.dp, min = 80.dp)
                 .animateContentSize()
         ) {
@@ -121,7 +127,7 @@ fun MessageBubble(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 120.dp, max = 260.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(MeshTheme.spacing.medium))
                                 .clickable { onImageClick(mediaPath) },
                             contentScale = ContentScale.Crop
                         )
@@ -130,27 +136,27 @@ fun MessageBubble(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(120.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(MeshTheme.spacing.medium))
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
                                 Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(36.dp))
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                                 Text(if (message.isFromMe) "Sending image..." else "Receiving image...", style = MaterialTheme.typography.labelSmall)
                                 if (message.status == DeliveryStatus.FAILED) {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                                     IconButton(
                                         onClick = { onRetryMedia(message.messageId) },
                                         modifier = Modifier.background(MaterialTheme.colorScheme.error, CircleShape).size(36.dp)
                                     ) {
-                                        Icon(Icons.Default.Refresh, contentDescription = "Retry image transfer", tint = Color.White)
+                                        Icon(Icons.Default.Refresh, contentDescription = "Retry image transfer", tint = MaterialTheme.colorScheme.onPrimary)
                                     }
                                 } else if (transferProgress != null && transferProgress >= 0f) {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                                     LinearProgressIndicator(
                                         progress = { transferProgress },
-                                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                        modifier = Modifier.fillMaxWidth().height(MeshTheme.spacing.small).clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -166,7 +172,7 @@ fun MessageBubble(
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 4.dp)
+                        modifier = Modifier.padding(vertical = MeshTheme.spacing.small)
                     ) {
                         IconButton(
                             onClick = {
@@ -175,7 +181,7 @@ fun MessageBubble(
                                 }
                             },
                             enabled = fileExists && !isSelectionMode,
-                            modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.surface.copy(alpha=0.5f), CircleShape)
+                            modifier = Modifier.size(MeshTheme.spacing.extraHuge).background(MaterialTheme.colorScheme.surface.copy(alpha=0.5f), CircleShape)
                         ) {
                             Icon(
                                 imageVector = if (isThisPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
@@ -184,11 +190,11 @@ fun MessageBubble(
                             )
                         }
 
-                        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                        Column(modifier = Modifier.weight(1f).padding(start = MeshTheme.spacing.medium)) {
                             if (message.status == DeliveryStatus.FAILED) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                                    Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                                     Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                 }
                             } else if (transferProgress != null && transferProgress >= 0f && message.status == DeliveryStatus.PENDING) {
@@ -197,21 +203,21 @@ fun MessageBubble(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = textColor.copy(alpha = 0.7f)
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                                 LinearProgressIndicator(
                                     progress = { transferProgress },
-                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    modifier = Modifier.fillMaxWidth().height(MeshTheme.spacing.small).clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
                                     color = MaterialTheme.colorScheme.primary,
                                     trackColor = textColor.copy(alpha = 0.3f)
                                 )
                             } else {
                                 LinearProgressIndicator(
                                     progress = { if (isThisPlaying) playbackProgress else 0f },
-                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    modifier = Modifier.fillMaxWidth().height(MeshTheme.spacing.small).clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
                                     color = textColor.copy(alpha = 0.8f),
                                     trackColor = textColor.copy(alpha = 0.3f)
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                                 Text(
                                     text = if (fileExists) durationText else "File missing",
                                     style = MaterialTheme.typography.labelSmall,
@@ -233,18 +239,18 @@ fun MessageBubble(
                             }
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MeshTheme.spacing.large))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Location Shared", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                         if (message.latitude != null && message.longitude != null) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(MeshTheme.spacing.mediumSmall))
                                     .background(MaterialTheme.colorScheme.surface.copy(alpha=0.3f))
-                                    .padding(8.dp)
+                                    .padding(MeshTheme.spacing.mediumSmall)
                             ) {
                                 Column {
                                     Text("Lat: ${String.format(Locale.US, "%.6f", message.latitude)}", color = textColor, style = MaterialTheme.typography.bodySmall)
@@ -253,7 +259,7 @@ fun MessageBubble(
                             }
                         }
                         if (message.batteryPercent != null && message.batteryPercent >= 0) {
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                             Text("🔋 ${message.batteryPercent}% Battery", color = textColor.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -262,12 +268,12 @@ fun MessageBubble(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(MeshTheme.spacing.medium))
                             .background(MaterialTheme.colorScheme.error)
-                            .padding(12.dp)
+                            .padding(MeshTheme.spacing.medium)
                     ) {
                         Text("🚨 SOS EMERGENCY", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                         if (message.latitude != null && message.longitude != null) {
                             Text("📍 Lat: ${String.format(Locale.US, "%.6f", message.latitude)}", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.bodySmall)
                             Text("📍 Lng: ${String.format(Locale.US, "%.6f", message.longitude)}", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.bodySmall)
@@ -282,7 +288,7 @@ fun MessageBubble(
                         text = message.text,
                         color = textColor,
                         style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        modifier = Modifier.padding(bottom = MeshTheme.spacing.extraSmall)
                     )
                 }
             }
@@ -291,7 +297,7 @@ fun MessageBubble(
             Row(
                 modifier = Modifier
                     .align(Alignment.End)
-                    .padding(top = 2.dp),
+                    .padding(top = MeshTheme.spacing.extraSmall),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -301,7 +307,7 @@ fun MessageBubble(
                     fontSize = 11.sp
                 )
                 if (isMe) {
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                     val statusIcon = when (message.status) {
                         DeliveryStatus.PENDING -> Icons.Default.AccessTime
                         DeliveryStatus.SENT -> Icons.Default.Check

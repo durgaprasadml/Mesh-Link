@@ -59,7 +59,7 @@ fun AnimatedErrorDialog(
                         // Error Icon Header
                         Box(
                             modifier = Modifier
-                                .size(64.dp)
+                                .size(MeshTheme.spacing.extraGiant)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.errorContainer),
                             contentAlignment = Alignment.Center
@@ -68,7 +68,7 @@ fun AnimatedErrorDialog(
                                 imageVector = Icons.Default.Warning,
                                 contentDescription = "Error",
                                 tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(MeshTheme.spacing.huge)
                             )
                         }
 

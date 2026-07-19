@@ -145,7 +145,7 @@ fun SettingsHome(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(64.dp)
+                                .size(MeshTheme.spacing.extraGiant)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
@@ -160,7 +160,7 @@ fun SettingsHome(
                         Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(userName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                             Text("Mesh ID: ${meshId.take(8).ifBlank { "Unassigned" }}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         }
                         Icon(Icons.Default.QrCode, contentDescription = "QR Code", tint = MaterialTheme.colorScheme.primary)

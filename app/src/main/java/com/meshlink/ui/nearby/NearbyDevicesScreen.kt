@@ -8,6 +8,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.automirrored.outlined.BluetoothSearching
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +21,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.components.EmptyState
 import com.meshlink.ui.components.PermissionHandler
+import com.meshlink.ui.components.LoadingOverlay
 import com.meshlink.ui.components.nearby.MeshDeviceCard
 import com.meshlink.ui.components.nearby.MeshTopologyCanvas
 import com.meshlink.ui.designsystem.theme.MeshTheme
@@ -105,9 +108,46 @@ fun NearbyDevicesScreen(
                                 placeholder = { Text("Search mesh peers") },
                                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                                 trailingIcon = {
-                                    if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { searchQuery = "" }) {
-                                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    Row {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) {
+                                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                            }
+                                        }
+                                        var showSortMenu by remember { mutableStateOf(false) }
+                                        Box {
+                                            IconButton(onClick = { showSortMenu = true }) {
+                                                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
+                                            }
+                                            DropdownMenu(
+                                                expanded = showSortMenu,
+                                                onDismissRequest = { showSortMenu = false }
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Sort by Signal (RSSI)") },
+                                                    onClick = { 
+                                                        viewModel.setSortOption(SortOption.RSSI)
+                                                        showSortMenu = false 
+                                                    },
+                                                    trailingIcon = { if (uiState.sortOption == SortOption.RSSI) Icon(Icons.Default.Check, "") }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Sort by Name") },
+                                                    onClick = { 
+                                                        viewModel.setSortOption(SortOption.NAME)
+                                                        showSortMenu = false 
+                                                    },
+                                                    trailingIcon = { if (uiState.sortOption == SortOption.NAME) Icon(Icons.Default.Check, "") }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Sort by Status") },
+                                                    onClick = { 
+                                                        viewModel.setSortOption(SortOption.STATUS)
+                                                        showSortMenu = false 
+                                                    },
+                                                    trailingIcon = { if (uiState.sortOption == SortOption.STATUS) Icon(Icons.Default.Check, "") }
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -140,7 +180,7 @@ fun NearbyDevicesScreen(
                             .padding(horizontal = MeshTheme.spacing.mediumLarge),
                         verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                     ) {
-                        items(filteredDevices, key = { it.meshId }) { device ->
+                        items(filteredDevices, key = { it.meshId }, contentType = { "device_item" }) { device ->
                             MeshDeviceCard(
                                 device = device, 
                                 onClick = {
@@ -151,10 +191,15 @@ fun NearbyDevicesScreen(
                                 }
                             )
                         }
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item { Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge)) }
                     }
                 }
             }
+
+            LoadingOverlay(
+                isLoading = uiState.devices.isEmpty() && searchQuery.isBlank() && !isSearchActive, // Simulated loading state for UX
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }

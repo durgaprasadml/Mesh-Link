@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.domain.model.Chat
@@ -109,7 +111,7 @@ fun ChatsListScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    items(filteredChats, key = { it.id }) { chat ->
+                    items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
                         ChatListItem(chat = chat, onClick = {
                             val safeName = chat.name.ifBlank { chat.id.takeLast(8) }
                             onNavigateToChat(chat.id, safeName)
@@ -123,10 +125,14 @@ fun ChatsListScreen(
 
 @Composable
 fun ChatListItem(chat: Chat, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
             .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium),
         verticalAlignment = Alignment.CenterVertically
     ) {

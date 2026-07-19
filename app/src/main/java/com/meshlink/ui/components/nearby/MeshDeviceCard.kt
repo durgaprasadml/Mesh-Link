@@ -18,6 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
@@ -37,14 +40,14 @@ fun MeshDeviceCard(
         else -> MaterialTheme.colorScheme.onBackground
     }
     val displayName = device.name.ifBlank { "Unknown Device" }
+    val haptic = LocalHapticFeedback.current
     
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clip(MeshTheme.shapes.large)
             .clickable { 
-                // Toggle expansion instead of navigating directly, but we can do both based on design.
-                // For this design, let's make the card expand, and add a "Connect/Chat" button inside.
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 expanded = !expanded 
             }
             .animateContentSize(),
@@ -132,9 +135,9 @@ fun MeshDeviceCard(
                             imageVector = Icons.Default.Bluetooth,
                             contentDescription = "Bluetooth",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(MeshTheme.spacing.mediumLarge)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                         Text("BLE Transport", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
                     }
                     
@@ -144,9 +147,9 @@ fun MeshDeviceCard(
                             imageVector = Icons.Default.Lock,
                             contentDescription = "Encrypted",
                             tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(MeshTheme.spacing.mediumLarge)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                         Text("E2E Encrypted", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }

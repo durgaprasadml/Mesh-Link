@@ -251,7 +251,7 @@ fun ChatDetailScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp) // tighter spacing between messages, wider spacing handled logic
         ) {
-            itemsIndexed(uiState.messages, key = { _, it -> it.messageId }) { index, msg ->
+            itemsIndexed(uiState.messages, key = { _, it -> it.messageId }, contentType = { _, _ -> "message_item" }) { index, msg ->
                 val showDateSeparator = shouldShowDateSeparator(
                     currentTimestamp = msg.timestamp,
                     previousTimestamp = if (index > 0) uiState.messages[index - 1].timestamp else null

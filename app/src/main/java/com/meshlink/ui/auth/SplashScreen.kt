@@ -81,7 +81,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
             ) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(MeshTheme.spacing.giant)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary)
                 )
@@ -105,7 +105,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
 
         // App Version at the bottom
         Text(
-            text = "v1.0.0 (RC1)",
+            text = "v${com.meshlink.BuildConfig.VERSION_NAME}",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier

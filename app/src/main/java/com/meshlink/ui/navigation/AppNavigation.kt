@@ -4,6 +4,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -58,7 +74,8 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun AppNavigation(
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    windowSizeClass: WindowSizeClass
 ) {
     val authViewModel: AuthViewModel = hiltViewModel()
     val isLoggedIn by authViewModel.isUserLoggedIn.collectAsState()
@@ -70,9 +87,31 @@ fun AppNavigation(
         }
     }
 
+    val currentBackStackEntry = navController.currentBackStackEntryAsState()
+    val currentRoute = currentBackStackEntry.value?.destination?.route
+
+    val isTopLevelScreen = currentRoute in listOf(
+        Screen.Home.route,
+        Screen.Nearby.route,
+        Screen.Sos.route,
+        Screen.Settings.route
+    )
+
+    val showNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && isTopLevelScreen
+    val showNavigationBar = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact && isTopLevelScreen
+
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        bottomBar = {
+            if (showNavigationBar) {
+                MeshNavigationBar(navController, currentRoute)
+            }
+        }
     ) { paddingValues ->
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (showNavigationRail) {
+                MeshNavigationRail(navController, currentRoute)
+            }
         NavHost(
             modifier = Modifier.padding(paddingValues),
             navController = navController,
@@ -200,6 +239,67 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() }
                 )
             }
+            }
         }
+    }
+}
+
+@Composable
+fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
+    NavigationBar {
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+            label = { Text("Home") },
+            selected = currentRoute == Screen.Home.route,
+            onClick = { navController.navigate(Screen.Home.route) }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
+            label = { Text("Nearby") },
+            selected = currentRoute == Screen.Nearby.route,
+            onClick = { navController.navigate(Screen.Nearby.route) }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
+            label = { Text("SOS") },
+            selected = currentRoute == Screen.Sos.route,
+            onClick = { navController.navigate(Screen.Sos.route) }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+            label = { Text("Settings") },
+            selected = currentRoute == Screen.Settings.route,
+            onClick = { navController.navigate(Screen.Settings.route) }
+        )
+    }
+}
+
+@Composable
+fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) {
+    NavigationRail {
+        NavigationRailItem(
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+            label = { Text("Home") },
+            selected = currentRoute == Screen.Home.route,
+            onClick = { navController.navigate(Screen.Home.route) }
+        )
+        NavigationRailItem(
+            icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
+            label = { Text("Nearby") },
+            selected = currentRoute == Screen.Nearby.route,
+            onClick = { navController.navigate(Screen.Nearby.route) }
+        )
+        NavigationRailItem(
+            icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
+            label = { Text("SOS") },
+            selected = currentRoute == Screen.Sos.route,
+            onClick = { navController.navigate(Screen.Sos.route) }
+        )
+        NavigationRailItem(
+            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+            label = { Text("Settings") },
+            selected = currentRoute == Screen.Settings.route,
+            onClick = { navController.navigate(Screen.Settings.route) }
+        )
     }
 }

@@ -102,7 +102,7 @@ fun SosScreen(
 
                     if (state.isFetchingLocation) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(MeshTheme.spacing.mediumLarge), color = MeshTheme.colors.warning, strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(MeshTheme.spacing.mediumLarge), color = MeshTheme.colors.warning, strokeWidth = MeshTheme.spacing.extraSmall)
                             Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
                             Text("Acquiring GPS fix...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f))
                         }
@@ -191,7 +191,7 @@ fun SosScreen(
                                 .scale(pulseScale)
                                 .clip(CircleShape)
                                 .background(MeshTheme.colors.danger.copy(alpha = pulseAlpha * 0.3f))
-                                .border(2.dp, MeshTheme.colors.danger.copy(alpha = pulseAlpha), CircleShape)
+                                .border(MeshTheme.spacing.extraSmall, MeshTheme.colors.danger.copy(alpha = pulseAlpha), CircleShape)
                         )
 
                         // Main button

@@ -10,6 +10,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.analytics.FirebaseAnalytics
@@ -59,6 +61,7 @@ class MainActivity : ComponentActivity() {
         requestNotificationPermissionIfNeeded()
 
         setContent {
+            val windowSizeClass = @OptIn(ExperimentalMaterial3WindowSizeClassApi::class) calculateWindowSizeClass(this)
             MeshTheme {
                 val navController = rememberNavController()
 
@@ -92,7 +95,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                AppNavigation(navController = navController)
+                AppNavigation(navController = navController, windowSizeClass = windowSizeClass)
             }
         }
 

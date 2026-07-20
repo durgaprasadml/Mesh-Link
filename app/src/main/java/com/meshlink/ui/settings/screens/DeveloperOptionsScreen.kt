@@ -13,9 +13,16 @@ import androidx.compose.ui.text.font.FontWeight
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
+import com.meshlink.ui.settings.SettingsUiState
+import com.meshlink.ui.settings.SettingsViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeveloperOptionsScreen(onBack: () -> Unit) {
+fun DeveloperOptionsScreen(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(

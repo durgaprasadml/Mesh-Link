@@ -16,9 +16,16 @@ import com.meshlink.ui.components.settings.StorageCategory
 import com.meshlink.ui.components.settings.StorageUsageBar
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
+import com.meshlink.ui.settings.SettingsUiState
+import com.meshlink.ui.settings.SettingsViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StorageSettingsScreen(onBack: () -> Unit) {
+fun StorageSettingsScreen(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit
+) {
     val totalStorage = 2L * 1024 * 1024 * 1024 // 2 GB mock
     val storageCategories = listOf(
         StorageCategory("Database (Chats)", 250 * 1024 * 1024L, MaterialTheme.colorScheme.primary),
@@ -75,14 +82,14 @@ fun StorageSettingsScreen(onBack: () -> Unit) {
                             title = "Clear Media Cache",
                             subtitle = "Frees up space without deleting chats.",
                             icon = Icons.Default.Image,
-                            onClick = {}
+                            onClick = { /* TODO: viewModel.clearMediaCache() */ }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
                             title = "Optimize Database",
                             subtitle = "Reindexes messages to save space.",
                             icon = Icons.Default.Storage,
-                            onClick = {}
+                            onClick = { /* TODO: viewModel.optimizeDatabase() */ }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
@@ -91,7 +98,7 @@ fun StorageSettingsScreen(onBack: () -> Unit) {
                             icon = Icons.Default.DeleteOutline,
                             iconTint = MaterialTheme.colorScheme.error,
                             textColor = MaterialTheme.colorScheme.error,
-                            onClick = {}
+                            onClick = { /* TODO: Implement destructive action dialog */ }
                         )
                     }
                 }

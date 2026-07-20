@@ -13,9 +13,16 @@ import androidx.compose.ui.text.font.FontWeight
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
+import com.meshlink.ui.settings.SettingsUiState
+import com.meshlink.ui.settings.SettingsViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppearanceSettingsScreen(onBack: () -> Unit) {
+fun AppearanceSettingsScreen(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -44,20 +51,30 @@ fun AppearanceSettingsScreen(onBack: () -> Unit) {
                     shape = MeshTheme.shapes.large
                 ) {
                     Column {
-                        var darkMode by remember { mutableStateOf(true) }
                         SettingsItemRow(
                             title = "Dark Theme",
                             subtitle = "Use dark mode across the app.",
                             icon = Icons.Default.DarkMode,
-                            trailingContent = { Switch(checked = darkMode, onCheckedChange = { darkMode = it }) }
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.themeMode == "DARK", 
+                                    onCheckedChange = { 
+                                        viewModel.setThemeMode(if (it) "DARK" else "LIGHT") 
+                                    }
+                                ) 
+                            }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        var dynamicColor by remember { mutableStateOf(true) }
                         SettingsItemRow(
                             title = "Dynamic Color (Material You)",
                             subtitle = "Adapt colors based on your wallpaper.",
                             icon = Icons.Default.ColorLens,
-                            trailingContent = { Switch(checked = dynamicColor, onCheckedChange = { dynamicColor = it }) }
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.isMaterialYouEnabled, 
+                                    onCheckedChange = { viewModel.setMaterialYouEnabled(it) }
+                                ) 
+                            }
                         )
                     }
                 }

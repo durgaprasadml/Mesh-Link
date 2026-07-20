@@ -15,9 +15,16 @@ import androidx.compose.ui.unit.dp
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
+import com.meshlink.ui.settings.SettingsUiState
+import com.meshlink.ui.settings.SettingsViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NetworkSettingsScreen(onBack: () -> Unit) {
+fun NetworkSettingsScreen(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -46,20 +53,28 @@ fun NetworkSettingsScreen(onBack: () -> Unit) {
                     shape = MeshTheme.shapes.large
                 ) {
                     Column {
-                        var bleEnabled by remember { mutableStateOf(true) }
                         SettingsItemRow(
                             title = "Bluetooth Low Energy (BLE)",
                             subtitle = "Use for low power, short-range discovery.",
                             icon = Icons.Default.Bluetooth,
-                            trailingContent = { Switch(checked = bleEnabled, onCheckedChange = { bleEnabled = it }) }
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.isBleEnabled, 
+                                    onCheckedChange = { viewModel.setBleEnabled(it) }
+                                ) 
+                            }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        var wifiEnabled by remember { mutableStateOf(true) }
                         SettingsItemRow(
                             title = "Wi-Fi Direct",
                             subtitle = "Use for high-bandwidth data transfer.",
                             icon = Icons.Default.Wifi,
-                            trailingContent = { Switch(checked = wifiEnabled, onCheckedChange = { wifiEnabled = it }) }
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.isWifiDirectEnabled, 
+                                    onCheckedChange = { viewModel.setWifiDirectEnabled(it) }
+                                ) 
+                            }
                         )
                     }
                 }
@@ -73,19 +88,16 @@ fun NetworkSettingsScreen(onBack: () -> Unit) {
                     shape = MeshTheme.shapes.large
                 ) {
                     Column {
-                        var relayEnabled by remember { mutableStateOf(true) }
                         SettingsItemRow(
                             title = "Act as Relay Node",
                             subtitle = "Help route messages for other peers. Uses more battery.",
                             icon = Icons.Default.Memory,
-                            trailingContent = { Switch(checked = relayEnabled, onCheckedChange = { relayEnabled = it }) }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        var backgroundEnabled by remember { mutableStateOf(true) }
-                        SettingsItemRow(
-                            title = "Background Discovery",
-                            subtitle = "Keep scanning when app is closed.",
-                            trailingContent = { Switch(checked = backgroundEnabled, onCheckedChange = { backgroundEnabled = it }) }
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.isMeshRelayEnabled, 
+                                    onCheckedChange = { viewModel.setMeshRelayEnabled(it) }
+                                ) 
+                            }
                         )
                     }
                 }

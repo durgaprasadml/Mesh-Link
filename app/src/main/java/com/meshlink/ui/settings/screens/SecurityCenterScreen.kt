@@ -16,9 +16,16 @@ import androidx.compose.ui.unit.dp
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
+import com.meshlink.ui.settings.SettingsUiState
+import com.meshlink.ui.settings.SettingsViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SecurityCenterScreen(onBack: () -> Unit) {
+fun SecurityCenterScreen(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -82,18 +89,30 @@ fun SecurityCenterScreen(onBack: () -> Unit) {
                 ) {
                     Column {
                         SettingsItemRow(
-                            title = "Identity Verification",
-                            subtitle = "Verify contacts via QR Code",
-                            icon = Icons.Default.Security,
-                            onClick = {}
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "App Lock (PIN/Biometrics)",
+                            title = "App Lock",
                             subtitle = "Require authentication to open app",
                             icon = Icons.Default.Lock,
-                            trailingContent = { Switch(checked = false, onCheckedChange = {}) }
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.isAppLockEnabled, 
+                                    onCheckedChange = { viewModel.setAppLockEnabled(it) }
+                                ) 
+                            }
                         )
+                        if (uiState.isAppLockEnabled) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                            SettingsItemRow(
+                                title = "Biometric Authentication",
+                                subtitle = "Unlock using fingerprint or face",
+                                icon = Icons.Default.Security,
+                                trailingContent = { 
+                                    Switch(
+                                        checked = uiState.isBiometricsEnabled, 
+                                        onCheckedChange = { viewModel.setBiometricsEnabled(it) }
+                                    ) 
+                                }
+                            )
+                        }
                     }
                 }
             }

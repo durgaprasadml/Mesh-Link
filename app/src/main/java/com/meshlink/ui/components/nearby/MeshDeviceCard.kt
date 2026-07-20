@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SignalCellular4Bar
 import androidx.compose.material.icons.filled.SignalCellularOff
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,17 +19,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.meshlink.domain.model.BleDevice
+import com.meshlink.domain.model.TransportType
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import kotlin.math.pow
 
 @Composable
 fun MeshDeviceCard(
     device: BleDevice,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isConnecting: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
     
@@ -39,6 +42,15 @@ fun MeshDeviceCard(
         isWeakSignal -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onBackground
     }
+    
+    // Simple path loss model for distance estimate (assuming txPower = -59 dBm)
+    val distanceEstimate = if (device.transport == TransportType.WIFI_DIRECT) {
+        "N/A"
+    } else {
+        val distance = 10.0.pow((-59 - device.rssi) / (10 * 2.0))
+        String.format("%.1f m", distance)
+    }
+
     val displayName = device.name.ifBlank { "Unknown Device" }
     val haptic = LocalHapticFeedback.current
     
@@ -61,26 +73,36 @@ fun MeshDeviceCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar
-                Box(
-                    modifier = Modifier
-                        .size(MeshTheme.spacing.giant)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val initials = displayName.split(" ")
-                        .mapNotNull { it.firstOrNull()?.toString() }
-                        .take(2)
-                        .joinToString("")
-                        .uppercase()
-                    
-                    Text(
-                        text = initials.ifBlank { "?" },
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                // Avatar with Online Indicator
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    Box(
+                        modifier = Modifier
+                            .size(MeshTheme.spacing.giant)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val initials = displayName.split(" ")
+                            .mapNotNull { it.firstOrNull()?.toString() }
+                            .take(2)
+                            .joinToString("")
+                            .uppercase()
+                        
+                        Text(
+                            text = initials.ifBlank { "?" },
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    if (device.isConnected) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
                 }
                 
                 Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
@@ -94,13 +116,13 @@ fun MeshDeviceCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Mesh ID: ${device.meshId.take(8)}...",
+                        text = "Distance: $distanceEstimate",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
                 
-                // Signal and Status
+                // Signal and Transport Badge
                 Column(horizontalAlignment = Alignment.End) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -117,6 +139,19 @@ fun MeshDeviceCard(
                             fontWeight = FontWeight.Bold
                         )
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Badge(
+                        containerColor = when(device.transport) {
+                            TransportType.BLE -> MaterialTheme.colorScheme.primaryContainer
+                            TransportType.WIFI_DIRECT -> MaterialTheme.colorScheme.tertiaryContainer
+                            TransportType.HYBRID -> MaterialTheme.colorScheme.secondaryContainer
+                        }
+                    ) {
+                        Text(
+                            text = device.transport.name.replace("_", " "),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
@@ -129,19 +164,31 @@ fun MeshDeviceCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Transport type
+                    // Transport type detailed
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.Bluetooth,
-                            contentDescription = "Bluetooth",
+                            imageVector = when (device.transport) {
+                                TransportType.BLE -> Icons.Default.Bluetooth
+                                TransportType.WIFI_DIRECT -> Icons.Default.Wifi
+                                TransportType.HYBRID -> Icons.Default.SwapHoriz
+                            },
+                            contentDescription = "Transport",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(MeshTheme.spacing.mediumLarge)
                         )
                         Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-                        Text("BLE Transport", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            text = when (device.transport) {
+                                TransportType.BLE -> "BLE Only"
+                                TransportType.WIFI_DIRECT -> "Wi-Fi Direct"
+                                TransportType.HYBRID -> "BLE + Wi-Fi Direct"
+                            }, 
+                            style = MaterialTheme.typography.bodySmall, 
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                     
-                    // Encryption Status
+                    // Connection Status
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Lock,
@@ -150,7 +197,11 @@ fun MeshDeviceCard(
                             modifier = Modifier.size(MeshTheme.spacing.mediumLarge)
                         )
                         Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-                        Text("E2E Encrypted", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            text = if (device.isConnected) "Connected & E2E" else "E2E Encrypted", 
+                            style = MaterialTheme.typography.bodySmall, 
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
 
@@ -159,9 +210,20 @@ fun MeshDeviceCard(
                 Button(
                     onClick = onClick,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = CircleShape
+                    shape = CircleShape,
+                    enabled = !isConnecting
                 ) {
-                    Text("Connect & Message")
+                    if (isConnecting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
+                        Text("Connecting...")
+                    } else {
+                        Text("Connect & Message")
+                    }
                 }
             }
         }

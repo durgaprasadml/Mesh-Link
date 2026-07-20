@@ -74,7 +74,7 @@ class BleAdvertiserManager @Inject constructor(@ApplicationContext private val c
 
         val scanResponse = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .addServiceData(ParcelUuid(BleConstants.MESH_SERVICE_UUID), combinedData)
+            .addManufacturerData(BleConstants.MANUFACTURER_ID, combinedData)
             .build()
 
         advertiseCallback = object : AdvertiseCallback() {
@@ -83,6 +83,12 @@ class BleAdvertiserManager @Inject constructor(@ApplicationContext private val c
             }
             override fun onStartFailure(errorCode: Int) {
                 MeshLogger.e(TAG, "Advertising failed with error code: $errorCode")
+                if (errorCode != AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        MeshLogger.d(TAG, "Attempting to restart BLE advertising after failure")
+                        startAdvertising(name, meshId, capabilities)
+                    }, 5000L)
+                }
             }
         }
         try {

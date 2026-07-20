@@ -72,26 +72,38 @@ fun SettingsScreen(
                 onLogout = { viewModel.logout() }
             )
             SettingsDestination.PROFILE -> ProfileScreen(
-                userName = userName,
-                meshId = meshId,
+                uiState = uiState,
+                onSaveName = { viewModel.updateUserName(it) },
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.SECURITY -> SecurityCenterScreen(
+                uiState = uiState,
+                viewModel = viewModel,
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.NETWORK -> NetworkSettingsScreen(
+                uiState = uiState,
+                viewModel = viewModel,
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.STORAGE -> StorageSettingsScreen(
+                uiState = uiState,
+                viewModel = viewModel,
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.APPEARANCE -> AppearanceSettingsScreen(
+                uiState = uiState,
+                viewModel = viewModel,
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.DIAGNOSTICS -> DiagnosticsScreen(
+                uiState = uiState,
+                viewModel = viewModel,
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.DEVELOPER -> DeveloperOptionsScreen(
+                uiState = uiState,
+                viewModel = viewModel,
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
         }

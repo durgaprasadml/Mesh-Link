@@ -49,4 +49,16 @@ abstract class DataModule {
     abstract fun bindChatLocalDataSource(
         impl: ChatLocalDataSourceImpl
     ): ChatLocalDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindSettingsRepository(
+        impl: com.meshlink.core.data.SettingsRepositoryImpl
+    ): com.meshlink.domain.repository.SettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSettingsLocalDataSource(
+        impl: com.meshlink.core.data.source.SettingsLocalDataSourceImpl
+    ): com.meshlink.core.data.source.SettingsLocalDataSource
 }

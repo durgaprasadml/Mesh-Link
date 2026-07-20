@@ -15,9 +15,16 @@ import androidx.compose.ui.text.font.FontWeight
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
+import com.meshlink.ui.settings.SettingsUiState
+import com.meshlink.ui.settings.SettingsViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DiagnosticsScreen(onBack: () -> Unit) {
+fun DiagnosticsScreen(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -55,9 +62,13 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
                             title = "BLE Subsystem",
-                            subtitle = "Advertising active. No faults.",
+                            subtitle = if (uiState.isBleEnabled) "Advertising active. No faults." else "BLE disabled by user.",
                             icon = Icons.Default.Bluetooth,
-                            trailingContent = { Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary) }
+                            trailingContent = { 
+                                if (uiState.isBleEnabled) {
+                                    Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
@@ -72,7 +83,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
             
             item {
                 Button(
-                    onClick = {},
+                    onClick = { /* TODO: viewModel.exportDiagnostics() */ },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                 ) {

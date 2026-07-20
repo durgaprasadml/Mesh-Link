@@ -104,31 +104,48 @@ class WifiDirectManager @Inject constructor(
         }
     }
 
+    private var isReceiverRegistered = false
+
     init {
         channel = manager?.initialize(context, context.mainLooper, null)
     }
 
     fun registerReceiver() {
-        context.registerReceiver(receiver, intentFilter)
+        if (!isReceiverRegistered) {
+            context.registerReceiver(receiver, intentFilter)
+            isReceiverRegistered = true
+        }
     }
 
     fun unregisterReceiver() {
-        try {
-            context.unregisterReceiver(receiver)
-        } catch (e: Exception) {
-            // Ignored
+        if (isReceiverRegistered) {
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (e: Exception) {
+                // Ignored
+            }
+            isReceiverRegistered = false
         }
     }
 
     @SuppressLint("MissingPermission")
     fun startDiscovery() {
+        registerReceiver()
         try {
             manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     MeshLogger.d(TAG, "P2P Discovery Started")
+                    // Auto-restart discovery after 110 seconds
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        MeshLogger.d(TAG, "Restarting P2P Discovery (timeout)")
+                        startDiscovery()
+                    }, 110000L)
                 }
                 override fun onFailure(reasonCode: Int) {
                     MeshLogger.e(TAG, "P2P Discovery Failed: $reasonCode")
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        startDiscovery()
+                    }, 10000L)
                 }
             })
         } catch (e: SecurityException) {

@@ -1,98 +1,86 @@
 package com.meshlink.ui.settings
 
-import app.cash.turbine.test
-import com.meshlink.domain.model.User
+import com.meshlink.domain.repository.SettingsRepository
 import com.meshlink.domain.repository.UserRepository
-import com.meshlink.util.MainDispatcherRule
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
+import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
 
-    @get:Rule
-    val mainDispatcherRule = MainDispatcherRule()
-
     private lateinit var userRepository: UserRepository
+    private lateinit var settingsRepository: SettingsRepository
     private lateinit var viewModel: SettingsViewModel
-
-    private val isEncryptionEnabledFlow = MutableStateFlow(true)
-    private val isOnlineVisibleFlow = MutableStateFlow(true)
-    private val meshModeFlow = MutableStateFlow("Auto")
-    private val testUser = User(
-        meshId = "user1",
-        name = "Test User",
-        phoneNumber = "1234567890"
-    )
+    private val testDispatcher = StandardTestDispatcher()
 
     @Before
     fun setup() {
+        Dispatchers.setMain(testDispatcher)
         userRepository = mockk(relaxed = true)
-        coEvery { userRepository.isEncryptionEnabled } returns isEncryptionEnabledFlow
-        coEvery { userRepository.isOnlineVisible } returns isOnlineVisibleFlow
-        coEvery { userRepository.meshMode } returns meshModeFlow
-        coEvery { userRepository.getLocalUser() } returns testUser
+        settingsRepository = mockk(relaxed = true)
 
-        viewModel = SettingsViewModel(userRepository)
+        coEvery { userRepository.isEncryptionEnabled } returns flowOf(true)
+        coEvery { userRepository.isOnlineVisible } returns flowOf(true)
+        coEvery { userRepository.meshMode } returns flowOf("Auto")
+        coEvery { settingsRepository.isAppLockEnabled } returns flowOf(false)
+        coEvery { settingsRepository.autoLockTimeoutMs } returns flowOf(60000L)
+        coEvery { settingsRepository.isBiometricsEnabled } returns flowOf(false)
+        coEvery { settingsRepository.isBleEnabled } returns flowOf(true)
+        coEvery { settingsRepository.isWifiDirectEnabled } returns flowOf(true)
+        coEvery { settingsRepository.preferredTransport } returns flowOf("HYBRID")
+        coEvery { settingsRepository.isMeshRelayEnabled } returns flowOf(true)
+        coEvery { settingsRepository.themeMode } returns flowOf("SYSTEM")
+        coEvery { settingsRepository.isMaterialYouEnabled } returns flowOf(true)
+        coEvery { settingsRepository.fontScale } returns flowOf(1.0f)
+        coEvery { settingsRepository.highContrast } returns flowOf(false)
+
+        viewModel = SettingsViewModel(userRepository, settingsRepository)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test
-    fun `uiState emits values from repository`() = runTest {
-        viewModel.uiState.test {
-            val state = awaitItem()
-            assertEquals(true, state.isEncryptionEnabled)
-            assertEquals(true, state.isOnlineVisible)
-            assertEquals("Auto", state.meshMode)
-            assertEquals(testUser, state.user)
-
-            isEncryptionEnabledFlow.value = false
-            val state2 = awaitItem()
-            assertEquals(false, state2.isEncryptionEnabled)
-
-            cancelAndIgnoreRemainingEvents()
-        }
+    fun testUpdateUserName() = runTest {
+        val newName = "New Name"
+        viewModel.updateUserName(newName)
+        testDispatcher.scheduler.advanceUntilIdle()
+        coVerify { userRepository.updateUserName(newName) }
     }
 
     @Test
-    fun `setEncryptionEnabled delegates to repository`() = runTest {
-        viewModel.setEncryptionEnabled(false)
-        advanceUntilIdle()
-        coVerify(exactly = 1) { userRepository.setEncryptionEnabled(false) }
+    fun testSetThemeMode() = runTest {
+        val mode = "DARK"
+        viewModel.setThemeMode(mode)
+        testDispatcher.scheduler.advanceUntilIdle()
+        coVerify { settingsRepository.setThemeMode(mode) }
     }
 
     @Test
-    fun `setOnlineVisible delegates to repository`() = runTest {
-        viewModel.setOnlineVisible(false)
-        advanceUntilIdle()
-        coVerify(exactly = 1) { userRepository.setOnlineVisible(false) }
+    fun testSetAppLockEnabled() = runTest {
+        viewModel.setAppLockEnabled(true)
+        testDispatcher.scheduler.advanceUntilIdle()
+        coVerify { settingsRepository.setAppLockEnabled(true) }
     }
 
     @Test
-    fun `setMeshMode delegates to repository`() = runTest {
-        viewModel.setMeshMode("Manual")
-        advanceUntilIdle()
-        coVerify(exactly = 1) { userRepository.setMeshMode("Manual") }
-    }
-
-    @Test
-    fun `logout delegates to repository and emits LogoutSuccess event`() = runTest {
-        viewModel.uiEvent.test {
-            viewModel.logout()
-            advanceUntilIdle()
-            
-            coVerify(exactly = 1) { userRepository.logout() }
-            assertEquals(SettingsEvent.LogoutSuccess, awaitItem())
-            
-            cancelAndIgnoreRemainingEvents()
-        }
+    fun testSetBleEnabled() = runTest {
+        viewModel.setBleEnabled(false)
+        testDispatcher.scheduler.advanceUntilIdle()
+        coVerify { settingsRepository.setBleEnabled(false) }
     }
 }

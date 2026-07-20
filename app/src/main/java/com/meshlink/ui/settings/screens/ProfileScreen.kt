@@ -19,15 +19,26 @@ import androidx.compose.ui.unit.dp
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
+import com.meshlink.ui.settings.SettingsUiState
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
-    userName: String,
-    meshId: String,
+    uiState: SettingsUiState,
+    onSaveName: (String) -> Unit,
     onBack: () -> Unit
 ) {
+    val userName = uiState.user?.name ?: "User"
+    val meshId = uiState.user?.meshId ?: ""
     var editName by remember { mutableStateOf(userName) }
     
+    // Update local state when remote state changes
+    LaunchedEffect(userName) {
+        if (editName != userName) {
+            editName = userName
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -37,6 +48,13 @@ fun ProfileScreen(
                     }
                 },
                 title = { Text("Profile") },
+                actions = {
+                    if (editName != userName && editName.isNotBlank()) {
+                        TextButton(onClick = { onSaveName(editName) }) {
+                            Text("Save", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -93,7 +111,8 @@ fun ProfileScreen(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Display Name") },
                 trailingIcon = { Icon(Icons.Default.Edit, contentDescription = "Edit") },
-                shape = MeshTheme.shapes.medium
+                shape = MeshTheme.shapes.medium,
+                singleLine = true
             )
             
             Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))

@@ -58,7 +58,9 @@ class BleScannerManager @Inject constructor(
             return
         }
         
-        val filter = ScanFilter.Builder().build()
+        val filter = ScanFilter.Builder()
+            .setServiceUuid(ParcelUuid(BleConstants.MESH_SERVICE_UUID))
+            .build()
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val isPowerSave = powerManager.isPowerSaveMode
 
@@ -83,6 +85,12 @@ class BleScannerManager @Inject constructor(
 
             override fun onScanFailed(errorCode: Int) {
                 MeshLogger.e(TAG, "BLE scan failed with error code: $errorCode")
+                if (errorCode != ScanCallback.SCAN_FAILED_ALREADY_STARTED) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        MeshLogger.d(TAG, "Attempting to restart BLE scan after failure")
+                        startHardwareScan()
+                    }, 5000L)
+                }
             }
         }
         
@@ -114,7 +122,7 @@ class BleScannerManager @Inject constructor(
 
         val deviceAddress = result.device.address
         val rssi = result.rssi
-        val serviceData = record.getServiceData(ParcelUuid(BleConstants.MESH_SERVICE_UUID))
+        val serviceData = record.getManufacturerSpecificData(BleConstants.MANUFACTURER_ID)
         
         if (serviceData == null || serviceData.size < 12) {
             // Ignore if missing data or old format
@@ -127,13 +135,13 @@ class BleScannerManager @Inject constructor(
         // 9-11: Name preview bytes
         val meshIdBytes = ByteArray(8)
         System.arraycopy(serviceData, 0, meshIdBytes, 0, 8)
-        val meshId = String(meshIdBytes, Charsets.UTF_8).trim()
+        val meshId = String(meshIdBytes, Charsets.UTF_8).replace("\u0000", "").trim()
         
         val capabilities = serviceData[8]
         
         val nameBytes = ByteArray(3)
         System.arraycopy(serviceData, 9, nameBytes, 0, 3)
-        var name = String(nameBytes, Charsets.UTF_8).trim()
+        var name = String(nameBytes, Charsets.UTF_8).replace("\u0000", "").trim()
         
         if (name.isBlank()) {
             name = record.deviceName ?: result.device.name ?: "Peer"

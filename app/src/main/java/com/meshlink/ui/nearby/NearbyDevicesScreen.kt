@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.automirrored.outlined.BluetoothSearching
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +26,7 @@ import com.meshlink.ui.components.LoadingOverlay
 import com.meshlink.ui.components.nearby.MeshDeviceCard
 import com.meshlink.ui.components.nearby.MeshTopologyCanvas
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +44,7 @@ fun NearbyDevicesScreen(
 
         var searchQuery by remember { mutableStateOf("") }
         var isSearchActive by remember { mutableStateOf(false) }
+        var connectingToAddress by remember { mutableStateOf<String?>(null) }
 
         val filteredDevices = if (searchQuery.isBlank()) {
             uiState.devices
@@ -164,12 +167,19 @@ fun NearbyDevicesScreen(
                     }
                 }
 
-                // Device List or Empty State
-                if (filteredDevices.isEmpty()) {
+                // Error State, Empty State, or Device List
+                if (uiState.errorMessage != null) {
+                    EmptyState(
+                        icon = Icons.Outlined.ErrorOutline,
+                        title = "Discovery Error",
+                        description = uiState.errorMessage!!,
+                        modifier = Modifier.weight(0.65f)
+                    )
+                } else if (filteredDevices.isEmpty()) {
                     EmptyState(
                         icon = Icons.AutoMirrored.Outlined.BluetoothSearching,
                         title = if (searchQuery.isBlank()) "Scanning for Peers" else "No matching peers",
-                        description = if (searchQuery.isBlank()) "Looking for active Mesh Link nodes in your vicinity..." else "Adjust your search terms.",
+                        description = if (searchQuery.isBlank()) "Looking for active Mesh Link nodes via BLE and Wi-Fi Direct..." else "Adjust your search terms.",
                         modifier = Modifier.weight(0.65f)
                     )
                 } else {
@@ -180,14 +190,19 @@ fun NearbyDevicesScreen(
                             .padding(horizontal = MeshTheme.spacing.mediumLarge),
                         verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                     ) {
-                        items(filteredDevices, key = { it.meshId }, contentType = { "device_item" }) { device ->
+                        items(filteredDevices, key = { it.address }, contentType = { "device_item" }) { device ->
                             MeshDeviceCard(
                                 device = device, 
+                                isConnecting = connectingToAddress == device.address,
                                 onClick = {
-                                    onNavigateToChat(
-                                        device.meshId.ifBlank { device.address },
-                                        device.name.ifBlank { device.address.takeLast(8) }
-                                    )
+                                    connectingToAddress = device.address
+                                    viewModel.connectToDevice(device) {
+                                        onNavigateToChat(
+                                            device.meshId.ifBlank { device.address },
+                                            device.name.ifBlank { device.address.takeLast(8) }
+                                        )
+                                        connectingToAddress = null
+                                    }
                                 }
                             )
                         }
@@ -196,8 +211,9 @@ fun NearbyDevicesScreen(
                 }
             }
 
+            // Only show full loading overlay if we're actively scanning and have absolutely zero results
             LoadingOverlay(
-                isLoading = uiState.devices.isEmpty() && searchQuery.isBlank() && !isSearchActive, // Simulated loading state for UX
+                isLoading = uiState.isScanning && uiState.devices.isEmpty() && searchQuery.isBlank() && !isSearchActive && uiState.errorMessage == null,
                 modifier = Modifier.fillMaxSize()
             )
         }

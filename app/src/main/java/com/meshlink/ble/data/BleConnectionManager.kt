@@ -16,7 +16,13 @@ class BleConnectionManager @Inject constructor(
     private val TAG = "BleConnectionManager"
 
     // Moving peerStates from BleRepositoryImpl here
-    val peerStates = ConcurrentHashMap<String, PeerConnectionState>()
+    val peerStates: MutableMap<String, PeerConnectionState> = java.util.Collections.synchronizedMap(
+        object : java.util.LinkedHashMap<String, PeerConnectionState>(100, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PeerConnectionState>?): Boolean {
+                return size > 1000
+            }
+        }
+    )
     
     val activeClients: Set<String>
         get() = bleDataSource.activeClients
@@ -59,10 +65,12 @@ class BleConnectionManager @Inject constructor(
     }
     
     fun updateAnalyticsConnectionCount() {
-        val count = peerStates.values.count { 
-            it == PeerConnectionState.CONNECTED || 
-            it == PeerConnectionState.SESSION_READY || 
-            it == PeerConnectionState.SESSION_ESTABLISHED 
+        val count = synchronized(peerStates) {
+            peerStates.values.count { 
+                it == PeerConnectionState.CONNECTED || 
+                it == PeerConnectionState.SESSION_READY || 
+                it == PeerConnectionState.SESSION_ESTABLISHED 
+            }
         }
         discoveryEngine.analytics.updateActiveConnections(count)
     }

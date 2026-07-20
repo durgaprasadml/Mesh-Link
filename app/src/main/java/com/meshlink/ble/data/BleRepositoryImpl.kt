@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.cancel
@@ -281,9 +282,12 @@ class BleRepositoryImpl @Inject constructor(
     }
 
     
+    private val retryMutex = kotlinx.coroutines.sync.Mutex()
+    
     private suspend fun retryPendingMessages() {
-        val pending = chatDao.getMessagesByStatus(DeliveryStatus.PENDING)
-        if (pending.isEmpty()) return
+        retryMutex.withLock {
+            val pending = chatDao.getMessagesByStatus(DeliveryStatus.PENDING)
+            if (pending.isEmpty()) return
 
         // FIX ISSUE 2: Auto-connect to all scanned devices before retrying
         connectToAllScannedDevices()
@@ -365,6 +369,7 @@ class BleRepositoryImpl @Inject constructor(
                 }
                 else -> {}
             }
+        }
         }
     }
 

@@ -7,6 +7,7 @@ interface UserRepository {
     suspend fun registerUser(name: String, phoneNumber: String, pin: String): Result<String>
     suspend fun loginUser(phoneNumber: String, pin: String): Result<User>
     suspend fun getLocalUser(): User?
+    suspend fun updateUserName(name: String)
     suspend fun logout()
     val isUserLoggedIn: Flow<Boolean>
     

@@ -6,6 +6,7 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.video.camera.CameraController
 import com.meshlink.video.codec.VideoCodecManager
 import com.meshlink.video.transport.VideoTransport
+import com.meshlink.video.screen.ScreenShareManager
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -13,7 +14,8 @@ import javax.inject.Singleton
 class VideoStreamManager @Inject constructor(
     private val cameraController: CameraController,
     private val codecManager: VideoCodecManager,
-    private val transport: VideoTransport
+    private val transport: VideoTransport,
+    private val screenShareManager: ScreenShareManager
 ) {
     companion object {
         private const val TAG = "VideoStreamManager"
@@ -112,8 +114,23 @@ class VideoStreamManager @Inject constructor(
         cameraController.switchCamera(owner)
     }
 
-    fun toggleScreenShare() {
-        // Switch input surface from Camera to MediaProjection
-        MeshLogger.d(TAG, "Screen share toggled (TODO: Implement MediaProjection binding)")
+    private var isScreenSharing = false
+
+    fun toggleScreenShare(resultCode: Int? = null, data: android.content.Intent? = null, metrics: android.util.DisplayMetrics? = null) {
+        if (!isScreenSharing) {
+            if (resultCode != null && data != null && metrics != null) {
+                codecManager.inputSurface?.let { surface ->
+                    screenShareManager.startScreenCapture(resultCode, data, surface, metrics)
+                    isScreenSharing = true
+                    MeshLogger.d(TAG, "Screen share started")
+                }
+            } else {
+                MeshLogger.e(TAG, "Cannot start screen share: Missing intent data or metrics")
+            }
+        } else {
+            screenShareManager.stopScreenCapture()
+            isScreenSharing = false
+            MeshLogger.d(TAG, "Screen share stopped")
+        }
     }
 }

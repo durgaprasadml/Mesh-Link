@@ -86,8 +86,8 @@ class VideoManager @Inject constructor(
         streamManager.switchCamera()
     }
 
-    fun toggleScreenShare() {
-        streamManager.toggleScreenShare()
+    fun toggleScreenShare(resultCode: Int? = null, data: android.content.Intent? = null, metrics: android.util.DisplayMetrics? = null) {
+        streamManager.toggleScreenShare(resultCode, data, metrics)
     }
 
     // ─────────────────── Incoming Handlers ───────────────────

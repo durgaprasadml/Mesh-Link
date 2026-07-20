@@ -32,6 +32,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -172,9 +173,12 @@ class MeshMessagingManager @Inject constructor(
         }
     }
 
+    private val retryMutex = kotlinx.coroutines.sync.Mutex()
+
     private suspend fun retryPendingMessages() {
-        val pending = chatDao.getMessagesByStatus(DeliveryStatus.PENDING)
-        if (pending.isEmpty()) return
+        retryMutex.withLock {
+            val pending = chatDao.getMessagesByStatus(DeliveryStatus.PENDING)
+            if (pending.isEmpty()) return
 
         // FIX ISSUE 2: Auto-connect to all scanned devices before retrying
         connectToAllScannedDevices()
@@ -256,6 +260,7 @@ class MeshMessagingManager @Inject constructor(
                 }
                 else -> {}
             }
+        }
         }
     }
 

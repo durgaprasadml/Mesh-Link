@@ -6,6 +6,7 @@ import com.meshlink.common.diagnostics.DiagnosticsManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 @Singleton
 class MeshCrashReporter @Inject constructor(
@@ -14,26 +15,24 @@ class MeshCrashReporter @Inject constructor(
 ) {
 
     fun logNonFatal(throwable: Throwable, metadata: Map<String, String>? = null) {
-        // TODO: In a production Firebase environment, you would use:
-        // FirebaseCrashlytics.getInstance().recordException(throwable)
-        // For now, we simulate this structured logging internally.
+        FirebaseCrashlytics.getInstance().recordException(throwable)
         
         val diagnosticsContext = diagnosticsManager.exportDiagnosticsJson()
         MeshLogger.e("CrashReporter", "Non-fatal exception recorded: ${throwable.message}\nDiagnostics: $diagnosticsContext")
         
         metadata?.forEach { (key, value) ->
             MeshLogger.e("CrashReporter", "Custom Key: $key = $value")
-            // FirebaseCrashlytics.getInstance().setCustomKey(key, value)
+            FirebaseCrashlytics.getInstance().setCustomKey(key, value)
         }
         
-        // FirebaseCrashlytics.getInstance().setCustomKey("mesh_diagnostics", diagnosticsContext)
+        FirebaseCrashlytics.getInstance().setCustomKey("mesh_diagnostics", diagnosticsContext)
     }
 
     fun setUserId(userId: String) {
-        // FirebaseCrashlytics.getInstance().setUserId(userId)
+        FirebaseCrashlytics.getInstance().setUserId(userId)
     }
 
     fun logBreadcrumb(message: String) {
-        // FirebaseCrashlytics.getInstance().log(message)
+        FirebaseCrashlytics.getInstance().log(message)
     }
 }

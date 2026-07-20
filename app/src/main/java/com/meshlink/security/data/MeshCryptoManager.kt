@@ -43,6 +43,13 @@ class MeshCryptoManager @Inject constructor(
     private val derivedKeys = java.util.concurrent.ConcurrentHashMap<String, SecretKey>()
     private val previousDerivedKeys = java.util.concurrent.ConcurrentHashMap<String, SecretKey>()
 
+    private val encryptCipherLocal = object : ThreadLocal<Cipher>() {
+        override fun initialValue() = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+    }
+    private val decryptCipherLocal = object : ThreadLocal<Cipher>() {
+        override fun initialValue() = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+    }
+
     // EncryptedSharedPreferences for persistent peer public key storage
     private val peerKeyStore: SharedPreferences by lazy {
         try {
@@ -333,34 +340,32 @@ class MeshCryptoManager @Inject constructor(
     // ────────── ECDH Key Agreement ──────────
 
     private fun deriveSharedKey(peerId: String): SecretKey {
-        derivedKeys[peerId]?.let { return it }
+        return derivedKeys.computeIfAbsent(peerId) {
+            val peerPublicKeyBase64 = getPeerPublicKey(peerId)
+            if (peerPublicKeyBase64 == null) {
+                com.meshlink.common.logger.MeshLogger.w("MeshCryptoManager", "No public key for peer $peerId")
+                return@computeIfAbsent SecretKeySpec(ByteArray(32), SecurityConstants.AES_GCM_CIPHER)
+            }
 
-        val peerPublicKeyBase64 = getPeerPublicKey(peerId)
-        if (peerPublicKeyBase64 == null) {
-            com.meshlink.common.logger.MeshLogger.w("MeshCryptoManager", "No public key for peer $peerId")
-            // Return a dummy key to fail gracefully instead of crashing
-            return SecretKeySpec(ByteArray(32), SecurityConstants.AES_GCM_CIPHER)
+            val peerKeyBytes = Base64.decode(peerPublicKeyBase64, Base64.NO_WRAP)
+            val keyFactory = KeyFactory.getInstance(SecurityConstants.EC_ALGORITHM)
+            val peerPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(peerKeyBytes))
+
+            val keyAgreement = KeyAgreement.getInstance(SecurityConstants.ECDH_ALGORITHM)
+            keyAgreement.init(getPrivateKey())
+            keyAgreement.doPhase(peerPublicKey, true)
+            val sharedSecret = keyAgreement.generateSecret()
+
+            val digest = MessageDigest.getInstance(SecurityConstants.SHA_256_ALGORITHM)
+            val aesKeyBytes = digest.digest(sharedSecret)
+            
+            val aesKey = SecretKeySpec(aesKeyBytes, "AES")
+
+            java.util.Arrays.fill(sharedSecret, 0.toByte())
+            java.util.Arrays.fill(aesKeyBytes, 0.toByte())
+
+            aesKey
         }
-
-        val peerKeyBytes = Base64.decode(peerPublicKeyBase64, Base64.NO_WRAP)
-        val keyFactory = KeyFactory.getInstance(SecurityConstants.EC_ALGORITHM)
-        val peerPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(peerKeyBytes))
-
-        val keyAgreement = KeyAgreement.getInstance(SecurityConstants.ECDH_ALGORITHM)
-        keyAgreement.init(getPrivateKey())
-        keyAgreement.doPhase(peerPublicKey, true)
-        val sharedSecret = keyAgreement.generateSecret()
-
-        val digest = MessageDigest.getInstance(SecurityConstants.SHA_256_ALGORITHM)
-        val aesKeyBytes = digest.digest(sharedSecret)
-        
-        val aesKey = SecretKeySpec(aesKeyBytes, "AES")
-
-        java.util.Arrays.fill(sharedSecret, 0.toByte())
-        java.util.Arrays.fill(aesKeyBytes, 0.toByte())
-
-        derivedKeys[peerId] = aesKey
-        return aesKey
     }
 
     // ────────── Ephemeral ECDH Rekey (Phase A2.3) ──────────
@@ -405,7 +410,7 @@ class MeshCryptoManager @Inject constructor(
     fun encrypt(plaintext: String, peerId: String, aad: ByteArray? = null): String {
         val key = deriveSharedKey(peerId)
 
-        val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+        val cipher = encryptCipherLocal.get()!!
         val iv = ByteArray(SecurityConstants.GCM_IV_LENGTH_BYTES)
         java.security.SecureRandom().nextBytes(iv)
         val spec = GCMParameterSpec(SecurityConstants.GCM_TAG_LENGTH_BITS, iv)
@@ -440,7 +445,7 @@ class MeshCryptoManager @Inject constructor(
             val iv = combined.copyOfRange(0, SecurityConstants.GCM_IV_LENGTH_BYTES)
             val ciphertextWithTag = combined.copyOfRange(SecurityConstants.GCM_IV_LENGTH_BYTES, combined.size)
 
-            val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+            val cipher = decryptCipherLocal.get()!!
             val spec = GCMParameterSpec(SecurityConstants.GCM_TAG_LENGTH_BITS, iv)
             cipher.init(Cipher.DECRYPT_MODE, key, spec)
 

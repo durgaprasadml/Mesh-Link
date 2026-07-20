@@ -51,7 +51,8 @@ class HomeViewModel @Inject constructor(
 
     fun updateUserName(name: String) {
         viewModelScope.launch {
-            // Placeholder: ideally update in UserDao
+            userRepository.updateUserName(name)
+            loadUser()
         }
     }
 

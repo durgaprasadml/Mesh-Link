@@ -52,7 +52,7 @@ import com.meshlink.ui.nearby.NearbyDevicesScreen
 import com.meshlink.ui.settings.SettingsScreen
 import com.meshlink.ui.sos.SosScreen
 import com.meshlink.util.NotificationHelper
-import java.net.URLEncoder
+
 
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
@@ -65,7 +65,7 @@ sealed class Screen(val route: String) {
     object Sos : Screen("sos")
     object ChatDetail : Screen("chat/{address}/{name}") {
         fun createRoute(address: String, name: String) = 
-            "chat/${URLEncoder.encode(address, "UTF-8")}/${URLEncoder.encode(name, "UTF-8")}"
+            "chat/${android.net.Uri.encode(address)}/${android.net.Uri.encode(name)}"
     }
     object Settings : Screen("settings")
     object Analytics : Screen("analytics")

@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var firebaseAnalytics: FirebaseAnalytics
     
-    private val pendingIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
+    private val pendingIntents = kotlinx.coroutines.channels.Channel<Intent>(kotlinx.coroutines.channels.Channel.UNLIMITED)
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
 
                 LaunchedEffect(Unit) {
-                    pendingIntents.collect { newIntent ->
+                    for (newIntent in pendingIntents) {
                         val address = newIntent.getStringExtra("address")
                         val name = newIntent.getStringExtra("name")
                         if (address != null && name != null) {
@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingIntents.tryEmit(intent)
+        pendingIntents.trySend(intent)
     }
 
     // FIX ERROR 1: suppress system notifications while app is in foreground

@@ -93,6 +93,13 @@ class UserRepositoryImpl @Inject constructor(
         return userEntity?.let { com.meshlink.domain.model.User(meshId = it.meshId, name = it.name, phoneNumber = it.phoneNumber) }
     }
 
+    override suspend fun updateUserName(name: String) {
+        val userEntity = localDataSource.getLocalUser()
+        if (userEntity != null) {
+            localDataSource.insertUser(userEntity.copy(name = name))
+        }
+    }
+
     override suspend fun logout() {
         localDataSource.setLoginState(false)
     }

@@ -110,10 +110,16 @@ class MeshRelayService : Service() {
                     }
                 } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
                     MeshLogger.e(TAG, "Not allowed to start foreground service from background", e)
-                    _serviceState.value = ServiceState.ERROR
+                    _serviceState.value = ServiceState.STOPPED
+                    restartOnDestroy = false
+                    stopSelf()
+                    return START_NOT_STICKY
                 } catch (e: Exception) {
                     MeshLogger.e(TAG, "Failed to start foreground service", e)
-                    _serviceState.value = ServiceState.ERROR
+                    _serviceState.value = ServiceState.STOPPED
+                    restartOnDestroy = false
+                    stopSelf()
+                    return START_NOT_STICKY
                 }
                 
                 if (hasRequiredPermissions(this)) {

@@ -5,7 +5,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class MessageType {
-    TEXT, IMAGE, VOICE, LOCATION, SOS
+    TEXT, IMAGE, VOICE, LOCATION, SOS, DOCUMENT
 }
 
 @Entity(

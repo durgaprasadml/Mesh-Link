@@ -148,4 +148,50 @@ class MeshCryptoManagerTest {
         assertNotNull(fingerprint)
         assertTrue("Fingerprint should contain colons", fingerprint.contains(":"))
     }
+
+    @Test
+    fun `test rotateIdentityKeys`() {
+        val pubKeyBase64 = cryptoManager.getOrCreatePublicKey()
+        val signKeyBase64 = cryptoManager.getOrCreateSigningKey()
+        
+        // Mock capture for new keys
+        val newPubCaptor = slot<String>()
+        val newSignCaptor = slot<String>()
+        every { editor.putString("__self_public_key__", capture(newPubCaptor)) } returns editor
+        every { editor.putString("__self_signing_public_key__", capture(newSignCaptor)) } returns editor
+        every { sharedPrefs.getString("__self_public_key__", null) } answers {
+            if (newPubCaptor.isCaptured) newPubCaptor.captured else null
+        }
+        
+        cryptoManager.rotateIdentityKeys()
+        
+        // Verify delete was called
+        verify { editor.remove("__self_public_key__") }
+        verify { editor.remove("__self_private_key__") }
+        
+        val newPubKey = cryptoManager.getOrCreatePublicKey()
+        
+        // If keys are generated randomly, they shouldn't match.
+        // In our mock they might be the same if we just mocked return values, 
+        // but we verify that the clear mechanism was invoked.
+        assertNotNull(newPubKey)
+    }
+
+    @Test
+    fun `test export and import identity`() {
+        every { sharedPrefs.getString("__self_public_key__", null) } returns "pub_key"
+        every { sharedPrefs.getString("__self_private_key__", null) } returns "priv_key"
+        every { sharedPrefs.getString("__self_signing_public_key__", null) } returns "sign_pub_key"
+        every { sharedPrefs.getString("__self_signing_private_key__", null) } returns "sign_priv_key"
+
+        val exported = cryptoManager.exportIdentity()
+        assertNotNull(exported)
+        
+        cryptoManager.importIdentity(exported)
+        
+        verify { editor.putString("__self_public_key__", "pub_key") }
+        verify { editor.putString("__self_private_key__", "priv_key") }
+        verify { editor.putString("__self_signing_public_key__", "sign_pub_key") }
+        verify { editor.putString("__self_signing_private_key__", "sign_priv_key") }
+    }
 }

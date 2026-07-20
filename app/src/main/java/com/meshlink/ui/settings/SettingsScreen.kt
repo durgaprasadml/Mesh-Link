@@ -77,8 +77,6 @@ fun SettingsScreen(
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.SECURITY -> SecurityCenterScreen(
-                uiState = uiState,
-                viewModel = viewModel,
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.NETWORK -> NetworkSettingsScreen(

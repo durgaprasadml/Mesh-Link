@@ -503,4 +503,128 @@ class MeshCryptoManager @Inject constructor(
         derivedKeys.remove(peerId)
         previousDerivedKeys.remove(peerId)
     }
+
+    // ────────── Identity Management ──────────
+
+    fun rotateIdentityKeys() {
+        val now = System.currentTimeMillis()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val keyStore = KeyStore.getInstance(SecurityConstants.ANDROID_KEYSTORE)
+                keyStore.load(null)
+                keyStore.deleteEntry(SecurityConstants.MESH_KEYSTORE_ALIAS)
+                keyStore.deleteEntry(SecurityConstants.SIGNING_KEYSTORE_ALIAS)
+            }
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to delete Keystore entries during rotation: ${e.message}")
+        }
+        
+        peerKeyStore.edit()
+            .remove(SecurityConstants.SELF_PUBLIC_KEY_KEY)
+            .remove(SecurityConstants.SELF_PRIVATE_KEY_KEY)
+            .putLong(SecurityConstants.LAST_ROTATION_TIME, now)
+            .apply()
+            
+        peerSigningKeyStore.edit()
+            .remove(SecurityConstants.SELF_SIGNING_PUBLIC_KEY_KEY)
+            .remove(SecurityConstants.SELF_SIGNING_PRIVATE_KEY_KEY)
+            .apply()
+            
+        // Pre-generate new keys
+        getOrCreatePublicKey()
+        getOrCreateSigningKey()
+    }
+
+    fun deleteIdentityKeys() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val keyStore = KeyStore.getInstance(SecurityConstants.ANDROID_KEYSTORE)
+                keyStore.load(null)
+                keyStore.deleteEntry(SecurityConstants.MESH_KEYSTORE_ALIAS)
+                keyStore.deleteEntry(SecurityConstants.SIGNING_KEYSTORE_ALIAS)
+            }
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to delete Keystore entries: ${e.message}")
+        }
+        
+        peerKeyStore.edit()
+            .remove(SecurityConstants.SELF_PUBLIC_KEY_KEY)
+            .remove(SecurityConstants.SELF_PRIVATE_KEY_KEY)
+            .remove(SecurityConstants.KEY_CREATION_TIME)
+            .remove(SecurityConstants.LAST_ROTATION_TIME)
+            .apply()
+            
+        peerSigningKeyStore.edit()
+            .remove(SecurityConstants.SELF_SIGNING_PUBLIC_KEY_KEY)
+            .remove(SecurityConstants.SELF_SIGNING_PRIVATE_KEY_KEY)
+            .apply()
+    }
+
+    fun exportIdentity(): String {
+        // Can only export software keys
+        val pubKey = peerKeyStore.getString(SecurityConstants.SELF_PUBLIC_KEY_KEY, null)
+        val privKey = peerKeyStore.getString(SecurityConstants.SELF_PRIVATE_KEY_KEY, null)
+        val signPubKey = peerSigningKeyStore.getString(SecurityConstants.SELF_SIGNING_PUBLIC_KEY_KEY, null)
+        val signPrivKey = peerSigningKeyStore.getString(SecurityConstants.SELF_SIGNING_PRIVATE_KEY_KEY, null)
+        
+        if (pubKey == null || privKey == null || signPubKey == null || signPrivKey == null) {
+            throw IllegalStateException("Cannot export hardware-backed identities or missing keys.")
+        }
+        
+        val json = org.json.JSONObject()
+        json.put("pub", pubKey)
+        json.put("priv", privKey)
+        json.put("sign_pub", signPubKey)
+        json.put("sign_priv", signPrivKey)
+        return Base64.encodeToString(json.toString().toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+    }
+
+    fun importIdentity(identityBackupBase64: String) {
+        try {
+            val jsonString = String(Base64.decode(identityBackupBase64, Base64.NO_WRAP), Charsets.UTF_8)
+            val json = org.json.JSONObject(jsonString)
+            val pub = json.getString("pub")
+            val priv = json.getString("priv")
+            val signPub = json.getString("sign_pub")
+            val signPriv = json.getString("sign_priv")
+            
+            // Delete existing hardware keys if present
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val keyStore = KeyStore.getInstance(SecurityConstants.ANDROID_KEYSTORE)
+                    keyStore.load(null)
+                    keyStore.deleteEntry(SecurityConstants.MESH_KEYSTORE_ALIAS)
+                    keyStore.deleteEntry(SecurityConstants.SIGNING_KEYSTORE_ALIAS)
+                }
+            } catch (ignore: Exception) {}
+            
+            peerKeyStore.edit()
+                .putString(SecurityConstants.SELF_PUBLIC_KEY_KEY, pub)
+                .putString(SecurityConstants.SELF_PRIVATE_KEY_KEY, priv)
+                .apply()
+                
+            peerSigningKeyStore.edit()
+                .putString(SecurityConstants.SELF_SIGNING_PUBLIC_KEY_KEY, signPub)
+                .putString(SecurityConstants.SELF_SIGNING_PRIVATE_KEY_KEY, signPriv)
+                .apply()
+                
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to import identity: ${e.message}")
+            throw IllegalArgumentException("Invalid identity backup format")
+        }
+    }
+
+    fun getKeyCreationTime(): Long {
+        val time = peerKeyStore.getLong(SecurityConstants.KEY_CREATION_TIME, 0L)
+        if (time == 0L) {
+            val now = System.currentTimeMillis()
+            peerKeyStore.edit().putLong(SecurityConstants.KEY_CREATION_TIME, now).apply()
+            return now
+        }
+        return time
+    }
+
+    fun getLastRotationTime(): Long {
+        return peerKeyStore.getLong(SecurityConstants.LAST_ROTATION_TIME, getKeyCreationTime())
+    }
 }

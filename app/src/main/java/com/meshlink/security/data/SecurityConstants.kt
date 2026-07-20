@@ -52,4 +52,6 @@ object SecurityConstants {
     const val SELF_PUBLIC_KEY_KEY = "__self_public_key__"
     const val SELF_SIGNING_PRIVATE_KEY_KEY = "__self_signing_private_key__"
     const val SELF_SIGNING_PUBLIC_KEY_KEY = "__self_signing_public_key__"
+    const val KEY_CREATION_TIME = "__key_creation_time__"
+    const val LAST_ROTATION_TIME = "__last_rotation_time__"
 }

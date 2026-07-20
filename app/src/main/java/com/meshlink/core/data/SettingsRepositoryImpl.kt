@@ -15,6 +15,11 @@ class SettingsRepositoryImpl @Inject constructor(
         localDataSource.setAppLockEnabled(enabled)
     }
 
+    override val appLockPinHash: Flow<String?> = localDataSource.appLockPinHash
+    override suspend fun setAppLockPinHash(pinHash: String?) {
+        localDataSource.setAppLockPinHash(pinHash)
+    }
+
     override val autoLockTimeoutMs: Flow<Long> = localDataSource.autoLockTimeoutMs
     override suspend fun setAutoLockTimeoutMs(timeoutMs: Long) {
         localDataSource.setAutoLockTimeoutMs(timeoutMs)

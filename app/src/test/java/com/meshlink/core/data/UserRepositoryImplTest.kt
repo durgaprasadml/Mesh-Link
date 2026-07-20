@@ -17,7 +17,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+import com.meshlink.util.MainDispatcherRule
+import org.junit.Rule
+
 class UserRepositoryImplTest {
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
 
     private lateinit var localDataSource: UserLocalDataSource
     private lateinit var cryptoDataSource: CryptoDataSource

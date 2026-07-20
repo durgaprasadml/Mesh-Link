@@ -191,6 +191,7 @@ dependencies {
 
     // Security
     implementation(libs.androidx.security.crypto)
+    implementation("androidx.biometric:biometric:1.1.0")
 
     testImplementation(libs.junit)
     testImplementation(libs.json)

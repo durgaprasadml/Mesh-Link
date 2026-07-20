@@ -7,6 +7,9 @@ interface SettingsLocalDataSource {
     val isAppLockEnabled: Flow<Boolean>
     suspend fun setAppLockEnabled(enabled: Boolean)
 
+    val appLockPinHash: Flow<String?>
+    suspend fun setAppLockPinHash(pinHash: String?)
+
     val autoLockTimeoutMs: Flow<Long>
     suspend fun setAutoLockTimeoutMs(timeoutMs: Long)
 

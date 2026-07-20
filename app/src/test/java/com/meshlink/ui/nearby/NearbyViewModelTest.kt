@@ -39,6 +39,7 @@ class NearbyViewModelTest {
         wifiDirectManager = mockk(relaxed = true)
 
         coEvery { meshRepository.scannedDevices } returns scannedDevicesFlow
+        coEvery { wifiDirectManager.discoveredPeers } returns kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
 
         viewModel = NearbyViewModel(meshRepository, userRepository, wifiDirectManager)
     }

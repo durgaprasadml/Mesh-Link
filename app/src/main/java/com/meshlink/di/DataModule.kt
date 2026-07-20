@@ -61,4 +61,10 @@ abstract class DataModule {
     abstract fun bindSettingsLocalDataSource(
         impl: com.meshlink.core.data.source.SettingsLocalDataSourceImpl
     ): com.meshlink.core.data.source.SettingsLocalDataSource
+    
+    @Binds
+    @Singleton
+    abstract fun bindSecurityRepository(
+        impl: com.meshlink.security.data.SecurityRepositoryImpl
+    ): com.meshlink.domain.repository.SecurityRepository
 }

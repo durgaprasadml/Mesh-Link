@@ -8,9 +8,12 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertEquals
+import org.junit.Assert.assertEquals
 
 class SettingsRepositoryTest {
+
+    @get:org.junit.Rule
+    val mainDispatcherRule = com.meshlink.util.MainDispatcherRule()
 
     private lateinit var localDataSource: SettingsLocalDataSource
     private lateinit var settingsRepository: SettingsRepositoryImpl
@@ -18,12 +21,12 @@ class SettingsRepositoryTest {
     @Before
     fun setup() {
         localDataSource = mockk(relaxed = true)
-        settingsRepository = SettingsRepositoryImpl(localDataSource)
     }
 
     @Test
     fun testIsAppLockEnabledFlowsFromDataSource() = runTest {
         coEvery { localDataSource.isAppLockEnabled } returns flowOf(true)
+        settingsRepository = SettingsRepositoryImpl(localDataSource)
         var result = false
         settingsRepository.isAppLockEnabled.collect { result = it }
         assertEquals(true, result)
@@ -31,12 +34,14 @@ class SettingsRepositoryTest {
 
     @Test
     fun testSetAppLockEnabledDelegatesToDataSource() = runTest {
+        settingsRepository = SettingsRepositoryImpl(localDataSource)
         settingsRepository.setAppLockEnabled(true)
         coVerify { localDataSource.setAppLockEnabled(true) }
     }
 
     @Test
     fun testSetThemeModeDelegatesToDataSource() = runTest {
+        settingsRepository = SettingsRepositoryImpl(localDataSource)
         settingsRepository.setThemeMode("DARK")
         coVerify { localDataSource.setThemeMode("DARK") }
     }

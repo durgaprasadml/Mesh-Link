@@ -208,6 +208,13 @@ class ChatDetailViewModel @Inject constructor(
         }
     }
 
+    fun sendDocument(uri: Uri) {
+        if (address.isBlank()) return
+        viewModelScope.launch {
+            meshRepository.sendDocument(rawPeerIdOrAddress.ifBlank { address }, uri, name)
+        }
+    }
+
     fun retryTransfer(messageId: String) {
         viewModelScope.launch {
             val msg = getMessageUseCase(messageId) ?: return@launch

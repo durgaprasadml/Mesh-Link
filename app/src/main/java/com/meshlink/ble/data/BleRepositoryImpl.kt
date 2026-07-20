@@ -633,6 +633,10 @@ class BleRepositoryImpl @Inject constructor(
         meshMessagingManager.sendImage(targetMeshId, imageUri, chatName)
     }
 
+    override suspend fun sendDocument(targetMeshId: String, documentUri: Uri, chatName: String) {
+        meshMessagingManager.sendDocument(targetMeshId, documentUri, chatName)
+    }
+
     override suspend fun sendVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String) {
         meshMessagingManager.sendVoiceNote(targetMeshId, filePath, durationMs, chatName)
     }

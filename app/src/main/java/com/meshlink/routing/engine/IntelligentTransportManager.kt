@@ -49,7 +49,10 @@ class IntelligentTransportManager @Inject constructor(
         return when (packetType) {
             PacketType.VIDEO_FRAME, 
             PacketType.VOICE_FRAME, 
-            PacketType.MEDIA_CHUNK -> true
+            PacketType.MEDIA_CHUNK,
+            PacketType.MEDIA_META,
+            PacketType.MEDIA_ACK,
+            PacketType.MEDIA_NACK -> true
             else -> false
         }
     }

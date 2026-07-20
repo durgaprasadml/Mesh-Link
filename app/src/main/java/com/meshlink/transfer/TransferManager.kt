@@ -6,6 +6,8 @@ import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.di.IoDispatcher
+import com.meshlink.routing.engine.IntelligentTransportManager
+import com.meshlink.routing.engine.RouteType
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -26,6 +28,7 @@ class TransferManager @Inject constructor(
     private val metaManager: FileMetadataManager,
     private val verifier: IntegrityVerifier,
     private val analytics: TransferAnalytics,
+    private val intelligentTransportManager: IntelligentTransportManager,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
     companion object {
@@ -37,6 +40,20 @@ class TransferManager @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     var onSendPacket: ((MeshPacket) -> Unit)? = null
     var onTransferCompleted: ((TransferSession) -> Unit)? = null
+
+    // ─────────────────── Initialization ───────────────────
+
+    init {
+        scope.launch {
+            val persisted = cache.loadPersistedSessions()
+            for (session in persisted) {
+                if (session.state == TransferState.SENDING || session.state == TransferState.RECEIVING) {
+                    session.state = TransferState.PAUSED
+                }
+                scheduler.addSession(session)
+            }
+        }
+    }
 
     // ─────────────────── Sender ───────────────────
 
@@ -52,7 +69,13 @@ class TransferManager @Inject constructor(
             return transferId
         }
 
-        val transport = TransportType.BLE // TODO: Integrate Smart Transport Selection
+        val routeType = intelligentTransportManager.selectTransportForPayload(targetId, PacketType.MEDIA_CHUNK, file.length())
+        val transport = when (routeType) {
+            RouteType.BLE -> TransportType.BLE
+            RouteType.WIFI_DIRECT -> TransportType.WIFI_DIRECT
+            RouteType.HYBRID -> TransportType.HYBRID
+        }
+        
         val mimeType = metaManager.getMimeTypeForFile(file)
         val checksum = verifier.calculateFileChecksum(file)
         val totalChunks = chunkManager.getTotalChunks(file.length(), transport)
@@ -75,6 +98,7 @@ class TransferManager @Inject constructor(
         )
 
         scheduler.addSession(session)
+        scope.launch { cache.persistSession(session) }
         analytics.recordTransferStarted(session)
         
         scope.launch {
@@ -92,6 +116,7 @@ class TransferManager @Inject constructor(
         }
 
         scheduler.updateSessionState(session.transferId, TransferState.SENDING)
+        scope.launch { cache.persistSession(session) }
 
         // Send META
         val metaPayload = metaManager.generateMetaPayload(
@@ -190,6 +215,7 @@ class TransferManager @Inject constructor(
         )
         
         scheduler.addSession(session)
+        scope.launch { cache.persistSession(session) }
         analytics.recordTransferStarted(session)
         
         // Start timeout monitor
@@ -216,6 +242,7 @@ class TransferManager @Inject constructor(
                 startTimeMs = System.currentTimeMillis()
             )
             scheduler.addSession(session)
+            scope.launch { cache.persistSession(session) }
             startTimeoutMonitor(transferId)
         }
         
@@ -246,6 +273,7 @@ class TransferManager @Inject constructor(
 
     private suspend fun assembleAndVerify(session: TransferSession) {
         scheduler.updateSessionState(session.transferId, TransferState.VERIFYING)
+        cache.persistSession(session)
         
         val mediaDir = File(context.filesDir, "mesh_media").also { if (!it.exists()) it.mkdirs() }
         val outputFile = File(mediaDir, session.fileName)
@@ -256,6 +284,7 @@ class TransferManager @Inject constructor(
             if (verifier.verifyFileChecksum(outputFile, session.sha256Checksum)) {
                 session.filePath = outputFile.absolutePath
                 scheduler.updateSessionState(session.transferId, TransferState.COMPLETED)
+                cache.persistSession(session)
                 cache.cleanUpSession(session.transferId)
                 analytics.recordTransferCompleted(session)
                 onTransferCompleted?.invoke(session)
@@ -274,6 +303,7 @@ class TransferManager @Inject constructor(
         val session = scheduler.getSession(transferId) ?: return
         if (session.direction == TransferDirection.OUTGOING && packet.chunkIndex == session.totalChunks - 1) {
             scheduler.updateSessionState(transferId, TransferState.COMPLETED)
+            scope.launch { cache.persistSession(session) }
             analytics.recordTransferCompleted(session)
         }
     }
@@ -333,6 +363,7 @@ class TransferManager @Inject constructor(
         val session = scheduler.getSession(transferId) ?: return
         if (session.state == TransferState.SENDING || session.state == TransferState.RECEIVING) {
             scheduler.updateSessionState(transferId, TransferState.PAUSED)
+            scope.launch { cache.persistSession(session) }
             MeshLogger.d(TAG, "Paused transfer $transferId")
         }
     }
@@ -353,8 +384,9 @@ class TransferManager @Inject constructor(
                             session.targetId, session.senderId, transferId,
                             missing.joinToString(","), PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType
                         )
+                        scheduler.updateSessionState(transferId, TransferState.RECEIVING)
+                        cache.persistSession(session)
                     }
-                    scheduler.updateSessionState(transferId, TransferState.RECEIVING)
                 }
             }
             MeshLogger.d(TAG, "Resumed transfer $transferId")
@@ -363,13 +395,20 @@ class TransferManager @Inject constructor(
 
     fun cancelTransfer(transferId: String) {
         scheduler.updateSessionState(transferId, TransferState.CANCELLED)
-        scope.launch { cache.cleanUpSession(transferId) }
+        val session = scheduler.getSession(transferId)
+        scope.launch { 
+            if (session != null) cache.persistSession(session)
+            cache.cleanUpSession(transferId) 
+        }
     }
 
     private suspend fun failSession(transferId: String, reason: String) {
         val session = scheduler.getSession(transferId)
         scheduler.updateSessionState(transferId, TransferState.FAILED)
-        if (session != null) analytics.recordTransferFailed(session, reason)
+        if (session != null) {
+            analytics.recordTransferFailed(session, reason)
+            cache.persistSession(session)
+        }
         cache.cleanUpSession(transferId)
     }
 

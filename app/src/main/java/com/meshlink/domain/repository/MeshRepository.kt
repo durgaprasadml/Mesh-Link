@@ -29,6 +29,7 @@ interface MeshRepository {
     
     suspend fun sendMessage(message: com.meshlink.domain.model.Message, chatName: String)
     suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String)
+    suspend fun sendDocument(targetMeshId: String, documentUri: Uri, chatName: String)
     suspend fun sendVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String)
     suspend fun sendLocation(targetMeshId: String, chatName: String)
     suspend fun sendReadReceipts(chatId: String)

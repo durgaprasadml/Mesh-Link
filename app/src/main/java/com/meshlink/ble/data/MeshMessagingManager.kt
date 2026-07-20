@@ -666,20 +666,83 @@ class MeshMessagingManager @Inject constructor(
         chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
     }
 
+    suspend fun sendDocument(targetMeshId: String, documentUri: Uri, chatName: String) {
+        val user = userRepository.getLocalUser() ?: return
+        val localPeerId = routingCoordinator.networkId(user.meshId)
+        val targetPeerId = routingCoordinator.outgoingChatId(targetMeshId)
+        meshRouter.localMeshId = localPeerId
+
+        // Connect to target and all mesh peers for relay
+        connectToPeer(targetMeshId)
+        connectToAllScannedDevices()
+
+        // Read document bytes
+        val documentBytes = withContext(Dispatchers.IO) {
+            context.contentResolver.openInputStream(documentUri)?.use { it.readBytes() }
+        }
+        if (documentBytes == null) {
+            MeshLogger.e(TAG, "sendDocument: failed to read $documentUri")
+            return
+        }
+
+        // Try to get filename
+        var fileName = "doc_${System.currentTimeMillis()}.file"
+        try {
+            context.contentResolver.query(documentUri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (idx != -1) fileName = cursor.getString(idx)
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Save local copy
+        val localFile = withContext(Dispatchers.IO) {
+            val mediaDir = File(context.filesDir, "mesh_documents")
+            if (!mediaDir.exists()) mediaDir.mkdirs()
+            File(mediaDir, fileName).apply {
+                writeBytes(documentBytes)
+            }
+        }
+
+        val chatId = targetPeerId
+        val messageId = UUID.randomUUID().toString()
+        val message = MessageEntity(
+            messageId   = messageId,
+            chatId      = chatId,
+            senderId    = localPeerId,
+            text        = "📄 $fileName",
+            timestamp   = System.currentTimeMillis(),
+            isFromMe    = true,
+            status      = DeliveryStatus.PENDING,
+            messageType = MessageType.DOCUMENT,
+            mediaPath   = localFile.absolutePath
+        )
+        chatDao.insertMessageAndUpdateChat(message, chatName)
+        transferManager.sendFile(
+            file = localFile,
+            senderId = localPeerId,
+            targetId = targetPeerId,
+            transferId = messageId
+        )
+        chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
+    }
+
     suspend fun receiveMediaMessage(completedTransferId: String, completedFilePath: String, completedMimeType: String, completedSenderId: String) {
         val isImage = completedMimeType.contains("image")
         val isVoice = completedMimeType.contains("audio")
+        val isVideo = completedMimeType.contains("video")
 
         val messageType = when {
             isImage -> MessageType.IMAGE
             isVoice -> MessageType.VOICE
-            else -> MessageType.TEXT
+            else -> MessageType.DOCUMENT
         }
 
         val previewText = when {
             isImage -> "📷 Image"
             isVoice -> "🎤 Voice Note"
-            else -> "📎 File"
+            else -> "📄 Document"
         }
 
         val chatId = routingCoordinator.incomingChatId(completedSenderId)
@@ -724,13 +787,13 @@ class MeshMessagingManager @Inject constructor(
         val messageType = when {
             isImage -> MessageType.IMAGE
             isVoice -> MessageType.VOICE
-            else -> MessageType.TEXT
+            else -> MessageType.DOCUMENT
         }
 
         val previewText = when {
             isImage -> "📷 Receiving Image..."
             isVoice -> "🎤 Receiving Voice Note..."
-            else -> "📎 Receiving File..."
+            else -> "📄 Receiving Document..."
         }
 
         val chatId = routingCoordinator.incomingChatId(packet.senderId)

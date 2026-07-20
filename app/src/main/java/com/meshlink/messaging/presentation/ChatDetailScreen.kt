@@ -49,7 +49,7 @@ fun ChatDetailScreen(
         initialFirstVisibleItemIndex = if (uiState.messages.isNotEmpty()) uiState.messages.size - 1 else 0
     )
 
-    var fullscreenImagePath by remember { mutableStateOf<String?>(null) }
+    var fullscreenMessageId by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -58,6 +58,12 @@ fun ChatDetailScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { viewModel.sendImage(it) }
+    }
+
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.sendDocument(it) }
     }
 
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -83,22 +89,30 @@ fun ChatDetailScreen(
         }
     }
 
-    if (fullscreenImagePath != null) {
-        Dialog(onDismissRequest = { fullscreenImagePath = null }) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-                    .clickable { fullscreenImagePath = null },
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = File(fullscreenImagePath!!),
-                    contentDescription = "Full Image",
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Fit
-                )
-            }
+    if (fullscreenMessageId != null) {
+        val mediaMessages = uiState.messages.filter { it.messageType == com.meshlink.domain.model.MessageType.IMAGE }
+        val initialIndex = mediaMessages.indexOfFirst { it.messageId == fullscreenMessageId }.coerceAtLeast(0)
+        
+        Dialog(
+            onDismissRequest = { fullscreenMessageId = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = false
+            )
+        ) {
+            MediaViewerScreen(
+                mediaMessages = mediaMessages,
+                initialIndex = initialIndex,
+                onBack = { fullscreenMessageId = null },
+                onDelete = { msg ->
+                    if (!uiState.selectedMessageIds.contains(msg.messageId)) {
+                        viewModel.toggleMessageSelection(msg.messageId)
+                    }
+                    viewModel.deleteSelectedMessages()
+                    fullscreenMessageId = null
+                }
+            )
         }
     }
 
@@ -113,6 +127,10 @@ fun ChatDetailScreen(
                 onGalleryClick = {
                     showAttachmentSheet = false
                     imagePickerLauncher.launch("image/*")
+                },
+                onDocumentClick = {
+                    showAttachmentSheet = false
+                    documentPickerLauncher.launch(arrayOf("*/*"))
                 },
                 onCameraClick = {
                     showAttachmentSheet = false
@@ -279,7 +297,7 @@ fun ChatDetailScreen(
                         onToggleSelection = { viewModel.toggleMessageSelection(msg.messageId) },
                         onPlayVoice = { viewModel.playVoice(it) },
                         onStopPlayback = { viewModel.stopPlayback() },
-                        onImageClick = { if (!uiState.isSelectionMode) fullscreenImagePath = it },
+                        onImageClick = { if (!uiState.isSelectionMode) fullscreenMessageId = it },
                         onLocationClick = { lat, lng ->
                             if (!uiState.isSelectionMode) {
                                 try {
@@ -312,6 +330,7 @@ private fun shouldShowDateSeparator(currentTimestamp: Long, previousTimestamp: L
 @Composable
 fun AttachmentMenu(
     onGalleryClick: () -> Unit,
+    onDocumentClick: () -> Unit,
     onCameraClick: () -> Unit,
     onLocationClick: () -> Unit
 ) {
@@ -329,6 +348,12 @@ fun AttachmentMenu(
                 label = "Gallery",
                 color = MaterialTheme.colorScheme.secondary,
                 onClick = onGalleryClick
+            )
+            AttachmentIcon(
+                icon = Icons.Default.InsertDriveFile,
+                label = "Document",
+                color = MaterialTheme.colorScheme.primary,
+                onClick = onDocumentClick
             )
             AttachmentIcon(
                 icon = Icons.Default.CameraAlt,

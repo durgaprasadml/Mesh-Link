@@ -82,6 +82,7 @@ fun MessageBubble(
             MessageType.VOICE -> append("Voice note.")
             MessageType.LOCATION -> append("Location shared.")
             MessageType.SOS -> append("SOS Emergency alert.")
+            MessageType.DOCUMENT -> append("Document: ${message.text}.")
         }
         append(" at ${formatTime(message.timestamp)}. ")
         if (isMe) {
@@ -128,7 +129,7 @@ fun MessageBubble(
                                 .fillMaxWidth()
                                 .heightIn(min = 120.dp, max = 260.dp)
                                 .clip(RoundedCornerShape(MeshTheme.spacing.medium))
-                                .clickable { onImageClick(mediaPath) },
+                                .clickable { onImageClick(message.messageId) },
                             contentScale = ContentScale.Crop
                         )
                     } else {
@@ -280,6 +281,63 @@ fun MessageBubble(
                         }
                         if (message.batteryPercent != null && message.batteryPercent >= 0) {
                             Text("🔋 Battery: ${message.batteryPercent}%", color = MaterialTheme.colorScheme.onError.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+                MessageType.DOCUMENT -> {
+                    val mediaPath = message.mediaPath
+                    val fileExists = mediaPath != null && File(mediaPath).exists()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .padding(vertical = MeshTheme.spacing.small)
+                            .clickable(enabled = fileExists && !isSelectionMode) {
+                                // Add click handler later if needed (e.g. open file with Intent)
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(MeshTheme.spacing.extraHuge)
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha=0.5f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.InsertDriveFile, contentDescription = "Document", tint = textColor)
+                        }
+                        Column(modifier = Modifier.weight(1f).padding(start = MeshTheme.spacing.medium)) {
+                            Text(
+                                text = message.text.removePrefix("📄 "),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = textColor,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
+                            if (message.status == DeliveryStatus.FAILED) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                                    Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+                                    Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                }
+                            } else if (transferProgress != null && transferProgress >= 0f && message.status == DeliveryStatus.PENDING) {
+                                Text(
+                                    text = if (message.isFromMe) "Sending..." else "Receiving...",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = textColor.copy(alpha = 0.7f)
+                                )
+                                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                                LinearProgressIndicator(
+                                    progress = { transferProgress },
+                                    modifier = Modifier.fillMaxWidth().height(MeshTheme.spacing.small).clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = textColor.copy(alpha = 0.3f)
+                                )
+                            } else {
+                                Text(
+                                    text = if (fileExists) "File available" else "File missing",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = textColor.copy(alpha = 0.7f)
+                                )
+                            }
                         }
                     }
                 }

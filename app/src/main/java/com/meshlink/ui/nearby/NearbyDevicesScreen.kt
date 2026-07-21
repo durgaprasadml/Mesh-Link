@@ -178,7 +178,7 @@ fun NearbyDevicesScreen(
                 } else if (filteredDevices.isEmpty()) {
                     EmptyState(
                         icon = Icons.AutoMirrored.Outlined.BluetoothSearching,
-                        title = if (searchQuery.isBlank()) "Scanning for Peers" else "No matching peers",
+                        title = if (searchQuery.isBlank()) "No nearby devices" else "No matching peers",
                         description = if (searchQuery.isBlank()) "Looking for active Mesh Link nodes via BLE and Wi-Fi Direct..." else "Adjust your search terms.",
                         modifier = Modifier.weight(0.65f)
                     )
@@ -210,12 +210,6 @@ fun NearbyDevicesScreen(
                     }
                 }
             }
-
-            // Only show full loading overlay if we're actively scanning and have absolutely zero results
-            LoadingOverlay(
-                isLoading = uiState.isScanning && uiState.devices.isEmpty() && searchQuery.isBlank() && !isSearchActive && uiState.errorMessage == null,
-                modifier = Modifier.fillMaxSize()
-            )
         }
     }
 }

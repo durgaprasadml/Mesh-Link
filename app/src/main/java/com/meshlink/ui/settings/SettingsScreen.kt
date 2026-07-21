@@ -25,7 +25,7 @@ import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.settings.screens.*
 
 enum class SettingsDestination {
-    HOME, PROFILE, SECURITY, NETWORK, STORAGE, APPEARANCE
+    HOME, PROFILE, NETWORK, STORAGE, APPEARANCE
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,7 +41,6 @@ fun SettingsScreen(
     var clearLocalData by remember { mutableStateOf(false) }
 
     val userName = uiState.user?.name ?: "User"
-    val meshId = uiState.user?.meshId ?: ""
 
     if (showLogoutDialog) {
         AlertDialog(
@@ -96,16 +95,12 @@ fun SettingsScreen(
         when (dest) {
             SettingsDestination.HOME -> SettingsHome(
                 userName = userName,
-                meshId = meshId,
                 onNavigate = { currentDestination = it },
                 onBack = onBack,
                 onLogout = { showLogoutDialog = true }
             )
             SettingsDestination.PROFILE -> com.meshlink.ui.profile.ProfileScreen(
                 onNavigateBack = { currentDestination = SettingsDestination.HOME }
-            )
-            SettingsDestination.SECURITY -> SecurityCenterScreen(
-                onBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.NETWORK -> NetworkSettingsScreen(
                 uiState = uiState,
@@ -131,7 +126,6 @@ fun SettingsScreen(
 @Composable
 fun SettingsHome(
     userName: String,
-    meshId: String,
     onNavigate: (SettingsDestination) -> Unit,
     onBack: () -> Unit,
     onLogout: () -> Unit
@@ -189,10 +183,7 @@ fun SettingsHome(
                         Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(userName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                            Text("Mesh ID: ${meshId.take(8).ifBlank { "Unassigned" }}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         }
-                        Icon(Icons.Default.QrCode, contentDescription = "QR Code", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }

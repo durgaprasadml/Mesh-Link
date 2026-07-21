@@ -45,7 +45,7 @@ import com.meshlink.ui.analytics.AnalyticsScreen
 import com.meshlink.ui.auth.AuthViewModel
 import com.meshlink.ui.auth.LoginScreen
 import com.meshlink.ui.auth.RegistrationScreen
-import com.meshlink.ui.auth.SplashScreen
+import com.meshlink.ui.auth.RegistrationScreen
 import com.meshlink.ui.broadcast.BroadcastScreen
 import com.meshlink.ui.home.HomeScreen
 import com.meshlink.ui.mesh.MeshDebugScreen
@@ -56,7 +56,6 @@ import com.meshlink.util.NotificationHelper
 
 
 sealed class Screen(val route: String) {
-    object Splash : Screen("splash")
     object Login : Screen("login")
     object Registration : Screen("registration")
     object Home : Screen("home")
@@ -81,6 +80,11 @@ fun AppNavigation(
     val authViewModel: AuthViewModel = hiltViewModel()
     val isLoggedIn by authViewModel.isUserLoggedIn.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    if (isLoggedIn == null) {
+        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())
+        return
+    }
 
     LaunchedEffect(snackbarHostState) {
         NotificationHelper.inAppNotifications.collect { notification ->
@@ -116,22 +120,12 @@ fun AppNavigation(
         NavHost(
             modifier = Modifier.padding(paddingValues),
             navController = navController,
-            startDestination = Screen.Splash.route,
+            startDestination = if (isLoggedIn == true) Screen.Home.route else Screen.Login.route,
             enterTransition = { slideInHorizontally(tween(300)) { it / 3 } + fadeIn(tween(300)) },
             exitTransition = { fadeOut(tween(300)) },
             popEnterTransition = { fadeIn(tween(300)) },
             popExitTransition = { slideOutHorizontally(tween(300)) { it / 3 } + fadeOut(tween(300)) }
         ) {
-            composable(Screen.Splash.route) {
-                SplashScreen(
-                    onTimeout = {
-                        val dest = if (isLoggedIn) Screen.Home.route else Screen.Login.route
-                        navController.navigate(dest) {
-                            popUpTo(Screen.Splash.route) { inclusive = true }
-                        }
-                    }
-                )
-            }
             
             composable(Screen.Login.route) {
                 LoginScreen(

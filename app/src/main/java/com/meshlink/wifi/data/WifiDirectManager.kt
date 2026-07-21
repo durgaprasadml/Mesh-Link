@@ -37,7 +37,9 @@ class WifiDirectManager @Inject constructor(
     }
 
     private val manager: WifiP2pManager? = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
-    private var channel: WifiP2pManager.Channel? = null
+    private val channel: WifiP2pManager.Channel? by lazy {
+        manager?.initialize(context, context.mainLooper, null)
+    }
 
     // Map of peer MAC address to WifiP2pDevice
     private val _discoveredPeers = MutableStateFlow<Map<String, WifiP2pDevice>>(emptyMap())
@@ -131,10 +133,6 @@ class WifiDirectManager @Inject constructor(
 
     private var isReceiverRegistered = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    init {
-        channel = manager?.initialize(context, context.mainLooper, null)
-    }
 
     fun registerReceiver() {
         if (!isReceiverRegistered) {

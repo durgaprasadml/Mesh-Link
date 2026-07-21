@@ -23,6 +23,9 @@ import com.meshlink.service.MeshRelayService
 import com.meshlink.ui.components.hasRequiredPermissions
 import com.meshlink.ui.navigation.AppNavigation
 import com.meshlink.ui.navigation.Screen
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.activity.viewModels
+import com.meshlink.ui.auth.AuthViewModel
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
@@ -38,7 +41,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var meshRepository: MeshRepository
 
-    private lateinit var firebaseAnalytics: FirebaseAnalytics
+    private val authViewModel: AuthViewModel by viewModels()
+
+    private var firebaseAnalytics: FirebaseAnalytics? = null
     
     private val pendingIntents = kotlinx.coroutines.channels.Channel<Intent>(kotlinx.coroutines.channels.Channel.UNLIMITED)
 
@@ -51,14 +56,17 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        
+        splashScreen.setKeepOnScreenCondition { authViewModel.isUserLoggedIn.value == null }
 
-        // ✅ Init Firebase
-        firebaseAnalytics = FirebaseAnalytics.getInstance(this)
-        FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
-
-        // ✅ Log app open
-        firebaseAnalytics.logEvent(FirebaseAnalytics.Event.APP_OPEN, null)
+        lifecycleScope.launch(Dispatchers.IO) {
+            firebaseAnalytics = FirebaseAnalytics.getInstance(this@MainActivity)
+            FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
+            firebaseAnalytics?.logEvent(FirebaseAnalytics.Event.APP_OPEN, null)
+            checkAndStartMesh()
+        }
 
         requestNotificationPermissionIfNeeded()
 
@@ -87,7 +95,7 @@ class MainActivity : ComponentActivity() {
                         val address = newIntent.getStringExtra("address")
                         val name = newIntent.getStringExtra("name")
                         if (address != null && name != null) {
-                            firebaseAnalytics.logEvent(
+                            firebaseAnalytics?.logEvent(
                                 "chat_opened",
                                 bundleOf("device_name" to name)
                             )
@@ -102,7 +110,7 @@ class MainActivity : ComponentActivity() {
                     val address = intent.getStringExtra("address")
                     val name = intent.getStringExtra("name")
                     if (address != null && name != null) {
-                        firebaseAnalytics.logEvent(
+                        firebaseAnalytics?.logEvent(
                             "chat_opened",
                             bundleOf("device_name" to name)
                         )
@@ -114,11 +122,6 @@ class MainActivity : ComponentActivity() {
 
                 AppNavigation(navController = navController, windowSizeClass = windowSizeClass)
             }
-        }
-
-        lifecycleScope.launch {
-            kotlinx.coroutines.delay(500)
-            checkAndStartMesh()
         }
     }
     
@@ -145,7 +148,7 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     meshRepository.autoStartMesh()
-                    firebaseAnalytics.logEvent("mesh_started", null)
+                    firebaseAnalytics?.logEvent("mesh_started", null)
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().recordException(e)
                 }
@@ -165,7 +168,7 @@ class MainActivity : ComponentActivity() {
                 startService(intent)
             }
 
-            firebaseAnalytics.logEvent("relay_service_started", null)
+            firebaseAnalytics?.logEvent("relay_service_started", null)
 
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)

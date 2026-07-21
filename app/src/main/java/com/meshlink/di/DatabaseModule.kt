@@ -30,12 +30,6 @@ object DatabaseModule {
         @ApplicationContext context: Context,
         databaseSecurityManager: com.meshlink.security.data.DatabaseSecurityManager
     ): MeshDatabase {
-        try {
-            System.loadLibrary("sqlcipher")
-        } catch (e: UnsatisfiedLinkError) {
-            com.meshlink.common.logger.MeshLogger.e("DbSecurity", "SQLCipher native library load failed", e)
-        }
-
         com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Starting DatabaseModule.provideMeshDatabase() - Lazy init")
         
         val hook = object : SQLiteDatabaseHook {
@@ -59,6 +53,11 @@ object DatabaseModule {
                         if (_delegate == null) {
                             synchronized(this) {
                                 if (_delegate == null) {
+                                    try {
+                                        System.loadLibrary("sqlcipher")
+                                    } catch (e: UnsatisfiedLinkError) {
+                                        com.meshlink.common.logger.MeshLogger.e("DbSecurity", "SQLCipher native library load failed", e)
+                                    }
                                     val passphraseBytes = try {
                                         databaseSecurityManager.getDatabasePassphrase()
                                     } catch (e: com.meshlink.security.data.SecurityRecoveryException) {

@@ -17,9 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
-import com.meshlink.ui.util.QrCodeUtils
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,7 +45,6 @@ fun ProfileScreen(
     var name by remember(uiState.user?.name) { mutableStateOf(uiState.user?.name ?: "") }
     var aboutMe by remember(uiState.user?.aboutMe) { mutableStateOf(uiState.user?.aboutMe ?: "") }
     var avatarUri by remember(uiState.user?.avatarUri) { mutableStateOf<Uri?>(uiState.user?.avatarUri?.let { Uri.parse(it) }) }
-    var showQrDialog by remember { mutableStateOf(false) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
@@ -165,96 +161,7 @@ fun ProfileScreen(
                     minLines = 3,
                     maxLines = 5
                 )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Mesh ID Section
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "Mesh ID",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = uiState.user?.meshId ?: "Unknown",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("Mesh ID", uiState.user?.meshId ?: "")
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "Mesh ID Copied", Toast.LENGTH_SHORT).show()
-                            }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy Mesh ID")
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Button(
-                            onClick = { showQrDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            Icon(Icons.Default.QrCode, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Show QR Code")
-                        }
-                    }
-                }
             }
         }
-    }
-
-    if (showQrDialog && uiState.user?.meshId != null) {
-        val qrBitmap = remember(uiState.user?.meshId) {
-            QrCodeUtils.generateQrCode(uiState.user!!.meshId)
-        }
-        AlertDialog(
-            onDismissRequest = { showQrDialog = false },
-            confirmButton = {
-                TextButton(onClick = { showQrDialog = false }) {
-                    Text("Close")
-                }
-            },
-            title = {
-                Text("Your Mesh ID")
-            },
-            text = {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (qrBitmap != null) {
-                        Image(
-                            bitmap = qrBitmap,
-                            contentDescription = "Mesh ID QR Code",
-                            modifier = Modifier.size(200.dp)
-                        )
-                    } else {
-                        Text("Failed to generate QR Code")
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Scan this code to add me as a contact",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        )
     }
 }

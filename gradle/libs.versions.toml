@@ -7,6 +7,7 @@ google-services = "4.4.0"
 crashlytics-plugin = "2.9.9"
 
 core-ktx = "1.13.1"
+core-splashscreen = "1.0.1"
 lifecycle = "2.8.7"
 activity-compose = "1.9.3"
 compose-bom = "2024.10.00"
@@ -37,6 +38,7 @@ zxing = "3.5.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "core-splashscreen" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
 androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }

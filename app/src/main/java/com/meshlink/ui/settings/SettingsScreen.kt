@@ -37,9 +37,39 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var currentDestination by remember { mutableStateOf(SettingsDestination.HOME) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    var clearLocalData by remember { mutableStateOf(false) }
 
     val userName = uiState.user?.name ?: "User"
     val meshId = uiState.user?.meshId ?: ""
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Logout") },
+            text = {
+                Column {
+                    Text("Are you sure you want to log out?")
+                    Row(
+                        modifier = Modifier.padding(top = 16.dp).clickable { clearLocalData = !clearLocalData },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = clearLocalData, onCheckedChange = { clearLocalData = it })
+                        Text("Clear local data")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.logout(clearLocalData)
+                    showLogoutDialog = false
+                }) { Text("Logout") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
 
     LaunchedEffect(viewModel.uiEvent) {
         viewModel.uiEvent.collect { event ->
@@ -69,7 +99,7 @@ fun SettingsScreen(
                 meshId = meshId,
                 onNavigate = { currentDestination = it },
                 onBack = onBack,
-                onLogout = { viewModel.logout() }
+                onLogout = { showLogoutDialog = true }
             )
             SettingsDestination.PROFILE -> com.meshlink.ui.profile.ProfileScreen(
                 onNavigateBack = { currentDestination = SettingsDestination.HOME }

@@ -107,7 +107,10 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun logout() {
+    override suspend fun logout(clearData: Boolean) {
+        if (clearData) {
+            localDataSource.clearLocalData()
+        }
         localDataSource.setLoginState(false)
     }
 }

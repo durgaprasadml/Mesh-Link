@@ -84,7 +84,8 @@ sealed class SettingsEvent {
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val logoutUseCase: com.meshlink.domain.usecase.auth.LogoutUseCase
 ) : ViewModel() {
 
     private val _uiEvent = MutableSharedFlow<SettingsEvent>(replay = 0)
@@ -329,9 +330,9 @@ class SettingsViewModel @Inject constructor(
     fun setLargeTextEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setLargeTextEnabled(enabled) }
     fun setReduceMotionEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setReduceMotionEnabled(enabled) }
 
-    fun logout() {
+    fun logout(clearData: Boolean = false) {
         viewModelScope.launch {
-            userRepository.logout()
+            logoutUseCase(clearLocalData = clearData)
             _uiEvent.emit(SettingsEvent.LogoutSuccess)
         }
     }

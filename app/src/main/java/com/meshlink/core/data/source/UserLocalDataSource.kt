@@ -17,4 +17,5 @@ interface UserLocalDataSource {
     suspend fun insertUser(user: UserEntity)
     suspend fun getUser(meshId: String): UserEntity?
     suspend fun getLocalUser(): UserEntity?
+    suspend fun clearLocalData()
 }

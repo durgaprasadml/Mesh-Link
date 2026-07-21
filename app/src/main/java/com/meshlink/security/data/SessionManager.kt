@@ -59,6 +59,11 @@ class SessionManager @Inject constructor(
 
     fun getAllSessionPeers(): Set<String> = activeSessions.keys
 
+    fun terminateAllSessions() {
+        val peers = activeSessions.keys.toList()
+        peers.forEach { removeSession(it) }
+    }
+
     private fun startCleanupRoutine() {
         scope.launch {
             while (true) {

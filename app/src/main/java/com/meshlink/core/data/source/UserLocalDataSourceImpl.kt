@@ -68,4 +68,10 @@ class UserLocalDataSourceImpl @Inject constructor(
     override suspend fun getLocalUser(): UserEntity? {
         return userDao.getLocalUser()
     }
+
+    override suspend fun clearLocalData() {
+        dataStore.edit { preferences ->
+            preferences.clear()
+        }
+    }
 }

@@ -210,4 +210,22 @@ class WifiDirectManager @Inject constructor(
         }
         }
     }
+
+    @SuppressLint("MissingPermission")
+    fun disconnect() {
+        try {
+            manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    MeshLogger.d(TAG, "P2P Disconnected successfully")
+                }
+                override fun onFailure(reason: Int) {
+                    MeshLogger.e(TAG, "P2P Disconnect failed: $reason")
+                }
+            })
+        } catch (e: SecurityException) {
+            MeshLogger.e(TAG, "SecurityException: Missing WiFi Direct permission for disconnect", e)
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Exception disconnecting from WiFi peer: ${e.message}", e)
+        }
+    }
 }

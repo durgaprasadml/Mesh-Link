@@ -9,7 +9,7 @@ interface UserRepository {
     suspend fun getLocalUser(): User?
     suspend fun updateUserName(name: String)
     suspend fun updateProfile(name: String, aboutMe: String?, avatarUri: String?)
-    suspend fun logout()
+    suspend fun logout(clearData: Boolean = false)
     val isUserLoggedIn: Flow<Boolean>
     
     val isEncryptionEnabled: Flow<Boolean>

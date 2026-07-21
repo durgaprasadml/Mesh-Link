@@ -7,6 +7,7 @@ import com.meshlink.util.MainDispatcherRule
 import io.mockk.*
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -22,12 +23,14 @@ class SettingsViewModelTest {
 
     private lateinit var userRepository: UserRepository
     private lateinit var settingsRepository: SettingsRepository
+    private lateinit var logoutUseCase: com.meshlink.domain.usecase.auth.LogoutUseCase
     private lateinit var viewModel: SettingsViewModel
 
     @Before
     fun setup() {
         userRepository = mockk(relaxed = true)
         settingsRepository = mockk(relaxed = true)
+        logoutUseCase = mockk(relaxed = true)
 
         val fakeUser = User(meshId = "mesh_1", name = "Test User", phoneNumber = "1234567890")
         coEvery { userRepository.getLocalUser() } returns fakeUser
@@ -91,7 +94,7 @@ class SettingsViewModelTest {
         every { settingsRepository.largeTextEnabled } returns flowOf(false)
         every { settingsRepository.reduceMotionEnabled } returns flowOf(false)
 
-        viewModel = SettingsViewModel(userRepository, settingsRepository)
+        viewModel = SettingsViewModel(userRepository, settingsRepository, logoutUseCase)
     }
 
     @Test
@@ -139,5 +142,21 @@ class SettingsViewModelTest {
 
         viewModel.setAnimationsEnabled(false)
         coVerify { settingsRepository.setAnimationsEnabled(false) }
+    }
+
+    @Test
+    fun `logout calls use case and emits event`() = runTest {
+        val events = mutableListOf<SettingsEvent>()
+        val collectJob = backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiEvent.collect { events.add(it) }
+        }
+
+        viewModel.logout(clearData = true)
+        advanceUntilIdle()
+
+        coVerify { logoutUseCase(true) }
+        assertEquals(SettingsEvent.LogoutSuccess, events.first())
+
+        collectJob.cancel()
     }
 }

@@ -124,21 +124,12 @@ fun MeshDeviceCard(
                 
                 // Signal and Transport Badge
                 Column(horizontalAlignment = Alignment.End) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (isWeakSignal) Icons.Default.SignalCellularOff else Icons.Default.SignalCellular4Bar,
-                            contentDescription = "Signal",
-                            tint = statusColor,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-                        Text(
-                            text = "${device.rssi} dBm",
-                            color = statusColor,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Icon(
+                        imageVector = if (isWeakSignal) Icons.Default.SignalCellularOff else Icons.Default.SignalCellular4Bar,
+                        contentDescription = "Signal",
+                        tint = statusColor,
+                        modifier = Modifier.size(18.dp)
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                     Badge(
                         containerColor = when(device.transport) {

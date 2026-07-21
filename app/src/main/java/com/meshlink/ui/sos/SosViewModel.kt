@@ -13,11 +13,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import android.content.Context
 import android.hardware.camera2.CameraManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.meshlink.domain.model.BleDevice
 
 enum class SosStatus {
     SAFE, BROADCASTING, DELIVERED, FAILED
@@ -37,7 +40,7 @@ data class SosUiState(
     val isBleEnabled: Boolean = true,
     val isWifiDirectEnabled: Boolean = true,
     val meshHealth: String = "Excellent",
-    val connectedNodesCount: Int = 3,
+    val nearbyResponders: List<BleDevice> = emptyList(),
     val relaysReached: Int = 0,
     val errorMessage: String? = null,
     val isFlashlightOn: Boolean = false,
@@ -54,8 +57,19 @@ class SosViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SosUiState())
     val uiState: StateFlow<SosUiState> = _uiState.asStateFlow()
 
+    private var mediaPlayer: MediaPlayer? = null
+    private var cameraId: String? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private val audioManager by lazy { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+
     init {
         refreshLocation()
+        
+        viewModelScope.launch {
+            meshRepository.scannedDevices.collect { devices ->
+                _uiState.update { it.copy(nearbyResponders = devices.values.toList()) }
+            }
+        }
     }
 
     fun refreshLocation() {
@@ -116,8 +130,7 @@ class SosViewModel @Inject constructor(
         }
     }
 
-    private var mediaPlayer: MediaPlayer? = null
-    private var cameraId: String? = null
+
 
     fun toggleFlashlight() {
         try {
@@ -141,13 +154,31 @@ class SosViewModel @Inject constructor(
                 mediaPlayer?.stop()
                 mediaPlayer?.release()
                 mediaPlayer = null
+                
+                audioFocusRequest?.let { request ->
+                    audioManager.abandonAudioFocusRequest(request)
+                    audioFocusRequest = null
+                }
+                
                 _uiState.update { it.copy(isAlarmPlaying = false) }
             } else {
                 val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                     ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                    
+                val audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                    
+                audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+                    .setAudioAttributes(audioAttributes)
+                    .build()
+                    
+                audioManager.requestAudioFocus(audioFocusRequest!!)
+                
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(context, alarmUri)
-                    setAudioStreamType(AudioManager.STREAM_ALARM)
+                    setAudioAttributes(audioAttributes)
                     isLooping = true
                     prepare()
                     start()
@@ -167,6 +198,11 @@ class SosViewModel @Inject constructor(
             }
             mediaPlayer?.release()
             mediaPlayer = null
+            
+            audioFocusRequest?.let { request ->
+                audioManager.abandonAudioFocusRequest(request)
+                audioFocusRequest = null
+            }
             
             if (uiState.value.isFlashlightOn) {
                 val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager

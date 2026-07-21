@@ -48,7 +48,6 @@ import com.meshlink.ui.auth.RegistrationScreen
 import com.meshlink.ui.auth.RegistrationScreen
 import com.meshlink.ui.broadcast.BroadcastScreen
 import com.meshlink.ui.home.HomeScreen
-import com.meshlink.ui.mesh.MeshDebugScreen
 import com.meshlink.ui.nearby.NearbyDevicesScreen
 import com.meshlink.ui.settings.SettingsScreen
 import com.meshlink.ui.sos.SosScreen
@@ -61,7 +60,6 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object ChatsList : Screen("chats")
     object Nearby : Screen("nearby")
-    object DebugMesh : Screen("debug_mesh")
     object Sos : Screen("sos")
     object ChatDetail : Screen("chat/{address}/{name}") {
         fun createRoute(address: String, name: String) = 
@@ -117,14 +115,39 @@ fun AppNavigation(
             if (showNavigationRail) {
                 MeshNavigationRail(navController, currentRoute)
             }
+        val topLevelRoutes = listOf(Screen.Home.route, Screen.Nearby.route, Screen.Sos.route, Screen.Settings.route)
         NavHost(
             modifier = Modifier.padding(paddingValues),
             navController = navController,
             startDestination = if (isLoggedIn == true) Screen.Home.route else Screen.Login.route,
-            enterTransition = { slideInHorizontally(tween(300)) { it / 3 } + fadeIn(tween(300)) },
-            exitTransition = { fadeOut(tween(300)) },
-            popEnterTransition = { fadeIn(tween(300)) },
-            popExitTransition = { slideOutHorizontally(tween(300)) { it / 3 } + fadeOut(tween(300)) }
+            enterTransition = {
+                if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                    fadeIn(tween(220))
+                } else {
+                    slideInHorizontally(tween(300)) { it } + fadeIn(tween(300))
+                }
+            },
+            exitTransition = {
+                if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                    fadeOut(tween(220))
+                } else {
+                    fadeOut(tween(300))
+                }
+            },
+            popEnterTransition = {
+                if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                    fadeIn(tween(220))
+                } else {
+                    fadeIn(tween(300))
+                }
+            },
+            popExitTransition = {
+                if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                    fadeOut(tween(220))
+                } else {
+                    slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
+                }
+            }
         ) {
             
             composable(Screen.Login.route) {
@@ -172,12 +195,6 @@ fun AppNavigation(
                     onNavigateToChat = { address, name ->
                         navController.navigate(Screen.ChatDetail.createRoute(address, name))
                     }
-                )
-            }
-
-            composable(Screen.DebugMesh.route) {
-                MeshDebugScreen(
-                    onBack = { navController.popBackStack() }
                 )
             }
 

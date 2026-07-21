@@ -23,8 +23,20 @@ class DeleteMessagesUseCase @Inject constructor(private val chatRepository: Chat
     suspend operator fun invoke(messageIds: List<String>) = chatRepository.deleteMessages(messageIds)
 }
 
-class DeleteChatUseCase @Inject constructor(private val chatRepository: ChatRepository) {
-    suspend operator fun invoke(chatId: String) = chatRepository.deleteChat(chatId)
+class DeleteChatUseCase @Inject constructor(
+    private val chatRepository: ChatRepository,
+    private val stateRestorationManager: com.meshlink.common.recovery.StateRestorationManager
+) {
+    suspend operator fun invoke(chatId: String) {
+        chatRepository.deleteChat(chatId)
+        stateRestorationManager.updateState { state ->
+            if (state.activeChatId == chatId) {
+                state.copy(pendingMessageDraft = null)
+            } else {
+                state
+            }
+        }
+    }
 }
 
 class MarkChatAsReadUseCase @Inject constructor(private val chatRepository: ChatRepository) {

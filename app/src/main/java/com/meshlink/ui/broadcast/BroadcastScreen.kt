@@ -70,9 +70,17 @@ fun BroadcastScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
-    // Auto-scroll to top (newest) when new messages arrive
+    // Auto-scroll to bottom only when user is already at bottom
     LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty()) listState.animateScrollToItem(0)
+        if (uiState.messages.isNotEmpty()) {
+            val visibleItems = listState.layoutInfo.visibleItemsInfo
+            val isAtBottom = visibleItems.isEmpty() || 
+                (visibleItems.last().index >= listState.layoutInfo.totalItemsCount - 2)
+            
+            if (isAtBottom) {
+                listState.animateScrollToItem(uiState.messages.size - 1)
+            }
+        }
     }
 
     Scaffold(

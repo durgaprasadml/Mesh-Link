@@ -195,13 +195,7 @@ fun SettingsHome(
                     shape = MeshTheme.shapes.large
                 ) {
                     Column {
-                        SettingsItemRow(
-                            title = "Security Center",
-                            subtitle = "Encryption, Identity, App Lock",
-                            icon = Icons.Default.Security,
-                            onClick = { onNavigate(SettingsDestination.SECURITY) }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+
                         SettingsItemRow(
                             title = "Network & Transport",
                             subtitle = "BLE, Wi-Fi Direct, Relaying",

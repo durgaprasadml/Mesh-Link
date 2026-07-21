@@ -66,10 +66,12 @@ fun HomeScreen(
         else -> ConnectionState.SEARCHING
     }
     
-    val filteredChats = if (searchQuery.isBlank()) {
-        chatsState.chats
-    } else {
-        chatsState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    val filteredChats = remember(searchQuery, chatsState.chats) {
+        if (searchQuery.isBlank()) {
+            chatsState.chats
+        } else {
+            chatsState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
     }
 
     Scaffold(
@@ -175,7 +177,7 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = MeshTheme.spacing.mediumLarge),
                         horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                     ) {
-                        item {
+                        item(contentType = "dashboard_card") {
                             DashboardCard(
                                 icon = Icons.Default.Wifi,
                                 title = "Nearby Devices",
@@ -185,7 +187,7 @@ fun HomeScreen(
                                 iconTintColor = MaterialTheme.colorScheme.primary
                             )
                         }
-                        item {
+                        item(contentType = "dashboard_card") {
                             DashboardCard(
                                 icon = Icons.Default.Campaign,
                                 title = "Broadcasts",
@@ -195,7 +197,7 @@ fun HomeScreen(
                                 iconTintColor = MaterialTheme.colorScheme.tertiary
                             )
                         }
-                        item {
+                        item(contentType = "dashboard_card") {
                             DashboardCard(
                                 icon = Icons.Default.Warning,
                                 title = "SOS",
@@ -231,7 +233,7 @@ fun HomeScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(filteredChats, key = { it.id }) { chat ->
+                    items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
                         ChatItem(
                             chat = chat,
                             onClick = {

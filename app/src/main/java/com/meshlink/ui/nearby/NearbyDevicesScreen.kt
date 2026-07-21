@@ -46,10 +46,12 @@ fun NearbyDevicesScreen(
         var isSearchActive by remember { mutableStateOf(false) }
         var connectingToAddress by remember { mutableStateOf<String?>(null) }
 
-        val filteredDevices = if (searchQuery.isBlank()) {
-            uiState.devices
-        } else {
-            uiState.devices.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        val filteredDevices = remember(searchQuery, uiState.devices) {
+            if (searchQuery.isBlank()) {
+                uiState.devices
+            } else {
+                uiState.devices.filter { it.name.contains(searchQuery, ignoreCase = true) }
+            }
         }
 
         Scaffold(

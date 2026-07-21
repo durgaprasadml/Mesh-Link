@@ -7,8 +7,11 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.meshlink.domain.model.BleDevice
+import com.meshlink.domain.model.TransportType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -485,7 +488,7 @@ fun EmergencyInfoCard(state: SosUiState, onRefresh: () -> Unit) {
                 InfoItem(
                     icon = Icons.Default.Wifi,
                     title = "Mesh Nodes",
-                    value = "${state.connectedNodesCount} nearby",
+                    value = "${state.nearbyResponders.size} nearby",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -544,16 +547,16 @@ fun InfoItem(
 fun NearbyResponders(state: SosUiState) {
     Column {
         Text(
-            "NEARBY RESPONDERS (${state.connectedNodesCount})",
+            "NEARBY RESPONDERS (${state.nearbyResponders.size})",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = MeshTheme.spacing.large)
         )
         Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
         
-        if (state.connectedNodesCount == 0) {
+        if (state.nearbyResponders.isEmpty()) {
             Text(
-                "Scanning for mesh nodes...",
+                "No responders nearby",
                 modifier = Modifier.padding(horizontal = MeshTheme.spacing.large),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -563,8 +566,8 @@ fun NearbyResponders(state: SosUiState) {
                 contentPadding = PaddingValues(horizontal = MeshTheme.spacing.large),
                 horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
             ) {
-                items(state.connectedNodesCount) { index ->
-                    ResponderCard(id = "Node-${1042 + index}", distance = "${(index + 1) * 50}m")
+                items(state.nearbyResponders) { device ->
+                    ResponderCard(device = device)
                 }
             }
         }
@@ -572,7 +575,7 @@ fun NearbyResponders(state: SosUiState) {
 }
 
 @Composable
-fun ResponderCard(id: String, distance: String) {
+fun ResponderCard(device: BleDevice) {
     Card(
         shape = MeshTheme.shapes.medium,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -582,11 +585,16 @@ fun ResponderCard(id: String, distance: String) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.WifiTethering, contentDescription = null, tint = MeshTheme.colors.success)
+            val icon = when (device.transport) {
+                TransportType.BLE -> Icons.Default.Bluetooth
+                TransportType.WIFI_DIRECT -> Icons.Default.Wifi
+                TransportType.HYBRID -> Icons.Default.WifiTethering
+            }
+            Icon(icon, contentDescription = null, tint = MeshTheme.colors.success)
             Spacer(modifier = Modifier.width(12.dp))
             Column {
-                Text(id, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
-                Text("~ $distance away", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Text(device.name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                Text("Transport: ${device.transport.name}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
             }
         }
     }

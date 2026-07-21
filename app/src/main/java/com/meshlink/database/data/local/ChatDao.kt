@@ -95,6 +95,35 @@ interface ChatDao {
     suspend fun deleteChatEntity(chatId: String)
 
     // FIX ERROR 3: Fetch all messages that were broadcast to all nodes
-    @Query("SELECT * FROM messages WHERE chatId = 'BROADCAST' ORDER BY timestamp DESC")
+    @Query("SELECT * FROM messages WHERE chatId = 'BROADCAST' ORDER BY timestamp ASC")
     fun getBroadcastMessages(): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages WHERE chatId = :chatId")
+    suspend fun getMessagesListForChat(chatId: String): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE messageId IN (:messageIds)")
+    suspend fun getMessagesByIds(messageIds: List<String>): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE chatId = :chatId ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLastMessageForChat(chatId: String): MessageEntity?
+
+    @Query("UPDATE chats SET lastMessage = :text, lastMessageAt = :timestamp WHERE id = :chatId")
+    suspend fun updateChatLastMessage(chatId: String, text: String?, timestamp: Long)
+
+    @Transaction
+    suspend fun deleteMessagesAndUpdateChat(messageIds: List<String>) {
+        val messages = getMessagesByIds(messageIds)
+        val chatIds = messages.map { it.chatId }.distinct()
+        
+        deleteMessages(messageIds)
+
+        for (chatId in chatIds) {
+            val lastMsg = getLastMessageForChat(chatId)
+            if (lastMsg != null) {
+                updateChatLastMessage(chatId, lastMsg.text, lastMsg.timestamp)
+            } else {
+                updateChatLastMessage(chatId, null, 0L)
+            }
+        }
+    }
 }

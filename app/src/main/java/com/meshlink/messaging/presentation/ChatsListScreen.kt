@@ -44,10 +44,12 @@ fun ChatsListScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
-    val filteredChats = if (searchQuery.isBlank()) {
-        uiState.chats
-    } else {
-        uiState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    val filteredChats = remember(searchQuery, uiState.chats) {
+        if (searchQuery.isBlank()) {
+            uiState.chats
+        } else {
+            uiState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
     }
 
     Scaffold(

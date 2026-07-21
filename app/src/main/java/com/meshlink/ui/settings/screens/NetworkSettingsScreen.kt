@@ -43,25 +43,6 @@ fun NetworkSettingsScreen(
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
         ) {
-            // Display Settings
-            item {
-                Text("Status & Diagnostics", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
-                ) {
-                    Column(modifier = Modifier.padding(MeshTheme.spacing.medium)) {
-                        Text("Bluetooth State: ${if (uiState.isBleEnabled) "Enabled" else "Disabled"}")
-                        Text("Advertising: ${if (uiState.bleAdvertisingEnabled) "Active" else "Inactive"}")
-                        Text("Scanning: ${if (uiState.bleScanningEnabled) "Active" else "Inactive"}")
-                        Text("Wi-Fi Direct State: ${if (uiState.isWifiDirectEnabled) "Enabled" else "Disabled"}")
-                        Text("Transport Mode: ${uiState.preferredTransport}")
-                        Text("Mesh Health: Nominal (Simulated)")
-                    }
-                }
-            }
-
             // Transport Mode
             item {
                 Text("Transport Mode", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)

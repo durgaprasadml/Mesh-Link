@@ -16,7 +16,6 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.common.power.PowerState
 import com.meshlink.common.power.PowerStateManager
 import com.meshlink.MainActivity
-import com.meshlink.common.diagnostics.RuntimeWatchdog
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.ui.components.hasRequiredPermissions
 import com.meshlink.wifi.data.WifiDirectManager
@@ -62,9 +61,6 @@ class MeshRelayService : Service() {
 
     @Inject
     lateinit var powerStateManager: PowerStateManager
-
-    @Inject
-    lateinit var runtimeWatchdog: RuntimeWatchdog
 
     private var serviceJob: Job? = null
     private var restartOnDestroy = true
@@ -147,7 +143,6 @@ class MeshRelayService : Service() {
             
             var lastRefresh = System.currentTimeMillis()
             while (isActive) {
-                runtimeWatchdog.ping("MeshRelayService")
                 delay(15_000L)
                 if (System.currentTimeMillis() - lastRefresh >= BLE_REFRESH_INTERVAL_MS) {
                     val currentState = powerStateManager.powerState.value
@@ -246,7 +241,6 @@ class MeshRelayService : Service() {
         serviceJob?.cancel()
         meshRepository.stopMesh()
         wifiDirectManager.unregisterReceiver()
-        runtimeWatchdog.remove("MeshRelayService")
         if (restartOnDestroy) {
             scheduleRestart()
         }

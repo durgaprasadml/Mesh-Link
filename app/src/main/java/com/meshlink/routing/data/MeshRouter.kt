@@ -188,6 +188,13 @@ class MeshRouter @Inject constructor(
 
         val packet = MeshPacketParser.fromJson(json) ?: return
 
+        // --- Strict Encryption Enforcement ---
+        val enforceEncryption = runBlocking { settingsRepository.advancedEncryptionEnforcement.first() }
+        if (enforceEncryption && !packet.encrypted && packet.type != PacketType.KEY_EXCHANGE && packet.type != PacketType.SOS) {
+            MeshLogger.w(TAG, "Dropped unencrypted packet ${packet.packetId.takeLast(6)} due to Strict Encryption policy")
+            return
+        }
+
         // --- Trust Validation ---
         val trustLevel = trustManager.getTrustLevel(packet.senderId)
         if (trustLevel == TrustLevel.BLOCKED || trustLevel == TrustLevel.REVOKED) {

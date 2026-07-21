@@ -9,26 +9,7 @@ class SettingsRepositoryImpl @Inject constructor(
     private val localDataSource: SettingsLocalDataSource
 ) : SettingsRepository {
 
-    // Security
-    override val isAppLockEnabled: Flow<Boolean> = localDataSource.isAppLockEnabled
-    override suspend fun setAppLockEnabled(enabled: Boolean) {
-        localDataSource.setAppLockEnabled(enabled)
-    }
-
-    override val appLockPinHash: Flow<String?> = localDataSource.appLockPinHash
-    override suspend fun setAppLockPinHash(pinHash: String?) {
-        localDataSource.setAppLockPinHash(pinHash)
-    }
-
-    override val autoLockTimeoutMs: Flow<Long> = localDataSource.autoLockTimeoutMs
-    override suspend fun setAutoLockTimeoutMs(timeoutMs: Long) {
-        localDataSource.setAutoLockTimeoutMs(timeoutMs)
-    }
-
-    override val isBiometricsEnabled: Flow<Boolean> = localDataSource.isBiometricsEnabled
-    override suspend fun setBiometricsEnabled(enabled: Boolean) {
-        localDataSource.setBiometricsEnabled(enabled)
-    }
+    // Security settings removed
 
     // Bluetooth
     override val isBleEnabled: Flow<Boolean> = localDataSource.isBleEnabled
@@ -106,48 +87,10 @@ class SettingsRepositoryImpl @Inject constructor(
         localDataSource.setMeshQueueSize(size)
     }
 
-    // Discovery
-    override val discoveryInterval: Flow<Long> = localDataSource.discoveryInterval
-    override suspend fun setDiscoveryInterval(interval: Long) {
-        localDataSource.setDiscoveryInterval(interval)
-    }
-    override val discoveryBackground: Flow<Boolean> = localDataSource.discoveryBackground
-    override suspend fun setDiscoveryBackground(enabled: Boolean) {
-        localDataSource.setDiscoveryBackground(enabled)
-    }
-    override val discoveryForeground: Flow<Boolean> = localDataSource.discoveryForeground
-    override suspend fun setDiscoveryForeground(enabled: Boolean) {
-        localDataSource.setDiscoveryForeground(enabled)
-    }
-    override val discoveryTimeout: Flow<Long> = localDataSource.discoveryTimeout
-    override suspend fun setDiscoveryTimeout(timeout: Long) {
-        localDataSource.setDiscoveryTimeout(timeout)
-    }
-    override val discoveryRestart: Flow<Boolean> = localDataSource.discoveryRestart
-    override suspend fun setDiscoveryRestart(enabled: Boolean) {
-        localDataSource.setDiscoveryRestart(enabled)
-    }
-
     // Advanced
-    override val advancedPacketSize: Flow<Int> = localDataSource.advancedPacketSize
-    override suspend fun setAdvancedPacketSize(size: Int) {
-        localDataSource.setAdvancedPacketSize(size)
-    }
-    override val advancedRetryCount: Flow<Int> = localDataSource.advancedRetryCount
-    override suspend fun setAdvancedRetryCount(count: Int) {
-        localDataSource.setAdvancedRetryCount(count)
-    }
-    override val advancedCompression: Flow<Boolean> = localDataSource.advancedCompression
-    override suspend fun setAdvancedCompression(enabled: Boolean) {
-        localDataSource.setAdvancedCompression(enabled)
-    }
     override val advancedEncryptionEnforcement: Flow<Boolean> = localDataSource.advancedEncryptionEnforcement
     override suspend fun setAdvancedEncryptionEnforcement(enabled: Boolean) {
         localDataSource.setAdvancedEncryptionEnforcement(enabled)
-    }
-    override val advancedBandwidthOptimization: Flow<Boolean> = localDataSource.advancedBandwidthOptimization
-    override suspend fun setAdvancedBandwidthOptimization(enabled: Boolean) {
-        localDataSource.setAdvancedBandwidthOptimization(enabled)
     }
 
     // Appearance

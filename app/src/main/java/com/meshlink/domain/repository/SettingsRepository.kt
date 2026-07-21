@@ -3,18 +3,7 @@ package com.meshlink.domain.repository
 import kotlinx.coroutines.flow.Flow
 
 interface SettingsRepository {
-    // Security
-    val isAppLockEnabled: Flow<Boolean>
-    suspend fun setAppLockEnabled(enabled: Boolean)
-
-    val appLockPinHash: Flow<String?>
-    suspend fun setAppLockPinHash(pinHash: String?)
-
-    val autoLockTimeoutMs: Flow<Long>
-    suspend fun setAutoLockTimeoutMs(timeoutMs: Long)
-
-    val isBiometricsEnabled: Flow<Boolean>
-    suspend fun setBiometricsEnabled(enabled: Boolean)
+    // Security settings removed
 
     // Network & Transport Settings
     // Bluetooth
@@ -72,37 +61,9 @@ interface SettingsRepository {
     val meshQueueSize: Flow<Int>
     suspend fun setMeshQueueSize(size: Int)
 
-    // Discovery
-    val discoveryInterval: Flow<Long>
-    suspend fun setDiscoveryInterval(interval: Long)
-    
-    val discoveryBackground: Flow<Boolean>
-    suspend fun setDiscoveryBackground(enabled: Boolean)
-    
-    val discoveryForeground: Flow<Boolean>
-    suspend fun setDiscoveryForeground(enabled: Boolean)
-    
-    val discoveryTimeout: Flow<Long>
-    suspend fun setDiscoveryTimeout(timeout: Long)
-    
-    val discoveryRestart: Flow<Boolean>
-    suspend fun setDiscoveryRestart(enabled: Boolean)
-
     // Advanced
-    val advancedPacketSize: Flow<Int>
-    suspend fun setAdvancedPacketSize(size: Int)
-    
-    val advancedRetryCount: Flow<Int>
-    suspend fun setAdvancedRetryCount(count: Int)
-    
-    val advancedCompression: Flow<Boolean>
-    suspend fun setAdvancedCompression(enabled: Boolean)
-    
     val advancedEncryptionEnforcement: Flow<Boolean>
     suspend fun setAdvancedEncryptionEnforcement(enabled: Boolean)
-    
-    val advancedBandwidthOptimization: Flow<Boolean>
-    suspend fun setAdvancedBandwidthOptimization(enabled: Boolean)
 
     // Appearance
     val themeMode: Flow<String>

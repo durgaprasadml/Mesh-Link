@@ -106,7 +106,18 @@ class WifiDirectManager @Inject constructor(
                     } else {
                         MeshLogger.d(TAG, "P2P Disconnected")
                         _connectionInfo.value = null
+                        
+                        val disconnectedMac = _connectedPeerMac.value
                         _connectedPeerMac.value = null
+                        
+                        if (disconnectedMac != null) {
+                            scope.launch {
+                                if (settingsRepository.wifiReconnectEnabled.first()) {
+                                    MeshLogger.d(TAG, "wifiReconnectEnabled is true. Attempting to reconnect to $disconnectedMac")
+                                    connectToPeer(disconnectedMac)
+                                }
+                            }
+                        }
                     }
                 }
                 WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION -> {

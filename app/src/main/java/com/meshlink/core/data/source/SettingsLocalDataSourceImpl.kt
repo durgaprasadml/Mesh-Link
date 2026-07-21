@@ -42,19 +42,8 @@ class SettingsLocalDataSourceImpl @Inject constructor(
         val MESH_PRIORITY = intPreferencesKey("mesh_priority")
         val MESH_QUEUE_SIZE = intPreferencesKey("mesh_queue_size")
 
-        // Discovery
-        val DISCOVERY_INTERVAL = longPreferencesKey("discovery_interval")
-        val DISCOVERY_BACKGROUND = booleanPreferencesKey("discovery_background")
-        val DISCOVERY_FOREGROUND = booleanPreferencesKey("discovery_foreground")
-        val DISCOVERY_TIMEOUT = longPreferencesKey("discovery_timeout")
-        val DISCOVERY_RESTART = booleanPreferencesKey("discovery_restart")
-
         // Advanced
-        val ADVANCED_PACKET_SIZE = intPreferencesKey("advanced_packet_size")
-        val ADVANCED_RETRY_COUNT = intPreferencesKey("advanced_retry_count")
-        val ADVANCED_COMPRESSION = booleanPreferencesKey("advanced_compression")
         val ADVANCED_ENCRYPTION_ENFORCEMENT = booleanPreferencesKey("advanced_encryption_enforcement")
-        val ADVANCED_BANDWIDTH_OPTIMIZATION = booleanPreferencesKey("advanced_bandwidth_optimization")
 
         // Appearance
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -169,48 +158,10 @@ class SettingsLocalDataSourceImpl @Inject constructor(
         dataStore.edit { it[MESH_QUEUE_SIZE] = size }
     }
 
-    // Discovery
-    override val discoveryInterval: Flow<Long> = dataStore.data.map { it[DISCOVERY_INTERVAL] ?: 30000L }
-    override suspend fun setDiscoveryInterval(interval: Long) {
-        dataStore.edit { it[DISCOVERY_INTERVAL] = interval }
-    }
-    override val discoveryBackground: Flow<Boolean> = dataStore.data.map { it[DISCOVERY_BACKGROUND] ?: true }
-    override suspend fun setDiscoveryBackground(enabled: Boolean) {
-        dataStore.edit { it[DISCOVERY_BACKGROUND] = enabled }
-    }
-    override val discoveryForeground: Flow<Boolean> = dataStore.data.map { it[DISCOVERY_FOREGROUND] ?: true }
-    override suspend fun setDiscoveryForeground(enabled: Boolean) {
-        dataStore.edit { it[DISCOVERY_FOREGROUND] = enabled }
-    }
-    override val discoveryTimeout: Flow<Long> = dataStore.data.map { it[DISCOVERY_TIMEOUT] ?: 120000L }
-    override suspend fun setDiscoveryTimeout(timeout: Long) {
-        dataStore.edit { it[DISCOVERY_TIMEOUT] = timeout }
-    }
-    override val discoveryRestart: Flow<Boolean> = dataStore.data.map { it[DISCOVERY_RESTART] ?: true }
-    override suspend fun setDiscoveryRestart(enabled: Boolean) {
-        dataStore.edit { it[DISCOVERY_RESTART] = enabled }
-    }
-
     // Advanced
-    override val advancedPacketSize: Flow<Int> = dataStore.data.map { it[ADVANCED_PACKET_SIZE] ?: 512 }
-    override suspend fun setAdvancedPacketSize(size: Int) {
-        dataStore.edit { it[ADVANCED_PACKET_SIZE] = size }
-    }
-    override val advancedRetryCount: Flow<Int> = dataStore.data.map { it[ADVANCED_RETRY_COUNT] ?: 3 }
-    override suspend fun setAdvancedRetryCount(count: Int) {
-        dataStore.edit { it[ADVANCED_RETRY_COUNT] = count }
-    }
-    override val advancedCompression: Flow<Boolean> = dataStore.data.map { it[ADVANCED_COMPRESSION] ?: true }
-    override suspend fun setAdvancedCompression(enabled: Boolean) {
-        dataStore.edit { it[ADVANCED_COMPRESSION] = enabled }
-    }
     override val advancedEncryptionEnforcement: Flow<Boolean> = dataStore.data.map { it[ADVANCED_ENCRYPTION_ENFORCEMENT] ?: true }
     override suspend fun setAdvancedEncryptionEnforcement(enabled: Boolean) {
         dataStore.edit { it[ADVANCED_ENCRYPTION_ENFORCEMENT] = enabled }
-    }
-    override val advancedBandwidthOptimization: Flow<Boolean> = dataStore.data.map { it[ADVANCED_BANDWIDTH_OPTIMIZATION] ?: true }
-    override suspend fun setAdvancedBandwidthOptimization(enabled: Boolean) {
-        dataStore.edit { it[ADVANCED_BANDWIDTH_OPTIMIZATION] = enabled }
     }
 
     // Appearance

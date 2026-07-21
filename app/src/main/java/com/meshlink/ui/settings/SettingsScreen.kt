@@ -71,10 +71,8 @@ fun SettingsScreen(
                 onBack = onBack,
                 onLogout = { viewModel.logout() }
             )
-            SettingsDestination.PROFILE -> ProfileScreen(
-                uiState = uiState,
-                onSaveName = { viewModel.updateUserName(it) },
-                onBack = { currentDestination = SettingsDestination.HOME }
+            SettingsDestination.PROFILE -> com.meshlink.ui.profile.ProfileScreen(
+                onNavigateBack = { currentDestination = SettingsDestination.HOME }
             )
             SettingsDestination.SECURITY -> SecurityCenterScreen(
                 onBack = { currentDestination = SettingsDestination.HOME }

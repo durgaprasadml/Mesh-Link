@@ -198,6 +198,10 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
+    
+    // QR Code
+    implementation(libs.zxing.core)
+    
     testImplementation(libs.robolectric)
     implementation(libs.kotlinx.coroutines.guava)
     

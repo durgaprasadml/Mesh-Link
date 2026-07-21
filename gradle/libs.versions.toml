@@ -33,6 +33,7 @@ androidx-test-rules = "1.5.0"
 androidx-test-ext-junit = "1.1.5"
 espresso-core = "3.5.1"
 firebase-bom = "33.5.1"
+zxing = "3.5.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
@@ -88,6 +89,7 @@ androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espres
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
 firebase-analytics-ktx = { group = "com.google.firebase", name = "firebase-analytics-ktx" }
 firebase-crashlytics-ktx = { group = "com.google.firebase", name = "firebase-crashlytics-ktx" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

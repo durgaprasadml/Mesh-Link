@@ -78,7 +78,7 @@ class UserRepositoryImpl @Inject constructor(
                 
                 if (verified) {
                     localDataSource.setLoginState(true)
-                    return Result.success(com.meshlink.domain.model.User(meshId = user.meshId, name = user.name, phoneNumber = user.phoneNumber))
+                    return Result.success(com.meshlink.domain.model.User(meshId = user.meshId, name = user.name, phoneNumber = user.phoneNumber, avatarUri = user.avatarUri, aboutMe = user.aboutMe))
                 }
             }
             
@@ -90,13 +90,20 @@ class UserRepositoryImpl @Inject constructor(
 
     override suspend fun getLocalUser(): com.meshlink.domain.model.User? {
         val userEntity = localDataSource.getLocalUser()
-        return userEntity?.let { com.meshlink.domain.model.User(meshId = it.meshId, name = it.name, phoneNumber = it.phoneNumber) }
+        return userEntity?.let { com.meshlink.domain.model.User(meshId = it.meshId, name = it.name, phoneNumber = it.phoneNumber, avatarUri = it.avatarUri, aboutMe = it.aboutMe) }
     }
 
     override suspend fun updateUserName(name: String) {
         val userEntity = localDataSource.getLocalUser()
         if (userEntity != null) {
             localDataSource.insertUser(userEntity.copy(name = name))
+        }
+    }
+
+    override suspend fun updateProfile(name: String, aboutMe: String?, avatarUri: String?) {
+        val userEntity = localDataSource.getLocalUser()
+        if (userEntity != null) {
+            localDataSource.insertUser(userEntity.copy(name = name, aboutMe = aboutMe, avatarUri = avatarUri))
         }
     }
 

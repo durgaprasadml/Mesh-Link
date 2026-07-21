@@ -45,4 +45,11 @@ object MeshDatabaseMigrations {
             // Version 8 schema update
         }
     }
+
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE users ADD COLUMN avatarUri TEXT")
+            db.execSQL("ALTER TABLE users ADD COLUMN aboutMe TEXT")
+        }
+    }
 }

@@ -116,4 +116,22 @@ interface SettingsRepository {
 
     val highContrast: Flow<Boolean>
     suspend fun setHighContrast(enabled: Boolean)
+
+    val accentColor: Flow<String>
+    suspend fun setAccentColor(color: String)
+
+    val animationsEnabled: Flow<Boolean>
+    suspend fun setAnimationsEnabled(enabled: Boolean)
+
+    val glassEffectsEnabled: Flow<Boolean>
+    suspend fun setGlassEffectsEnabled(enabled: Boolean)
+
+    val cornerRadiusScale: Flow<Float>
+    suspend fun setCornerRadiusScale(scale: Float)
+
+    val largeTextEnabled: Flow<Boolean>
+    suspend fun setLargeTextEnabled(enabled: Boolean)
+
+    val reduceMotionEnabled: Flow<Boolean>
+    suspend fun setReduceMotionEnabled(enabled: Boolean)
 }

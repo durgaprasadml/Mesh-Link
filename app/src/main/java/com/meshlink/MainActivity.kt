@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
@@ -62,7 +64,22 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val windowSizeClass = @OptIn(ExperimentalMaterial3WindowSizeClassApi::class) calculateWindowSizeClass(this)
-            MeshTheme {
+            
+            val settingsViewModel: com.meshlink.ui.settings.SettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+            val uiState by settingsViewModel.uiState.collectAsState()
+
+            MeshTheme(
+                themeMode = uiState.themeMode,
+                dynamicColor = uiState.isMaterialYouEnabled,
+                accentColor = uiState.accentColor,
+                fontScale = uiState.fontScale,
+                largeTextEnabled = uiState.largeTextEnabled,
+                cornerRadiusScale = uiState.cornerRadiusScale,
+                animationsEnabled = uiState.animationsEnabled,
+                glassEffectsEnabled = uiState.glassEffectsEnabled,
+                highContrast = uiState.highContrast,
+                reduceMotionEnabled = uiState.reduceMotionEnabled
+            ) {
                 val navController = rememberNavController()
 
                 LaunchedEffect(Unit) {

@@ -170,4 +170,34 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setHighContrast(enabled: Boolean) {
         localDataSource.setHighContrast(enabled)
     }
+
+    override val accentColor: Flow<String> = localDataSource.accentColor
+    override suspend fun setAccentColor(color: String) {
+        localDataSource.setAccentColor(color)
+    }
+
+    override val animationsEnabled: Flow<Boolean> = localDataSource.animationsEnabled
+    override suspend fun setAnimationsEnabled(enabled: Boolean) {
+        localDataSource.setAnimationsEnabled(enabled)
+    }
+
+    override val glassEffectsEnabled: Flow<Boolean> = localDataSource.glassEffectsEnabled
+    override suspend fun setGlassEffectsEnabled(enabled: Boolean) {
+        localDataSource.setGlassEffectsEnabled(enabled)
+    }
+
+    override val cornerRadiusScale: Flow<Float> = localDataSource.cornerRadiusScale
+    override suspend fun setCornerRadiusScale(scale: Float) {
+        localDataSource.setCornerRadiusScale(scale)
+    }
+
+    override val largeTextEnabled: Flow<Boolean> = localDataSource.largeTextEnabled
+    override suspend fun setLargeTextEnabled(enabled: Boolean) {
+        localDataSource.setLargeTextEnabled(enabled)
+    }
+
+    override val reduceMotionEnabled: Flow<Boolean> = localDataSource.reduceMotionEnabled
+    override suspend fun setReduceMotionEnabled(enabled: Boolean) {
+        localDataSource.setReduceMotionEnabled(enabled)
+    }
 }

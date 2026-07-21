@@ -84,6 +84,12 @@ class SettingsViewModelTest {
         every { settingsRepository.isMaterialYouEnabled } returns flowOf(true)
         every { settingsRepository.fontScale } returns flowOf(1.0f)
         every { settingsRepository.highContrast } returns flowOf(false)
+        every { settingsRepository.accentColor } returns flowOf("Blue")
+        every { settingsRepository.animationsEnabled } returns flowOf(true)
+        every { settingsRepository.glassEffectsEnabled } returns flowOf(true)
+        every { settingsRepository.cornerRadiusScale } returns flowOf(1.0f)
+        every { settingsRepository.largeTextEnabled } returns flowOf(false)
+        every { settingsRepository.reduceMotionEnabled } returns flowOf(false)
 
         viewModel = SettingsViewModel(userRepository, settingsRepository)
     }
@@ -118,5 +124,20 @@ class SettingsViewModelTest {
     fun `setBleEnabled updates repository`() = runTest {
         viewModel.setBleEnabled(false)
         coVerify { settingsRepository.setBleEnabled(false) }
+    }
+
+    @Test
+    fun `Appearance setters update repository`() = runTest {
+        viewModel.setThemeMode("DARK")
+        coVerify { settingsRepository.setThemeMode("DARK") }
+
+        viewModel.setAccentColor("Red")
+        coVerify { settingsRepository.setAccentColor("Red") }
+
+        viewModel.setLargeTextEnabled(true)
+        coVerify { settingsRepository.setLargeTextEnabled(true) }
+
+        viewModel.setAnimationsEnabled(false)
+        coVerify { settingsRepository.setAnimationsEnabled(false) }
     }
 }

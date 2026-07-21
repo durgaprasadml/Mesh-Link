@@ -58,4 +58,22 @@ class SettingsRepositoryTest {
         settingsRepository.setMeshRelayEnabled(false)
         coVerify { localDataSource.setMeshRelayEnabled(false) }
     }
+
+    @Test
+    fun `setThemeMode calls local data source`() = runTest {
+        settingsRepository.setThemeMode("DARK")
+        coVerify { localDataSource.setThemeMode("DARK") }
+    }
+
+    @Test
+    fun `setAccentColor calls local data source`() = runTest {
+        settingsRepository.setAccentColor("Green")
+        coVerify { localDataSource.setAccentColor("Green") }
+    }
+
+    @Test
+    fun `setCornerRadiusScale calls local data source`() = runTest {
+        settingsRepository.setCornerRadiusScale(1.5f)
+        coVerify { localDataSource.setCornerRadiusScale(1.5f) }
+    }
 }

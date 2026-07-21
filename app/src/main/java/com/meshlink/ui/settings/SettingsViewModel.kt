@@ -66,7 +66,13 @@ data class SettingsUiState(
     val themeMode: String = "SYSTEM",
     val isMaterialYouEnabled: Boolean = true,
     val fontScale: Float = 1.0f,
-    val highContrast: Boolean = false
+    val highContrast: Boolean = false,
+    val accentColor: String = "Blue",
+    val animationsEnabled: Boolean = true,
+    val glassEffectsEnabled: Boolean = true,
+    val cornerRadiusScale: Float = 1.0f,
+    val largeTextEnabled: Boolean = false,
+    val reduceMotionEnabled: Boolean = false
 )
 
 sealed class SettingsEvent {
@@ -215,10 +221,29 @@ class SettingsViewModel @Inject constructor(
         )
     }
 
-    // Two more properties needed that didn't fit in groups of 5
-    // Let's create an intermediate flow
-    val uiState = combine(combinedState, settingsRepository.fontScale, settingsRepository.highContrast) { state, fontScale, highContrast ->
-        state.copy(fontScale = fontScale, highContrast = highContrast)
+    // Fetch the remaining properties in a separate combine
+    val uiState = combine(
+        combinedState,
+        settingsRepository.fontScale,
+        settingsRepository.highContrast,
+        settingsRepository.accentColor,
+        settingsRepository.animationsEnabled,
+        settingsRepository.glassEffectsEnabled,
+        settingsRepository.cornerRadiusScale,
+        settingsRepository.largeTextEnabled,
+        settingsRepository.reduceMotionEnabled
+    ) { args ->
+        val state = args[0] as SettingsUiState
+        state.copy(
+            fontScale = args[1] as Float,
+            highContrast = args[2] as Boolean,
+            accentColor = args[3] as String,
+            animationsEnabled = args[4] as Boolean,
+            glassEffectsEnabled = args[5] as Boolean,
+            cornerRadiusScale = args[6] as Float,
+            largeTextEnabled = args[7] as Boolean,
+            reduceMotionEnabled = args[8] as Boolean
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
     // Internal data classes for grouping
@@ -297,6 +322,12 @@ class SettingsViewModel @Inject constructor(
     fun setMaterialYouEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setMaterialYouEnabled(enabled) }
     fun setFontScale(scale: Float) = viewModelScope.launch { settingsRepository.setFontScale(scale) }
     fun setHighContrast(enabled: Boolean) = viewModelScope.launch { settingsRepository.setHighContrast(enabled) }
+    fun setAccentColor(color: String) = viewModelScope.launch { settingsRepository.setAccentColor(color) }
+    fun setAnimationsEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAnimationsEnabled(enabled) }
+    fun setGlassEffectsEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setGlassEffectsEnabled(enabled) }
+    fun setCornerRadiusScale(scale: Float) = viewModelScope.launch { settingsRepository.setCornerRadiusScale(scale) }
+    fun setLargeTextEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setLargeTextEnabled(enabled) }
+    fun setReduceMotionEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setReduceMotionEnabled(enabled) }
 
     fun logout() {
         viewModelScope.launch {

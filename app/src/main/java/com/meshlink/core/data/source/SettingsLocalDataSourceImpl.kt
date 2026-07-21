@@ -61,6 +61,12 @@ class SettingsLocalDataSourceImpl @Inject constructor(
         val MATERIAL_YOU_ENABLED = booleanPreferencesKey("material_you_enabled")
         val FONT_SCALE = floatPreferencesKey("font_scale")
         val HIGH_CONTRAST = booleanPreferencesKey("high_contrast")
+        val ACCENT_COLOR = stringPreferencesKey("accent_color")
+        val ANIMATIONS_ENABLED = booleanPreferencesKey("animations_enabled")
+        val GLASS_EFFECTS_ENABLED = booleanPreferencesKey("glass_effects_enabled")
+        val CORNER_RADIUS_SCALE = floatPreferencesKey("corner_radius_scale")
+        val LARGE_TEXT_ENABLED = booleanPreferencesKey("large_text_enabled")
+        val REDUCE_MOTION_ENABLED = booleanPreferencesKey("reduce_motion_enabled")
     }
 
     // Security
@@ -226,5 +232,35 @@ class SettingsLocalDataSourceImpl @Inject constructor(
     override val highContrast: Flow<Boolean> = dataStore.data.map { it[HIGH_CONTRAST] ?: false }
     override suspend fun setHighContrast(enabled: Boolean) {
         dataStore.edit { it[HIGH_CONTRAST] = enabled }
+    }
+
+    override val accentColor: Flow<String> = dataStore.data.map { it[ACCENT_COLOR] ?: "Blue" }
+    override suspend fun setAccentColor(color: String) {
+        dataStore.edit { it[ACCENT_COLOR] = color }
+    }
+
+    override val animationsEnabled: Flow<Boolean> = dataStore.data.map { it[ANIMATIONS_ENABLED] ?: true }
+    override suspend fun setAnimationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[ANIMATIONS_ENABLED] = enabled }
+    }
+
+    override val glassEffectsEnabled: Flow<Boolean> = dataStore.data.map { it[GLASS_EFFECTS_ENABLED] ?: true }
+    override suspend fun setGlassEffectsEnabled(enabled: Boolean) {
+        dataStore.edit { it[GLASS_EFFECTS_ENABLED] = enabled }
+    }
+
+    override val cornerRadiusScale: Flow<Float> = dataStore.data.map { it[CORNER_RADIUS_SCALE] ?: 1.0f }
+    override suspend fun setCornerRadiusScale(scale: Float) {
+        dataStore.edit { it[CORNER_RADIUS_SCALE] = scale }
+    }
+
+    override val largeTextEnabled: Flow<Boolean> = dataStore.data.map { it[LARGE_TEXT_ENABLED] ?: false }
+    override suspend fun setLargeTextEnabled(enabled: Boolean) {
+        dataStore.edit { it[LARGE_TEXT_ENABLED] = enabled }
+    }
+
+    override val reduceMotionEnabled: Flow<Boolean> = dataStore.data.map { it[REDUCE_MOTION_ENABLED] ?: false }
+    override suspend fun setReduceMotionEnabled(enabled: Boolean) {
+        dataStore.edit { it[REDUCE_MOTION_ENABLED] = enabled }
     }
 }

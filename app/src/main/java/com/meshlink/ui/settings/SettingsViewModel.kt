@@ -18,10 +18,7 @@ data class SettingsUiState(
     val isOnlineVisible: Boolean = true,
     val meshMode: String = "Auto",
     
-    // Security
-    val isAppLockEnabled: Boolean = false,
-    val autoLockTimeoutMs: Long = 60000L,
-    val isBiometricsEnabled: Boolean = false,
+    // Security settings removed
     
     // Network - Bluetooth
     val isBleEnabled: Boolean = true,
@@ -94,20 +91,17 @@ class SettingsViewModel @Inject constructor(
         combine(
             userRepository.isEncryptionEnabled,
             userRepository.isOnlineVisible,
-            userRepository.meshMode,
-            settingsRepository.isAppLockEnabled,
-            settingsRepository.autoLockTimeoutMs
-        ) { enc, onl, mesh, lock, timeout ->
-            SettingsGroup1(enc, onl, mesh, lock, timeout)
+            userRepository.meshMode
+        ) { enc, onl, mesh ->
+            SettingsGroup1(enc, onl, mesh)
         },
         combine(
-            settingsRepository.isBiometricsEnabled,
             settingsRepository.isBleEnabled,
             settingsRepository.bleAdvertisingEnabled,
             settingsRepository.bleScanningEnabled,
             settingsRepository.bleTxPower
-        ) { bio, ble, bleAdv, bleScan, bleTx ->
-            SettingsGroup2(bio, ble, bleAdv, bleScan, bleTx)
+        ) { ble, bleAdv, bleScan, bleTx ->
+            SettingsGroup2(ble, bleAdv, bleScan, bleTx)
         },
         combine(
             settingsRepository.bleScanInterval,
@@ -149,10 +143,7 @@ class SettingsViewModel @Inject constructor(
             isEncryptionEnabled = g1.enc,
             isOnlineVisible = g1.onl,
             meshMode = g1.mesh,
-            isAppLockEnabled = g1.lock,
-            autoLockTimeoutMs = g1.timeout,
             
-            isBiometricsEnabled = g2.bio,
             isBleEnabled = g2.ble,
             bleAdvertisingEnabled = g2.bleAdv,
             bleScanningEnabled = g2.bleScan,
@@ -206,8 +197,8 @@ class SettingsViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
     // Internal data classes for grouping
-    private data class SettingsGroup1(val enc: Boolean, val onl: Boolean, val mesh: String, val lock: Boolean, val timeout: Long)
-    private data class SettingsGroup2(val bio: Boolean, val ble: Boolean, val bleAdv: Boolean, val bleScan: Boolean, val bleTx: Int)
+    private data class SettingsGroup1(val enc: Boolean, val onl: Boolean, val mesh: String)
+    private data class SettingsGroup2(val ble: Boolean, val bleAdv: Boolean, val bleScan: Boolean, val bleTx: Int)
     private data class SettingsGroup3(val bleInt: Long, val bleAuto: Boolean, val wifi: Boolean, val wifiAuto: Boolean, val wifiDisc: Boolean)
     private data class SettingsGroup4(val wifiGo: Boolean, val wifiRec: Boolean, val trans: String, val relay: Boolean, val hops: Int)
     private data class SettingsGroup5(val ttl: Int, val prio: Int, val queue: Int, val encEnf: Boolean, val theme: String)
@@ -230,11 +221,8 @@ class SettingsViewModel @Inject constructor(
     fun setOnlineVisible(visible: Boolean) = viewModelScope.launch { userRepository.setOnlineVisible(visible) }
     fun setMeshMode(mode: String) = viewModelScope.launch { userRepository.setMeshMode(mode) }
 
-    // Security Settings
-    fun setAppLockEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAppLockEnabled(enabled) }
-    fun setAutoLockTimeoutMs(timeoutMs: Long) = viewModelScope.launch { settingsRepository.setAutoLockTimeoutMs(timeoutMs) }
-    fun setBiometricsEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setBiometricsEnabled(enabled) }
-    
+    // Security Settings Removed
+
     // Bluetooth Settings
     fun setBleEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setBleEnabled(enabled) }
     fun setBleAdvertisingEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setBleAdvertisingEnabled(enabled) }

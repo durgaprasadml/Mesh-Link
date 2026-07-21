@@ -3,18 +3,7 @@ package com.meshlink.core.data.source
 import kotlinx.coroutines.flow.Flow
 
 interface SettingsLocalDataSource {
-    // Security
-    val isAppLockEnabled: Flow<Boolean>
-    suspend fun setAppLockEnabled(enabled: Boolean)
-
-    val appLockPinHash: Flow<String?>
-    suspend fun setAppLockPinHash(pinHash: String?)
-
-    val autoLockTimeoutMs: Flow<Long>
-    suspend fun setAutoLockTimeoutMs(timeoutMs: Long)
-
-    val isBiometricsEnabled: Flow<Boolean>
-    suspend fun setBiometricsEnabled(enabled: Boolean)
+    // Security settings removed
 
     // Network & Transport Settings
     // Bluetooth

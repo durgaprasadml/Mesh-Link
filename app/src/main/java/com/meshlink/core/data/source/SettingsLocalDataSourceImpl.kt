@@ -11,11 +11,7 @@ class SettingsLocalDataSourceImpl @Inject constructor(
 ) : SettingsLocalDataSource {
 
     companion object {
-        // Security
-        val APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
-        val APP_LOCK_PIN_HASH = stringPreferencesKey("app_lock_pin_hash")
-        val AUTO_LOCK_TIMEOUT_MS = longPreferencesKey("auto_lock_timeout_ms")
-        val BIOMETRICS_ENABLED = booleanPreferencesKey("biometrics_enabled")
+        // Security settings removed
 
         // Network - Bluetooth
         val BLE_ENABLED = booleanPreferencesKey("ble_enabled")
@@ -58,29 +54,7 @@ class SettingsLocalDataSourceImpl @Inject constructor(
         val REDUCE_MOTION_ENABLED = booleanPreferencesKey("reduce_motion_enabled")
     }
 
-    // Security
-    override val isAppLockEnabled: Flow<Boolean> = dataStore.data.map { it[APP_LOCK_ENABLED] ?: false }
-    override suspend fun setAppLockEnabled(enabled: Boolean) {
-        dataStore.edit { it[APP_LOCK_ENABLED] = enabled }
-    }
-
-    override val appLockPinHash: Flow<String?> = dataStore.data.map { it[APP_LOCK_PIN_HASH] }
-    override suspend fun setAppLockPinHash(pinHash: String?) {
-        dataStore.edit { prefs ->
-            if (pinHash == null) prefs.remove(APP_LOCK_PIN_HASH)
-            else prefs[APP_LOCK_PIN_HASH] = pinHash
-        }
-    }
-
-    override val autoLockTimeoutMs: Flow<Long> = dataStore.data.map { it[AUTO_LOCK_TIMEOUT_MS] ?: 60000L }
-    override suspend fun setAutoLockTimeoutMs(timeoutMs: Long) {
-        dataStore.edit { it[AUTO_LOCK_TIMEOUT_MS] = timeoutMs }
-    }
-
-    override val isBiometricsEnabled: Flow<Boolean> = dataStore.data.map { it[BIOMETRICS_ENABLED] ?: false }
-    override suspend fun setBiometricsEnabled(enabled: Boolean) {
-        dataStore.edit { it[BIOMETRICS_ENABLED] = enabled }
-    }
+    // Security settings removed
 
     // Bluetooth
     override val isBleEnabled: Flow<Boolean> = dataStore.data.map { it[BLE_ENABLED] ?: true }

@@ -87,6 +87,10 @@ class HybridTransportIntegrationTest {
 
         val discoveryEngine = mockk<com.meshlink.ble.discovery.DiscoveryEngine>(relaxed = true)
         every { discoveryEngine.engineEvents } returns MutableSharedFlow()
+        
+        val discoveryManager = mockk<com.meshlink.ble.data.DiscoveryManager>(relaxed = true)
+        every { discoveryManager.discoveryEngine } returns discoveryEngine
+        every { discoveryManager.scannedDevices } returns MutableStateFlow(emptyMap())
 
         repository = BleRepositoryImpl(
             application = app,
@@ -104,7 +108,7 @@ class HybridTransportIntegrationTest {
             rekeyManager = rekeyManager,
                         trustManager = trustManager,
             securityMonitor = securityMonitor,
-            discoveryManager = mockk(relaxed = true),
+            discoveryManager = discoveryManager,
             connectionManager = mockk(relaxed = true),
             routingCoordinator = mockk(relaxed = true),
             meshMessagingManager = meshMessagingManager,

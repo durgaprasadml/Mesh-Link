@@ -12,16 +12,24 @@ import android.os.ParcelUuid
 import android.os.PowerManager
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.ble.discovery.DiscoveryEngine
+import com.meshlink.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 @Singleton
 @SuppressLint("MissingPermission")
 class BleScannerManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val discoveryEngine: DiscoveryEngine
+    private val discoveryEngine: DiscoveryEngine,
+    private val settingsRepository: SettingsRepository
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     companion object {
         private const val TAG = "BleScanner"
     }
@@ -50,13 +58,19 @@ class BleScannerManager @Inject constructor(
     }
 
     private fun startHardwareScan() {
-        stopHardwareScan()
+        scope.launch {
+            if (!settingsRepository.bleScanningEnabled.first() || !settingsRepository.isBleEnabled.first()) {
+                MeshLogger.d(TAG, "BLE Scanning disabled in settings. Skipping.")
+                return@launch
+            }
+            
+            stopHardwareScan()
 
-        val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
-        if (bluetoothAdapter?.isEnabled != true) {
-            MeshLogger.w(TAG, "Bluetooth is disabled; skipping hardware scan")
-            return
-        }
+            val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return@launch
+            if (bluetoothAdapter?.isEnabled != true) {
+                MeshLogger.w(TAG, "Bluetooth is disabled; skipping hardware scan")
+                return@launch
+            }
         
         val filter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(BleConstants.MESH_SERVICE_UUID))
@@ -86,10 +100,14 @@ class BleScannerManager @Inject constructor(
             override fun onScanFailed(errorCode: Int) {
                 MeshLogger.e(TAG, "BLE scan failed with error code: $errorCode")
                 if (errorCode != ScanCallback.SCAN_FAILED_ALREADY_STARTED) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        MeshLogger.d(TAG, "Attempting to restart BLE scan after failure")
-                        startHardwareScan()
-                    }, 5000L)
+                    scope.launch {
+                        if (settingsRepository.bleAutoRestart.first()) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                MeshLogger.d(TAG, "Attempting to restart BLE scan after failure")
+                                startHardwareScan()
+                            }, 5000L)
+                        }
+                    }
                 }
             }
         }
@@ -100,6 +118,7 @@ class BleScannerManager @Inject constructor(
             MeshLogger.e(TAG, "SecurityException: Missing BLE scan permission", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception starting hardware scan: ${e.message}", e)
+        }
         }
     }
 

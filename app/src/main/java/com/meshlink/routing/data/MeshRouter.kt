@@ -13,12 +13,14 @@ import com.meshlink.routing.engine.RoutingEngine
 import com.meshlink.routing.engine.RouteType
 import com.meshlink.security.data.TrustLevel
 import com.meshlink.security.data.TrustManager
+import com.meshlink.domain.repository.SettingsRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 
 @Singleton
 class MeshRouter @Inject constructor(
@@ -27,6 +29,7 @@ class MeshRouter @Inject constructor(
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,
     private val routingEngine: RoutingEngine,
+    private val settingsRepository: SettingsRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) {
 
@@ -247,6 +250,19 @@ class MeshRouter @Inject constructor(
             return
         }
 
+        // Check Mesh Relay setting
+        val relayEnabled = runBlocking { settingsRepository.isMeshRelayEnabled.first() }
+        if (!relayEnabled && !isAckNack) {
+            MeshLogger.d(TAG, "Relay disabled in settings, dropping packet ${packet.packetId.takeLast(6)}")
+            return
+        }
+
+        val maxHops = runBlocking { settingsRepository.meshMaxHops.first() }
+        if (packet.hopCount >= maxHops) {
+            MeshLogger.d(TAG, "Max hops exceeded, dropping packet ${packet.packetId.takeLast(6)}")
+            return
+        }
+
         val relayPacket = packet.copy(
             ttl = packet.ttl - 1,
             hopCount = packet.hopCount + 1,
@@ -328,7 +344,7 @@ class MeshRouter @Inject constructor(
         encrypted: Boolean = false,
         packetId: String? = null
     ) {
-        val initialTtl = routingEngine.calculateInitialTtl(PacketType.TEXT)
+        val initialTtl = runBlocking { settingsRepository.meshTtl.first() }
         val packet = MeshPacket(
             packetId = packetId ?: java.util.UUID.randomUUID().toString(),
             senderId = myAddressAlias,
@@ -344,7 +360,7 @@ class MeshRouter @Inject constructor(
     }
 
     fun sendMediaPacket(packet: MeshPacket) {
-        val initialTtl = routingEngine.calculateInitialTtl(packet.type)
+        val initialTtl = runBlocking { settingsRepository.meshTtl.first() }
         val finalPacket = packet.copy(ttl = initialTtl)
         
         routingEngine.markPacketProcessed(finalPacket.packetId)

@@ -10,13 +10,23 @@ import android.content.Context
 import android.os.ParcelUuid
 import android.os.PowerManager
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 @Singleton
 @SuppressLint("MissingPermission")
-class BleAdvertiserManager @Inject constructor(@ApplicationContext private val context: Context) {
+class BleAdvertiserManager @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val settingsRepository: SettingsRepository
+) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     companion object {
         private const val TAG = "BleAdvertiser"
         private const val NAME_PREVIEW_LENGTH = 3
@@ -29,34 +39,47 @@ class BleAdvertiserManager @Inject constructor(@ApplicationContext private val c
     private var advertiseCallback: AdvertiseCallback? = null
 
     fun startAdvertising(name: String, meshId: String, capabilities: Byte = 0) {
-        stopAdvertising()
+        scope.launch {
+            if (!settingsRepository.bleAdvertisingEnabled.first() || !settingsRepository.isBleEnabled.first()) {
+                MeshLogger.d(TAG, "BLE Advertising disabled in settings. Skipping.")
+                return@launch
+            }
 
-        val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return
-        if (bluetoothAdapter?.isEnabled != true) {
-            MeshLogger.w(TAG, "Bluetooth is disabled; skipping advertising")
-            return
-        }
+            stopAdvertising()
 
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        val isPowerSave = powerManager.isPowerSaveMode
+            val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return@launch
+            if (bluetoothAdapter?.isEnabled != true) {
+                MeshLogger.w(TAG, "Bluetooth is disabled; skipping advertising")
+                return@launch
+            }
 
-        val advMode = if (isPowerSave) {
-            AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
-        } else {
-            AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
-        }
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val isPowerSave = powerManager.isPowerSaveMode
+            val userTxPower = settingsRepository.bleTxPower.first()
 
-        val txPower = if (isPowerSave) {
-            AdvertiseSettings.ADVERTISE_TX_POWER_LOW
-        } else {
-            AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
-        }
+            val advMode = if (isPowerSave) {
+                AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
+            } else {
+                AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
+            }
 
-        val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(advMode)
-            .setTxPowerLevel(txPower)
-            .setConnectable(true)
-            .build()
+            val txPower = if (isPowerSave) {
+                AdvertiseSettings.ADVERTISE_TX_POWER_LOW
+            } else {
+                when (userTxPower) {
+                    0 -> AdvertiseSettings.ADVERTISE_TX_POWER_ULTRA_LOW
+                    1 -> AdvertiseSettings.ADVERTISE_TX_POWER_LOW
+                    2 -> AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
+                    3 -> AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
+                    else -> AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
+                }
+            }
+
+            val settings = AdvertiseSettings.Builder()
+                .setAdvertiseMode(advMode)
+                .setTxPowerLevel(txPower)
+                .setConnectable(true)
+                .build()
 
         // Legacy BLE advertising is capped at 31 bytes per packet.
         // We pack 8 bytes Mesh ID, 1 byte Capabilities, 3 bytes Name preview
@@ -84,10 +107,14 @@ class BleAdvertiserManager @Inject constructor(@ApplicationContext private val c
             override fun onStartFailure(errorCode: Int) {
                 MeshLogger.e(TAG, "Advertising failed with error code: $errorCode")
                 if (errorCode != AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        MeshLogger.d(TAG, "Attempting to restart BLE advertising after failure")
-                        startAdvertising(name, meshId, capabilities)
-                    }, 5000L)
+                    scope.launch {
+                        if (settingsRepository.bleAutoRestart.first()) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                MeshLogger.d(TAG, "Attempting to restart BLE advertising after failure")
+                                startAdvertising(name, meshId, capabilities)
+                            }, 5000L)
+                        }
+                    }
                 }
             }
         }
@@ -97,6 +124,7 @@ class BleAdvertiserManager @Inject constructor(@ApplicationContext private val c
             MeshLogger.e(TAG, "SecurityException: Missing BLE advertise permission", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception starting advertising: ${e.message}", e)
+        }
         }
     }
 

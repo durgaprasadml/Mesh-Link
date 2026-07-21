@@ -11,10 +11,17 @@ import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.domain.repository.SettingsRepository
 import com.google.firebase.analytics.FirebaseAnalytics
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +29,8 @@ import kotlinx.coroutines.flow.asStateFlow
 @Singleton
 class WifiDirectManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val analytics: FirebaseAnalytics
+    private val analytics: FirebaseAnalytics,
+    private val settingsRepository: SettingsRepository
 ) {
     companion object {
         private const val TAG = "WifiDirectManager"
@@ -105,6 +113,7 @@ class WifiDirectManager @Inject constructor(
     }
 
     private var isReceiverRegistered = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     init {
         channel = manager?.initialize(context, context.mainLooper, null)
@@ -130,17 +139,22 @@ class WifiDirectManager @Inject constructor(
 
     @SuppressLint("MissingPermission")
     fun startDiscovery() {
-        registerReceiver()
-        try {
-            manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
-                override fun onSuccess() {
-                    MeshLogger.d(TAG, "P2P Discovery Started")
-                    // Auto-restart discovery after 110 seconds
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        MeshLogger.d(TAG, "Restarting P2P Discovery (timeout)")
-                        startDiscovery()
-                    }, 110000L)
-                }
+        scope.launch {
+            if (!settingsRepository.isWifiDirectEnabled.first() || !settingsRepository.wifiPeerDiscoveryEnabled.first()) {
+                MeshLogger.d(TAG, "Wi-Fi Direct or Discovery disabled by settings. Not starting discovery.")
+                return@launch
+            }
+            registerReceiver()
+            try {
+                manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        MeshLogger.d(TAG, "P2P Discovery Started")
+                        // Auto-restart discovery after 110 seconds
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            MeshLogger.d(TAG, "Restarting P2P Discovery (timeout)")
+                            startDiscovery()
+                        }, 110000L)
+                    }
                 override fun onFailure(reasonCode: Int) {
                     MeshLogger.e(TAG, "P2P Discovery Failed: $reasonCode")
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
@@ -153,20 +167,32 @@ class WifiDirectManager @Inject constructor(
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception starting WiFi discovery: ${e.message}", e)
         }
+        }
     }
 
     @SuppressLint("MissingPermission")
     fun connectToPeer(deviceAddress: String) {
-        val config = WifiP2pConfig().apply {
-            this.deviceAddress = deviceAddress
-            
-            // Deterministic Group Owner election based on MAC address comparison
-            val localMac = _localDeviceMac.value
-            if (localMac != null) {
-                // Higher MAC becomes Group Owner (intent = 15), lower becomes client (intent = 0)
-                groupOwnerIntent = if (localMac > deviceAddress) 15 else 0
+        scope.launch {
+            if (!settingsRepository.isWifiDirectEnabled.first() || !settingsRepository.wifiAutoConnect.first()) {
+                MeshLogger.d(TAG, "Wi-Fi Direct connect skipped due to settings")
+                return@launch
             }
-        }
+            val forceGo = settingsRepository.wifiPreferredGroupOwner.first()
+
+            val config = WifiP2pConfig().apply {
+                this.deviceAddress = deviceAddress
+                
+                if (forceGo) {
+                    groupOwnerIntent = 15
+                } else {
+                    // Deterministic Group Owner election based on MAC address comparison
+                    val localMac = _localDeviceMac.value
+                    if (localMac != null) {
+                        // Higher MAC becomes Group Owner (intent = 15), lower becomes client (intent = 0)
+                        groupOwnerIntent = if (localMac > deviceAddress) 15 else 0
+                    }
+                }
+            }
         
         try {
             manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
@@ -181,6 +207,7 @@ class WifiDirectManager @Inject constructor(
             MeshLogger.e(TAG, "SecurityException: Missing WiFi Direct permission for connect", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception connecting to WiFi peer: ${e.message}", e)
+        }
         }
     }
 }

@@ -4,9 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -45,8 +43,58 @@ fun NetworkSettingsScreen(
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
         ) {
+            // Display Settings
             item {
-                Text("Transport Protocols", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Status & Diagnostics", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
+                ) {
+                    Column(modifier = Modifier.padding(MeshTheme.spacing.medium)) {
+                        Text("Bluetooth State: ${if (uiState.isBleEnabled) "Enabled" else "Disabled"}")
+                        Text("Advertising: ${if (uiState.bleAdvertisingEnabled) "Active" else "Inactive"}")
+                        Text("Scanning: ${if (uiState.bleScanningEnabled) "Active" else "Inactive"}")
+                        Text("Wi-Fi Direct State: ${if (uiState.isWifiDirectEnabled) "Enabled" else "Disabled"}")
+                        Text("Transport Mode: ${uiState.preferredTransport}")
+                        Text("Mesh Health: Nominal (Simulated)")
+                    }
+                }
+            }
+
+            // Transport Mode
+            item {
+                Text("Transport Mode", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
+                ) {
+                    Column {
+                        val modes = listOf("BLE", "WIFI", "HYBRID", "AUTOMATIC")
+                        modes.forEachIndexed { index, mode ->
+                            SettingsItemRow(
+                                title = mode,
+                                subtitle = "Prioritize $mode transport",
+                                icon = Icons.Default.Transform,
+                                trailingContent = {
+                                    RadioButton(
+                                        selected = uiState.preferredTransport == mode,
+                                        onClick = { viewModel.setPreferredTransport(mode) }
+                                    )
+                                }
+                            )
+                            if (index < modes.size - 1) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Bluetooth
+            item {
+                Text("Bluetooth Low Energy", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -54,8 +102,8 @@ fun NetworkSettingsScreen(
                 ) {
                     Column {
                         SettingsItemRow(
-                            title = "Bluetooth Low Energy (BLE)",
-                            subtitle = "Use for low power, short-range discovery.",
+                            title = "Enable BLE",
+                            subtitle = "Master switch for Bluetooth transport",
                             icon = Icons.Default.Bluetooth,
                             trailingContent = { 
                                 Switch(
@@ -66,8 +114,56 @@ fun NetworkSettingsScreen(
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
-                            title = "Wi-Fi Direct",
-                            subtitle = "Use for high-bandwidth data transfer.",
+                            title = "Advertising",
+                            subtitle = "Broadcast your presence",
+                            icon = Icons.Default.CellTower,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.bleAdvertisingEnabled, 
+                                    onCheckedChange = { viewModel.setBleAdvertisingEnabled(it) }
+                                ) 
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Scanning",
+                            subtitle = "Listen for other devices",
+                            icon = Icons.Default.Radar,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.bleScanningEnabled, 
+                                    onCheckedChange = { viewModel.setBleScanningEnabled(it) }
+                                ) 
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Auto Restart",
+                            subtitle = "Automatically restart BLE if it crashes",
+                            icon = Icons.Default.Autorenew,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.bleAutoRestart, 
+                                    onCheckedChange = { viewModel.setBleAutoRestart(it) }
+                                ) 
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Wi-Fi Direct
+            item {
+                Text("Wi-Fi Direct", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
+                ) {
+                    Column {
+                        SettingsItemRow(
+                            title = "Enable Wi-Fi Direct",
+                            subtitle = "Master switch for high-bandwidth transport",
                             icon = Icons.Default.Wifi,
                             trailingContent = { 
                                 Switch(
@@ -76,12 +172,61 @@ fun NetworkSettingsScreen(
                                 ) 
                             }
                         )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Auto Connect",
+                            subtitle = "Automatically accept connections",
+                            icon = Icons.Default.Link,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.wifiAutoConnect, 
+                                    onCheckedChange = { viewModel.setWifiAutoConnect(it) }
+                                ) 
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Peer Discovery",
+                            subtitle = "Actively search for Wi-Fi peers",
+                            icon = Icons.Default.Search,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.wifiPeerDiscoveryEnabled, 
+                                    onCheckedChange = { viewModel.setWifiPeerDiscoveryEnabled(it) }
+                                ) 
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Preferred Group Owner",
+                            subtitle = "Force Group Owner role during negotiation",
+                            icon = Icons.Default.Star,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.wifiPreferredGroupOwner, 
+                                    onCheckedChange = { viewModel.setWifiPreferredGroupOwner(it) }
+                                ) 
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Auto Reconnect",
+                            subtitle = "Reconnect if link drops",
+                            icon = Icons.Default.Sync,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.wifiReconnectEnabled, 
+                                    onCheckedChange = { viewModel.setWifiReconnectEnabled(it) }
+                                ) 
+                            }
+                        )
                     }
                 }
             }
 
+            // Mesh Relay
             item {
-                Text("Mesh Behavior", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Mesh Routing & Relay", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -89,8 +234,8 @@ fun NetworkSettingsScreen(
                 ) {
                     Column {
                         SettingsItemRow(
-                            title = "Act as Relay Node",
-                            subtitle = "Help route messages for other peers. Uses more battery.",
+                            title = "Enable Relay",
+                            subtitle = "Help route messages for other peers",
                             icon = Icons.Default.Memory,
                             trailingContent = { 
                                 Switch(
@@ -99,9 +244,113 @@ fun NetworkSettingsScreen(
                                 ) 
                             }
                         )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        Column(modifier = Modifier.padding(MeshTheme.spacing.medium)) {
+                            Text("Max Hops: ${uiState.meshMaxHops}")
+                            Slider(
+                                value = uiState.meshMaxHops.toFloat(),
+                                onValueChange = { viewModel.setMeshMaxHops(it.toInt()) },
+                                valueRange = 1f..15f
+                            )
+                        }
                     }
                 }
             }
+
+            // Discovery
+            item {
+                Text("Discovery Engine", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
+                ) {
+                    Column {
+                        SettingsItemRow(
+                            title = "Background Discovery",
+                            subtitle = "Keep scanning when app is minimized",
+                            icon = Icons.Default.ScreenLockLandscape,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.discoveryBackground, 
+                                    onCheckedChange = { viewModel.setDiscoveryBackground(it) }
+                                ) 
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Foreground Discovery",
+                            subtitle = "Aggressive scanning when app is open",
+                            icon = Icons.Default.Smartphone,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.discoveryForeground, 
+                                    onCheckedChange = { viewModel.setDiscoveryForeground(it) }
+                                ) 
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Advanced
+            item {
+                Text("Advanced Configuration", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
+                ) {
+                    Column {
+                        SettingsItemRow(
+                            title = "Bandwidth Optimization",
+                            subtitle = "Dynamically throttle traffic",
+                            icon = Icons.Default.Speed,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.advancedBandwidthOptimization, 
+                                    onCheckedChange = { viewModel.setAdvancedBandwidthOptimization(it) }
+                                ) 
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Payload Compression",
+                            subtitle = "Compress packets before transmission",
+                            icon = Icons.Default.Compress,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.advancedCompression, 
+                                    onCheckedChange = { viewModel.setAdvancedCompression(it) }
+                                ) 
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Strict Encryption",
+                            subtitle = "Drop unencrypted packets",
+                            icon = Icons.Default.Security,
+                            trailingContent = { 
+                                Switch(
+                                    checked = uiState.advancedEncryptionEnforcement, 
+                                    onCheckedChange = { viewModel.setAdvancedEncryptionEnforcement(it) }
+                                ) 
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        Column(modifier = Modifier.padding(MeshTheme.spacing.medium)) {
+                            Text("Max Retries: ${uiState.advancedRetryCount}")
+                            Slider(
+                                value = uiState.advancedRetryCount.toFloat(),
+                                onValueChange = { viewModel.setAdvancedRetryCount(it.toInt()) },
+                                valueRange = 0f..10f
+                            )
+                        }
+                    }
+                }
+            }
+            
+            item { Spacer(modifier = Modifier.height(32.dp)) }
         }
     }
 }

@@ -34,6 +34,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -251,25 +252,49 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
             icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
             label = { Text("Home") },
             selected = currentRoute == Screen.Home.route,
-            onClick = { navController.navigate(Screen.Home.route) }
+            onClick = {
+                navController.navigate(Screen.Home.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
             label = { Text("Nearby") },
             selected = currentRoute == Screen.Nearby.route,
-            onClick = { navController.navigate(Screen.Nearby.route) }
+            onClick = {
+                navController.navigate(Screen.Nearby.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
             label = { Text("SOS") },
             selected = currentRoute == Screen.Sos.route,
-            onClick = { navController.navigate(Screen.Sos.route) }
+            onClick = {
+                navController.navigate(Screen.Sos.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
             label = { Text("Settings") },
             selected = currentRoute == Screen.Settings.route,
-            onClick = { navController.navigate(Screen.Settings.route) }
+            onClick = {
+                navController.navigate(Screen.Settings.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
     }
 }
@@ -281,25 +306,49 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
             icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
             label = { Text("Home") },
             selected = currentRoute == Screen.Home.route,
-            onClick = { navController.navigate(Screen.Home.route) }
+            onClick = {
+                navController.navigate(Screen.Home.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
         NavigationRailItem(
             icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
             label = { Text("Nearby") },
             selected = currentRoute == Screen.Nearby.route,
-            onClick = { navController.navigate(Screen.Nearby.route) }
+            onClick = {
+                navController.navigate(Screen.Nearby.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
         NavigationRailItem(
             icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
             label = { Text("SOS") },
             selected = currentRoute == Screen.Sos.route,
-            onClick = { navController.navigate(Screen.Sos.route) }
+            onClick = {
+                navController.navigate(Screen.Sos.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
         NavigationRailItem(
             icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
             label = { Text("Settings") },
             selected = currentRoute == Screen.Settings.route,
-            onClick = { navController.navigate(Screen.Settings.route) }
+            onClick = {
+                navController.navigate(Screen.Settings.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
     }
 }

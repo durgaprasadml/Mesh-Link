@@ -131,7 +131,7 @@ class BleRepositoryImpl @Inject constructor(
 
     override val scannedDevices: StateFlow<Map<String, BleDevice>> = discoveryManager.scannedDevices
     override val incomingMeshPayloads: SharedFlow<Pair<String, MeshPacket>> = meshRouter.incomingPayloads
-    override val transferProgress = mediaTransferManager.transferProgress
+    override val transferProgress = transferManager.transferProgress
 
     private fun networkId(peerId: String): String = routingCoordinator.networkId(peerId)
     private fun normalizePeerId(peerIdOrAddress: String): String = routingCoordinator.normalizePeerId(peerIdOrAddress)
@@ -178,6 +178,12 @@ class BleRepositoryImpl @Inject constructor(
         transferManager.onTransferCompleted = { session ->
             scope.launch {
                 meshMessagingManager.receiveMediaMessage(session.transferId, session.filePath!!, session.mimeType, session.senderId)
+            }
+        }
+
+        transferManager.onOutgoingTransferCompleted = { session ->
+            scope.launch {
+                chatDao.updateMessageStatus(session.transferId, DeliveryStatus.SENT)
             }
         }
 
@@ -327,20 +333,19 @@ class BleRepositoryImpl @Inject constructor(
                         chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
                     }
                 }
-                MessageType.IMAGE, MessageType.VOICE -> {
+                MessageType.IMAGE, MessageType.VOICE, MessageType.DOCUMENT -> {
                     val file = msg.mediaPath?.let { File(it) }
                     if (file != null && file.exists()) {
-                        val bytes = file.readBytes()
-                        val packets = mediaTransferManager.createChunkedPackets(
-                            data = bytes,
-                            senderId = networkId(msg.senderId),
-                            targetId = msg.chatId,
-                            mimeType = if (msg.messageType == MessageType.IMAGE) "image/jpeg" else "audio/m4a",
+                        val targetPeerId = outgoingChatId(msg.chatId)
+                        val localPeerId = networkId(msg.senderId)
+                        val priority = if (msg.messageType == MessageType.VOICE) com.meshlink.transfer.TransferPriority.HIGH else com.meshlink.transfer.TransferPriority.MEDIUM
+                        transferManager.sendFile(
+                            file = file,
+                            senderId = localPeerId,
+                            targetId = targetPeerId,
+                            priority = priority,
                             transferId = msg.messageId
                         )
-                        if (meshMessagingManager.dispatchMediaPackets(msg.chatId, packets)) {
-                            chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
-                        }
                     }
                 }
                 MessageType.LOCATION -> {

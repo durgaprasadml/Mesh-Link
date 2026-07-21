@@ -257,42 +257,6 @@ fun NetworkSettingsScreen(
                 }
             }
 
-            // Discovery
-            item {
-                Text("Discovery Engine", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
-                ) {
-                    Column {
-                        SettingsItemRow(
-                            title = "Background Discovery",
-                            subtitle = "Keep scanning when app is minimized",
-                            icon = Icons.Default.ScreenLockLandscape,
-                            trailingContent = { 
-                                Switch(
-                                    checked = uiState.discoveryBackground, 
-                                    onCheckedChange = { viewModel.setDiscoveryBackground(it) }
-                                ) 
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Foreground Discovery",
-                            subtitle = "Aggressive scanning when app is open",
-                            icon = Icons.Default.Smartphone,
-                            trailingContent = { 
-                                Switch(
-                                    checked = uiState.discoveryForeground, 
-                                    onCheckedChange = { viewModel.setDiscoveryForeground(it) }
-                                ) 
-                            }
-                        )
-                    }
-                }
-            }
-
             // Advanced
             item {
                 Text("Advanced Configuration", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -302,30 +266,6 @@ fun NetworkSettingsScreen(
                     shape = MeshTheme.shapes.large
                 ) {
                     Column {
-                        SettingsItemRow(
-                            title = "Bandwidth Optimization",
-                            subtitle = "Dynamically throttle traffic",
-                            icon = Icons.Default.Speed,
-                            trailingContent = { 
-                                Switch(
-                                    checked = uiState.advancedBandwidthOptimization, 
-                                    onCheckedChange = { viewModel.setAdvancedBandwidthOptimization(it) }
-                                ) 
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Payload Compression",
-                            subtitle = "Compress packets before transmission",
-                            icon = Icons.Default.Compress,
-                            trailingContent = { 
-                                Switch(
-                                    checked = uiState.advancedCompression, 
-                                    onCheckedChange = { viewModel.setAdvancedCompression(it) }
-                                ) 
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
                             title = "Strict Encryption",
                             subtitle = "Drop unencrypted packets",
@@ -337,15 +277,6 @@ fun NetworkSettingsScreen(
                                 ) 
                             }
                         )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        Column(modifier = Modifier.padding(MeshTheme.spacing.medium)) {
-                            Text("Max Retries: ${uiState.advancedRetryCount}")
-                            Slider(
-                                value = uiState.advancedRetryCount.toFloat(),
-                                onValueChange = { viewModel.setAdvancedRetryCount(it.toInt()) },
-                                valueRange = 0f..10f
-                            )
-                        }
                     }
                 }
             }

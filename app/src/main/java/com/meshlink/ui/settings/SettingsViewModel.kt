@@ -48,19 +48,9 @@ data class SettingsUiState(
     val meshPriority: Int = 1,
     val meshQueueSize: Int = 1000,
 
-    // Discovery
-    val discoveryInterval: Long = 30000L,
-    val discoveryBackground: Boolean = true,
-    val discoveryForeground: Boolean = true,
-    val discoveryTimeout: Long = 120000L,
-    val discoveryRestart: Boolean = true,
-
     // Advanced
-    val advancedPacketSize: Int = 512,
-    val advancedRetryCount: Int = 3,
-    val advancedCompression: Boolean = true,
     val advancedEncryptionEnforcement: Boolean = true,
-    val advancedBandwidthOptimization: Boolean = true,
+
     
     // Appearance
     val themeMode: String = "SYSTEM",
@@ -141,28 +131,10 @@ class SettingsViewModel @Inject constructor(
             settingsRepository.meshTtl,
             settingsRepository.meshPriority,
             settingsRepository.meshQueueSize,
-            settingsRepository.discoveryInterval,
-            settingsRepository.discoveryBackground
-        ) { ttl, prio, queue, dInt, dBack ->
-            SettingsGroup5(ttl, prio, queue, dInt, dBack)
-        },
-        combine(
-            settingsRepository.discoveryForeground,
-            settingsRepository.discoveryTimeout,
-            settingsRepository.discoveryRestart,
-            settingsRepository.advancedPacketSize,
-            settingsRepository.advancedRetryCount
-        ) { dFore, dTime, dRest, pSize, retries ->
-            SettingsGroup6(dFore, dTime, dRest, pSize, retries)
-        },
-        combine(
-            settingsRepository.advancedCompression,
             settingsRepository.advancedEncryptionEnforcement,
-            settingsRepository.advancedBandwidthOptimization,
-            settingsRepository.themeMode,
-            settingsRepository.isMaterialYouEnabled
-        ) { comp, encEnf, bwOpt, theme, mat ->
-            SettingsGroup7(comp, encEnf, bwOpt, theme, mat)
+            settingsRepository.themeMode
+        ) { ttl, prio, queue, encEnf, theme ->
+            SettingsGroup5(ttl, prio, queue, encEnf, theme)
         }
     ) { args ->
         val user = args[0] as User?
@@ -171,11 +143,7 @@ class SettingsViewModel @Inject constructor(
         val g3 = args[3] as SettingsGroup3
         val g4 = args[4] as SettingsGroup4
         val g5 = args[5] as SettingsGroup5
-        val g6 = args[6] as SettingsGroup6
-        val g7 = args[7] as SettingsGroup7
         
-        // Fetch the remaining ones that didn't fit (fontScale, highContrast) in a separate combine
-        // Actually it's easier to just do one more combine block:
         SettingsUiState(
             user = user,
             isEncryptionEnabled = g1.enc,
@@ -205,26 +173,15 @@ class SettingsViewModel @Inject constructor(
             meshTtl = g5.ttl,
             meshPriority = g5.prio,
             meshQueueSize = g5.queue,
-            discoveryInterval = g5.dInt,
-            discoveryBackground = g5.dBack,
-            
-            discoveryForeground = g6.dFore,
-            discoveryTimeout = g6.dTime,
-            discoveryRestart = g6.dRest,
-            advancedPacketSize = g6.pSize,
-            advancedRetryCount = g6.retries,
-            
-            advancedCompression = g7.comp,
-            advancedEncryptionEnforcement = g7.encEnf,
-            advancedBandwidthOptimization = g7.bwOpt,
-            themeMode = g7.theme,
-            isMaterialYouEnabled = g7.mat
+            advancedEncryptionEnforcement = g5.encEnf,
+            themeMode = g5.theme
         )
     }
 
     // Fetch the remaining properties in a separate combine
     val uiState = combine(
         combinedState,
+        settingsRepository.isMaterialYouEnabled,
         settingsRepository.fontScale,
         settingsRepository.highContrast,
         settingsRepository.accentColor,
@@ -236,14 +193,15 @@ class SettingsViewModel @Inject constructor(
     ) { args ->
         val state = args[0] as SettingsUiState
         state.copy(
-            fontScale = args[1] as Float,
-            highContrast = args[2] as Boolean,
-            accentColor = args[3] as String,
-            animationsEnabled = args[4] as Boolean,
-            glassEffectsEnabled = args[5] as Boolean,
-            cornerRadiusScale = args[6] as Float,
-            largeTextEnabled = args[7] as Boolean,
-            reduceMotionEnabled = args[8] as Boolean
+            isMaterialYouEnabled = args[1] as Boolean,
+            fontScale = args[2] as Float,
+            highContrast = args[3] as Boolean,
+            accentColor = args[4] as String,
+            animationsEnabled = args[5] as Boolean,
+            glassEffectsEnabled = args[6] as Boolean,
+            cornerRadiusScale = args[7] as Float,
+            largeTextEnabled = args[8] as Boolean,
+            reduceMotionEnabled = args[9] as Boolean
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
@@ -252,9 +210,7 @@ class SettingsViewModel @Inject constructor(
     private data class SettingsGroup2(val bio: Boolean, val ble: Boolean, val bleAdv: Boolean, val bleScan: Boolean, val bleTx: Int)
     private data class SettingsGroup3(val bleInt: Long, val bleAuto: Boolean, val wifi: Boolean, val wifiAuto: Boolean, val wifiDisc: Boolean)
     private data class SettingsGroup4(val wifiGo: Boolean, val wifiRec: Boolean, val trans: String, val relay: Boolean, val hops: Int)
-    private data class SettingsGroup5(val ttl: Int, val prio: Int, val queue: Int, val dInt: Long, val dBack: Boolean)
-    private data class SettingsGroup6(val dFore: Boolean, val dTime: Long, val dRest: Boolean, val pSize: Int, val retries: Int)
-    private data class SettingsGroup7(val comp: Boolean, val encEnf: Boolean, val bwOpt: Boolean, val theme: String, val mat: Boolean)
+    private data class SettingsGroup5(val ttl: Int, val prio: Int, val queue: Int, val encEnf: Boolean, val theme: String)
 
     // Profile Settings
     fun updateUserName(name: String) {
@@ -304,19 +260,7 @@ class SettingsViewModel @Inject constructor(
     fun setMeshPriority(priority: Int) = viewModelScope.launch { settingsRepository.setMeshPriority(priority) }
     fun setMeshQueueSize(size: Int) = viewModelScope.launch { settingsRepository.setMeshQueueSize(size) }
 
-    // Discovery
-    fun setDiscoveryInterval(interval: Long) = viewModelScope.launch { settingsRepository.setDiscoveryInterval(interval) }
-    fun setDiscoveryBackground(enabled: Boolean) = viewModelScope.launch { settingsRepository.setDiscoveryBackground(enabled) }
-    fun setDiscoveryForeground(enabled: Boolean) = viewModelScope.launch { settingsRepository.setDiscoveryForeground(enabled) }
-    fun setDiscoveryTimeout(timeout: Long) = viewModelScope.launch { settingsRepository.setDiscoveryTimeout(timeout) }
-    fun setDiscoveryRestart(enabled: Boolean) = viewModelScope.launch { settingsRepository.setDiscoveryRestart(enabled) }
-
-    // Advanced
-    fun setAdvancedPacketSize(size: Int) = viewModelScope.launch { settingsRepository.setAdvancedPacketSize(size) }
-    fun setAdvancedRetryCount(count: Int) = viewModelScope.launch { settingsRepository.setAdvancedRetryCount(count) }
-    fun setAdvancedCompression(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAdvancedCompression(enabled) }
     fun setAdvancedEncryptionEnforcement(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAdvancedEncryptionEnforcement(enabled) }
-    fun setAdvancedBandwidthOptimization(enabled: Boolean) = viewModelScope.launch { settingsRepository.setAdvancedBandwidthOptimization(enabled) }
 
     // Appearance Settings
     fun setThemeMode(mode: String) = viewModelScope.launch { settingsRepository.setThemeMode(mode) }

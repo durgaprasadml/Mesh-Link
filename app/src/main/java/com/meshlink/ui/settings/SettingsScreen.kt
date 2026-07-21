@@ -25,7 +25,7 @@ import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.settings.screens.*
 
 enum class SettingsDestination {
-    HOME, PROFILE, SECURITY, NETWORK, STORAGE, APPEARANCE, DIAGNOSTICS, DEVELOPER
+    HOME, PROFILE, SECURITY, NETWORK, STORAGE, APPEARANCE
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,16 +122,7 @@ fun SettingsScreen(
                 viewModel = viewModel,
                 onBack = { currentDestination = SettingsDestination.HOME }
             )
-            SettingsDestination.DIAGNOSTICS -> DiagnosticsScreen(
-                uiState = uiState,
-                viewModel = viewModel,
-                onBack = { currentDestination = SettingsDestination.HOME }
-            )
-            SettingsDestination.DEVELOPER -> DeveloperOptionsScreen(
-                uiState = uiState,
-                viewModel = viewModel,
-                onBack = { currentDestination = SettingsDestination.HOME }
-            )
+
         }
     }
 }
@@ -239,30 +230,6 @@ fun SettingsHome(
                             subtitle = "Theme, Dynamic Color",
                             icon = Icons.Default.Palette,
                             onClick = { onNavigate(SettingsDestination.APPEARANCE) }
-                        )
-                    }
-                }
-            }
-
-            item {
-                // System Group
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
-                ) {
-                    Column {
-                        SettingsItemRow(
-                            title = "Diagnostics",
-                            subtitle = "Health metrics and exports",
-                            icon = Icons.Default.HealthAndSafety,
-                            onClick = { onNavigate(SettingsDestination.DIAGNOSTICS) }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Developer Options",
-                            subtitle = "Simulators and packet viewers",
-                            icon = Icons.Default.Code,
-                            onClick = { onNavigate(SettingsDestination.DEVELOPER) }
                         )
                     }
                 }

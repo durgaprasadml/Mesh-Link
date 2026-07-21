@@ -86,6 +86,8 @@ class BleScannerManager @Inject constructor(
 
         val settings = ScanSettings.Builder()
             .setScanMode(scanMode)
+            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
             .build()
 
         scanCallback = object : ScanCallback() {
@@ -118,6 +120,14 @@ class BleScannerManager @Inject constructor(
             MeshLogger.e(TAG, "SecurityException: Missing BLE scan permission", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception starting hardware scan: ${e.message}", e)
+            scope.launch {
+                if (settingsRepository.bleAutoRestart.first()) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        MeshLogger.d(TAG, "Attempting to restart BLE scan after exception")
+                        startHardwareScan()
+                    }, 5000L)
+                }
+            }
         }
         }
     }

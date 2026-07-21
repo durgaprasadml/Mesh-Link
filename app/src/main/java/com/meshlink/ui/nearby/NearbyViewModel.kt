@@ -51,15 +51,20 @@ class NearbyViewModel @Inject constructor(
         }
         
         wifiMap.values.forEach { wifiDevice ->
-            val mac = wifiDevice.deviceAddress
-            if (mergedDevices.containsKey(mac)) {
-                val existing = mergedDevices[mac]!!
-                mergedDevices[mac] = existing.copy(transport = TransportType.HYBRID)
+            val wifiMac = wifiDevice.deviceAddress
+            val wifiName = wifiDevice.deviceName ?: "Unknown Peer"
+            
+            // Try to find a matching BLE device by Name
+            val matchingBleDeviceEntry = mergedDevices.entries.find { it.value.name == wifiName }
+            
+            if (matchingBleDeviceEntry != null) {
+                val existing = matchingBleDeviceEntry.value
+                mergedDevices[existing.address] = existing.copy(transport = TransportType.HYBRID)
             } else {
-                mergedDevices[mac] = BleDevice(
+                mergedDevices[wifiMac] = BleDevice(
                     meshId = "", 
-                    name = wifiDevice.deviceName ?: "Unknown Peer",
-                    address = mac,
+                    name = wifiName,
+                    address = wifiMac,
                     rssi = -50, 
                     lastSeen = System.currentTimeMillis(),
                     transport = TransportType.WIFI_DIRECT,
@@ -116,7 +121,9 @@ class NearbyViewModel @Inject constructor(
     fun connectToDevice(device: BleDevice, onConnected: () -> Unit) {
         viewModelScope.launch {
             if (device.transport == TransportType.WIFI_DIRECT || device.transport == TransportType.HYBRID) {
-                wifiDirectManager.connectToPeer(device.address)
+                // If HYBRID, device.address is BLE MAC. Find Wi-Fi MAC by name.
+                val wifiMac = wifiDirectManager.discoveredPeers.value.values.find { it.deviceName == device.name }?.deviceAddress
+                wifiDirectManager.connectToPeer(wifiMac ?: device.address)
             }
             if (device.transport == TransportType.BLE || device.transport == TransportType.HYBRID) {
                 meshRepository.connectToPeer(device.address)

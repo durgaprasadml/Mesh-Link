@@ -218,20 +218,19 @@ class MeshMessagingManager @Inject constructor(
                         chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
                     }
                 }
-                MessageType.IMAGE, MessageType.VOICE -> {
+                MessageType.IMAGE, MessageType.VOICE, MessageType.DOCUMENT -> {
                     val file = msg.mediaPath?.let { File(it) }
                     if (file != null && file.exists()) {
-                        val bytes = file.readBytes()
-                        val packets = mediaTransferManager.createChunkedPackets(
-                            data = bytes,
-                            senderId = routingCoordinator.networkId(msg.senderId),
-                            targetId = msg.chatId,
-                            mimeType = if (msg.messageType == MessageType.IMAGE) "image/jpeg" else "audio/m4a",
+                        val targetPeerId = routingCoordinator.outgoingChatId(msg.chatId)
+                        val localPeerId = routingCoordinator.networkId(msg.senderId)
+                        val priority = if (msg.messageType == MessageType.VOICE) com.meshlink.transfer.TransferPriority.HIGH else com.meshlink.transfer.TransferPriority.MEDIUM
+                        transferManager.sendFile(
+                            file = file,
+                            senderId = localPeerId,
+                            targetId = targetPeerId,
+                            priority = priority,
                             transferId = msg.messageId
                         )
-                        if (dispatchMediaPackets(msg.chatId, packets)) {
-                            chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
-                        }
                     }
                 }
                 MessageType.LOCATION -> {
@@ -668,7 +667,6 @@ class MeshMessagingManager @Inject constructor(
             targetId = targetPeerId,
             transferId = messageId
         )
-        chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
     }
 
     suspend fun sendDocument(targetMeshId: String, documentUri: Uri, chatName: String) {
@@ -730,7 +728,6 @@ class MeshMessagingManager @Inject constructor(
             targetId = targetPeerId,
             transferId = messageId
         )
-        chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
     }
 
     suspend fun receiveMediaMessage(completedTransferId: String, completedFilePath: String, completedMimeType: String, completedSenderId: String) {
@@ -855,7 +852,6 @@ class MeshMessagingManager @Inject constructor(
             transferId = messageId,
             priority = com.meshlink.transfer.TransferPriority.HIGH
         )
-        chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
     }
 
     // ────────── Location (ENCRYPTED GPS payload) ──────────

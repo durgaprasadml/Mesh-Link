@@ -54,6 +54,12 @@ class WifiDirectManager @Inject constructor(
     private val _localDeviceMac = MutableStateFlow<String?>(null)
     val localDeviceMac: StateFlow<String?> = _localDeviceMac.asStateFlow()
 
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val restartDiscoveryRunnable = Runnable {
+        MeshLogger.d(TAG, "Restarting P2P Discovery (timeout)")
+        startDiscovery()
+    }
+
     private val intentFilter = IntentFilter().apply {
         addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
         addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
@@ -149,23 +155,21 @@ class WifiDirectManager @Inject constructor(
                 manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() {
                         MeshLogger.d(TAG, "P2P Discovery Started")
-                        // Auto-restart discovery after 110 seconds
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            MeshLogger.d(TAG, "Restarting P2P Discovery (timeout)")
-                            startDiscovery()
-                        }, 110000L)
+                        handler.removeCallbacks(restartDiscoveryRunnable)
+                        handler.postDelayed(restartDiscoveryRunnable, 110000L)
                     }
                 override fun onFailure(reasonCode: Int) {
                     MeshLogger.e(TAG, "P2P Discovery Failed: $reasonCode")
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        startDiscovery()
-                    }, 10000L)
+                    handler.removeCallbacks(restartDiscoveryRunnable)
+                    handler.postDelayed(restartDiscoveryRunnable, 10000L)
                 }
             })
         } catch (e: SecurityException) {
             MeshLogger.e(TAG, "SecurityException: Missing WiFi Direct permission", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception starting WiFi discovery: ${e.message}", e)
+            handler.removeCallbacks(restartDiscoveryRunnable)
+            handler.postDelayed(restartDiscoveryRunnable, 10000L)
         }
         }
     }

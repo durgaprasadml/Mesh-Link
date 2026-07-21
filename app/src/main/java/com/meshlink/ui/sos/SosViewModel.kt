@@ -11,6 +11,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import android.content.Context
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import android.net.Uri
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 enum class SosStatus {
     SAFE, BROADCASTING, DELIVERED, FAILED
@@ -32,13 +39,16 @@ data class SosUiState(
     val meshHealth: String = "Excellent",
     val connectedNodesCount: Int = 3,
     val relaysReached: Int = 0,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isFlashlightOn: Boolean = false,
+    val isAlarmPlaying: Boolean = false
 )
 
 @HiltViewModel
 class SosViewModel @Inject constructor(
     private val meshRepository: MeshRepository,
-    private val locationProvider: LocationProvider
+    private val locationProvider: LocationProvider,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SosUiState())
@@ -103,6 +113,67 @@ class SosViewModel @Inject constructor(
                 errorMessage = null,
                 relaysReached = 0
             )
+        }
+    }
+
+    private var mediaPlayer: MediaPlayer? = null
+    private var cameraId: String? = null
+
+    fun toggleFlashlight() {
+        try {
+            val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            if (cameraId == null) {
+                cameraId = cameraManager.cameraIdList.firstOrNull()
+            }
+            val newFlashlightState = !uiState.value.isFlashlightOn
+            cameraId?.let { id ->
+                cameraManager.setTorchMode(id, newFlashlightState)
+                _uiState.update { it.copy(isFlashlightOn = newFlashlightState) }
+            }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(errorMessage = "Flashlight unavailable: ${e.message}") }
+        }
+    }
+
+    fun toggleAlarm() {
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+                mediaPlayer = null
+                _uiState.update { it.copy(isAlarmPlaying = false) }
+            } else {
+                val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                mediaPlayer = MediaPlayer().apply {
+                    setDataSource(context, alarmUri)
+                    setAudioStreamType(AudioManager.STREAM_ALARM)
+                    isLooping = true
+                    prepare()
+                    start()
+                }
+                _uiState.update { it.copy(isAlarmPlaying = true) }
+            }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(errorMessage = "Alarm unavailable: ${e.message}") }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+            }
+            mediaPlayer?.release()
+            mediaPlayer = null
+            
+            if (uiState.value.isFlashlightOn) {
+                val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                cameraId?.let { id -> cameraManager.setTorchMode(id, false) }
+            }
+        } catch (e: Exception) {
+            // Ignore during cleanup
         }
     }
 }

@@ -41,11 +41,17 @@ class RoutingCoordinator @Inject constructor(
     fun resolveChatId(peerIdOrAddress: String): String = normalizePeerId(peerIdOrAddress)
 
     fun resolvePeerAddress(peerIdOrAddress: String): String? {
+        if (BleConstants.isBluetoothAddress(peerIdOrAddress)) return peerIdOrAddress
+
         val norm = normalizePeerId(peerIdOrAddress)
-        return connectionManager.connectedServers.firstOrNull { normalizePeerId(it) == norm }
-            ?: connectionManager.activeClients.firstOrNull { normalizePeerId(it) == norm }
-            ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == peerIdOrAddress }?.key
-            ?: discoveryManager.scannedDevices.value.keys.firstOrNull { normalizePeerId(it) == norm }
+        
+        val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { normalizePeerId(it.meshId) == norm }
+        if (scanned != null) return scanned.address
+        
+        val route = meshRouter.routeTable[peerIdOrAddress] ?: meshRouter.routeTable[norm]
+        if (route != null) return route.nextHop
+
+        return null
     }
 
     fun hasDeliveryPath(targetPeerIdOrAddress: String): Boolean {

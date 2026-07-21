@@ -43,6 +43,9 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -123,9 +126,41 @@ fun SosScreen(
                 )
             }
 
-            item { EmergencyContacts() }
             item { NearbyResponders(state) }
-            item { QuickActions() }
+            item {
+                val context = LocalContext.current
+                QuickActions(
+                    state = state,
+                    onCall = {
+                        try {
+                            val intent = Intent(Intent.ACTION_DIAL).apply {
+                                data = Uri.parse("tel:911")
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            // Ignore or show toast
+                        }
+                    },
+                    onShare = {
+                        try {
+                            val locationStr = if (state.latitude != null && state.longitude != null) {
+                                "My emergency location: https://maps.google.com/?q=${state.latitude},${state.longitude}"
+                            } else {
+                                "I'm having an emergency, but my location is currently unavailable."
+                            }
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, locationStr)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Share Location via"))
+                        } catch (e: Exception) {
+                            // Ignore or show toast
+                        }
+                    },
+                    onFlashlight = { viewModel.toggleFlashlight() },
+                    onAlarm = { viewModel.toggleAlarm() }
+                )
+            }
             item { SafetyTips() }
         }
     }
@@ -504,63 +539,6 @@ fun InfoItem(
     }
 }
 
-@Composable
-fun EmergencyContacts() {
-    Column {
-        Text(
-            "TRUSTED CONTACTS",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = MeshTheme.spacing.large)
-        )
-        Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = MeshTheme.spacing.large),
-            horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
-        ) {
-            items(3) { index ->
-                ContactCard(name = "Contact ${index + 1}", role = "Family")
-            }
-            item {
-                Card(
-                    modifier = Modifier.height(64.dp),
-                    shape = MeshTheme.shapes.medium,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-                ) {
-                    Box(modifier = Modifier.fillMaxHeight().padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-                        Text("+ Add Contact", color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ContactCard(name: String, role: String) {
-    Card(
-        shape = MeshTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(name.take(1), color = MaterialTheme.colorScheme.onPrimary)
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
-                Text(role, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f))
-            }
-        }
-    }
-}
 
 @Composable
 fun NearbyResponders(state: SosUiState) {
@@ -615,33 +593,72 @@ fun ResponderCard(id: String, distance: String) {
 }
 
 @Composable
-fun QuickActions() {
+fun QuickActions(
+    state: SosUiState,
+    onCall: () -> Unit,
+    onShare: () -> Unit,
+    onFlashlight: () -> Unit,
+    onAlarm: () -> Unit
+) {
     Column(modifier = Modifier.padding(horizontal = MeshTheme.spacing.large)) {
         Text("QUICK ACTIONS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
         
         Row(horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)) {
-            ActionChip(icon = Icons.Default.Call, label = "Call 911", modifier = Modifier.weight(1f), isDanger = true)
-            ActionChip(icon = Icons.Default.ShareLocation, label = "Share Live", modifier = Modifier.weight(1f))
+            ActionChip(icon = Icons.Default.Call, label = "Call 911", modifier = Modifier.weight(1f), isDanger = true, onClick = onCall)
+            ActionChip(icon = Icons.Default.ShareLocation, label = "Share Live", modifier = Modifier.weight(1f), onClick = onShare)
         }
         Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
         Row(horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)) {
-            ActionChip(icon = Icons.Default.FlashlightOn, label = "Flashlight", modifier = Modifier.weight(1f))
-            ActionChip(icon = Icons.Default.NotificationsActive, label = "Loud Alarm", modifier = Modifier.weight(1f))
+            ActionChip(
+                icon = Icons.Default.FlashlightOn, 
+                label = "Flashlight", 
+                modifier = Modifier.weight(1f), 
+                isActive = state.isFlashlightOn,
+                onClick = onFlashlight
+            )
+            ActionChip(
+                icon = Icons.Default.NotificationsActive, 
+                label = "Loud Alarm", 
+                modifier = Modifier.weight(1f), 
+                isActive = state.isAlarmPlaying,
+                isDanger = state.isAlarmPlaying,
+                onClick = onAlarm
+            )
         }
     }
 }
 
 @Composable
-fun ActionChip(icon: ImageVector, label: String, modifier: Modifier = Modifier, isDanger: Boolean = false) {
+fun ActionChip(
+    icon: ImageVector, 
+    label: String, 
+    modifier: Modifier = Modifier, 
+    isDanger: Boolean = false,
+    isActive: Boolean = false,
+    onClick: () -> Unit
+) {
+    val containerColor = if (isActive && isDanger) MeshTheme.colors.danger.copy(alpha = 0.1f) 
+        else if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) 
+        else Color.Transparent
+        
+    val contentColor = if (isDanger) MeshTheme.colors.danger 
+        else if (isActive) MaterialTheme.colorScheme.primary 
+        else MaterialTheme.colorScheme.onSurface
+        
+    val borderColor = if (isDanger) MeshTheme.colors.danger.copy(alpha = 0.5f) 
+        else if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) 
+        else MaterialTheme.colorScheme.outline
+        
     OutlinedButton(
-        onClick = { /* TODO */ },
+        onClick = onClick,
         modifier = modifier.height(56.dp),
         shape = MeshTheme.shapes.medium,
         colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = if (isDanger) MeshTheme.colors.danger else MaterialTheme.colorScheme.onSurface
+            contentColor = contentColor,
+            containerColor = containerColor
         ),
-        border = BorderStroke(1.dp, if (isDanger) MeshTheme.colors.danger.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline)
+        border = BorderStroke(1.dp, borderColor)
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(8.dp))

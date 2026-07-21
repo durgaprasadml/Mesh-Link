@@ -195,10 +195,19 @@ class MeshRouter @Inject constructor(
             return
         }
 
-        // Strict de-dup — reject if already processed
-        if (!routingEngine.markPacketProcessed(packet.packetId)) {
-            MeshLogger.d(TAG, "Dedup: dropped duplicate ${packet.packetId.takeLast(6)}")
-            return
+        val isBroadcast = packet.targetId == "BROADCAST"
+        val isForMe     = packet.targetId == localMeshId
+
+        // Strict de-dup — reject if already processed, UNLESS it's a direct message for us
+        // (we want to re-process duplicates for ourselves so we can re-send ACKs if the sender retried)
+        val isDuplicate = !routingEngine.markPacketProcessed(packet.packetId)
+        if (isDuplicate) {
+            if (isForMe && packet.type != PacketType.DELIVERY_ACK) {
+                MeshLogger.d(TAG, "Dedup: re-processing duplicate ${packet.packetId.takeLast(6)} for local delivery/ACK")
+            } else {
+                MeshLogger.d(TAG, "Dedup: dropped duplicate ${packet.packetId.takeLast(6)}")
+                return
+            }
         }
 
         // Dynamic Route Learning - Track this sender's path
@@ -214,9 +223,6 @@ class MeshRouter @Inject constructor(
         MeshLogger.d(TAG, "Packet [${packet.type}] from=${packet.senderId.takeLast(6)} target=${packet.targetId.takeLast(6)} ttl=${packet.ttl} hops=${packet.hopCount}")
 
         analytics.recordNodeSeen(packet.senderId)
-
-        val isBroadcast = packet.targetId == "BROADCAST"
-        val isForMe     = packet.targetId == localMeshId
 
         // Deliver locally if it's for us or a broadcast
         if (isForMe || isBroadcast) {

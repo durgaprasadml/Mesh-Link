@@ -18,6 +18,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 
 @Singleton
 class TransferManager @Inject constructor(
@@ -40,6 +44,13 @@ class TransferManager @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     var onSendPacket: ((MeshPacket) -> Unit)? = null
     var onTransferCompleted: ((TransferSession) -> Unit)? = null
+    var onOutgoingTransferCompleted: ((TransferSession) -> Unit)? = null
+
+    val transferProgress: StateFlow<Map<String, Float>> = scheduler.activeSessions
+        .map { sessions ->
+            sessions.associate { it.transferId to it.getProgress() }
+        }
+        .stateIn(scope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     // ─────────────────── Initialization ───────────────────
 
@@ -305,6 +316,7 @@ class TransferManager @Inject constructor(
             scheduler.updateSessionState(transferId, TransferState.COMPLETED)
             scope.launch { cache.persistSession(session) }
             analytics.recordTransferCompleted(session)
+            onOutgoingTransferCompleted?.invoke(session)
         }
     }
 

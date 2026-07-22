@@ -24,6 +24,11 @@ class SendMessageUseCase @Inject constructor(
 
         val normalizedChatId = meshRepository.resolveChatId(targetMeshId)
 
+        android.util.Log.d("[DIAG-Stage2]", "═══ SendMessageUseCase ═══")
+        android.util.Log.d("[DIAG-Stage2]", "  RAW targetMeshId       : '$targetMeshId'")
+        android.util.Log.d("[DIAG-Stage2]", "  RAW myMeshId           : '$myMeshId'")
+        android.util.Log.d("[DIAG-Stage2]", "  resolveChatId(target)  : '$normalizedChatId'  [used as chatId in DB]")
+
         val messageId = UUID.randomUUID().toString()
         val message = Message(
             messageId = messageId,
@@ -35,8 +40,14 @@ class SendMessageUseCase @Inject constructor(
             status = DeliveryStatus.PENDING,
             messageType = MessageType.TEXT
         )
-        
+
+        android.util.Log.d("[DIAG-Stage2]", "  message.chatId         : '${message.chatId}'")
+        android.util.Log.d("[DIAG-Stage2]", "  message.senderId       : '${message.senderId}'")
+        android.util.Log.d("[DIAG-Stage2]", "  message.messageId      : '${message.messageId.takeLast(6)}'")
+
         chatRepository.saveMessage(message, chatName)
+        android.util.Log.d("[DIAG-Stage2]", "  chatRepository.saveMessage() called  ✓")
         meshRepository.sendMessage(targetMeshId, message, chatName)
+        android.util.Log.d("[DIAG-Stage2]", "  meshRepository.sendMessage() called  ✓")
     }
 }

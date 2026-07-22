@@ -64,8 +64,28 @@ class MeshMessagingManager @Inject constructor(
     suspend fun handleIncomingPacket(packet: MeshPacket) {
         if (packet.targetId == "BROADCAST") {
             // Broadcasts are not encrypted
+            MeshLogger.d(TAG, "[DIAG-Stage8] handleIncomingPacket: BROADCAST packet type=${packet.type}")
         } else {
             val myMeshId = userRepository.getLocalUser()?.meshId
+            val myNetworkId = if (myMeshId != null) routingCoordinator.networkId(myMeshId) else null
+            val targetsMe = myNetworkId != null && packet.targetId == myNetworkId
+
+            // ── DIAGNOSTIC Stage 8 ───────────────────────────────────────────────
+            MeshLogger.d(TAG, "[DIAG-Stage8] ═══ handleIncomingPacket() guard ═══")
+            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.packetId (last-6) : '${packet.packetId.takeLast(6)}'")
+            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.senderId           : '${packet.senderId}'")
+            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.targetId           : '${packet.targetId}'")
+            MeshLogger.d(TAG, "[DIAG-Stage8]   RAW myMeshId              : '$myMeshId'")
+            MeshLogger.d(TAG, "[DIAG-Stage8]   networkId(myMeshId)       : '$myNetworkId'  [take(8) = FIRST-8]")
+            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.targetId == myNetworkId  : $targetsMe")
+            if (!targetsMe) {
+                MeshLogger.w(TAG, "[DIAG-Stage8]   ⚠ GUARD FIRES — packet NOT for me, will RETURN")
+                MeshLogger.w(TAG, "[DIAG-Stage8]   ⚠ targetId='${packet.targetId}'  networkId='$myNetworkId'  MISMATCH=${packet.targetId != myNetworkId}")
+            } else {
+                MeshLogger.d(TAG, "[DIAG-Stage8]   ✓ Guard passes — packet IS for me, continuing")
+            }
+            // ─────────────────────────────────────────────────────────────────────
+
             if (myMeshId != null && packet.targetId != routingCoordinator.networkId(myMeshId)) {
                 // Not for me, just route it without decrypting
                 MeshLogger.d(TAG, "Routing packet to ${packet.targetId.takeLast(8)}")
@@ -174,6 +194,7 @@ class MeshMessagingManager @Inject constructor(
     }
 
     private val retryMutex = kotlinx.coroutines.sync.Mutex()
+    private val lastKeyExchangeRequest = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     suspend fun retryPendingMessages() {
         retryMutex.withLock {
@@ -191,12 +212,19 @@ class MeshMessagingManager @Inject constructor(
             }
             val reqEncCheck = userRepository.isEncryptionEnabled.first()
             if (reqEncCheck && !cryptoManager.hasPeerKey(msg.chatId)) {
-                MeshLogger.w(TAG, "Missing key for ${msg.chatId}, requesting key exchange and postponing retry")
-                val localUser = userRepository.getLocalUser()
-                if (localUser != null) {
-                    val localPeerId = routingCoordinator.networkId(localUser.meshId)
-                    val publicKey = cryptoManager.getOrCreatePublicKey()
-                    meshRouter.broadcastKeyExchange(localPeerId, publicKey)
+                val now = System.currentTimeMillis()
+                val lastReq = lastKeyExchangeRequest[msg.chatId] ?: 0L
+                if (now - lastReq > 10_000L) {
+                    MeshLogger.w(TAG, "Missing key for ${msg.chatId}, requesting key exchange and postponing retry")
+                    val localUser = userRepository.getLocalUser()
+                    if (localUser != null) {
+                        val localPeerId = routingCoordinator.networkId(localUser.meshId)
+                        val publicKey = cryptoManager.getOrCreatePublicKey()
+                        meshRouter.broadcastKeyExchange(localPeerId, publicKey)
+                        lastKeyExchangeRequest[msg.chatId] = now
+                    }
+                } else {
+                    MeshLogger.d(TAG, "Missing key for ${msg.chatId}, but key exchange recently requested. Waiting...")
                 }
                 return@forEach
             }
@@ -547,6 +575,19 @@ class MeshMessagingManager @Inject constructor(
         val targetPeerId = routingCoordinator.outgoingChatId(targetMeshId)
         meshRouter.localMeshId = localPeerId
 
+        // ── DIAGNOSTIC Stage 3/4 ──────────────────────────────────────────────────
+        MeshLogger.d(TAG, "[DIAG-Stage3/4] ═══ sendMessage() ═══")
+        MeshLogger.d(TAG, "[DIAG-Stage3/4]   RAW user.meshId           : '${user.meshId}'")
+        MeshLogger.d(TAG, "[DIAG-Stage3/4]   RAW targetMeshId          : '$targetMeshId'")
+        MeshLogger.d(TAG, "[DIAG-Stage3/4]   networkId(user.meshId)    : '$localPeerId'  [take(8) = FIRST-8]")
+        MeshLogger.d(TAG, "[DIAG-Stage3/4]   outgoingChatId(target)    : '$targetPeerId'  [takeLast(8) = LAST-8]")
+        MeshLogger.d(TAG, "[DIAG-Stage3/4]   meshRouter.localMeshId    : '${meshRouter.localMeshId}'")
+        MeshLogger.d(TAG, "[DIAG-Stage3/4]   Packet will be:")
+        MeshLogger.d(TAG, "[DIAG-Stage3/4]     senderId = '$localPeerId'")
+        MeshLogger.d(TAG, "[DIAG-Stage3/4]     targetId = '$targetPeerId'")
+        MeshLogger.d(TAG, "[DIAG-Stage3/4]   MISMATCH? localMeshId('$localPeerId') == targetPeerId('$targetPeerId'): ${localPeerId == targetPeerId}")
+        // ─────────────────────────────────────────────────────────────────────────
+
         // FIX ISSUE 2: Connect to target AND all scanned devices for mesh relay
         connectToPeer(targetMeshId)
         connectToAllScannedDevices()
@@ -571,7 +612,13 @@ class MeshMessagingManager @Inject constructor(
     }
 
     private suspend fun receiveMessage(packet: MeshPacket) {
+        MeshLogger.d(TAG, "[DIAG-Stage9] ═══ receiveMessage() ═══")
+        MeshLogger.d(TAG, "[DIAG-Stage9]   packet.packetId (last-6): '${packet.packetId.takeLast(6)}'")
+        MeshLogger.d(TAG, "[DIAG-Stage9]   packet.senderId          : '${packet.senderId}'")
+        MeshLogger.d(TAG, "[DIAG-Stage9]   packet.targetId          : '${packet.targetId}'")
+
         if (chatDao.getMessageByUuid(packet.packetId) != null) {
+            MeshLogger.d(TAG, "[DIAG-Stage9]   Already processed (duplicate) — sending ACK only")
             // Already processed this message! Just send ACK in case it was lost.
             userRepository.getLocalUser()?.let { user ->
                 val localPeerId = routingCoordinator.networkId(user.meshId)
@@ -588,6 +635,15 @@ class MeshMessagingManager @Inject constructor(
         }
 
         val chatId = routingCoordinator.incomingChatId(packet.senderId)
+
+        // ── DIAGNOSTIC Stage 9 (DATABASE WRITE) ────────────────────────────────
+        val myMeshId = userRepository.getLocalUser()?.meshId
+        MeshLogger.d(TAG, "[DIAG-Stage9]   RAW myMeshId                      : '$myMeshId'")
+        MeshLogger.d(TAG, "[DIAG-Stage9]   incomingChatId(packet.senderId)   : '$chatId'  [normalizePeerId = takeLast(8)]")
+        MeshLogger.d(TAG, "[DIAG-Stage9]   DB insert: chatId='$chatId'  senderId='${packet.senderId}'")
+        MeshLogger.d(TAG, "[DIAG-Stage9]   NOTE: UI queries chatId via resolveChatId(peer) = normalizePeerId(peer) = takeLast(8)")
+        MeshLogger.d(TAG, "[DIAG-Stage9]   MATCH? chatId stored='$chatId' vs chatId queried by UI='${routingCoordinator.incomingChatId(packet.senderId)}'")
+        // ─────────────────────────────────────────────────────────────────────
 
         // Decrypt if encrypted
         val rawPayload = if (packet.encrypted) {
@@ -617,7 +673,9 @@ class MeshMessagingManager @Inject constructor(
             status = DeliveryStatus.DELIVERED,
             messageType = MessageType.TEXT
         )
+        MeshLogger.d(TAG, "[DIAG-Stage9]   Inserting MessageEntity: messageId=${message.messageId.takeLast(6)} chatId=${message.chatId} senderId=${message.senderId}")
         chatDao.insertMessageAndUpdateChat(message, senderName)
+        MeshLogger.d(TAG, "[DIAG-Stage9]   ✓ chatDao.insertMessageAndUpdateChat() called for chatId='${message.chatId}'")
 
         // FIX: Phase 3 - Send Delivery ACK
         userRepository.getLocalUser()?.let { user ->

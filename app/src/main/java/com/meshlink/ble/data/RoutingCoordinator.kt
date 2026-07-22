@@ -29,7 +29,27 @@ class RoutingCoordinator @Inject constructor(
 ) {
     private val TAG = "RoutingCoordinator"
 
-    fun networkId(peerId: String): String = BleConstants.toNetworkId(peerId)
+    private var diagDumped = false
+
+    fun networkId(peerId: String): String {
+        val result = BleConstants.toNetworkId(peerId)
+        if (!diagDumped && peerId.isNotBlank()) {
+            diagDumped = true
+            val altResult = normalizePeerId(peerId)
+            MeshLogger.d("[DIAG-IDs]", "═══ ID Normalization Split-Brain Proof ═══")
+            MeshLogger.d("[DIAG-IDs]", "  RAW peerId                : '$peerId'")
+            MeshLogger.d("[DIAG-IDs]", "  networkId (take 8)        : '$result'")
+            MeshLogger.d("[DIAG-IDs]", "  normalizePeerId (last 8)  : '$altResult'")
+            MeshLogger.d("[DIAG-IDs]", "  MISMATCH = ${result != altResult}")
+            if (result != altResult) {
+                MeshLogger.w("[DIAG-IDs]", "  ⚠ SPLIT-BRAIN CONFIRMED: The two functions produce DIFFERENT strings!")
+                MeshLogger.w("[DIAG-IDs]", "  ⚠ isForMe will ALWAYS be false for personal messages.")
+            } else {
+                MeshLogger.d("[DIAG-IDs]", "  ✓ Both functions produce the same string for this ID (meshId length ≤ 8?)")
+            }
+        }
+        return result
+    }
 
     fun normalizePeerId(peerIdOrAddress: String): String {
         val withoutColons = peerIdOrAddress.replace(":", "").uppercase()

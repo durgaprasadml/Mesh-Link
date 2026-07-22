@@ -64,6 +64,24 @@ class MeshRouter @Inject constructor(
     private fun observeIncoming() {
         scope.launch {
             gattManager.incomingMessages.collect { (sender, json) ->
+                // ── [TRANSPORT-B] Packet received from BLE, about to parse ─────────────────────────
+                MeshLogger.d(TAG, "[TRANSPORT-B] ═══ MeshRouter.observeIncoming() ═══")
+                MeshLogger.d(TAG, "[TRANSPORT-B]   immediateSender : '$sender'")
+                MeshLogger.d(TAG, "[TRANSPORT-B]   rawJsonBytes    : ${json.toByteArray(Charsets.UTF_8).size} B")
+                MeshLogger.d(TAG, "[TRANSPORT-B]   jsonPreview     : '${json.take(100)}'")
+                val parsed = com.meshlink.ble.data.MeshPacketParser.fromJson(json)
+                if (parsed == null) {
+                    MeshLogger.e(TAG, "[TRANSPORT-B]   ✗ MeshPacketParser.fromJson() returned null — JSON is malformed or empty")
+                } else {
+                    MeshLogger.d(TAG, "[TRANSPORT-B]   ✓ Packet parsed:")
+                    MeshLogger.d(TAG, "[TRANSPORT-B]     packetId  : '${parsed.packetId.takeLast(8)}'")
+                    MeshLogger.d(TAG, "[TRANSPORT-B]     senderId  : '${parsed.senderId}'")
+                    MeshLogger.d(TAG, "[TRANSPORT-B]     targetId  : '${parsed.targetId}'")
+                    MeshLogger.d(TAG, "[TRANSPORT-B]     type      : '${parsed.type}'")
+                    MeshLogger.d(TAG, "[TRANSPORT-B]     encrypted : ${parsed.encrypted}")
+                    MeshLogger.d(TAG, "[TRANSPORT-B]     ttl       : ${parsed.ttl}")
+                }
+                // ───────────────────────────────────────────────────────────────────────
                 try {
                     handleIncomingPacket(sender, json)
                 } catch (e: Exception) {
@@ -205,6 +223,24 @@ class MeshRouter @Inject constructor(
         val isBroadcast = packet.targetId == "BROADCAST"
         val isForMe     = packet.targetId == localMeshId
 
+        // ── DIAGNOSTIC Stage 3 (PRIMARY KILL SWITCH) ─────────────────────────
+        MeshLogger.d(TAG, "[DIAG-Stage3] ═══ MeshRouter.handleIncomingPacket() ═══")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   packet.packetId (last-6) : '${packet.packetId.takeLast(6)}'")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   packet.type              : '${packet.type}'")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   packet.senderId          : '${packet.senderId}'")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   packet.targetId          : '${packet.targetId}'")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   localMeshId              : '$localMeshId'")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   isBroadcast              : $isBroadcast")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   isForMe (targetId==localMeshId): $isForMe")
+        if (!isForMe && !isBroadcast) {
+            MeshLogger.w(TAG, "[DIAG-Stage3]   ⚠ isForMe=false AND isBroadcast=false")
+            MeshLogger.w(TAG, "[DIAG-Stage3]   ⚠ Packet will NOT be emitted to _incomingPayloads")
+            MeshLogger.w(TAG, "[DIAG-Stage3]   ⚠ DIAGNOSIS: targetId='${packet.targetId}'  localMeshId='$localMeshId'  DIFFER=${packet.targetId != localMeshId}")
+        } else {
+            MeshLogger.d(TAG, "[DIAG-Stage3]   ✓ Packet will be emitted to _incomingPayloads (isForMe=$isForMe isBroadcast=$isBroadcast)")
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         // Strict de-dup — reject if already processed, UNLESS it's a direct message for us
         // (we want to re-process duplicates for ourselves so we can re-send ACKs if the sender retried)
         val isDuplicate = !routingEngine.markPacketProcessed(packet.packetId)
@@ -245,6 +281,8 @@ class MeshRouter @Inject constructor(
             val emitted = _incomingPayloads.tryEmit(packet.senderId to packet)
             if (!emitted) {
                 MeshLogger.w(TAG, "incomingPayloads buffer full — packet ${packet.packetId.takeLast(6)} dropped")
+            } else {
+                MeshLogger.d(TAG, "[DIAG-Stage3]   ✓ _incomingPayloads.tryEmit() succeeded for ${packet.packetId.takeLast(6)}")
             }
         }
 
@@ -367,6 +405,18 @@ class MeshRouter @Inject constructor(
             ttl = initialTtl
         )
 
+        // ── [TRANSPORT-A] Packet Created ──────────────────────────────────────────────────
+        val serialized = MeshPacketParser.toJson(packet)
+        MeshLogger.d(TAG, "[TRANSPORT-A] ═══ Packet Created & Enqueued ═══")
+        MeshLogger.d(TAG, "[TRANSPORT-A]   packetId  : '${packet.packetId.takeLast(8)}'")
+        MeshLogger.d(TAG, "[TRANSPORT-A]   senderId  : '${packet.senderId}'")
+        MeshLogger.d(TAG, "[TRANSPORT-A]   targetId  : '${packet.targetId}'")
+        MeshLogger.d(TAG, "[TRANSPORT-A]   encrypted : ${packet.encrypted}")
+        MeshLogger.d(TAG, "[TRANSPORT-A]   ttl       : ${packet.ttl}")
+        MeshLogger.d(TAG, "[TRANSPORT-A]   serializedBytes : ${serialized.toByteArray(Charsets.UTF_8).size} B")
+        MeshLogger.d(TAG, "[TRANSPORT-A]   payload preview : '${packet.payload.take(60)}'")
+        // ────────────────────────────────────────────────────────────────────────
+
         routingEngine.markPacketProcessed(packet.packetId)
         analytics.recordPacketSent()
         routingEngine.queueOptimizer.enqueue(packet)
@@ -407,7 +457,7 @@ class MeshRouter @Inject constructor(
                 }
 
                 val packet = routingEngine.queueOptimizer.dequeue() ?: continue
-                
+
                 if (!routingEngine.retryEngine.shouldRetryNow() && packet.type != PacketType.SOS) {
                     // Requeue if critically congested, but allow SOS
                     routingEngine.queueOptimizer.enqueue(packet)
@@ -419,22 +469,41 @@ class MeshRouter @Inject constructor(
                 val connectedNodes = gattManager.connectedServers.keys + gattManager.activeClients.keys
                 val nextHop = routingEngine.getNextHopForForwarding(packet, connectedNodes, excludeHop = "")
 
+                // ── [TRANSPORT-A] Queue Dequeue & Dispatch ────────────────────────────────
+                MeshLogger.d(TAG, "[TRANSPORT-A] ═══ Queue Processor: Dequeued Packet ═══")
+                MeshLogger.d(TAG, "[TRANSPORT-A]   packetId    : '${packet.packetId.takeLast(8)}'")
+                MeshLogger.d(TAG, "[TRANSPORT-A]   senderId    : '${packet.senderId}'")
+                MeshLogger.d(TAG, "[TRANSPORT-A]   targetId    : '${packet.targetId}'")
+                MeshLogger.d(TAG, "[TRANSPORT-A]   type        : '${packet.type}'")
+                MeshLogger.d(TAG, "[TRANSPORT-A]   serializedBytes : ${json.toByteArray(Charsets.UTF_8).size} B")
+                MeshLogger.d(TAG, "[TRANSPORT-A]   connectedNodes  : ${connectedNodes.size}  -> $connectedNodes")
+                MeshLogger.d(TAG, "[TRANSPORT-A]   nextHop         : '${nextHop ?: "BROADCAST (no directed route)"}'")
+                // ─────────────────────────────────────────────────────────────────────
+
                 try {
                     // Check Intelligent Transport (Wi-Fi vs BLE)
                     val preferredTransport = routingEngine.transportManager.selectTransportForPayload(packet.targetId, packet.type)
-                    
+
+                    // ── [TRANSPORT-A] Transport Selection ───────────────────────────────────
+                    MeshLogger.d(TAG, "[TRANSPORT-A]   preferredTransport : $preferredTransport")
+
                     if (preferredTransport == RouteType.WIFI_DIRECT) {
-                        // In a full implementation, we would route this to WifiDirectManager here.
-                        // For now, if we can't find a wifi socket, we fallback to BLE below.
+                        MeshLogger.d(TAG, "[TRANSPORT-A]   Transport = WIFI_DIRECT (fallback to BLE if socket not ready)")
                         MeshLogger.d(TAG, "Preferred transport is Wi-Fi Direct for packet ${packet.packetId.takeLast(6)}")
+                    } else {
+                        MeshLogger.d(TAG, "[TRANSPORT-A]   Transport = BLE")
                     }
 
                     if (nextHop != null) {
+                        MeshLogger.d(TAG, "[TRANSPORT-A]   ▶ Calling gattManager.broadcastPacket(includeAddress='$nextHop') -- DIRECTED")
                         gattManager.broadcastPacket(json, includeAddress = nextHop)
                     } else {
+                        MeshLogger.d(TAG, "[TRANSPORT-A]   ▶ Calling gattManager.broadcastPacket() -- BROADCAST to ALL (${connectedNodes.size} nodes)")
                         gattManager.broadcastPacket(json)
                     }
+                    // ────────────────────────────────────────────────────────────────────
                 } catch (e: Exception) {
+                    MeshLogger.e(TAG, "[TRANSPORT-A]   ✗ EXCEPTION sending packet: ${e.message}")
                     MeshLogger.e(TAG, "Failed to send packet: ${e.message}")
                     storeForLater(packet)
                 }

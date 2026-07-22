@@ -69,9 +69,28 @@ class ChatDetailViewModel @Inject constructor(
     }
 
     val messages: StateFlow<List<Message>> = if (address.isNotBlank()) {
+        MeshLogger.d("[DIAG-Stage1/11]", "═══ ChatDetailViewModel init ═══")
+        MeshLogger.d("[DIAG-Stage1/11]", "  rawPeerIdOrAddress : '$rawPeerIdOrAddress'")
+        MeshLogger.d("[DIAG-Stage1/11]", "  address (resolveChatId) : '$address'")
+        MeshLogger.d("[DIAG-Stage1/11]", "  Subscribing to getMessagesForChat(chatId='$address')")
         getChatMessagesUseCase(address)
+            .also { flow ->
+                viewModelScope.launch {
+                    flow.collect { msgs ->
+                        MeshLogger.d("[DIAG-Stage11]", "Flow emitted ${msgs.size} message(s) for chatId='$address'")
+                        if (msgs.isEmpty()) {
+                            MeshLogger.w("[DIAG-Stage11]", "  ⚠ EMPTY — no messages found for chatId='$address'")
+                        } else {
+                            msgs.forEach { m ->
+                                MeshLogger.d("[DIAG-Stage11]", "  msg id=${m.messageId.takeLast(6)} chatId=${m.chatId} from=${m.senderId.take(10)} isFromMe=${m.isFromMe}")
+                            }
+                        }
+                    }
+                }
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     } else {
+        MeshLogger.w("[DIAG-Stage1/11]", "  ⚠ address is BLANK — messages Flow will be empty forever")
         MutableStateFlow(emptyList())
     }
 
@@ -179,8 +198,15 @@ class ChatDetailViewModel @Inject constructor(
 
     fun sendMessage(text: String) {
         val trimmed = text.trim()
-        if (trimmed.isBlank() || address.isBlank()) return
+        MeshLogger.d("[DIAG-Stage1]", "═══ UI: sendMessage() called ═══")
+        MeshLogger.d("[DIAG-Stage1]", "  trimmedText='${trimmed.take(40)}'")
+        MeshLogger.d("[DIAG-Stage1]", "  address='$address'  rawPeerIdOrAddress='$rawPeerIdOrAddress'")
+        if (trimmed.isBlank() || address.isBlank()) {
+            MeshLogger.w("[DIAG-Stage1]", "  ⚠ ABORT — trimmed.isBlank=${trimmed.isBlank()} address.isBlank=${address.isBlank()}")
+            return
+        }
         viewModelScope.launch {
+            MeshLogger.d("[DIAG-Stage1]", "  Invoking SendMessageUseCase with targetMeshId='${rawPeerIdOrAddress.ifBlank { address }}'")
             sendMessageUseCase(
                 targetMeshId = rawPeerIdOrAddress.ifBlank { address },
                 messageText = trimmed,

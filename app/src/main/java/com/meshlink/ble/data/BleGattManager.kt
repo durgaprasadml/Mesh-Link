@@ -35,9 +35,15 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         const val TYPE_END = 0x03.toByte()
     }
 
+    enum class BleConnectionState {
+        DISCONNECTED, CONNECTING, CONNECTED, SERVICES_DISCOVERED, READY
+    }
+
     private data class PendingClientWrite(
         val address: String,
-        val bytes: ByteArray
+        val bytes: ByteArray,
+        var retryCount: Int = 0,
+        var nextAttemptTime: Long = 0L
     )
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -47,6 +53,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
     // Multi-Point Ad-Hoc Connections
     val connectedServers = ConcurrentHashMap<String, BluetoothDevice>()
     val activeClients = ConcurrentHashMap<String, BluetoothGatt>()
+    val deviceStates = ConcurrentHashMap<String, BleConnectionState>()
     private val deviceMtus = ConcurrentHashMap<String, Int>()
     private val reassemblyBuffers = ConcurrentHashMap<String, ByteArrayOutputStream>()
     private val pendingClientWrites = mutableListOf<PendingClientWrite>()
@@ -95,6 +102,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         gattServer?.close()
         gattServer = null
         connectedServers.clear()
+        deviceStates.clear()
         deviceMtus.clear()
         reassemblyBuffers.clear()
         activeClients.values.forEach { 
@@ -128,7 +136,16 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
 
     fun broadcastPacket(jsonPacket: String, excludeAddress: String? = null, includeAddress: String? = null) {
         val bytes = jsonPacket.toByteArray(Charsets.UTF_8)
-        
+
+        // ── [TRANSPORT-A] broadcastPacket entry ─────────────────────────────────────────────
+        MeshLogger.d("BleGatt", "[TRANSPORT-A] ═══ broadcastPacket() ═══")
+        MeshLogger.d("BleGatt", "[TRANSPORT-A]   totalBytes      : ${bytes.size} B")
+        MeshLogger.d("BleGatt", "[TRANSPORT-A]   includeAddress  : '${includeAddress ?: "ALL"}'")
+        MeshLogger.d("BleGatt", "[TRANSPORT-A]   excludeAddress  : '${excludeAddress ?: "none"}'")
+        MeshLogger.d("BleGatt", "[TRANSPORT-A]   activeClients   : ${activeClients.size}  -> ${activeClients.keys}")
+        MeshLogger.d("BleGatt", "[TRANSPORT-A]   connectedServers: ${connectedServers.size}  -> ${connectedServers.keys}")
+        // ─────────────────────────────────────────────────────────────────────────
+
         // Dispatch to Nodes we initiated connection to
         activeClients.forEach { (address, _) ->
             if (includeAddress != null) {
@@ -151,6 +168,8 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                         sendFragmentedNotification(device, char, bytes)
                     }
                 }
+            } else {
+                MeshLogger.w("BleGatt", "[TRANSPORT-A]   ⚠ GATT service/char null — cannot notify connectedServers")
             }
         }
     }
@@ -215,22 +234,30 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
             TYPE_FULL -> {
                 reassemblyBuffers.remove(address)
                 val message = String(payload, Charsets.UTF_8)
+                MeshLogger.d("BleGatt", "[DIAG-Stage5] ═══ Reassembled FULL packet from $address ═══")
+                MeshLogger.d("BleGatt", "[DIAG-Stage5]   payloadLen=${message.length}  preview='${message.take(80)}'")
                 _incomingMessages.tryEmit(address to message)
             }
             TYPE_START -> {
                 val bos = ByteArrayOutputStream()
                 bos.write(payload)
                 reassemblyBuffers[address] = bos
+                MeshLogger.d("BleGatt", "[DIAG-Stage5] START fragment from $address (${payload.size} bytes)")
             }
             TYPE_CONT -> {
                 reassemblyBuffers[address]?.write(payload)
+                MeshLogger.d("BleGatt", "[DIAG-Stage5] CONT fragment from $address (${payload.size} bytes)")
             }
             TYPE_END -> {
                 val bos = reassemblyBuffers.remove(address)
                 if (bos != null) {
                     bos.write(payload)
                     val message = String(bos.toByteArray(), Charsets.UTF_8)
+                    MeshLogger.d("BleGatt", "[DIAG-Stage5] ═══ Reassembled END packet from $address ═══")
+                    MeshLogger.d("BleGatt", "[DIAG-Stage5]   totalLen=${message.length}  preview='${message.take(80)}'")
                     _incomingMessages.tryEmit(address to message)
+                } else {
+                    MeshLogger.w("BleGatt", "[DIAG-Stage5] END fragment from $address but NO reassembly buffer! Packet lost.")
                 }
             }
         }
@@ -282,11 +309,23 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
     private fun flushClientWriteQueueLocked() {
         if (activeWriteAddress != null) return
 
+        val now = System.currentTimeMillis()
         val iterator = pendingClientWrites.iterator()
+        
         while (iterator.hasNext()) {
             val pending = iterator.next()
+            
+            if (now < pending.nextAttemptTime) continue
+            
+            val state = deviceStates[pending.address]
+            if (state != BleConnectionState.READY) {
+                // Keep in queue, wait for READY state
+                continue
+            }
+
             val gatt = activeClients[pending.address]
             if (gatt == null) {
+                MeshLogger.w("BleGatt", "[TRANSPORT-A]   ⚠ No GATT client for ${pending.address} — dropping fragment")
                 iterator.remove()
                 continue
             }
@@ -295,6 +334,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                 ?.getCharacteristic(BleConstants.MSG_CHAR_UUID)
             if (char == null) {
                 try {
+                    MeshLogger.w("BleGatt", "[TRANSPORT-A]   ⚠ Service not discovered for ${pending.address} — retrying discoverServices()")
                     gatt.discoverServices()
                 } catch (e: Exception) {
                     MeshLogger.w("BleGatt", "Service discovery retry failed for ${pending.address}: ${e.message}")
@@ -308,14 +348,38 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                 method.invoke(char, pending.bytes)
                 char.writeType = android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                 val writeStarted = gatt.writeCharacteristic(char)
-                iterator.remove()
+                
+                MeshLogger.d("BleGatt", "[TRANSPORT-A]   writeCharacteristic() to '${pending.address}'")
+                MeshLogger.d("BleGatt", "[TRANSPORT-A]     fragmentBytes : ${pending.bytes.size} B")
+                MeshLogger.d("BleGatt", "[TRANSPORT-A]     writeStarted  : $writeStarted")
+                MeshLogger.d("BleGatt", "[TRANSPORT-A]     writeType     : WRITE_TYPE_NO_RESPONSE")
+                MeshLogger.d("BleGatt", "[TRANSPORT-A]     state         : $state")
+                MeshLogger.d("BleGatt", "[TRANSPORT-A]     queueSize     : ${pendingClientWrites.size}")
+                
                 if (writeStarted) {
                     activeWriteAddress = pending.address
+                    // Do NOT remove from iterator here. It will be removed in onCharacteristicWrite callback.
                     return
+                } else {
+                    pending.retryCount++
+                    if (pending.retryCount > 10) {
+                        MeshLogger.e("BleGatt", "[TRANSPORT-A]   ⚠ writeCharacteristic permanently failed for ${pending.address}, dropping packet.")
+                        iterator.remove()
+                    } else {
+                        val backoff = 50L * (1 shl pending.retryCount.coerceAtMost(6))
+                        pending.nextAttemptTime = now + backoff
+                        MeshLogger.w("BleGatt", "[TRANSPORT-A]   ⚠ writeCharacteristic returned false for ${pending.address}. Retry ${pending.retryCount} in ${backoff}ms")
+                        // Wait for backoff
+                        scope.launch {
+                            delay(backoff)
+                            flushClientWriteQueue()
+                        }
+                        return
+                    }
                 }
-                MeshLogger.w("BleGatt", "writeCharacteristic returned false for ${pending.address}")
             } catch (e: Exception) {
                 iterator.remove()
+                MeshLogger.e("BleGatt", "[TRANSPORT-A]   ✗ Exception in writeCharacteristic: ${e.message}")
                 MeshLogger.e("BleGatt", "Error writing char: ${e.message}")
             }
         }
@@ -352,6 +416,13 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         ) {
             super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value)
             if (characteristic.uuid == BleConstants.MSG_CHAR_UUID) {
+                // ── [TRANSPORT-B] Server received write (Device B receiving from Client A) ───────────────
+                MeshLogger.d("BleGatt", "[TRANSPORT-B] ═══ onCharacteristicWriteRequest (Server) ═══")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   from device  : '${device.address}'")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   bytesReceived: ${value.size} B")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   fragType byte: 0x${value.getOrNull(0)?.toString(16)?.uppercase() ?: "??"}")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   responseNeeded: $responseNeeded")
+                // ───────────────────────────────────────────────────────────────────────
                 if (responseNeeded) {
                     gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
                 }
@@ -378,6 +449,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
     private val clientCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
+                deviceStates[gatt.device.address] = BleConnectionState.CONNECTED
                 _gattEvents.tryEmit(GattEvent.Connected(gatt.device.address))
                 // Negotiate massive MTU for entire JSON packets
                 val mtuRequested = gatt.requestMtu(512)
@@ -385,6 +457,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                     gatt.discoverServices()
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                deviceStates[gatt.device.address] = BleConnectionState.DISCONNECTED
                 activeClients.remove(gatt.device.address)
                 deviceMtus.remove(gatt.device.address)
                 reassemblyBuffers.remove(gatt.device.address)
@@ -417,6 +490,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         @Suppress("DEPRECATION")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
+                deviceStates[gatt.device.address] = BleConnectionState.SERVICES_DISCOVERED
                 _gattEvents.tryEmit(GattEvent.ServicesDiscovered(gatt.device.address))
             }
             val char = gatt.getService(BleConstants.MESH_SERVICE_UUID)?.getCharacteristic(BleConstants.MSG_CHAR_UUID)
@@ -436,15 +510,37 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
             flushClientWriteQueue()
         }
 
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            super.onDescriptorWrite(gatt, descriptor, status)
+            if (status == BluetoothGatt.GATT_SUCCESS && descriptor.uuid == UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")) {
+                MeshLogger.d("BleGatt", "Notifications enabled for ${gatt.device.address}, device is READY")
+                deviceStates[gatt.device.address] = BleConnectionState.READY
+                flushClientWriteQueue()
+            }
+        }
+
         @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             if (characteristic.uuid == BleConstants.MSG_CHAR_UUID) {
+                val value = characteristic.value
+                // ── [TRANSPORT-B] Client received notify (Device B receiving from Server A) ───────────
+                MeshLogger.d("BleGatt", "[TRANSPORT-B] ═══ onCharacteristicChanged (Client, API<33) ═══")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   from server  : '${gatt.device.address}'")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   bytesReceived: ${value?.size ?: 0} B")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   fragType byte: 0x${value?.getOrNull(0)?.toString(16)?.uppercase() ?: "??"}") 
+                // ───────────────────────────────────────────────────────────────────────
                 handleIncomingFragment(gatt.device.address, characteristic.value)
             }
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
             if (characteristic.uuid == BleConstants.MSG_CHAR_UUID) {
+                // ── [TRANSPORT-B] Client received notify (Device B receiving from Server A, API>=33) ──────
+                MeshLogger.d("BleGatt", "[TRANSPORT-B] ═══ onCharacteristicChanged (Client, API>=33) ═══")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   from server  : '${gatt.device.address}'")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   bytesReceived: ${value.size} B")
+                MeshLogger.d("BleGatt", "[TRANSPORT-B]   fragType byte: 0x${value.getOrNull(0)?.toString(16)?.uppercase() ?: "??"}")
+                // ─────────────────────────────────────────────────────────────────────
                 handleIncomingFragment(gatt.device.address, value)
             }
         }
@@ -457,12 +553,20 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         ) {
             super.onCharacteristicWrite(gatt, characteristic, status)
             if (characteristic.uuid == BleConstants.MSG_CHAR_UUID) {
+                // ── [TRANSPORT-A] GATT write callback ───────────────────────────────────────────
                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                    MeshLogger.w("BleGatt", "Characteristic write failed for ${gatt.device.address}: $status")
+                    MeshLogger.w("BleGatt", "[TRANSPORT-A]   ⚠ onCharacteristicWrite FAILED for ${gatt.device.address}: status=$status")
+                } else {
+                    MeshLogger.d("BleGatt", "[TRANSPORT-A]   ✓ onCharacteristicWrite SUCCESS for ${gatt.device.address}: status=GATT_SUCCESS")
                 }
+                // ──────────────────────────────────────────────────────────────────────
                 scope.launch {
                     mutex.withLock {
                         if (activeWriteAddress == gatt.device.address) {
+                            val index = pendingClientWrites.indexOfFirst { it.address == gatt.device.address }
+                            if (index != -1) {
+                                pendingClientWrites.removeAt(index)
+                            }
                             activeWriteAddress = null
                         }
                         flushClientWriteQueueLocked()

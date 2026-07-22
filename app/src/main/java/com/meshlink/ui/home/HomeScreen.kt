@@ -242,7 +242,7 @@ fun HomeScreen(
                             ChatItem(
                                 chat = chat,
                                 onClick = {
-                                    val safeName = chat.name.ifBlank { chat.id.takeLast(8) }
+                                    val safeName = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) }
                                     onNavigateToChat(chat.id, safeName)
                                 }
                             )
@@ -287,7 +287,7 @@ fun ChatItem(chat: Chat, onClick: () -> Unit) {
             modifier = Modifier.weight(1f)
         ) {
             Text(
-                text = chat.name.ifBlank { chat.id.takeLast(8) },
+                text = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) },
                 color = MaterialTheme.colorScheme.onBackground,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,

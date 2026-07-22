@@ -201,7 +201,7 @@ fun NearbyDevicesScreen(
                                     viewModel.connectToDevice(device) {
                                         onNavigateToChat(
                                             device.meshId.ifBlank { device.address },
-                                            device.name.ifBlank { device.address.takeLast(8) }
+                                            device.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(device.address) }
                                         )
                                         connectingToAddress = null
                                     }

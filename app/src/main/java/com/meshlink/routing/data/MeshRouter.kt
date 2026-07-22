@@ -74,7 +74,7 @@ class MeshRouter @Inject constructor(
                     MeshLogger.e(TAG, "[TRANSPORT-B]   ✗ MeshPacketParser.fromJson() returned null — JSON is malformed or empty")
                 } else {
                     MeshLogger.d(TAG, "[TRANSPORT-B]   ✓ Packet parsed:")
-                    MeshLogger.d(TAG, "[TRANSPORT-B]     packetId  : '${parsed.packetId.takeLast(8)}'")
+                    MeshLogger.d(TAG, "[TRANSPORT-B]     packetId  : '${com.meshlink.util.MeshIdNormalizer.canonicalize(parsed.packetId)}'")
                     MeshLogger.d(TAG, "[TRANSPORT-B]     senderId  : '${parsed.senderId}'")
                     MeshLogger.d(TAG, "[TRANSPORT-B]     targetId  : '${parsed.targetId}'")
                     MeshLogger.d(TAG, "[TRANSPORT-B]     type      : '${parsed.type}'")
@@ -165,7 +165,7 @@ class MeshRouter @Inject constructor(
             }
             
             relayDao.deletePacket(entity.packetId)
-            MeshLogger.d(TAG, "S&F: delivered ${entity.packetId.takeLast(6)}")
+            MeshLogger.d(TAG, "S&F: delivered ${com.meshlink.util.MeshIdNormalizer.canonicalize(entity.packetId)}")
         }
     }
 
@@ -209,7 +209,7 @@ class MeshRouter @Inject constructor(
         // --- Strict Encryption Enforcement ---
         val enforceEncryption = runBlocking { settingsRepository.advancedEncryptionEnforcement.first() }
         if (enforceEncryption && !packet.encrypted && packet.type != PacketType.KEY_EXCHANGE && packet.type != PacketType.SOS) {
-            MeshLogger.w(TAG, "Dropped unencrypted packet ${packet.packetId.takeLast(6)} due to Strict Encryption policy")
+            MeshLogger.w(TAG, "Dropped unencrypted packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} due to Strict Encryption policy")
             return
         }
 
@@ -225,7 +225,7 @@ class MeshRouter @Inject constructor(
 
         // ── DIAGNOSTIC Stage 3 (PRIMARY KILL SWITCH) ─────────────────────────
         MeshLogger.d(TAG, "[DIAG-Stage3] ═══ MeshRouter.handleIncomingPacket() ═══")
-        MeshLogger.d(TAG, "[DIAG-Stage3]   packet.packetId (last-6) : '${packet.packetId.takeLast(6)}'")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   packet.packetId (last-6) : '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
         MeshLogger.d(TAG, "[DIAG-Stage3]   packet.type              : '${packet.type}'")
         MeshLogger.d(TAG, "[DIAG-Stage3]   packet.senderId          : '${packet.senderId}'")
         MeshLogger.d(TAG, "[DIAG-Stage3]   packet.targetId          : '${packet.targetId}'")
@@ -246,9 +246,9 @@ class MeshRouter @Inject constructor(
         val isDuplicate = !routingEngine.markPacketProcessed(packet.packetId)
         if (isDuplicate) {
             if (isForMe && packet.type != PacketType.DELIVERY_ACK) {
-                MeshLogger.d(TAG, "Dedup: re-processing duplicate ${packet.packetId.takeLast(6)} for local delivery/ACK")
+                MeshLogger.d(TAG, "Dedup: re-processing duplicate ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} for local delivery/ACK")
             } else {
-                MeshLogger.d(TAG, "Dedup: dropped duplicate ${packet.packetId.takeLast(6)}")
+                MeshLogger.d(TAG, "Dedup: dropped duplicate ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
                 return
             }
         }
@@ -263,7 +263,7 @@ class MeshRouter @Inject constructor(
             type = RouteType.BLE
         )
 
-        MeshLogger.d(TAG, "Packet [${packet.type}] from=${packet.senderId.takeLast(6)} target=${packet.targetId.takeLast(6)} ttl=${packet.ttl} hops=${packet.hopCount}")
+        MeshLogger.d(TAG, "Packet [${packet.type}] from=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)} target=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)} ttl=${packet.ttl} hops=${packet.hopCount}")
 
         analytics.recordNodeSeen(packet.senderId)
 
@@ -280,9 +280,9 @@ class MeshRouter @Inject constructor(
             
             val emitted = _incomingPayloads.tryEmit(packet.senderId to packet)
             if (!emitted) {
-                MeshLogger.w(TAG, "incomingPayloads buffer full — packet ${packet.packetId.takeLast(6)} dropped")
+                MeshLogger.w(TAG, "incomingPayloads buffer full — packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} dropped")
             } else {
-                MeshLogger.d(TAG, "[DIAG-Stage3]   ✓ _incomingPayloads.tryEmit() succeeded for ${packet.packetId.takeLast(6)}")
+                MeshLogger.d(TAG, "[DIAG-Stage3]   ✓ _incomingPayloads.tryEmit() succeeded for ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
             }
         }
 
@@ -297,20 +297,20 @@ class MeshRouter @Inject constructor(
 
         // Loop guard
         if (routingEngine.isRoutingLoop(packet, localMeshId)) {
-            MeshLogger.d(TAG, "Loop guard: already visited ${packet.packetId.takeLast(6)}, dropping")
+            MeshLogger.d(TAG, "Loop guard: already visited ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}, dropping")
             return
         }
 
         // Check Mesh Relay setting
         val relayEnabled = runBlocking { settingsRepository.isMeshRelayEnabled.first() }
         if (!relayEnabled && !isAckNack) {
-            MeshLogger.d(TAG, "Relay disabled in settings, dropping packet ${packet.packetId.takeLast(6)}")
+            MeshLogger.d(TAG, "Relay disabled in settings, dropping packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
             return
         }
 
         val maxHops = runBlocking { settingsRepository.meshMaxHops.first() }
         if (packet.hopCount >= maxHops) {
-            MeshLogger.d(TAG, "Max hops exceeded, dropping packet ${packet.packetId.takeLast(6)}")
+            MeshLogger.d(TAG, "Max hops exceeded, dropping packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
             return
         }
 
@@ -330,7 +330,7 @@ class MeshRouter @Inject constructor(
 
         // Congestion Check
         if (routingEngine.congestionMonitor.isCongested() && !routingEngine.qosManager.shouldBypassQueue(packet.type)) {
-            MeshLogger.w(TAG, "Congestion critical: dropping/delaying non-critical packet ${packet.packetId.takeLast(6)}")
+            MeshLogger.w(TAG, "Congestion critical: dropping/delaying non-critical packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
             if (!isAckNack) {
                 storeForLater(relayPacket)
             }
@@ -341,12 +341,12 @@ class MeshRouter @Inject constructor(
             val nextHop = routingEngine.getNextHopForForwarding(relayPacket, connectedNodes, excludeHop = immediateSenderAddress)
             if (nextHop != null) {
                 routingEngine.queueOptimizer.enqueue(relayPacket)
-                MeshLogger.d(TAG, "Directed relay queued ${packet.packetId.takeLast(6)} via $nextHop")
+                MeshLogger.d(TAG, "Directed relay queued ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} via $nextHop")
             } else {
                 if (routingEngine.shouldRelayBroadcast(relayPacket.type)) {
                     routingEngine.congestionMonitor.recordBroadcast()
                     routingEngine.queueOptimizer.enqueue(relayPacket)
-                    MeshLogger.d(TAG, "Forwarded broadcast queued ${packet.packetId.takeLast(6)} (ttl=${relayPacket.ttl})")
+                    MeshLogger.d(TAG, "Forwarded broadcast queued ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} (ttl=${relayPacket.ttl})")
                 } else {
                     MeshLogger.d(TAG, "Dropped broadcast due to battery/congestion heuristics")
                 }
@@ -378,7 +378,7 @@ class MeshRouter @Inject constructor(
                         mimeType    = packet.mimeType
                     )
                 )
-                MeshLogger.d(TAG, "Stored ${packet.packetId.takeLast(6)} for later delivery")
+                MeshLogger.d(TAG, "Stored ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} for later delivery")
             } catch (e: Exception) {
                 routingEngine.congestionMonitor.decrementRelay()
                 MeshLogger.e(TAG, "Failed to cache relay packet: ${e.message}")
@@ -408,7 +408,7 @@ class MeshRouter @Inject constructor(
         // ── [TRANSPORT-A] Packet Created ──────────────────────────────────────────────────
         val serialized = MeshPacketParser.toJson(packet)
         MeshLogger.d(TAG, "[TRANSPORT-A] ═══ Packet Created & Enqueued ═══")
-        MeshLogger.d(TAG, "[TRANSPORT-A]   packetId  : '${packet.packetId.takeLast(8)}'")
+        MeshLogger.d(TAG, "[TRANSPORT-A]   packetId  : '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
         MeshLogger.d(TAG, "[TRANSPORT-A]   senderId  : '${packet.senderId}'")
         MeshLogger.d(TAG, "[TRANSPORT-A]   targetId  : '${packet.targetId}'")
         MeshLogger.d(TAG, "[TRANSPORT-A]   encrypted : ${packet.encrypted}")
@@ -471,7 +471,7 @@ class MeshRouter @Inject constructor(
 
                 // ── [TRANSPORT-A] Queue Dequeue & Dispatch ────────────────────────────────
                 MeshLogger.d(TAG, "[TRANSPORT-A] ═══ Queue Processor: Dequeued Packet ═══")
-                MeshLogger.d(TAG, "[TRANSPORT-A]   packetId    : '${packet.packetId.takeLast(8)}'")
+                MeshLogger.d(TAG, "[TRANSPORT-A]   packetId    : '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
                 MeshLogger.d(TAG, "[TRANSPORT-A]   senderId    : '${packet.senderId}'")
                 MeshLogger.d(TAG, "[TRANSPORT-A]   targetId    : '${packet.targetId}'")
                 MeshLogger.d(TAG, "[TRANSPORT-A]   type        : '${packet.type}'")
@@ -489,7 +489,7 @@ class MeshRouter @Inject constructor(
 
                     if (preferredTransport == RouteType.WIFI_DIRECT) {
                         MeshLogger.d(TAG, "[TRANSPORT-A]   Transport = WIFI_DIRECT (fallback to BLE if socket not ready)")
-                        MeshLogger.d(TAG, "Preferred transport is Wi-Fi Direct for packet ${packet.packetId.takeLast(6)}")
+                        MeshLogger.d(TAG, "Preferred transport is Wi-Fi Direct for packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
                     } else {
                         MeshLogger.d(TAG, "[TRANSPORT-A]   Transport = BLE")
                     }

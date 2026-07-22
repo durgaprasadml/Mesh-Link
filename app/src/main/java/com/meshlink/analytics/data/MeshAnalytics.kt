@@ -60,7 +60,7 @@ class MeshAnalytics @Inject constructor() {
         totalPacketsFailed++
         addLogEntry(RelayLogEntry(
             timestamp = System.currentTimeMillis(),
-            event = "❌ FAILED → ${targetId.takeLast(8)}",
+            event = "❌ FAILED → ${com.meshlink.util.MeshIdNormalizer.canonicalize(targetId)}",
             detail = reason,
             type = LogType.FAILURE
         ))
@@ -71,7 +71,7 @@ class MeshAnalytics @Inject constructor() {
         totalPacketsRelayed++
         addLogEntry(RelayLogEntry(
             timestamp = System.currentTimeMillis(),
-            event = "🔄 RELAYED from ${fromId.takeLast(8)}",
+            event = "🔄 RELAYED from ${com.meshlink.util.MeshIdNormalizer.canonicalize(fromId)}",
             detail = "Hop #$hopCount",
             type = LogType.RELAY
         ))
@@ -93,7 +93,7 @@ class MeshAnalytics @Inject constructor() {
     fun recordKeyExchange(peerId: String) {
         addLogEntry(RelayLogEntry(
             timestamp = System.currentTimeMillis(),
-            event = "🔐 KEY_EXCHANGE with ${peerId.takeLast(8)}",
+            event = "🔐 KEY_EXCHANGE with ${com.meshlink.util.MeshIdNormalizer.canonicalize(peerId)}",
             detail = "E2E encryption established",
             type = LogType.SECURITY
         ))
@@ -102,7 +102,7 @@ class MeshAnalytics @Inject constructor() {
     fun recordSosReceived(senderId: String) {
         addLogEntry(RelayLogEntry(
             timestamp = System.currentTimeMillis(),
-            event = "🚨 SOS from ${senderId.takeLast(8)}",
+            event = "🚨 SOS from ${com.meshlink.util.MeshIdNormalizer.canonicalize(senderId)}",
             detail = "Emergency broadcast received",
             type = LogType.SOS
         ))

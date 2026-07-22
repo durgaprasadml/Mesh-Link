@@ -480,7 +480,7 @@ class MeshCryptoManager @Inject constructor(
         } catch (e: Exception) {
             if (requireEncryption) {
                 FirebaseCrashlytics.getInstance().apply {
-                    setCustomKey("peerId", peerId.takeLast(8))
+                    setCustomKey("peerId", com.meshlink.util.MeshIdNormalizer.canonicalize(peerId))
                     setCustomKey("messageId", messageId)
                     setCustomKey("retryCount", retryCount)
                     setCustomKey("keyPresent", true)

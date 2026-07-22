@@ -11,7 +11,7 @@ object BleConstants {
     private val bluetoothAddressRegex = Regex("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
     fun toNetworkId(meshId: String): String {
-        return meshId.trim().take(NETWORK_ID_LENGTH)
+        return com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
     }
 
     fun isBluetoothAddress(value: String): Boolean {

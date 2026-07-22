@@ -259,7 +259,7 @@ private fun BroadcastBubble(msg: Message) {
         ) {
             if (!isMe) {
                 Text(
-                    text = msg.senderId.takeLast(8),
+                    text = com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelSmall
                 )

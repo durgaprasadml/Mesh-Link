@@ -456,7 +456,7 @@ fun ActiveNodesCard(nodes: Set<String>) {
                                 )
                                 Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                                 Text(
-                                    nodeId.takeLast(8),
+                                    com.meshlink.util.MeshIdNormalizer.canonicalize(nodeId),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold
                                 )

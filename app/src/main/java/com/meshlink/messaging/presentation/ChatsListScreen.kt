@@ -115,7 +115,7 @@ fun ChatsListScreen(
                 ) {
                     items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
                         ChatListItem(chat = chat, onClick = {
-                            val safeName = chat.name.ifBlank { chat.id.takeLast(8) }
+                            val safeName = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) }
                             onNavigateToChat(chat.id, safeName)
                         })
                     }

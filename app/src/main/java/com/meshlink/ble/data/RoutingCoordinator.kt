@@ -52,8 +52,7 @@ class RoutingCoordinator @Inject constructor(
     }
 
     fun normalizePeerId(peerIdOrAddress: String): String {
-        val withoutColons = peerIdOrAddress.replace(":", "").uppercase()
-        return if (withoutColons.length > 8) withoutColons.takeLast(8) else withoutColons
+        return com.meshlink.util.MeshIdNormalizer.canonicalize(peerIdOrAddress)
     }
 
     fun incomingChatId(senderMeshId: String): String = normalizePeerId(senderMeshId)

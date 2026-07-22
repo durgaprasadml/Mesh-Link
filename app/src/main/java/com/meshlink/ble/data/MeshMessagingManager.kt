@@ -72,7 +72,7 @@ class MeshMessagingManager @Inject constructor(
 
             // ── DIAGNOSTIC Stage 8 ───────────────────────────────────────────────
             MeshLogger.d(TAG, "[DIAG-Stage8] ═══ handleIncomingPacket() guard ═══")
-            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.packetId (last-6) : '${packet.packetId.takeLast(6)}'")
+            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.packetId (last-6) : '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
             MeshLogger.d(TAG, "[DIAG-Stage8]   packet.senderId           : '${packet.senderId}'")
             MeshLogger.d(TAG, "[DIAG-Stage8]   packet.targetId           : '${packet.targetId}'")
             MeshLogger.d(TAG, "[DIAG-Stage8]   RAW myMeshId              : '$myMeshId'")
@@ -88,7 +88,7 @@ class MeshMessagingManager @Inject constructor(
 
             if (myMeshId != null && packet.targetId != routingCoordinator.networkId(myMeshId)) {
                 // Not for me, just route it without decrypting
-                MeshLogger.d(TAG, "Routing packet to ${packet.targetId.takeLast(8)}")
+                MeshLogger.d(TAG, "Routing packet to ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)}")
                 return
             }
         }
@@ -428,7 +428,7 @@ class MeshMessagingManager @Inject constructor(
                     verified = true
                 )
 
-                MeshLogger.d(TAG, "🔐 SECURE Key exchanged with: ${packet.senderId.takeLast(8)}")
+                MeshLogger.d(TAG, "🔐 SECURE Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)}")
 
                 val address = routingCoordinator.resolvePeerAddress(packet.senderId)
                 if (address != null) {
@@ -438,7 +438,7 @@ class MeshMessagingManager @Inject constructor(
             } else {
                 // Legacy unauthenticated key exchange
                 cryptoManager.storePeerPublicKey(packet.senderId, packet.payload)
-                MeshLogger.d(TAG, "🔐 LEGACY Key exchanged with: ${packet.senderId.takeLast(8)}")
+                MeshLogger.d(TAG, "🔐 LEGACY Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)}")
                 val address = routingCoordinator.resolvePeerAddress(packet.senderId)
                 if (address != null) {
                     connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
@@ -613,7 +613,7 @@ class MeshMessagingManager @Inject constructor(
 
     private suspend fun receiveMessage(packet: MeshPacket) {
         MeshLogger.d(TAG, "[DIAG-Stage9] ═══ receiveMessage() ═══")
-        MeshLogger.d(TAG, "[DIAG-Stage9]   packet.packetId (last-6): '${packet.packetId.takeLast(6)}'")
+        MeshLogger.d(TAG, "[DIAG-Stage9]   packet.packetId (last-6): '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
         MeshLogger.d(TAG, "[DIAG-Stage9]   packet.senderId          : '${packet.senderId}'")
         MeshLogger.d(TAG, "[DIAG-Stage9]   packet.targetId          : '${packet.targetId}'")
 
@@ -656,11 +656,11 @@ class MeshMessagingManager @Inject constructor(
         val (plaintext, senderName) = try {
             val json = JSONObject(rawPayload)
             val text = json.optString("text", rawPayload)
-            val name = json.optString("senderName", packet.senderId.takeLast(8))
+            val name = json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
             text to name
         } catch (_: Exception) {
             // Legacy plain text packet
-            rawPayload to packet.senderId.takeLast(8)
+            rawPayload to com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
         }
 
         val message = MessageEntity(
@@ -673,7 +673,7 @@ class MeshMessagingManager @Inject constructor(
             status = DeliveryStatus.DELIVERED,
             messageType = MessageType.TEXT
         )
-        MeshLogger.d(TAG, "[DIAG-Stage9]   Inserting MessageEntity: messageId=${message.messageId.takeLast(6)} chatId=${message.chatId} senderId=${message.senderId}")
+        MeshLogger.d(TAG, "[DIAG-Stage9]   Inserting MessageEntity: messageId=${com.meshlink.util.MeshIdNormalizer.canonicalize(message.messageId)} chatId=${message.chatId} senderId=${message.senderId}")
         chatDao.insertMessageAndUpdateChat(message, senderName)
         MeshLogger.d(TAG, "[DIAG-Stage9]   ✓ chatDao.insertMessageAndUpdateChat() called for chatId='${message.chatId}'")
 
@@ -825,7 +825,7 @@ class MeshMessagingManager @Inject constructor(
         }
 
         val chatId = routingCoordinator.incomingChatId(completedSenderId)
-        val senderName = completedSenderId.takeLast(8)
+        val senderName = com.meshlink.util.MeshIdNormalizer.canonicalize(completedSenderId)
 
         val message = MessageEntity(
             messageId = completedTransferId,
@@ -876,7 +876,7 @@ class MeshMessagingManager @Inject constructor(
         }
 
         val chatId = routingCoordinator.incomingChatId(packet.senderId)
-        val senderName = packet.senderId.takeLast(8)
+        val senderName = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
 
         val message = MessageEntity(
             messageId = transferId,
@@ -1016,7 +1016,7 @@ class MeshMessagingManager @Inject constructor(
         val lat = json.optDouble("lat", 0.0)
         val lng = json.optDouble("lng", 0.0)
         val battery = json.optInt("battery", -1)
-        val senderName = json.optString("senderName", packet.senderId.takeLast(8))
+        val senderName = json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
 
         val chatId = routingCoordinator.incomingChatId(packet.senderId)
 
@@ -1153,9 +1153,9 @@ class MeshMessagingManager @Inject constructor(
         val rawPayload = packet.payload
         val (plaintext, senderName) = try {
             val json = JSONObject(rawPayload)
-            json.optString("text", rawPayload) to json.optString("senderName", packet.senderId.takeLast(8))
+            json.optString("text", rawPayload) to json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
         } catch (_: Exception) {
-            rawPayload to packet.senderId.takeLast(8)
+            rawPayload to com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
         }
 
         val message = MessageEntity(
@@ -1214,7 +1214,7 @@ class MeshMessagingManager @Inject constructor(
         val lat = json.optDouble("lat", 0.0)
         val lng = json.optDouble("lng", 0.0)
         val battery = json.optInt("battery", -1)
-        val senderName = json.optString("senderName", packet.senderId.takeLast(8))
+        val senderName = json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
 
         val chatId = routingCoordinator.incomingChatId(packet.senderId)
 

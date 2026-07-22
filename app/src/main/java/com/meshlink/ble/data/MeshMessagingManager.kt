@@ -219,8 +219,9 @@ class MeshMessagingManager @Inject constructor(
                     val localUser = userRepository.getLocalUser()
                     if (localUser != null) {
                         val localPeerId = routingCoordinator.networkId(localUser.meshId)
-                        val publicKey = cryptoManager.getOrCreatePublicKey()
-                        meshRouter.broadcastKeyExchange(localPeerId, publicKey)
+                        val packetBase = generateSignedKeyExchange(localPeerId, isResponse = false)
+                        val packet = packetBase.copy(targetId = msg.chatId)
+                        dispatchSinglePacket(msg.chatId, packet)
                         lastKeyExchangeRequest[msg.chatId] = now
                     }
                 } else {
@@ -435,6 +436,23 @@ class MeshMessagingManager @Inject constructor(
                     connectionManager.updatePeerState(address, PeerConnectionState.SESSION_ESTABLISHED)
                     scope.launch { retryPendingMessages() }
                 }
+
+                var isResponse = false
+                if (parts.size >= 8 && parts[7] == "resp") {
+                    isResponse = true
+                }
+
+                if (!isResponse) {
+                    scope.launch {
+                        userRepository.getLocalUser()?.let { user ->
+                            val localPeerId = routingCoordinator.networkId(user.meshId)
+                            if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
+                                val responseKeyEx = generateSignedKeyExchange(localPeerId, isResponse = true).copy(targetId = packet.senderId)
+                                dispatchSinglePacket(packet.senderId, responseKeyEx)
+                            }
+                        }
+                    }
+                }
             } else {
                 // Legacy unauthenticated key exchange
                 cryptoManager.storePeerPublicKey(packet.senderId, packet.payload)
@@ -443,6 +461,16 @@ class MeshMessagingManager @Inject constructor(
                 if (address != null) {
                     connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
                     scope.launch { retryPendingMessages() }
+                }
+
+                scope.launch {
+                    userRepository.getLocalUser()?.let { user ->
+                        val localPeerId = routingCoordinator.networkId(user.meshId)
+                        if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
+                            val responseKeyEx = generateSignedKeyExchange(localPeerId, isResponse = true).copy(targetId = packet.senderId)
+                            dispatchSinglePacket(packet.senderId, responseKeyEx)
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -455,7 +483,7 @@ class MeshMessagingManager @Inject constructor(
         connectionManager.updatePeerState(address, PeerConnectionState.DISCONNECTED)
     }
 
-    fun generateSignedKeyExchange(localPeerId: String): MeshPacket {
+    fun generateSignedKeyExchange(localPeerId: String, isResponse: Boolean = false): MeshPacket {
         val ecdhPublicKey = cryptoManager.getOrCreatePublicKey()
         val signingPublicKey = cryptoManager.getOrCreateSigningKey()
         val timestamp = System.currentTimeMillis()
@@ -467,7 +495,8 @@ class MeshMessagingManager @Inject constructor(
         val signature = cryptoManager.sign(dataToSign)
         val signatureBase64 = android.util.Base64.encodeToString(signature, android.util.Base64.NO_WRAP)
 
-        val payload = "v2|$ecdhPublicKey|$timestamp|$nonce|$version|$signatureBase64|$signingPublicKey"
+        val respTag = if (isResponse) "|resp" else ""
+        val payload = "v2|$ecdhPublicKey|$timestamp|$nonce|$version|$signatureBase64|$signingPublicKey$respTag"
         return MeshPacket(
             packetId = uuid,
             senderId = localPeerId,

@@ -89,44 +89,13 @@ class BleRepositoryImpl @Inject constructor(
 
     private fun updatePeerState(address: String, newState: PeerConnectionState) {
         connectionManager.updatePeerState(address, newState)
-        if (newState == PeerConnectionState.SERVICES_DISCOVERED || newState == PeerConnectionState.MTU_READY) {
-            checkAndTriggerHandshake(address)
+        if (newState == PeerConnectionState.SERVICES_DISCOVERED || newState == PeerConnectionState.MTU_READY || newState == PeerConnectionState.CONNECTED) {
+            meshMessagingManager.checkAndTriggerHandshake(address)
         }
     }
 
     private fun checkAndTriggerHandshake(address: String) {
-        val state = connectionManager.peerStates[address] ?: return
-        if (state == PeerConnectionState.SERVICES_DISCOVERED || state == PeerConnectionState.MTU_READY) {
-            val peerId = scannedDevices.value.values.firstOrNull { it.address == address }?.meshId
-                ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == address }?.key
-                
-            if (peerId != null) {
-                scope.launch {
-                    val reqEnc = userRepository.isEncryptionEnabled.first()
-                    if (reqEnc) {
-                        if (cryptoManager.hasPeerKey(peerId)) {
-                            updatePeerState(address, PeerConnectionState.SESSION_READY)
-                            meshMessagingManager.retryPendingMessages()
-                        } else {
-                            val currentState = connectionManager.peerStates[address]
-                            if (currentState != PeerConnectionState.KEY_EXCHANGE_STARTED) {
-                                connectionManager.peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
-                                val user = userRepository.getLocalUser()
-                                if (user != null) {
-                                    val localPeerId = networkId(user.meshId)
-                                    val packetBase = meshMessagingManager.generateSignedKeyExchange(localPeerId)
-                                    val packet = packetBase.copy(targetId = peerId)
-                                    meshMessagingManager.dispatchSinglePacket(peerId, packet)
-                                }
-                            }
-                        }
-                    } else {
-                        updatePeerState(address, PeerConnectionState.SESSION_READY)
-                        meshMessagingManager.retryPendingMessages()
-                    }
-                }
-            }
-        }
+        meshMessagingManager.checkAndTriggerHandshake(address)
     }
 
     override val scannedDevices: StateFlow<Map<String, BleDevice>> = discoveryManager.scannedDevices
@@ -142,7 +111,7 @@ class BleRepositoryImpl @Inject constructor(
 
     
     override suspend fun setLocalMeshId(meshId: String) {
-        meshRouter.localMeshId = meshId
+        meshRouter.localMeshId = networkId(meshId)
     }
 
     init {
@@ -373,22 +342,7 @@ class BleRepositoryImpl @Inject constructor(
      * FIX ISSUE 2: Also auto-connects to all scanned devices for mesh relay.
      */
     override suspend fun autoStartMesh() {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = networkId(user.meshId)
-        meshRouter.localMeshId = localPeerId
-        
-        // Broadcast routing capabilities
-        discoveryManager.startAdvertising(user.name, user.meshId, 0x01)
-        startServer()
-        startScanning()
-
-        // Wait briefly for scan results before connecting
-        delay(2000)
-        connectToAllScannedDevices()
-
-        // Broadcast our public key so all peers can set up E2E
-        val publicKey = cryptoManager.getOrCreatePublicKey()
-        meshRouter.broadcastKeyExchange(localPeerId, publicKey)
+        meshMessagingManager.autoStartMesh()
     }
 
     /**

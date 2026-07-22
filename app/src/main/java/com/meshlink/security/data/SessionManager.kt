@@ -13,7 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-
+import java.security.MessageDigest
 @Singleton
 class SessionManager @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
@@ -30,7 +30,31 @@ class SessionManager @Inject constructor(
     }
 
     fun getSession(peerId: String): PeerSecureSession? {
-        return activeSessions[peerId]
+        val existing = activeSessions[peerId]
+        if (existing != null) return existing
+        if (cryptoManager.hasPeerKey(peerId)) {
+            val fingerprint = cryptoManager.getPeerSigningKey(peerId)?.let { cryptoManager.getDeviceFingerprint(it) } ?: "ESTABLISHED"
+            val localFingerprint = cryptoManager.getLocalFingerprint()
+            val sorted = listOf(localFingerprint, fingerprint).sorted()
+            val combined = sorted[0] + ":" + sorted[1]
+            val digest = MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(combined.toByteArray(Charsets.UTF_8))
+            val derivedSessionId = hash.joinToString("") { "%02x".format(it) }.take(16)
+
+            val restored = PeerSecureSession(
+                peerId = peerId,
+                sessionId = derivedSessionId,
+                fingerprint = fingerprint,
+                sessionStart = System.currentTimeMillis(),
+                sessionVersion = 2,
+                verified = true,
+                lastActivity = System.currentTimeMillis()
+            )
+            activeSessions[peerId] = restored
+            MeshLogger.d(TAG, "Auto-restored session for peer $peerId from persisted keys")
+            return restored
+        }
+        return null
     }
 
     fun createSession(
@@ -39,9 +63,17 @@ class SessionManager @Inject constructor(
         sessionVersion: Int,
         verified: Boolean
     ): PeerSecureSession {
+        val localFingerprint = cryptoManager.getLocalFingerprint()
+        val sorted = listOf(localFingerprint, fingerprint).sorted()
+        val combined = sorted[0] + ":" + sorted[1]
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hash = digest.digest(combined.toByteArray(Charsets.UTF_8))
+        val derivedSessionId = hash.joinToString("") { "%02x".format(it) }.take(16)
+
         val now = System.currentTimeMillis()
         val session = PeerSecureSession(
             peerId = peerId,
+            sessionId = derivedSessionId,
             fingerprint = fingerprint,
             sessionStart = now,
             sessionVersion = sessionVersion,
@@ -85,8 +117,8 @@ class SessionManager @Inject constructor(
      */
     fun generateAad(peerId: String): Pair<ByteArray, String>? {
         val trustLevel = trustManager.getTrustLevel(peerId)
-        if (trustLevel != com.meshlink.security.data.TrustLevel.VERIFIED && trustLevel != com.meshlink.security.data.TrustLevel.TRUSTED) {
-            MeshLogger.w(TAG, "Cannot generate AAD: Peer $peerId is not VERIFIED or TRUSTED (Level: $trustLevel)")
+        if (trustLevel == com.meshlink.security.data.TrustLevel.BLOCKED || trustLevel == com.meshlink.security.data.TrustLevel.REVOKED) {
+            MeshLogger.w(TAG, "Cannot generate AAD: Peer $peerId is BLOCKED or REVOKED (Level: $trustLevel)")
             return null
         }
 

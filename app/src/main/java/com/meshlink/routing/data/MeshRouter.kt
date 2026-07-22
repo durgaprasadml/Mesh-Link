@@ -220,22 +220,23 @@ class MeshRouter @Inject constructor(
             return
         }
 
-        val isBroadcast = packet.targetId == "BROADCAST"
-        val isForMe     = packet.targetId == localMeshId
+        val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)
+        val canonicalLocalId  = com.meshlink.util.MeshIdNormalizer.canonicalize(localMeshId)
+        val isBroadcast = packet.targetId == "BROADCAST" || canonicalTargetId == "BROADCAST"
+        val isForMe     = canonicalTargetId.isNotBlank() && canonicalLocalId.isNotBlank() && canonicalTargetId == canonicalLocalId
 
         // ── DIAGNOSTIC Stage 3 (PRIMARY KILL SWITCH) ─────────────────────────
         MeshLogger.d(TAG, "[DIAG-Stage3] ═══ MeshRouter.handleIncomingPacket() ═══")
         MeshLogger.d(TAG, "[DIAG-Stage3]   packet.packetId (last-6) : '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
         MeshLogger.d(TAG, "[DIAG-Stage3]   packet.type              : '${packet.type}'")
         MeshLogger.d(TAG, "[DIAG-Stage3]   packet.senderId          : '${packet.senderId}'")
-        MeshLogger.d(TAG, "[DIAG-Stage3]   packet.targetId          : '${packet.targetId}'")
-        MeshLogger.d(TAG, "[DIAG-Stage3]   localMeshId              : '$localMeshId'")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   packet.targetId          : '${packet.targetId}' (norm: '$canonicalTargetId')")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   localMeshId              : '$localMeshId' (norm: '$canonicalLocalId')")
         MeshLogger.d(TAG, "[DIAG-Stage3]   isBroadcast              : $isBroadcast")
-        MeshLogger.d(TAG, "[DIAG-Stage3]   isForMe (targetId==localMeshId): $isForMe")
+        MeshLogger.d(TAG, "[DIAG-Stage3]   isForMe                  : $isForMe")
         if (!isForMe && !isBroadcast) {
             MeshLogger.w(TAG, "[DIAG-Stage3]   ⚠ isForMe=false AND isBroadcast=false")
             MeshLogger.w(TAG, "[DIAG-Stage3]   ⚠ Packet will NOT be emitted to _incomingPayloads")
-            MeshLogger.w(TAG, "[DIAG-Stage3]   ⚠ DIAGNOSIS: targetId='${packet.targetId}'  localMeshId='$localMeshId'  DIFFER=${packet.targetId != localMeshId}")
         } else {
             MeshLogger.d(TAG, "[DIAG-Stage3]   ✓ Packet will be emitted to _incomingPayloads (isForMe=$isForMe isBroadcast=$isBroadcast)")
         }
@@ -431,20 +432,7 @@ class MeshRouter @Inject constructor(
         routingEngine.queueOptimizer.enqueue(finalPacket)
     }
 
-    fun broadcastKeyExchange(
-        myMeshId: String,
-        publicKeyBase64: String
-    ) {
-        val ttl = routingEngine.calculateInitialTtl(PacketType.KEY_EXCHANGE)
-        val packet = MeshPacket(
-            senderId = myMeshId,
-            targetId = "BROADCAST",
-            payload = publicKeyBase64,
-            type = PacketType.KEY_EXCHANGE,
-            ttl = ttl
-        )
-        sendMediaPacket(packet)
-    }
+
 
     // ─────────────────── Queue Processor ───────────────────
 

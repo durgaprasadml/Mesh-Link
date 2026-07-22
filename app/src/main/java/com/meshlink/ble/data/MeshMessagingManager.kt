@@ -105,8 +105,6 @@ class MeshMessagingManager @Inject constructor(
                 val unwrapped = sessionManager.validateAndUnwrap(packet.senderId, finalPayload)
                 if (unwrapped == null) {
                     MeshLogger.w(TAG, "Dropping packet: session validation failed")
-                    val address = routingCoordinator.resolvePeerAddress(packet.senderId)
-                    if (address != null) checkAndTriggerHandshake(address)
                     return
                 }
                 validAad = unwrapped.first
@@ -121,8 +119,6 @@ class MeshMessagingManager @Inject constructor(
             val decrypted = cryptoManager.decryptOrPassthrough(finalPayload, packet.senderId, validAad, usePreviousKey)
             if (decrypted == finalPayload && !finalPayload.startsWith("{")) {
                 MeshLogger.w(TAG, "Dropping packet: Failed to decrypt payload.")
-                val address = routingCoordinator.resolvePeerAddress(packet.senderId)
-                if (address != null) checkAndTriggerHandshake(address)
                 return
             }
             trustManager.increaseTrustScore(packet.senderId, 1)
@@ -578,8 +574,8 @@ class MeshMessagingManager @Inject constructor(
         connectToAllScannedDevices()
 
         // Broadcast our public key so all peers can set up E2E
-        val publicKey = cryptoManager.getOrCreatePublicKey()
-        meshRouter.broadcastKeyExchange(localPeerId, publicKey)
+        val keyExchangePacket = generateSignedKeyExchange(localPeerId).copy(targetId = "BROADCAST")
+        dispatchSinglePacket("BROADCAST", keyExchangePacket)
     }
 
     /**
@@ -1216,7 +1212,9 @@ class MeshMessagingManager @Inject constructor(
                             retryPendingMessages()
                         } else {
                             val currentState = connectionManager.peerStates[address]
-                            if (currentState != com.meshlink.ble.data.PeerConnectionState.KEY_EXCHANGE_STARTED) {
+                            if (currentState != com.meshlink.ble.data.PeerConnectionState.KEY_EXCHANGE_STARTED &&
+                                currentState != com.meshlink.ble.data.PeerConnectionState.SESSION_READY &&
+                                currentState != com.meshlink.ble.data.PeerConnectionState.SESSION_ESTABLISHED) {
                                 connectionManager.peerStates[address] = com.meshlink.ble.data.PeerConnectionState.KEY_EXCHANGE_STARTED
                                 val user = userRepository.getLocalUser()
                                 if (user != null) {

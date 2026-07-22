@@ -58,7 +58,9 @@ interface ChatDao {
                 unreadCount = if (message.isFromMe) 0 else 1
             )
         } else {
+            val updatedName = if (chatName.isNotBlank() && chatName != message.chatId) chatName else chat.name
             chat = chat.copy(
+                name = updatedName,
                 lastMessage = message.text,
                 lastMessageAt = message.timestamp,
                 unreadCount = if (message.isFromMe) chat.unreadCount else chat.unreadCount + 1

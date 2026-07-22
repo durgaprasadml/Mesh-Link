@@ -7,7 +7,7 @@ import kotlin.concurrent.withLock
 
 data class PeerSecureSession(
     val peerId: String,
-    val sessionId: String = UUID.randomUUID().toString(),
+    val sessionId: String,
     val fingerprint: String,
     val sessionStart: Long,
     val sessionVersion: Int,

@@ -116,6 +116,13 @@ fun ChatDetailScreen(
         }
     }
 
+    DisposableEffect(viewModel.address) {
+        com.meshlink.util.NotificationHelper.setCurrentChatId(viewModel.address)
+        onDispose {
+            com.meshlink.util.NotificationHelper.setCurrentChatId(null)
+        }
+    }
+
     if (showAttachmentSheet) {
         ModalBottomSheet(
             onDismissRequest = { showAttachmentSheet = false },

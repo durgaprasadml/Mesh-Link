@@ -18,6 +18,7 @@ data class InAppNotification(
 object NotificationHelper {
     private const val CHANNEL_ID = "mesh_link_messages"
     private var isAppInForeground = false
+    private var currentChatId: String? = null
 
     private val _inAppNotifications = MutableSharedFlow<InAppNotification>()
     val inAppNotifications = _inAppNotifications.asSharedFlow()
@@ -26,9 +27,22 @@ object NotificationHelper {
         isAppInForeground = foreground
     }
 
+    fun setCurrentChatId(chatId: String?) {
+        currentChatId = chatId
+    }
+
     fun showMessageNotification(context: Context, senderId: String, senderName: String, message: String) {
         if (isAppInForeground) {
-            _inAppNotifications.tryEmit(InAppNotification(senderName, message))
+            if (currentChatId == senderId) {
+                // User Currently Viewing The Same Chat: Do NOT show notification.
+                return
+            }
+            if (currentChatId != null) {
+                // User Currently Viewing Another Chat: Show in-app notification.
+                _inAppNotifications.tryEmit(InAppNotification(senderName, message))
+                return
+            }
+            // User Actively Using Mesh Link (not in a chat): No notification, just update UI
             return
         }
 

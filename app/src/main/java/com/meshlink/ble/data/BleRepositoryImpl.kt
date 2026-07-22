@@ -407,8 +407,8 @@ class BleRepositoryImpl @Inject constructor(
 
     // ────────── Text Messages (ENCRYPTED) ──────────
 
-    override suspend fun sendMessage(message: com.meshlink.domain.model.Message, chatName: String) {
-        meshMessagingManager.sendMessage(message, chatName)
+    override suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message, chatName: String) {
+        meshMessagingManager.sendMessage(targetMeshId, message, chatName)
     }
 
     override suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String) {

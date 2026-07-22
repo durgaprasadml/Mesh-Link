@@ -43,7 +43,7 @@ class RetryWorker @AssistedInject constructor(
                 if (chat != null) {
                     MeshLogger.d(TAG, "Retrying message ${message.messageId} to ${chat.name}")
                     try {
-                        meshRepository.sendMessage(message.toDomain(), chat.name)
+                        meshRepository.sendMessage(message.chatId, message.toDomain(), chat.name)
                     } catch (e: Exception) {
                         MeshLogger.e(TAG, "Failed to retry message ${message.messageId}", e)
                     }

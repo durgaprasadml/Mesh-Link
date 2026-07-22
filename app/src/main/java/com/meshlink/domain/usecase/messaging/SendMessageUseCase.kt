@@ -22,10 +22,12 @@ class SendMessageUseCase @Inject constructor(
         val user = userRepository.getLocalUser() ?: return
         val myMeshId = user.meshId
 
+        val normalizedChatId = meshRepository.resolveChatId(targetMeshId)
+
         val messageId = UUID.randomUUID().toString()
         val message = Message(
             messageId = messageId,
-            chatId = targetMeshId,
+            chatId = normalizedChatId,
             text = messageText,
             senderId = myMeshId,
             timestamp = System.currentTimeMillis(),
@@ -35,6 +37,6 @@ class SendMessageUseCase @Inject constructor(
         )
         
         chatRepository.saveMessage(message, chatName)
-        meshRepository.sendMessage(message, chatName)
+        meshRepository.sendMessage(targetMeshId, message, chatName)
     }
 }

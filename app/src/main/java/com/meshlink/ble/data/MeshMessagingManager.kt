@@ -479,7 +479,16 @@ class MeshMessagingManager @Inject constructor(
     }
 
     fun connectToDevice(address: String) {
-        connectionManager.connectToDevice(address)
+        if (com.meshlink.ble.data.BleConstants.isBluetoothAddress(address)) {
+            connectionManager.connectToDevice(address)
+        } else {
+            val resolved = routingCoordinator.resolvePeerAddress(address)
+            if (resolved != null) {
+                connectionManager.connectToDevice(resolved)
+            } else {
+                MeshLogger.w(TAG, "Cannot directly connect to $address - MAC unknown. Relying on mesh routing.")
+            }
+        }
     }
 
     fun connectToPeer(peerIdOrAddress: String): Boolean {
@@ -532,14 +541,14 @@ class MeshMessagingManager @Inject constructor(
 
     // ────────── Text Messages (ENCRYPTED) ──────────
 
-    suspend fun sendMessage(message: com.meshlink.domain.model.Message, chatName: String) {
+    suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message, chatName: String) {
         val user = userRepository.getLocalUser() ?: return
         val localPeerId = routingCoordinator.networkId(user.meshId)
-        val targetPeerId = routingCoordinator.outgoingChatId(message.chatId)
+        val targetPeerId = routingCoordinator.outgoingChatId(targetMeshId)
         meshRouter.localMeshId = localPeerId
 
         // FIX ISSUE 2: Connect to target AND all scanned devices for mesh relay
-        connectToPeer(message.chatId)
+        connectToPeer(targetMeshId)
         connectToAllScannedDevices()
 
         val messageId = message.messageId

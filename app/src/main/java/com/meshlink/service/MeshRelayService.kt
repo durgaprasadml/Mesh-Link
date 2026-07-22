@@ -66,10 +66,33 @@ class MeshRelayService : Service() {
     private var restartOnDestroy = true
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private val bluetoothStateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (intent?.action == android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED) {
+                val state = intent.getIntExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, -1)
+                if (state == android.bluetooth.BluetoothAdapter.STATE_ON) {
+                    MeshLogger.d(TAG, "Bluetooth turned ON, restarting Mesh Relay")
+                    if (hasRequiredPermissions(this@MeshRelayService)) {
+                        serviceScope.launch {
+                            meshRepository.autoStartMesh()
+                        }
+                    }
+                } else if (state == android.bluetooth.BluetoothAdapter.STATE_OFF) {
+                    MeshLogger.d(TAG, "Bluetooth turned OFF, stopping Mesh operations temporarily")
+                    meshRepository.stopMesh()
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         wifiDirectManager.registerReceiver()
+        
+        val filter = android.content.IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+        registerReceiver(bluetoothStateReceiver, filter)
+        
         MeshLogger.d(TAG, "MeshRelayService created")
     }
 
@@ -241,6 +264,11 @@ class MeshRelayService : Service() {
         serviceJob?.cancel()
         meshRepository.stopMesh()
         wifiDirectManager.unregisterReceiver()
+        try {
+            unregisterReceiver(bluetoothStateReceiver)
+        } catch (e: Exception) {
+            // Ignored
+        }
         if (restartOnDestroy) {
             scheduleRestart()
         }

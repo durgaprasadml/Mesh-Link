@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
+import com.meshlink.ui.designsystem.theme.MeshTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,7 +86,7 @@ fun ProfileScreen(
                         enabled = name.isNotBlank() && !uiState.isSaving
                     ) {
                         if (uiState.isSaving) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(MeshTheme.spacing.extraLarge), strokeWidth = MeshTheme.spacing.extraSmall)
                         } else {
                             Text("Save")
                         }
@@ -104,7 +105,7 @@ fun ProfileScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                    .padding(MeshTheme.spacing.mediumLarge),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Avatar Picker
@@ -133,13 +134,13 @@ fun ProfileScreen(
                         Icon(
                             Icons.Default.Edit,
                             contentDescription = "Edit Profile Picture",
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(MeshTheme.spacing.extraHuge),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.extraLarge))
 
                 // Name Input
                 OutlinedTextField(
@@ -150,7 +151,7 @@ fun ProfileScreen(
                     singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
 
                 // About Me Input
                 OutlinedTextField(

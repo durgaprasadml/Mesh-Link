@@ -6,8 +6,10 @@ data class PeerDiscoveryRecord(
     val macAddress: String,
     val meshId: String,
     var name: String,
-    val rssiFilter: RssiFilter = RssiFilter(),
+    val rssiFilter: KalmanFilter = KalmanFilter(),
     var smoothedRssi: Int = -100,
+    var distanceMeters: Double? = null,
+    var distanceConfidence: String? = null,
     var lastSeenMillis: Long = System.currentTimeMillis(),
     var failedAttempts: Int = 0,
     var capabilities: Byte = 0, // Battery, Routing, etc.

@@ -50,7 +50,7 @@ fun SettingsScreen(
                 Column {
                     Text("Are you sure you want to log out?")
                     Row(
-                        modifier = Modifier.padding(top = 16.dp).clickable { clearLocalData = !clearLocalData },
+                        modifier = Modifier.padding(top = MeshTheme.spacing.mediumLarge).clickable { clearLocalData = !clearLocalData },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(checked = clearLocalData, onCheckedChange = { clearLocalData = it })

@@ -207,9 +207,9 @@ fun EmergencyStatusCard(state: SosUiState) {
         ) {
             Icon(
                 imageVector = if (state.status == SosStatus.SAFE) Icons.Default.CheckCircle else Icons.Default.Warning,
-                contentDescription = null,
+                contentDescription = "Active Emergency",
                 tint = contentColor,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(MeshTheme.spacing.huge)
             )
             Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
             Column {
@@ -319,7 +319,7 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
                     progress = { progress.value },
                     modifier = Modifier.size(190.dp),
                     color = MeshTheme.colors.danger,
-                    strokeWidth = 8.dp,
+                    strokeWidth = MeshTheme.spacing.mediumSmall,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     strokeCap = StrokeCap.Round
                 )
@@ -360,11 +360,11 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             Icons.Default.Warning,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
+                            contentDescription = "Responder Location",
+                            modifier = Modifier.size(MeshTheme.spacing.giant),
                             tint = MaterialTheme.colorScheme.onPrimary
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                         Text(
                             text = "SOS",
                             style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
@@ -394,13 +394,13 @@ fun ActiveSosState(state: SosUiState, onCancel: () -> Unit) {
                 .size(160.dp)
                 .clip(CircleShape)
                 .background(if (isDelivered) MeshTheme.colors.success else MeshTheme.colors.warning)
-                .border(8.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                .border(MeshTheme.spacing.mediumSmall, MaterialTheme.colorScheme.surface, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             if (isDelivered) {
                 Icon(
                     Icons.Default.CheckCircle,
-                    contentDescription = null,
+                    contentDescription = "Safe User",
                     modifier = Modifier.size(72.dp),
                     tint = MaterialTheme.colorScheme.onPrimary
                 )
@@ -452,12 +452,12 @@ fun EmergencyInfoCard(state: SosUiState, onRefresh: () -> Unit) {
 
             // Location
             Row(verticalAlignment = Alignment.Top) {
-                Icon(Icons.Default.LocationOn, contentDescription = null, tint = MeshTheme.colors.warning, modifier = Modifier.padding(top = 2.dp))
+                Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = MeshTheme.colors.warning, modifier = Modifier.padding(top = MeshTheme.spacing.extraSmall))
                 Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
                 Column {
                     if (state.isFetchingLocation) {
                         Text("Acquiring GPS fix...", style = MaterialTheme.typography.bodyMedium)
-                        LinearProgressIndicator(modifier = Modifier.padding(top = 4.dp).width(100.dp))
+                        LinearProgressIndicator(modifier = Modifier.padding(top = MeshTheme.spacing.small).width(100.dp))
                     } else if (state.latitude != null && state.longitude != null) {
                         Text(
                             text = "${String.format(Locale.US, "%.5f", state.latitude)}, ${String.format(Locale.US, "%.5f", state.longitude)}",
@@ -516,8 +516,8 @@ fun EmergencyInfoCard(state: SosUiState, onRefresh: () -> Unit) {
                 onClick = onRefresh,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.Default.Refresh, contentDescription = "Retry", modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
                 Text("Refresh Data")
             }
         }
@@ -533,8 +533,8 @@ fun InfoItem(
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.width(8.dp))
+        Icon(icon, contentDescription = title, modifier = Modifier.size(MeshTheme.spacing.large), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
         Column {
             Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = valueColor)
@@ -566,7 +566,11 @@ fun NearbyResponders(state: SosUiState) {
                 contentPadding = PaddingValues(horizontal = MeshTheme.spacing.large),
                 horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
             ) {
-                items(state.nearbyResponders) { device ->
+                items(
+                    items = state.nearbyResponders,
+                    key = { it.address },
+                    contentType = { "responder_card" }
+                ) { device ->
                     ResponderCard(device = device)
                 }
             }
@@ -582,7 +586,7 @@ fun ResponderCard(device: BleDevice) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium),
             verticalAlignment = Alignment.CenterVertically
         ) {
             val icon = when (device.transport) {
@@ -590,8 +594,8 @@ fun ResponderCard(device: BleDevice) {
                 TransportType.WIFI_DIRECT -> Icons.Default.Wifi
                 TransportType.HYBRID -> Icons.Default.WifiTethering
             }
-            Icon(icon, contentDescription = null, tint = MeshTheme.colors.success)
-            Spacer(modifier = Modifier.width(12.dp))
+            Icon(icon, contentDescription = "Responder transport method", tint = MeshTheme.colors.success)
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
             Column {
                 Text(device.name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
                 Text("Transport: ${device.transport.name}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
@@ -668,8 +672,8 @@ fun ActionChip(
         ),
         border = BorderStroke(1.dp, borderColor)
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(8.dp))
+        Icon(icon, contentDescription = label, modifier = Modifier.size(MeshTheme.spacing.large))
+        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
         Text(label, style = MaterialTheme.typography.labelLarge)
     }
 }
@@ -688,7 +692,7 @@ fun SafetyTips() {
     ) {
         Column(modifier = Modifier.padding(MeshTheme.spacing.large)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Outlined.Info, contentDescription = "Information", tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
                 Text("Safety Tips", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
                 Spacer(modifier = Modifier.weight(1f))
@@ -712,8 +716,8 @@ fun SafetyTips() {
 
 @Composable
 fun TipItem(text: String) {
-    Row(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text("•", modifier = Modifier.padding(end = 8.dp))
+    Row(modifier = Modifier.padding(vertical = MeshTheme.spacing.small)) {
+        Text("•", modifier = Modifier.padding(end = MeshTheme.spacing.mediumSmall))
         Text(text, style = MaterialTheme.typography.bodyMedium)
     }
 }

@@ -12,5 +12,7 @@ data class BleDevice(
     val lastSeen: Long = System.currentTimeMillis(),
     val transport: TransportType = TransportType.BLE,
     val capabilities: Byte = 0,
-    val isConnected: Boolean = false
+    val isConnected: Boolean = false,
+    val distanceMeters: Double? = null,
+    val distanceConfidence: String? = null
 )

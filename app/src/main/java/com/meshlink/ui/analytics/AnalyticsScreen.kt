@@ -1,5 +1,6 @@
 package com.meshlink.ui.analytics
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -153,25 +154,40 @@ fun AnalyticsScreen(
                 Text("Recent Activity", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
             }
 
-            if (uiState.recentLog.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(MeshTheme.spacing.huge),
-                            contentAlignment = Alignment.Center
+            item {
+                AnimatedContent<Boolean>(
+                    targetState = uiState.recentLog.isEmpty(),
+                    label = "recent_log_empty_state_transition"
+                ) { isEmpty ->
+                    if (isEmpty) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Text("No activity yet. Start messaging!", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(MeshTheme.spacing.huge),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
+                                ) {
+                                    Text("No activity yet. Start messaging!", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
+                        ) {
+                            uiState.recentLog.forEach { entry ->
+                                RelayLogCard(entry)
+                            }
                         }
                     }
                 }
-            } else {
-                items(uiState.recentLog) { entry ->
-                    RelayLogCard(entry)
-                }
-            } 
+            }
             // Bottom spacer
             item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }

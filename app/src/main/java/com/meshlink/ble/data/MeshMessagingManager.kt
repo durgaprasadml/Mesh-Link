@@ -175,7 +175,7 @@ class MeshMessagingManager @Inject constructor(
 
     private val retryMutex = kotlinx.coroutines.sync.Mutex()
 
-    private suspend fun retryPendingMessages() {
+    suspend fun retryPendingMessages() {
         retryMutex.withLock {
             val pending = chatDao.getMessagesByStatus(DeliveryStatus.PENDING)
             if (pending.isEmpty()) return
@@ -301,10 +301,6 @@ class MeshMessagingManager @Inject constructor(
     ): Boolean {
         connectToPeer(targetPeerId)
         connectToAllScannedDevices()
-        if (!hasDeliveryPath(targetPeerId)) {
-            MeshLogger.d(TAG, "No delivery path for text to $targetPeerId, keeping PENDING")
-            return false
-        }
         meshRouter.sendPayload(targetPeerId, payload, localPeerId, encrypted, packetId)
         return true
     }
@@ -312,7 +308,6 @@ class MeshMessagingManager @Inject constructor(
     fun dispatchMediaPackets(targetPeerId: String, packets: List<MeshPacket>): Boolean {
         connectToPeer(targetPeerId)
         connectToAllScannedDevices()
-        if (!hasDeliveryPath(targetPeerId)) return false
         packets.forEach { pkt ->
             meshRouter.sendMediaPacket(pkt.copy(encrypted = false))
         }
@@ -322,7 +317,6 @@ class MeshMessagingManager @Inject constructor(
     fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): Boolean {
         connectToPeer(targetPeerId)
         connectToAllScannedDevices()
-        if (!hasDeliveryPath(targetPeerId)) return false
         meshRouter.sendMediaPacket(packet)
         return true
     }
@@ -433,7 +427,7 @@ class MeshMessagingManager @Inject constructor(
         connectionManager.updatePeerState(address, PeerConnectionState.DISCONNECTED)
     }
 
-    private fun generateSignedKeyExchange(localPeerId: String): MeshPacket {
+    fun generateSignedKeyExchange(localPeerId: String): MeshPacket {
         val ecdhPublicKey = cryptoManager.getOrCreatePublicKey()
         val signingPublicKey = cryptoManager.getOrCreateSigningKey()
         val timestamp = System.currentTimeMillis()
@@ -568,6 +562,22 @@ class MeshMessagingManager @Inject constructor(
     }
 
     private suspend fun receiveMessage(packet: MeshPacket) {
+        if (chatDao.getMessageByUuid(packet.packetId) != null) {
+            // Already processed this message! Just send ACK in case it was lost.
+            userRepository.getLocalUser()?.let { user ->
+                val localPeerId = routingCoordinator.networkId(user.meshId)
+                val ackPacket = MeshPacket(
+                    senderId = localPeerId,
+                    targetId = packet.senderId,
+                    payload = packet.packetId,
+                    type = PacketType.DELIVERY_ACK,
+                    encrypted = false
+                )
+                dispatchSinglePacket(packet.senderId, ackPacket)
+            }
+            return
+        }
+
         val chatId = routingCoordinator.incomingChatId(packet.senderId)
 
         // Decrypt if encrypted
@@ -912,6 +922,22 @@ class MeshMessagingManager @Inject constructor(
     }
 
     private suspend fun receiveLocationMessage(packet: MeshPacket) {
+        if (chatDao.getMessageByUuid(packet.packetId) != null) {
+            // Already processed this message! Just send ACK in case it was lost.
+            userRepository.getLocalUser()?.let { user ->
+                val localPeerId = routingCoordinator.networkId(user.meshId)
+                val ackPacket = MeshPacket(
+                    senderId = localPeerId,
+                    targetId = packet.senderId,
+                    payload = packet.packetId,
+                    type = PacketType.DELIVERY_ACK,
+                    encrypted = false
+                )
+                dispatchSinglePacket(packet.senderId, ackPacket)
+            }
+            return
+        }
+
         // Decrypt GPS payload
         val rawPayload = if (packet.encrypted) {
             cryptoManager.decryptOrPassthrough(packet.payload, packet.senderId)

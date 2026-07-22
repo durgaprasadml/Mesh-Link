@@ -43,25 +43,27 @@ fun MeshDeviceCard(
         else -> MaterialTheme.colorScheme.onBackground
     }
     
-    // Simple path loss model for distance estimate (assuming txPower = -59 dBm)
-    val distanceEstimate = if (device.transport == TransportType.WIFI_DIRECT) {
-        "N/A"
+    val distanceText = if (device.transport == TransportType.WIFI_DIRECT) {
+        "Distance: N/A"
+    } else if (device.distanceConfidence == "LOW") {
+        "Approximate Distance"
+    } else if (device.distanceMeters != null) {
+        val formattedConf = device.distanceConfidence?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Unknown"
+        "Distance: ${String.format("%.1f m", device.distanceMeters)} - Confidence: $formattedConf"
     } else {
-        val distance = 10.0.pow((-59 - device.rssi) / (10 * 2.0))
-        String.format("%.1f m", distance)
+        "Distance: Calculating..."
     }
 
     val displayName = device.name.ifBlank { "Unknown Device" }
     val haptic = LocalHapticFeedback.current
     
     Card(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            expanded = !expanded
+        },
         modifier = modifier
             .fillMaxWidth()
-            .clip(MeshTheme.shapes.large)
-            .clickable { 
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                expanded = !expanded 
-            }
             .animateContentSize(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -98,7 +100,7 @@ fun MeshDeviceCard(
                     if (device.isConnected) {
                         Box(
                             modifier = Modifier
-                                .size(12.dp)
+                                .size(MeshTheme.spacing.medium)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primary)
                         )
@@ -116,7 +118,7 @@ fun MeshDeviceCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Distance: $distanceEstimate",
+                        text = distanceText,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -130,7 +132,7 @@ fun MeshDeviceCard(
                         tint = statusColor,
                         modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                     Badge(
                         containerColor = when(device.transport) {
                             TransportType.BLE -> MaterialTheme.colorScheme.primaryContainer
@@ -140,7 +142,7 @@ fun MeshDeviceCard(
                     ) {
                         Text(
                             text = device.transport.name.replace("_", " "),
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = MeshTheme.spacing.small, vertical = MeshTheme.spacing.extraSmall)
                         )
                     }
                 }
@@ -206,9 +208,9 @@ fun MeshDeviceCard(
                 ) {
                     if (isConnecting) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(MeshTheme.spacing.extraLarge),
                             color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
+                            strokeWidth = MeshTheme.spacing.extraSmall
                         )
                         Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
                         Text("Connecting...")

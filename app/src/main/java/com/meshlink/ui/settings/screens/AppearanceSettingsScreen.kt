@@ -118,11 +118,15 @@ fun AppearanceSettingsScreen(
                                 "Red" to Color(0xFFF44336)
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)) {
-                                items(colors) { (name, color) ->
+                                items(
+                                    items = colors,
+                                    key = { it.first },
+                                    contentType = { "color_item" }
+                                ) { (name, color) ->
                                     val isSelected = uiState.accentColor == name
                                     Box(
                                         modifier = Modifier
-                                            .size(48.dp)
+                                            .size(MeshTheme.spacing.giant)
                                             .clip(CircleShape)
                                             .background(color)
                                             .border(

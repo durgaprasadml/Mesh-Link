@@ -142,7 +142,7 @@ fun MessageBubble(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
-                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(36.dp))
+                                Icon(Icons.Default.Image, contentDescription = "Image message", modifier = Modifier.size(36.dp))
                                 Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                                 Text(if (message.isFromMe) "Sending image..." else "Receiving image...", style = MaterialTheme.typography.labelSmall)
                                 if (message.status == DeliveryStatus.FAILED) {
@@ -194,7 +194,7 @@ fun MessageBubble(
                         Column(modifier = Modifier.weight(1f).padding(start = MeshTheme.spacing.medium)) {
                             if (message.status == DeliveryStatus.FAILED) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                                    Icon(Icons.Default.Refresh, contentDescription = "Failed to send, tap to retry", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
                                     Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                                     Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                 }
@@ -240,7 +240,7 @@ fun MessageBubble(
                             }
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MeshTheme.spacing.large))
+                            Icon(Icons.Default.LocationOn, contentDescription = "Location message", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MeshTheme.spacing.large))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Location Shared", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         }
@@ -314,7 +314,7 @@ fun MessageBubble(
                             Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
                             if (message.status == DeliveryStatus.FAILED) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                                    Icon(Icons.Default.Refresh, contentDescription = "Failed to send, tap to retry", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
                                     Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                                     Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                 }

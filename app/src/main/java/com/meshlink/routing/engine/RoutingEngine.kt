@@ -76,7 +76,11 @@ class RoutingEngine @Inject constructor(
      * Probabilistic Relay for broadcasts.
      */
     fun shouldRelayBroadcast(packetType: com.meshlink.domain.model.PacketType): Boolean {
-        if (packetType == com.meshlink.domain.model.PacketType.SOS) return true // Always relay SOS
+        if (packetType == com.meshlink.domain.model.PacketType.SOS ||
+            packetType == com.meshlink.domain.model.PacketType.TEXT ||
+            packetType == com.meshlink.domain.model.PacketType.LOCATION) {
+            return true // Always relay critical user data
+        }
         
         if (!batteryAwareNetworking.canRelayBackgroundTraffic()) {
             return false // Drop if battery is critical

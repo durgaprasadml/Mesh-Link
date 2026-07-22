@@ -122,30 +122,30 @@ fun AppNavigation(
             startDestination = if (isLoggedIn == true) Screen.Home.route else Screen.Login.route,
             enterTransition = {
                 if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                    fadeIn(tween(220))
+                    fadeIn(tween(210, delayMillis = 90))
                 } else {
-                    slideInHorizontally(tween(300)) { it } + fadeIn(tween(300))
+                    slideInHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeIn(tween(300))
                 }
             },
             exitTransition = {
                 if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                    fadeOut(tween(220))
+                    fadeOut(tween(90))
                 } else {
                     fadeOut(tween(300))
                 }
             },
             popEnterTransition = {
                 if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                    fadeIn(tween(220))
+                    fadeIn(tween(210, delayMillis = 90))
                 } else {
-                    fadeIn(tween(300))
+                    slideInHorizontally(tween(300)) { -(it * 0.2f).toInt() } + fadeIn(tween(300))
                 }
             },
             popExitTransition = {
                 if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                    fadeOut(tween(220))
+                    fadeOut(tween(90))
                 } else {
-                    slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
+                    slideOutHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeOut(tween(300))
                 }
             }
         ) {
@@ -265,7 +265,7 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
             selected = currentRoute == Screen.Home.route,
             onClick = {
                 navController.navigate(Screen.Home.route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(Screen.Home.route) { saveState = true }
                     launchSingleTop = true
                     restoreState = true
                 }
@@ -277,7 +277,7 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
             selected = currentRoute == Screen.Nearby.route,
             onClick = {
                 navController.navigate(Screen.Nearby.route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(Screen.Home.route) { saveState = true }
                     launchSingleTop = true
                     restoreState = true
                 }
@@ -289,7 +289,7 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
             selected = currentRoute == Screen.Sos.route,
             onClick = {
                 navController.navigate(Screen.Sos.route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(Screen.Home.route) { saveState = true }
                     launchSingleTop = true
                     restoreState = true
                 }
@@ -301,7 +301,7 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
             selected = currentRoute == Screen.Settings.route,
             onClick = {
                 navController.navigate(Screen.Settings.route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(Screen.Home.route) { saveState = true }
                     launchSingleTop = true
                     restoreState = true
                 }
@@ -319,7 +319,7 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
             selected = currentRoute == Screen.Home.route,
             onClick = {
                 navController.navigate(Screen.Home.route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(Screen.Home.route) { saveState = true }
                     launchSingleTop = true
                     restoreState = true
                 }
@@ -331,7 +331,7 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
             selected = currentRoute == Screen.Nearby.route,
             onClick = {
                 navController.navigate(Screen.Nearby.route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(Screen.Home.route) { saveState = true }
                     launchSingleTop = true
                     restoreState = true
                 }
@@ -343,7 +343,7 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
             selected = currentRoute == Screen.Sos.route,
             onClick = {
                 navController.navigate(Screen.Sos.route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(Screen.Home.route) { saveState = true }
                     launchSingleTop = true
                     restoreState = true
                 }
@@ -355,7 +355,7 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
             selected = currentRoute == Screen.Settings.route,
             onClick = {
                 navController.navigate(Screen.Settings.route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(Screen.Home.route) { saveState = true }
                     launchSingleTop = true
                     restoreState = true
                 }

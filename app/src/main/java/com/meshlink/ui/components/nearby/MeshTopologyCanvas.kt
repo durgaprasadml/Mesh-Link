@@ -58,6 +58,9 @@ fun MeshTopologyCanvas(
     val nodeRadius = with(LocalDensity.current) { MeshTheme.spacing.medium.toPx() }
     val centerRadius = with(LocalDensity.current) { MeshTheme.spacing.mediumLarge.toPx() }
 
+    val dashEffect = remember { PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f) }
+    val stroke4 = remember { Stroke(width = 4f) }
+
     Box(modifier = modifier) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val center = Offset(size.width / 2, size.height / 2)
@@ -69,13 +72,13 @@ fun MeshTopologyCanvas(
                     color = primaryColor.copy(alpha = alpha),
                     radius = maxRadius * scale / 3f,
                     center = center,
-                    style = Stroke(width = 4f)
+                    style = stroke4
                 )
                 drawCircle(
                     color = primaryColor.copy(alpha = (alpha * 1.5f).coerceAtMost(1f)),
                     radius = maxRadius * (scale / 3f) * 0.6f,
                     center = center,
-                    style = Stroke(width = 4f)
+                    style = stroke4
                 )
             } else {
                 // Draw connections and nodes
@@ -89,7 +92,7 @@ fun MeshTopologyCanvas(
                     val nodePos = Offset(x, y)
 
                     // Draw line from center to node
-                    val pathEffect = if (device.rssi < -85) PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f) else null
+                    val pathEffect = if (device.rssi < -85) dashEffect else null
                     val lineColor = if (device.rssi < -85) onSurface.copy(alpha = 0.3f) else primaryColor.copy(alpha = 0.6f)
                     
                     drawLine(

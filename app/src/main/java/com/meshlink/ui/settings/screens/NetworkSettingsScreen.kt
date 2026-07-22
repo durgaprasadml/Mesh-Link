@@ -262,7 +262,7 @@ fun NetworkSettingsScreen(
                 }
             }
             
-            item { Spacer(modifier = Modifier.height(32.dp)) }
+            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 }

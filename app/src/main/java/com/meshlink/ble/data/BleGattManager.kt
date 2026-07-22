@@ -203,8 +203,8 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                     notify(device, char, packet)
                     offset += chunkSize
                     
-                    // Small delay to prevent dropping packets on some devices
-                    delay(10)
+                    // Yield instead of delay to maximize throughput
+                    kotlinx.coroutines.yield()
                 }
             }
         }

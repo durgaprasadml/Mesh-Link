@@ -176,10 +176,8 @@ class TransferManager @Inject constructor(
             scheduler.updateSessionProgress(session.transferId, i + 1, (i + 1).toLong() * chunkSize)
             i++
             
-            // Delay to prevent overwhelming BLE buffers
-            if (session.transportUsed == TransportType.BLE) {
-                delay(INTER_CHUNK_DELAY_MS)
-            }
+            // Yield to other coroutines but don't artificially delay
+            kotlinx.coroutines.yield()
         }
     }
 
@@ -339,7 +337,7 @@ class TransferManager @Inject constructor(
                     session.senderId, session.targetId, transferId,
                     b64, PacketType.MEDIA_CHUNK, idx, session.totalChunks, session.mimeType
                 )
-                delay(INTER_CHUNK_DELAY_MS)
+                kotlinx.coroutines.yield()
             }
         }
     }

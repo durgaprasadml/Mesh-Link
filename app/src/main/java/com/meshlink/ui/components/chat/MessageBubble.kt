@@ -35,6 +35,10 @@ import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.io.File
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -121,9 +125,12 @@ fun MessageBubble(
             when (message.messageType) {
                 MessageType.IMAGE -> {
                     val mediaPath = message.mediaPath
-                    if (mediaPath != null && File(mediaPath).exists()) {
+                    val isComplete = message.status != DeliveryStatus.PENDING && message.status != DeliveryStatus.FAILED
+                    val hasFullFile = mediaPath != null && File(mediaPath).exists()
+                    
+                    if (isComplete && hasFullFile) {
                         AsyncImage(
-                            model = File(mediaPath),
+                            model = File(mediaPath!!),
                             contentDescription = "View full image",
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -132,6 +139,64 @@ fun MessageBubble(
                                 .clickable { onImageClick(message.messageId) },
                             contentScale = ContentScale.Crop
                         )
+                    } else if (!message.thumbnailBase64.isNullOrEmpty()) {
+                        // Decode base64 to bitmap
+                        val imageBitmap = androidx.compose.runtime.remember(message.thumbnailBase64) {
+                            try {
+                                val bytes = Base64.decode(message.thumbnailBase64, Base64.DEFAULT)
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 120.dp, max = 260.dp)
+                                .clip(RoundedCornerShape(MeshTheme.spacing.medium))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            if (imageBitmap != null) {
+                                Image(
+                                    bitmap = imageBitmap,
+                                    contentDescription = "Image thumbnail",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                    alpha = 0.5f // Dim thumbnail while loading
+                                )
+                            }
+                            
+                            // Overlay progress or retry
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
+                                    if (message.status == DeliveryStatus.FAILED) {
+                                        IconButton(
+                                            onClick = { onRetryMedia(message.messageId) },
+                                            modifier = Modifier.background(MaterialTheme.colorScheme.error, CircleShape).size(36.dp)
+                                        ) {
+                                            Icon(Icons.Default.Refresh, contentDescription = "Retry image transfer", tint = MaterialTheme.colorScheme.onPrimary)
+                                        }
+                                        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
+                                        Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    } else if (transferProgress != null && transferProgress >= 0f) {
+                                        CircularProgressIndicator(
+                                            progress = { transferProgress },
+                                            color = MaterialTheme.colorScheme.primary,
+                                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        )
+                                    } else {
+                                        CircularProgressIndicator(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         Box(
                             modifier = Modifier

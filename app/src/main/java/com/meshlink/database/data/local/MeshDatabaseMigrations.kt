@@ -52,4 +52,15 @@ object MeshDatabaseMigrations {
             db.execSQL("ALTER TABLE users ADD COLUMN aboutMe TEXT")
         }
     }
+
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN mimeType TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaWidth INTEGER")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaHeight INTEGER")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaSize INTEGER")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaChecksum TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN thumbnailBase64 TEXT")
+        }
+    }
 }

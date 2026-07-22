@@ -22,7 +22,7 @@ class VoiceRecorder @Inject constructor(
     @MainDispatcher private val mainDispatcher: CoroutineDispatcher
 ) {
     companion object {
-        private const val MAX_DURATION_MS = 10_000L
+        private const val MAX_DURATION_MS = 60_000L
         private const val TAG = "VoiceRecorder"
     }
 
@@ -54,8 +54,9 @@ class VoiceRecorder @Inject constructor(
                 setAudioSource(MediaRecorder.AudioSource.MIC)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioEncodingBitRate(64000)
-                setAudioSamplingRate(44100)
+                setAudioChannels(1) // Mono
+                setAudioEncodingBitRate(16_000) // 16 kbps
+                setAudioSamplingRate(16_000) // 16 kHz
                 setMaxDuration(MAX_DURATION_MS.toInt())
                 setOutputFile(outputFile!!.absolutePath)
                 prepare()

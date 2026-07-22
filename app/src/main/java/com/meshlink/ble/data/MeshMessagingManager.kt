@@ -730,7 +730,7 @@ class MeshMessagingManager @Inject constructor(
         connectToPeer(targetMeshId)
         connectToAllScannedDevices()
 
-        // Compress image: max 800px, ≤200KB JPEG
+        // Compress image: max 480px, ≤80KB JPEG
         val compressedBytes = withContext(Dispatchers.IO) {
             ImageCompressor.compress(context, imageUri)
         }
@@ -739,6 +739,20 @@ class MeshMessagingManager @Inject constructor(
             return
         }
         MeshLogger.d(TAG, "sendImage: compressed to ${compressedBytes.size / 1000}KB")
+
+        val thumbnailBase64 = withContext(Dispatchers.IO) {
+            ImageCompressor.generateThumbnailBase64(context, imageUri)
+        }
+
+        // Clean up temp camera file if applicable
+        if (imageUri.scheme == "content" && imageUri.authority?.contains("fileprovider") == true) {
+            try {
+                val tempFile = File(context.cacheDir, "images/${imageUri.lastPathSegment}")
+                if (tempFile.exists()) tempFile.delete()
+            } catch (e: Exception) {
+                MeshLogger.w(TAG, "Failed to delete temp camera file")
+            }
+        }
 
         // Save local copy
         val localFile = withContext(Dispatchers.IO) {
@@ -752,15 +766,18 @@ class MeshMessagingManager @Inject constructor(
         val chatId = targetPeerId
         val messageId = UUID.randomUUID().toString()
         val message = MessageEntity(
-            messageId   = messageId,
-            chatId      = chatId,
-            senderId    = localPeerId,
-            text        = "📷 Image",
-            timestamp   = System.currentTimeMillis(),
-            isFromMe    = true,
-            status      = DeliveryStatus.PENDING,
-            messageType = MessageType.IMAGE,
-            mediaPath   = localFile.absolutePath
+            messageId       = messageId,
+            chatId          = chatId,
+            senderId        = localPeerId,
+            text            = "📷 Image",
+            timestamp       = System.currentTimeMillis(),
+            isFromMe        = true,
+            status          = DeliveryStatus.PENDING,
+            messageType     = MessageType.IMAGE,
+            mediaPath       = localFile.absolutePath,
+            mimeType        = "image/jpeg",
+            mediaSize       = localFile.length(),
+            thumbnailBase64 = thumbnailBase64
         )
         chatDao.insertMessageAndUpdateChat(message, chatName)
         transferManager.sendFile(

@@ -10,8 +10,8 @@ import java.io.ByteArrayOutputStream
 object ImageCompressor {
 
     private const val TAG = "ImageCompressor"
-    private const val MAX_DIMENSION = 800       // Requirement: max 800px
-    private const val MAX_SIZE_BYTES = 200_000  // Requirement: ≤200KB
+    private const val MAX_DIMENSION = 480       // Requirement: max 480px
+    private const val MAX_SIZE_BYTES = 80_000   // Requirement: ≤80KB
     private const val MIN_QUALITY = 15
 
     /**
@@ -19,7 +19,7 @@ object ImageCompressor {
      * Strategy:
      *   1. Decode with inSampleSize to avoid loading multi-megapixel images into memory.
      *   2. Scale to MAX_DIMENSION using createScaledBitmap.
-     *   3. Iteratively reduce JPEG quality from 45 → MIN_QUALITY until ≤200KB.
+     *   3. Iteratively reduce JPEG quality from 25 → MIN_QUALITY until ≤80KB.
      *   4. If still too large at minimum quality, halve dimensions and repeat (max 3 passes).
      * Returns null if compression fails or image cannot be decoded.
      */
@@ -89,7 +89,7 @@ object ImageCompressor {
      * Returns the byte array if target met, null if impossible at MIN_QUALITY.
      */
     private fun compressToTarget(bitmap: Bitmap, maxSizeBytes: Int): ByteArray? {
-        var quality = 45
+        var quality = 25
         var bytes: ByteArray
         val baos = ByteArrayOutputStream()
         do {
@@ -132,5 +132,40 @@ object ImageCompressor {
             }
         }
         return inSampleSize.coerceAtLeast(1)
+    }
+
+    /**
+     * Generates a 120px thumbnail encoded as a Base64 JPEG string.
+     */
+    fun generateThumbnailBase64(context: Context, uri: Uri): String? {
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, bounds)
+            }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                inSampleSize = calculateInSampleSize(bounds, 120, 120)
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            val bitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOptions)
+            } ?: return null
+
+            val scaled = scaleBitmapToMax(bitmap, 120)
+            val baos = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 40, baos)
+            
+            if (scaled !== bitmap) {
+                scaled.recycle()
+            }
+            bitmap.recycle()
+
+            android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.NO_WRAP)
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "generateThumbnailBase64() failed: ${e.message}", e)
+            null
+        }
     }
 }

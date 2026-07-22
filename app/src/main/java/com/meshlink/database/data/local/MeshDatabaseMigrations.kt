@@ -63,4 +63,14 @@ object MeshDatabaseMigrations {
             db.execSQL("ALTER TABLE messages ADD COLUMN thumbnailBase64 TEXT")
         }
     }
+
+    val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // SQLite doesn't support dropping columns easily, so we recreate the table.
+            db.execSQL("CREATE TABLE users_new (meshId TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, avatarUri TEXT, aboutMe TEXT)")
+            db.execSQL("INSERT INTO users_new (meshId, name, avatarUri, aboutMe) SELECT meshId, name, avatarUri, aboutMe FROM users")
+            db.execSQL("DROP TABLE users")
+            db.execSQL("ALTER TABLE users_new RENAME TO users")
+        }
+    }
 }

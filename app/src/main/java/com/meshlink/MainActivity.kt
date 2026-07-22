@@ -25,7 +25,6 @@ import com.meshlink.ui.navigation.AppNavigation
 import com.meshlink.ui.navigation.Screen
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.viewModels
-import com.meshlink.ui.auth.AuthViewModel
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
@@ -40,8 +39,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var meshRepository: MeshRepository
-
-    private val authViewModel: AuthViewModel by viewModels()
 
     private var firebaseAnalytics: FirebaseAnalytics? = null
     
@@ -58,8 +55,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        
-        splashScreen.setKeepOnScreenCondition { authViewModel.isUserLoggedIn.value == null }
 
         lifecycleScope.launch(Dispatchers.IO) {
             firebaseAnalytics = FirebaseAnalytics.getInstance(this@MainActivity)
@@ -78,15 +73,15 @@ class MainActivity : ComponentActivity() {
 
             MeshTheme(
                 themeMode = uiState.themeMode,
-                dynamicColor = uiState.isMaterialYouEnabled,
-                accentColor = uiState.accentColor,
-                fontScale = uiState.fontScale,
-                largeTextEnabled = uiState.largeTextEnabled,
-                cornerRadiusScale = uiState.cornerRadiusScale,
-                animationsEnabled = uiState.animationsEnabled,
-                glassEffectsEnabled = uiState.glassEffectsEnabled,
-                highContrast = uiState.highContrast,
-                reduceMotionEnabled = uiState.reduceMotionEnabled
+                dynamicColor = true,
+                accentColor = "Blue",
+                fontScale = 1.0f,
+                largeTextEnabled = false,
+                cornerRadiusScale = 1.0f,
+                animationsEnabled = true,
+                glassEffectsEnabled = true,
+                highContrast = false,
+                reduceMotionEnabled = false
             ) {
                 val navController = rememberNavController()
 

@@ -4,13 +4,14 @@ import com.meshlink.domain.model.User
 import kotlinx.coroutines.flow.Flow
 
 interface UserRepository {
-    suspend fun registerUser(name: String, phoneNumber: String, pin: String): Result<String>
-    suspend fun loginUser(phoneNumber: String, pin: String): Result<User>
+    suspend fun createProfile(name: String): Result<String>
+    val hasProfile: Flow<Boolean>
     suspend fun getLocalUser(): User?
     suspend fun updateUserName(name: String)
     suspend fun updateProfile(name: String, aboutMe: String?, avatarUri: String?)
-    suspend fun logout(clearData: Boolean = false)
-    val isUserLoggedIn: Flow<Boolean>
+    
+    val hasProfile: Flow<Boolean>
+    suspend fun createProfile(name: String): Result<Unit>
     
     val isEncryptionEnabled: Flow<Boolean>
     suspend fun setEncryptionEnabled(enabled: Boolean)

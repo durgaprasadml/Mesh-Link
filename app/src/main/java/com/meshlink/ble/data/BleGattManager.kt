@@ -64,6 +64,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         data class Disconnected(val address: String) : GattEvent()
         data class MtuChanged(val address: String, val mtu: Int) : GattEvent()
         data class ServicesDiscovered(val address: String) : GattEvent()
+        data class QueueEmpty(val address: String) : GattEvent()
     }
 
     private val _gattEvents = MutableSharedFlow<GattEvent>(extraBufferCapacity = 100)
@@ -112,6 +113,10 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         activeClients.clear()
         pendingClientWrites.clear()
         activeWriteAddress = null
+    }
+
+    fun isQueueEmpty(address: String): Boolean {
+        return pendingClientWrites.none { it.address == address }
     }
 
     fun connectToDevice(address: String) {
@@ -569,6 +574,11 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                             }
                             activeWriteAddress = null
                         }
+                        
+                        if (pendingClientWrites.none { it.address == gatt.device.address }) {
+                            _gattEvents.tryEmit(GattEvent.QueueEmpty(gatt.device.address))
+                        }
+                        
                         flushClientWriteQueueLocked()
                     }
                 }

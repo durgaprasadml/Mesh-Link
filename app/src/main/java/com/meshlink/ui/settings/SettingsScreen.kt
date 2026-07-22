@@ -1,16 +1,18 @@
 package com.meshlink.ui.settings
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,114 +24,46 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
-import com.meshlink.ui.settings.screens.*
-
-enum class SettingsDestination {
-    HOME, PROFILE, NETWORK, STORAGE, APPEARANCE
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    onLoggedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var currentDestination by remember { mutableStateOf(SettingsDestination.HOME) }
-    var showLogoutDialog by remember { mutableStateOf(false) }
-    var clearLocalData by remember { mutableStateOf(false) }
-
     val userName = uiState.user?.name ?: "User"
+    val meshId = uiState.user?.meshId ?: "Unknown ID"
 
-    if (showLogoutDialog) {
+    var showEditNameDialog by remember { mutableStateOf(false) }
+
+    if (showEditNameDialog) {
+        var newName by remember { mutableStateOf(userName) }
         AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("Logout") },
+            onDismissRequest = { showEditNameDialog = false },
+            title = { Text("Edit Display Name") },
             text = {
-                Column {
-                    Text("Are you sure you want to log out?")
-                    Row(
-                        modifier = Modifier.padding(top = MeshTheme.spacing.mediumLarge).clickable { clearLocalData = !clearLocalData },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(checked = clearLocalData, onCheckedChange = { clearLocalData = it })
-                        Text("Clear local data")
-                    }
-                }
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("Name") },
+                    singleLine = true
+                )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.logout(clearLocalData)
-                    showLogoutDialog = false
-                }) { Text("Logout") }
+                    if (newName.isNotBlank()) {
+                        viewModel.updateUserName(newName.trim())
+                    }
+                    showEditNameDialog = false
+                }) { Text("Save") }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showEditNameDialog = false }) { Text("Cancel") }
             }
         )
     }
 
-    LaunchedEffect(viewModel.uiEvent) {
-        viewModel.uiEvent.collect { event ->
-            when (event) {
-                is SettingsEvent.LogoutSuccess -> onLoggedOut()
-                else -> {}
-            }
-        }
-    }
-
-    AnimatedContent(
-        targetState = currentDestination,
-        transitionSpec = {
-            if (targetState != SettingsDestination.HOME) {
-                slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn() togetherWith
-                        slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) + fadeOut()
-            } else {
-                slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300)) + fadeIn() togetherWith
-                        slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut()
-            }
-        },
-        label = "SettingsNav"
-    ) { dest ->
-        when (dest) {
-            SettingsDestination.HOME -> SettingsHome(
-                userName = userName,
-                onNavigate = { currentDestination = it },
-                onBack = onBack,
-                onLogout = { showLogoutDialog = true }
-            )
-            SettingsDestination.PROFILE -> com.meshlink.ui.profile.ProfileScreen(
-                onNavigateBack = { currentDestination = SettingsDestination.HOME }
-            )
-            SettingsDestination.NETWORK -> NetworkSettingsScreen(
-                uiState = uiState,
-                viewModel = viewModel,
-                onBack = { currentDestination = SettingsDestination.HOME }
-            )
-            SettingsDestination.STORAGE -> StorageSettingsScreen(
-                uiState = uiState,
-                viewModel = viewModel,
-                onBack = { currentDestination = SettingsDestination.HOME }
-            )
-            SettingsDestination.APPEARANCE -> AppearanceSettingsScreen(
-                uiState = uiState,
-                viewModel = viewModel,
-                onBack = { currentDestination = SettingsDestination.HOME }
-            )
-
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingsHome(
-    userName: String,
-    onNavigate: (SettingsDestination) -> Unit,
-    onBack: () -> Unit,
-    onLogout: () -> Unit
-) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -154,86 +88,140 @@ fun SettingsHome(
             item {
                 // Profile Card
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigate(SettingsDestination.PROFILE) },
+                    modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = MeshTheme.shapes.large
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(MeshTheme.spacing.mediumLarge),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(MeshTheme.spacing.mediumLarge)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(MeshTheme.spacing.extraGiant)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
+                        Text("Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = userName.take(1).uppercase(),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(userName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Box(
+                                modifier = Modifier
+                                    .size(MeshTheme.spacing.extraGiant)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = userName.take(1).uppercase(),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(userName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("Mesh ID: ${meshId.take(8)}...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = { showEditNameDialog = true }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit Name")
+                            }
                         }
                     }
                 }
             }
 
             item {
-                // Main Settings Group
+                // Appearance Card
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
+                    shape = MeshTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column {
-
-                        SettingsItemRow(
-                            title = "Network & Transport",
-                            subtitle = "BLE, Wi-Fi Direct, Relaying",
-                            icon = Icons.Default.WifiTethering,
-                            onClick = { onNavigate(SettingsDestination.NETWORK) }
+                    Column(modifier = Modifier.padding(vertical = MeshTheme.spacing.small)) {
+                        Text(
+                            "Appearance",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
                         )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
-                            title = "Storage & Data",
-                            subtitle = "Database, Media Cache",
-                            icon = Icons.Default.Storage,
-                            onClick = { onNavigate(SettingsDestination.STORAGE) }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Appearance",
-                            subtitle = "Theme, Dynamic Color",
+                            title = "Theme",
+                            subtitle = uiState.themeMode,
                             icon = Icons.Default.Palette,
-                            onClick = { onNavigate(SettingsDestination.APPEARANCE) }
+                            onClick = {
+                                val nextMode = when (uiState.themeMode) {
+                                    "SYSTEM" -> "LIGHT"
+                                    "LIGHT" -> "DARK"
+                                    else -> "SYSTEM"
+                                }
+                                viewModel.setThemeMode(nextMode)
+                            }
                         )
                     }
                 }
             }
 
             item {
-                // Logout Group
+                // Chat Card
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
+                    shape = MeshTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    SettingsItemRow(
-                        title = "Log Out",
-                        icon = Icons.AutoMirrored.Filled.ExitToApp,
-                        iconTint = MaterialTheme.colorScheme.error,
-                        textColor = MaterialTheme.colorScheme.error,
-                        onClick = onLogout,
-                        trailingContent = null
-                    )
+                    Column(modifier = Modifier.padding(vertical = MeshTheme.spacing.small)) {
+                        Text(
+                            "Chat",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
+                        )
+                        SettingsItemRow(
+                            title = "Clear All Chats",
+                            icon = Icons.Default.Chat,
+                            onClick = { viewModel.clearAllChats() }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Clear Media Cache",
+                            icon = Icons.Default.Storage,
+                            onClick = { viewModel.clearMediaCache() }
+                        )
+                    }
+                }
+            }
+            
+
+            item {
+                // About Card
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(vertical = MeshTheme.spacing.small)) {
+                        Text(
+                            "About",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
+                        )
+                        SettingsItemRow(
+                            title = "App Version",
+                            subtitle = "Mesh Link v3.0",
+                            icon = Icons.Default.Info,
+                            onClick = { }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "BLE Status",
+                            subtitle = if (uiState.isBleEnabled) "Active" else "Inactive",
+                            icon = Icons.Default.Info,
+                            onClick = { }
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.giant))
             }

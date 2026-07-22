@@ -60,7 +60,22 @@ class MeshMessagingManager @Inject constructor(
 ) {
     private val TAG = "MeshMessagingManager"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    
+/*
+    init {
+        transferManager.onSendPacket = { packet ->
+            meshRouter.sendMediaPacket(packet)
+        }
+        transferManager.waitForTransportQueueDrain = { targetId ->
+            meshRouter.waitForTransportQueueDrain(targetId)
+        }
+        transferManager.onTransferCompleted = { session ->
+            scope.launch {
+                receiveMediaMessage(session.transferId, session.filePath, session.mimeType, session.senderId)
+            }
+        }
+    }
+*/
+
     suspend fun handleIncomingPacket(packet: MeshPacket) {
         if (packet.targetId == "BROADCAST") {
             // Broadcasts are not encrypted
@@ -128,49 +143,49 @@ class MeshMessagingManager @Inject constructor(
         try {
             when (processedPacket.type) {
                 PacketType.KEY_EXCHANGE -> {
-                    handleKeyExchange(packet)
+                    handleKeyExchange(processedPacket)
                 }
                 PacketType.TEXT -> {
-                    if (packet.targetId == "BROADCAST") {
-                        receiveBroadcastTextMessage(packet)
+                    if (processedPacket.targetId == "BROADCAST") {
+                        receiveBroadcastTextMessage(processedPacket)
                     } else {
-                        receiveMessage(packet)
+                        receiveMessage(processedPacket)
                     }
                 }
                 PacketType.MEDIA_META,
                 PacketType.MEDIA_CHUNK,
                 PacketType.MEDIA_ACK,
                 PacketType.MEDIA_NACK -> {
-                    if (packet.type == PacketType.MEDIA_META && packet.transferId != null) {
-                        insertPlaceholderIncomingMedia(packet)
+                    if (processedPacket.type == PacketType.MEDIA_META && processedPacket.transferId != null) {
+                        insertPlaceholderIncomingMedia(processedPacket)
                     }
-                    transferManager.handleIncomingPacket(packet)
+                    transferManager.handleIncomingPacket(processedPacket)
                 }
                 PacketType.LOCATION -> {
-                    receiveLocationMessage(packet)
+                    receiveLocationMessage(processedPacket)
                 }
                 PacketType.SOS -> {
-                    receiveSosMessage(packet)
+                    receiveSosMessage(processedPacket)
                 }
                 PacketType.DELIVERY_ACK -> {
-                    chatDao.updateMessageStatus(packet.payload, DeliveryStatus.DELIVERED)
+                    chatDao.updateMessageStatus(processedPacket.payload, DeliveryStatus.DELIVERED)
                 }
                 PacketType.READ_RECEIPT -> {
-                    chatDao.updateMessageStatus(packet.payload, DeliveryStatus.SEEN)
+                    chatDao.updateMessageStatus(processedPacket.payload, DeliveryStatus.SEEN)
                 }
                 PacketType.WIFI_NEGOTIATION -> {
-                    handleWifiNegotiation(packet)
+                    handleWifiNegotiation(processedPacket)
                 }
                 PacketType.SESSION_REKEY -> {
-                    rekeyManager.handleRekeyPacket(packet.senderId, packet.payload, cryptoManager.getPeerPublicKey(packet.senderId))
+                    rekeyManager.handleRekeyPacket(processedPacket.senderId, processedPacket.payload, cryptoManager.getPeerPublicKey(processedPacket.senderId))
                 }
                 PacketType.VOICE_SIGNAL,
                 PacketType.VOICE_FRAME -> {
-                    voiceTransport.handleIncomingPacket(packet)
+                    voiceTransport.handleIncomingPacket(processedPacket)
                 }
                 PacketType.VIDEO_SIGNAL,
                 PacketType.VIDEO_FRAME -> {
-                    videoTransport.handleIncomingPacket(packet)
+                    videoTransport.handleIncomingPacket(processedPacket)
                 }
                 PacketType.BEACON,
                 PacketType.INCIDENT_REPORT,
@@ -243,7 +258,7 @@ class MeshMessagingManager @Inject constructor(
                         chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
                     }
                 }
-                MessageType.IMAGE, MessageType.VOICE, MessageType.DOCUMENT -> {
+                MessageType.IMAGE, MessageType.VOICE -> {
                     val file = msg.mediaPath?.let { File(it) }
                     if (file != null && file.exists()) {
                         val targetPeerId = routingCoordinator.outgoingChatId(msg.chatId)
@@ -670,19 +685,23 @@ class MeshMessagingManager @Inject constructor(
         MeshLogger.d(TAG, "[DIAG-Stage9]   MATCH? chatId stored='$chatId' vs chatId queried by UI='${routingCoordinator.incomingChatId(packet.senderId)}'")
         // ─────────────────────────────────────────────────────────────────────
 
-        // Decrypt if encrypted
-        val rawPayload = if (packet.encrypted) {
-            cryptoManager.decryptOrPassthrough(packet.payload, packet.senderId)
-        } else {
-            packet.payload
+        val rawPayload = packet.payload
+
+        val internalKeywords = setOf("KEY_EXCHANGE", "ACK", "RELAY", "ROUTING", "HANDSHAKE")
+        if (rawPayload.startsWith("v2|") || internalKeywords.contains(rawPayload)) {
+            MeshLogger.w(TAG, "Filtering out internal protocol packet from chat UI: $rawPayload")
+            return
         }
 
         // Try to parse as JSON (new format with senderName), fall back to plain text
         val (plaintext, senderName) = try {
             val json = JSONObject(rawPayload)
-            val text = json.optString("text", rawPayload)
-            val name = json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
-            text to name
+            if (json.has("text")) {
+                json.getString("text") to json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
+            } else {
+                MeshLogger.w(TAG, "Filtering out JSON protocol packet masquerading as text: $rawPayload")
+                return
+            }
         } catch (_: Exception) {
             // Legacy plain text packet
             rawPayload to com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
@@ -788,66 +807,6 @@ class MeshMessagingManager @Inject constructor(
         )
     }
 
-    suspend fun sendDocument(targetMeshId: String, documentUri: Uri, chatName: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = routingCoordinator.networkId(user.meshId)
-        val targetPeerId = routingCoordinator.outgoingChatId(targetMeshId)
-        meshRouter.localMeshId = localPeerId
-
-        // Connect to target and all mesh peers for relay
-        connectToPeer(targetMeshId)
-        connectToAllScannedDevices()
-
-        // Read document bytes
-        val documentBytes = withContext(Dispatchers.IO) {
-            context.contentResolver.openInputStream(documentUri)?.use { it.readBytes() }
-        }
-        if (documentBytes == null) {
-            MeshLogger.e(TAG, "sendDocument: failed to read $documentUri")
-            return
-        }
-
-        // Try to get filename
-        var fileName = "doc_${System.currentTimeMillis()}.file"
-        try {
-            context.contentResolver.query(documentUri, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (idx != -1) fileName = cursor.getString(idx)
-                }
-            }
-        } catch (_: Exception) {}
-
-        // Save local copy
-        val localFile = withContext(Dispatchers.IO) {
-            val mediaDir = File(context.filesDir, "mesh_documents")
-            if (!mediaDir.exists()) mediaDir.mkdirs()
-            File(mediaDir, fileName).apply {
-                writeBytes(documentBytes)
-            }
-        }
-
-        val chatId = targetPeerId
-        val messageId = UUID.randomUUID().toString()
-        val message = MessageEntity(
-            messageId   = messageId,
-            chatId      = chatId,
-            senderId    = localPeerId,
-            text        = "📄 $fileName",
-            timestamp   = System.currentTimeMillis(),
-            isFromMe    = true,
-            status      = DeliveryStatus.PENDING,
-            messageType = MessageType.DOCUMENT,
-            mediaPath   = localFile.absolutePath
-        )
-        chatDao.insertMessageAndUpdateChat(message, chatName)
-        transferManager.sendFile(
-            file = localFile,
-            senderId = localPeerId,
-            targetId = targetPeerId,
-            transferId = messageId
-        )
-    }
 
     suspend fun receiveMediaMessage(completedTransferId: String, completedFilePath: String, completedMimeType: String, completedSenderId: String) {
         val isImage = completedMimeType.contains("image")
@@ -857,7 +816,7 @@ class MeshMessagingManager @Inject constructor(
         val messageType = when {
             isImage -> MessageType.IMAGE
             isVoice -> MessageType.VOICE
-            else -> MessageType.DOCUMENT
+            else -> com.meshlink.database.data.local.MessageType.DOCUMENT
         }
 
         val previewText = when {
@@ -908,7 +867,7 @@ class MeshMessagingManager @Inject constructor(
         val messageType = when {
             isImage -> MessageType.IMAGE
             isVoice -> MessageType.VOICE
-            else -> MessageType.DOCUMENT
+            else -> com.meshlink.database.data.local.MessageType.DOCUMENT
         }
 
         val previewText = when {
@@ -943,11 +902,8 @@ class MeshMessagingManager @Inject constructor(
         meshRouter.localMeshId = localPeerId
         connectToPeer(targetMeshId)
 
-        val voiceBytes = withContext(Dispatchers.IO) {
-            val voiceFile = File(filePath)
-            if (!voiceFile.exists()) return@withContext null
-            voiceFile.readBytes()
-        } ?: return
+        val voiceFile = File(filePath)
+        if (!voiceFile.exists()) return
 
         val chatId = targetPeerId
         val messageId = UUID.randomUUID().toString()
@@ -1193,9 +1149,21 @@ class MeshMessagingManager @Inject constructor(
         if (chatDao.getMessageByUuid(packet.packetId) != null) return // Ignore duplicate
 
         val rawPayload = packet.payload
+
+        val internalKeywords = setOf("KEY_EXCHANGE", "ACK", "RELAY", "ROUTING", "HANDSHAKE")
+        if (rawPayload.startsWith("v2|") || internalKeywords.contains(rawPayload)) {
+            MeshLogger.w(TAG, "Filtering out internal protocol packet from broadcast UI: $rawPayload")
+            return
+        }
+
         val (plaintext, senderName) = try {
             val json = JSONObject(rawPayload)
-            json.optString("text", rawPayload) to json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
+            if (json.has("text")) {
+                json.getString("text") to json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
+            } else {
+                MeshLogger.w(TAG, "Filtering out JSON protocol packet masquerading as broadcast text: $rawPayload")
+                return
+            }
         } catch (_: Exception) {
             rawPayload to com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
         }

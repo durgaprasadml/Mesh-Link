@@ -60,11 +60,6 @@ fun ChatDetailScreen(
         uri?.let { viewModel.sendImage(it) }
     }
 
-    val documentPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri?.let { viewModel.sendDocument(it) }
-    }
 
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -75,12 +70,13 @@ fun ChatDetailScreen(
         }
     }
 
-    var previousMessageCount by remember { mutableIntStateOf(0) }
-    LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty() && uiState.messages.size > previousMessageCount) {
+    var previousLastMessageId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(uiState.messages) {
+        val currentLast = uiState.messages.lastOrNull()?.messageId
+        if (currentLast != null && currentLast != previousLastMessageId) {
             listState.animateScrollToItem(uiState.messages.size - 1)
         }
-        previousMessageCount = uiState.messages.size
+        previousLastMessageId = currentLast
     }
 
     LaunchedEffect(uiState.messages.lastOrNull()?.messageId) {
@@ -135,10 +131,7 @@ fun ChatDetailScreen(
                     showAttachmentSheet = false
                     imagePickerLauncher.launch("image/*")
                 },
-                onDocumentClick = {
-                    showAttachmentSheet = false
-                    documentPickerLauncher.launch(arrayOf("*/*"))
-                },
+
                 onCameraClick = {
                     showAttachmentSheet = false
                     val dir = File(context.cacheDir, "images")
@@ -337,7 +330,6 @@ private fun shouldShowDateSeparator(currentTimestamp: Long, previousTimestamp: L
 @Composable
 fun AttachmentMenu(
     onGalleryClick: () -> Unit,
-    onDocumentClick: () -> Unit,
     onCameraClick: () -> Unit,
     onLocationClick: () -> Unit
 ) {
@@ -356,12 +348,7 @@ fun AttachmentMenu(
                 color = MaterialTheme.colorScheme.secondary,
                 onClick = onGalleryClick
             )
-            AttachmentIcon(
-                icon = Icons.Default.InsertDriveFile,
-                label = "Document",
-                color = MaterialTheme.colorScheme.primary,
-                onClick = onDocumentClick
-            )
+
             AttachmentIcon(
                 icon = Icons.Default.CameraAlt,
                 label = "Camera",

@@ -4,12 +4,12 @@ import com.meshlink.database.data.local.UserEntity
 import kotlinx.coroutines.flow.Flow
 
 interface UserLocalDataSource {
-    val isLoggedIn: Flow<Boolean>
+    val hasProfile: Flow<Boolean>
     val isEncryptionEnabled: Flow<Boolean>
     val isOnlineVisible: Flow<Boolean>
     val meshMode: Flow<String>
 
-    suspend fun setLoginState(isLoggedIn: Boolean)
+    suspend fun setProfileCreated(created: Boolean)
     suspend fun setEncryptionEnabled(enabled: Boolean)
     suspend fun setOnlineVisible(visible: Boolean)
     suspend fun setMeshMode(mode: String)

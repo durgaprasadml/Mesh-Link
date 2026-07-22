@@ -1,19 +1,31 @@
 package com.meshlink.core.data
 
 import com.meshlink.core.data.source.UserLocalDataSource
-import com.meshlink.database.data.local.UserEntity
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.domain.model.User
-import com.meshlink.security.data.source.CryptoDataSource
+import com.meshlink.database.data.local.UserEntity
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 
 class UserRepositoryImpl @Inject constructor(
-    private val localDataSource: UserLocalDataSource,
-    private val cryptoDataSource: CryptoDataSource
+    private val localDataSource: UserLocalDataSource
 ) : UserRepository {
 
-    override val isUserLoggedIn: Flow<Boolean> = localDataSource.isLoggedIn
+    override val hasProfile: Flow<Boolean> = localDataSource.hasProfile
+    
+    override suspend fun createProfile(name: String): Result<Unit> {
+        return try {
+            // Generate a random meshId and save local user
+            val meshId = java.util.UUID.randomUUID().toString()
+            val user = UserEntity(meshId = meshId, name = name)
+            localDataSource.insertUser(user)
+            localDataSource.setProfileCreated(true)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override val isEncryptionEnabled: Flow<Boolean> = localDataSource.isEncryptionEnabled
     
     override suspend fun setEncryptionEnabled(enabled: Boolean) {
@@ -32,65 +44,9 @@ class UserRepositoryImpl @Inject constructor(
         localDataSource.setMeshMode(mode)
     }
 
-    override suspend fun registerUser(name: String, phoneNumber: String, pin: String): Result<String> {
-        return try {
-            val meshId = cryptoDataSource.generateLegacyHash(phoneNumber)
-            val salt = cryptoDataSource.generateSalt()
-            val pinHash = "$salt:${cryptoDataSource.generateSaltedHash(pin, salt)}"
-            val user = UserEntity(meshId = meshId, name = name, phoneNumber = phoneNumber, pinHash = pinHash)
-            
-            localDataSource.insertUser(user)
-            localDataSource.setLoginState(true)
-            
-            Result.success(meshId)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun loginUser(phoneNumber: String, pin: String): Result<User> {
-        return try {
-            val meshId = cryptoDataSource.generateLegacyHash(phoneNumber)
-            val user = localDataSource.getUser(meshId)
-            
-            if (user != null) {
-                var verified = false
-                
-                if (user.pinHash.contains(":")) {
-                    val parts = user.pinHash.split(":")
-                    if (parts.size == 2) {
-                        val salt = parts[0]
-                        val hash = parts[1]
-                        if (cryptoDataSource.generateSaltedHash(pin, salt) == hash) {
-                            verified = true
-                        }
-                    }
-                } else {
-                    // Legacy migration
-                    val legacyHash = cryptoDataSource.generateLegacyHash(pin)
-                    if (user.pinHash == legacyHash) {
-                        verified = true
-                        val newSalt = cryptoDataSource.generateSalt()
-                        val newHash = cryptoDataSource.generateSaltedHash(pin, newSalt)
-                        localDataSource.insertUser(user.copy(pinHash = "$newSalt:$newHash"))
-                    }
-                }
-                
-                if (verified) {
-                    localDataSource.setLoginState(true)
-                    return Result.success(com.meshlink.domain.model.User(meshId = user.meshId, name = user.name, phoneNumber = user.phoneNumber, avatarUri = user.avatarUri, aboutMe = user.aboutMe))
-                }
-            }
-            
-            Result.failure(Exception("Invalid phone number or PIN"))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun getLocalUser(): com.meshlink.domain.model.User? {
+    override suspend fun getLocalUser(): User? {
         val userEntity = localDataSource.getLocalUser()
-        return userEntity?.let { com.meshlink.domain.model.User(meshId = it.meshId, name = it.name, phoneNumber = it.phoneNumber, avatarUri = it.avatarUri, aboutMe = it.aboutMe) }
+        return userEntity?.let { User(meshId = it.meshId, name = it.name, avatarUri = it.avatarUri, aboutMe = it.aboutMe) }
     }
 
     override suspend fun updateUserName(name: String) {
@@ -105,12 +61,5 @@ class UserRepositoryImpl @Inject constructor(
         if (userEntity != null) {
             localDataSource.insertUser(userEntity.copy(name = name, aboutMe = aboutMe, avatarUri = avatarUri))
         }
-    }
-
-    override suspend fun logout(clearData: Boolean) {
-        if (clearData) {
-            localDataSource.clearLocalData()
-        }
-        localDataSource.setLoginState(false)
     }
 }

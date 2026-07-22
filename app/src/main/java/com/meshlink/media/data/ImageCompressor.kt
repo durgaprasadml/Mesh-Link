@@ -11,17 +11,16 @@ object ImageCompressor {
 
     private const val TAG = "ImageCompressor"
     private const val MAX_DIMENSION = 480       // Requirement: max 480px
-    private const val MAX_SIZE_BYTES = 80_000   // Requirement: ≤80KB
-    private const val MIN_QUALITY = 15
+    private const val MAX_SIZE_BYTES = 80_000   // Target: 40KB - 80KB
+    private const val ABSOLUTE_MAX_BYTES = 100_000 // Absolute max 100KB
 
     /**
-     * Compress an image URI to a JPEG byte array ≤200KB, max 800×800px.
+     * Compress an image URI to a JPEG byte array. Target ≤ 80KB. Max 100KB.
      * Strategy:
-     *   1. Decode with inSampleSize to avoid loading multi-megapixel images into memory.
-     *   2. Scale to MAX_DIMENSION using createScaledBitmap.
-     *   3. Iteratively reduce JPEG quality from 25 → MIN_QUALITY until ≤80KB.
-     *   4. If still too large at minimum quality, halve dimensions and repeat (max 3 passes).
-     * Returns null if compression fails or image cannot be decoded.
+     *   1. Decode with inSampleSize to avoid loading full res image.
+     *   2. Scale to MAX_DIMENSION (480px) using createScaledBitmap.
+     *   3. Compress using JPEG quality 20%. If > 80KB, retry with 15%.
+     *   4. If still > 100KB, resize by 0.8x and repeat.
      */
     fun compress(context: Context, uri: Uri): ByteArray? {
         return try {
@@ -55,12 +54,12 @@ object ImageCompressor {
             var pass = 0
 
             while (pass < 3) {
-                result = compressToTarget(bitmap, MAX_SIZE_BYTES)
+                result = compressToTarget(bitmap)
                 if (result != null) break
 
-                // Still too large — halve dimensions and retry
-                val newW = (bitmap.width * 0.7f).toInt().coerceAtLeast(100)
-                val newH = (bitmap.height * 0.7f).toInt().coerceAtLeast(100)
+                // Still too large (> 100KB) — resize by 0.8x and retry
+                val newW = (bitmap.width * 0.8f).toInt().coerceAtLeast(100)
+                val newH = (bitmap.height * 0.8f).toInt().coerceAtLeast(100)
                 val smaller = Bitmap.createScaledBitmap(bitmap, newW, newH, true)
                 if (smaller !== bitmap) bitmap.recycle()
                 bitmap = smaller
@@ -71,7 +70,7 @@ object ImageCompressor {
             bitmap.recycle()
 
             if (result == null) {
-                MeshLogger.e(TAG, "Could not compress image to ≤${MAX_SIZE_BYTES / 1000}KB after $pass passes")
+                MeshLogger.e(TAG, "Could not compress image to ≤${ABSOLUTE_MAX_BYTES / 1000}KB after $pass passes")
             } else {
                 MeshLogger.d(TAG, "Compressed to ${result.size / 1000}KB in $pass pass(es)")
             }
@@ -84,23 +83,22 @@ object ImageCompressor {
     }
 
     /**
-     * Iteratively compress bitmap as JPEG, starting at quality 45, stepping down by 5
-     * until size ≤ maxSizeBytes or MIN_QUALITY is reached.
-     * Returns the byte array if target met, null if impossible at MIN_QUALITY.
+     * Compress bitmap as JPEG at quality 20. If > 80KB, compress at quality 15.
+     * Returns the byte array if size ≤ ABSOLUTE_MAX_BYTES, else null.
      */
-    private fun compressToTarget(bitmap: Bitmap, maxSizeBytes: Int): ByteArray? {
-        var quality = 25
-        var bytes: ByteArray
+    private fun compressToTarget(bitmap: Bitmap): ByteArray? {
         val baos = ByteArrayOutputStream()
-        do {
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 20, baos)
+        var bytes = baos.toByteArray()
+        
+        if (bytes.size > MAX_SIZE_BYTES) {
             baos.reset()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 15, baos)
             bytes = baos.toByteArray()
-            quality -= 5
-        } while (bytes.size > maxSizeBytes && quality >= MIN_QUALITY)
+        }
         baos.close()
 
-        return if (bytes.size <= maxSizeBytes) bytes else null
+        return if (bytes.size <= ABSOLUTE_MAX_BYTES) bytes else null
     }
 
     private fun scaleBitmapToMax(bitmap: Bitmap, maxDimension: Int): Bitmap {

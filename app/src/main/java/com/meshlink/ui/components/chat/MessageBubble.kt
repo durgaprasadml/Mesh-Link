@@ -86,11 +86,17 @@ fun MessageBubble(
             MessageType.VOICE -> append("Voice note.")
             MessageType.LOCATION -> append("Location shared.")
             MessageType.SOS -> append("SOS Emergency alert.")
-            MessageType.DOCUMENT -> append("Document: ${message.text}.")
+
         }
         append(" at ${formatTime(message.timestamp)}. ")
         if (isMe) {
-            append("Status: ${message.status.name.lowercase()}. ")
+            val statusStr = when (message.status) {
+                DeliveryStatus.PENDING -> "sending"
+                DeliveryStatus.SENT -> "sent"
+                DeliveryStatus.DELIVERED, DeliveryStatus.RELAYED, DeliveryStatus.SEEN -> "delivered"
+                DeliveryStatus.FAILED -> "failed"
+            }
+            append("Status: $statusStr. ")
         }
         if (isSelected) {
             append("Selected. ")
@@ -140,15 +146,21 @@ fun MessageBubble(
                             contentScale = ContentScale.Crop
                         )
                     } else if (!message.thumbnailBase64.isNullOrEmpty()) {
-                        // Decode base64 to bitmap
-                        val imageBitmap = androidx.compose.runtime.remember(message.thumbnailBase64) {
-                            try {
-                                val bytes = Base64.decode(message.thumbnailBase64, Base64.DEFAULT)
-                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                            } catch (e: Exception) {
-                                null
+                        // Decode base64 to bitmap efficiently on background thread
+                        val imageBitmapState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+                        androidx.compose.runtime.LaunchedEffect(message.thumbnailBase64) {
+                            if (!message.thumbnailBase64.isNullOrEmpty()) {
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        val bytes = Base64.decode(message.thumbnailBase64, Base64.DEFAULT)
+                                        imageBitmapState.value = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                                    } catch (e: Exception) {
+                                        // Ignore
+                                    }
+                                }
                             }
                         }
+                        val imageBitmap = imageBitmapState.value
                         
                         Box(
                             modifier = Modifier
@@ -304,10 +316,27 @@ fun MessageBubble(
                                 }
                             }
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationOn, contentDescription = "Location message", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MeshTheme.spacing.large))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Location Shared", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        // Mini map placeholder
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(MeshTheme.spacing.medium))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Map,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Location message",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(32.dp).offset(y = (-8).dp)
+                            )
                         }
                         Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                         if (message.latitude != null && message.longitude != null) {
@@ -349,70 +378,24 @@ fun MessageBubble(
                         }
                     }
                 }
-                MessageType.DOCUMENT -> {
-                    val mediaPath = message.mediaPath
-                    val fileExists = mediaPath != null && File(mediaPath).exists()
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .padding(vertical = MeshTheme.spacing.small)
-                            .clickable(enabled = fileExists && !isSelectionMode) {
-                                // Add click handler later if needed (e.g. open file with Intent)
-                            }
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(MeshTheme.spacing.extraHuge)
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha=0.5f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.InsertDriveFile, contentDescription = "Document", tint = textColor)
-                        }
-                        Column(modifier = Modifier.weight(1f).padding(start = MeshTheme.spacing.medium)) {
-                            Text(
-                                text = message.text.removePrefix("📄 "),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = textColor,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
+
+                MessageType.TEXT -> {
+                    Column {
+                        Text(
+                            text = message.text,
+                            color = textColor,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = MeshTheme.spacing.extraSmall)
+                        )
+                        if (message.status == DeliveryStatus.FAILED) {
                             Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-                            if (message.status == DeliveryStatus.FAILED) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Failed to send, tap to retry", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
-                                    Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-                                    Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                                }
-                            } else if (transferProgress != null && transferProgress >= 0f && message.status == DeliveryStatus.PENDING) {
-                                Text(
-                                    text = if (message.isFromMe) "Sending..." else "Receiving...",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = textColor.copy(alpha = 0.7f)
-                                )
-                                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                                LinearProgressIndicator(
-                                    progress = { transferProgress },
-                                    modifier = Modifier.fillMaxWidth().height(MeshTheme.spacing.small).clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    trackColor = textColor.copy(alpha = 0.3f)
-                                )
-                            } else {
-                                Text(
-                                    text = if (fileExists) "File available" else "File missing",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = textColor.copy(alpha = 0.7f)
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Retry message", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                                Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+                                Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
-                }
-                MessageType.TEXT -> {
-                    Text(
-                        text = message.text,
-                        color = textColor,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(bottom = MeshTheme.spacing.extraSmall)
-                    )
                 }
             }
 

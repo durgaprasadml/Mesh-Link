@@ -17,14 +17,14 @@ class UserLocalDataSourceImpl @Inject constructor(
 ) : UserLocalDataSource {
 
     companion object {
-        val IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
+        val HAS_PROFILE = booleanPreferencesKey("has_profile")
         val ENCRYPTION_ENABLED = booleanPreferencesKey("encryption_enabled")
         val ONLINE_VISIBILITY = booleanPreferencesKey("online_visibility")
         val MESH_MODE = stringPreferencesKey("mesh_mode")
     }
 
-    override val isLoggedIn: Flow<Boolean> = dataStore.data.map { preferences ->
-        preferences[IS_LOGGED_IN] ?: false
+    override val hasProfile: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[HAS_PROFILE] ?: false
     }
 
     override val isEncryptionEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
@@ -51,9 +51,9 @@ class UserLocalDataSourceImpl @Inject constructor(
         dataStore.edit { prefs -> prefs[MESH_MODE] = mode }
     }
 
-    override suspend fun setLoginState(isLoggedIn: Boolean) {
+    override suspend fun setProfileCreated(created: Boolean) {
         dataStore.edit { preferences ->
-            preferences[IS_LOGGED_IN] = isLoggedIn
+            preferences[HAS_PROFILE] = created
         }
     }
 

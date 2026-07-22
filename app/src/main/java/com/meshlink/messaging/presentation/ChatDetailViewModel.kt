@@ -234,23 +234,21 @@ class ChatDetailViewModel @Inject constructor(
         }
     }
 
-    fun sendDocument(uri: Uri) {
-        if (address.isBlank()) return
-        viewModelScope.launch {
-            meshRepository.sendDocument(rawPeerIdOrAddress.ifBlank { address }, uri, name)
-        }
-    }
 
     fun retryTransfer(messageId: String) {
         viewModelScope.launch {
             val msg = getMessageUseCase(messageId) ?: return@launch
-            if (msg.status == com.meshlink.domain.model.DeliveryStatus.FAILED && msg.mediaPath != null) {
-                // Resume upload from the beginning (manual retry)
-                val uri = Uri.parse(msg.mediaPath)
-                if (msg.messageType == com.meshlink.domain.model.MessageType.IMAGE) {
-                    meshRepository.sendImage(rawPeerIdOrAddress.ifBlank { address }, uri, name)
-                } else if (msg.messageType == com.meshlink.domain.model.MessageType.VOICE) {
-                    meshRepository.sendVoiceNote(rawPeerIdOrAddress.ifBlank { address }, msg.mediaPath, msg.mediaDurationMs ?: 0L, name)
+            if (msg.status == com.meshlink.domain.model.DeliveryStatus.FAILED) {
+                if (msg.messageType == com.meshlink.domain.model.MessageType.TEXT) {
+                    meshRepository.sendMessage(rawPeerIdOrAddress.ifBlank { address }, msg, name)
+                } else if (msg.mediaPath != null) {
+                    // Resume upload from the beginning (manual retry)
+                    val uri = Uri.parse(msg.mediaPath)
+                    if (msg.messageType == com.meshlink.domain.model.MessageType.IMAGE) {
+                        meshRepository.sendImage(rawPeerIdOrAddress.ifBlank { address }, uri, name)
+                    } else if (msg.messageType == com.meshlink.domain.model.MessageType.VOICE) {
+                        meshRepository.sendVoiceNote(rawPeerIdOrAddress.ifBlank { address }, msg.mediaPath, msg.mediaDurationMs ?: 0L, name)
+                    }
                 }
             }
         }

@@ -40,7 +40,7 @@ class FakeMeshRepository : MeshRepository {
     override suspend fun autoStartMesh() {}
     override fun stopMesh() {}
     
-    override suspend fun sendMessage(message: Message, chatName: String) {}
+    override suspend fun sendMessage(targetMeshId: String, message: Message) {}
     override suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String) {}
     override suspend fun sendVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String) {}
     override suspend fun sendLocation(targetMeshId: String, chatName: String) {}

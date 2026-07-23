@@ -1,6 +1,6 @@
 package com.meshlink.routing.engine
 
-import com.meshlink.ai.engine.TransportPredictor
+
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.repository.SettingsRepository
 import javax.inject.Inject
@@ -15,7 +15,6 @@ import kotlinx.coroutines.runBlocking
 @Singleton
 class IntelligentTransportManager @Inject constructor(
     private val routeOptimizer: RouteOptimizer,
-    private val transportPredictor: TransportPredictor,
     private val settingsRepository: SettingsRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -42,9 +41,7 @@ class IntelligentTransportManager @Inject constructor(
             "AUTOMATIC" -> { /* default AI behaviour */ }
         }
 
-        // Consult AI Transport Predictor first
-        val predictedBest = transportPredictor.predictBestTransport(destinationId, payloadSizeBytes)
-        
+        val predictedBest = RouteType.BLE
         // Find best known route to the destination
         val bestRoute = routeOptimizer.getOptimalRoute(destinationId)
         

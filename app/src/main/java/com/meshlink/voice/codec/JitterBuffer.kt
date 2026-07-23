@@ -54,8 +54,10 @@ class JitterBuffer @Inject constructor(
                     // Check if it's the right time to play it or if we should skip missing frames
                     if (lastPlayedSeqNum == -1L || nextFrame.sequenceNumber > lastPlayedSeqNum) {
                         val frame = buffer.poll()
-                        lastPlayedSeqNum = frame.sequenceNumber
-                        onFrameReadyForDecode?.invoke(frame)
+                        if (frame != null) {
+                            lastPlayedSeqNum = frame.sequenceNumber
+                            onFrameReadyForDecode?.invoke(frame)
+                        }
                     } else {
                         // Old frame arrived late, discard
                         buffer.poll()

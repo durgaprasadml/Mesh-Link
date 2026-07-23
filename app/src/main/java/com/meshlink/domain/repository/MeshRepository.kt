@@ -27,7 +27,7 @@ interface MeshRepository {
     fun stopMesh()
     fun getMeshStatus(): com.meshlink.domain.model.MeshStatus
     
-    suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message, chatName: String)
+    suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message)
     suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String)
     suspend fun sendVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String)
     suspend fun sendLocation(targetMeshId: String, chatName: String)

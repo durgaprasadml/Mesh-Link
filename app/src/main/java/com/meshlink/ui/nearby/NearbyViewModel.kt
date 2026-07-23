@@ -6,7 +6,7 @@ import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.model.TransportType
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
-import com.meshlink.wifi.data.WifiDirectManager
+
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,8 +28,7 @@ data class NearbyUiState(
 @HiltViewModel
 class NearbyViewModel @Inject constructor(
     private val meshRepository: MeshRepository,
-    private val userRepository: UserRepository,
-    private val wifiDirectManager: WifiDirectManager
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     private val _sortOption = MutableStateFlow(SortOption.RSSI)
@@ -38,42 +37,17 @@ class NearbyViewModel @Inject constructor(
 
     val uiState: StateFlow<NearbyUiState> = combine(
         meshRepository.scannedDevices,
-        wifiDirectManager.discoveredPeers,
         _sortOption,
         _isScanning,
         _errorMessage
-    ) { bleMap, wifiMap, sortOption, isScanning, errorMessage ->
+    ) { bleMap, sortOption, isScanning, errorMessage ->
         
         val mergedDevices = mutableMapOf<String, BleDevice>()
         
         bleMap.values.forEach { device ->
             mergedDevices[device.address] = device
         }
-        
-        wifiMap.values.forEach { wifiDevice ->
-            val wifiMac = wifiDevice.deviceAddress
-            val wifiName = wifiDevice.deviceName ?: "Unknown Peer"
-            
-            // Try to find a matching BLE device by Name
-            val matchingBleDeviceEntry = mergedDevices.entries.find { it.value.name == wifiName }
-            
-            if (matchingBleDeviceEntry != null) {
-                val existing = matchingBleDeviceEntry.value
-                mergedDevices[existing.address] = existing.copy(transport = TransportType.HYBRID)
-            } else {
-                mergedDevices[wifiMac] = BleDevice(
-                    meshId = "", 
-                    name = wifiName,
-                    address = wifiMac,
-                    rssi = -50, 
-                    lastSeen = System.currentTimeMillis(),
-                    transport = TransportType.WIFI_DIRECT,
-                    capabilities = 0,
-                    isConnected = false
-                )
-            }
-        }
-        
+
         val sortedList = when (sortOption) {
             SortOption.RSSI -> mergedDevices.values.toList().sortedByDescending { it.rssi }
             SortOption.NAME -> mergedDevices.values.toList().sortedBy { it.name.ifBlank { "~" } }
@@ -105,7 +79,6 @@ class NearbyViewModel @Inject constructor(
             if (user != null) {
                 try {
                     meshRepository.autoStartMesh()
-                    wifiDirectManager.startDiscovery()
                 } catch (e: Exception) {
                     _errorMessage.value = e.message ?: "Failed to start discovery"
                 } finally {
@@ -120,11 +93,7 @@ class NearbyViewModel @Inject constructor(
     
     fun connectToDevice(device: BleDevice, onConnected: () -> Unit) {
         viewModelScope.launch {
-            if (device.transport == TransportType.WIFI_DIRECT || device.transport == TransportType.HYBRID) {
-                // If HYBRID, device.address is BLE MAC. Find Wi-Fi MAC by name.
-                val wifiMac = wifiDirectManager.discoveredPeers.value.values.find { it.deviceName == device.name }?.deviceAddress
-                wifiDirectManager.connectToPeer(wifiMac ?: device.address)
-            }
+
             if (device.transport == TransportType.BLE || device.transport == TransportType.HYBRID) {
                 meshRepository.connectToPeer(device.address)
             }

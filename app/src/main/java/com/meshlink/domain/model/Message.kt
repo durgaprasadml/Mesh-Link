@@ -29,5 +29,5 @@ enum class DeliveryStatus {
 }
 
 enum class MessageType {
-    TEXT, IMAGE, VOICE, LOCATION, SOS, DOCUMENT
+    TEXT, IMAGE, VOICE, LOCATION, SOS
 }

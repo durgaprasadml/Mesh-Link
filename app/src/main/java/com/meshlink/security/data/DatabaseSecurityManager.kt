@@ -10,7 +10,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.google.firebase.crashlytics.FirebaseCrashlytics
+
 import java.security.InvalidAlgorithmParameterException
 import java.security.KeyStore
 import java.security.ProviderException
@@ -209,7 +209,7 @@ class DatabaseSecurityManager @Inject constructor(
         } catch (e: Exception) {
             val sanitizedMsg = e.javaClass.simpleName
             com.meshlink.common.logger.MeshLogger.e(TAG, "Rekey failure: $sanitizedMsg", e)
-            FirebaseCrashlytics.getInstance().recordException(Exception("Database migration failed during rekey: $sanitizedMsg", e))
+            com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Database migration failed during rekey: $sanitizedMsg")
             legacyDb?.close()
             return false
         }
@@ -248,7 +248,7 @@ class DatabaseSecurityManager @Inject constructor(
         } catch (e: Exception) {
             val sanitizedMsg = e.javaClass.simpleName
             com.meshlink.common.logger.MeshLogger.e(TAG, "Verification failure: $sanitizedMsg", e)
-            FirebaseCrashlytics.getInstance().recordException(Exception("Database migration failed during verification: $sanitizedMsg", e))
+            com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Database migration failed during verification: $sanitizedMsg")
             return false
         } finally {
             verifyDb?.close()
@@ -312,7 +312,7 @@ class DatabaseSecurityManager @Inject constructor(
             } catch (e: Exception) {
                 attempt++
                 if (attempt >= 3) {
-                    FirebaseCrashlytics.getInstance().recordException(Exception("Keystore DB encrypt failed after 3 retries", e))
+                    com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Keystore DB encrypt failed after 3 retries")
                     throw e
                 }
             }
@@ -334,7 +334,7 @@ class DatabaseSecurityManager @Inject constructor(
                 
                 return cipher.doFinal(encrypted)
             } catch (e: android.security.keystore.KeyPermanentlyInvalidatedException) {
-                FirebaseCrashlytics.getInstance().recordException(Exception("Keystore DB key permanently invalidated", e))
+                com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Keystore DB key permanently invalidated")
                 // Regenerate the master key but do NOT delete the DB or return dummy byte array
                 try {
                     val keyStore = KeyStore.getInstance(SecurityConstants.ANDROID_KEYSTORE).apply { load(null) }
@@ -348,7 +348,7 @@ class DatabaseSecurityManager @Inject constructor(
                 attempt++
                 if (attempt >= 3) {
                     val msg = e.javaClass.simpleName
-                    FirebaseCrashlytics.getInstance().recordException(Exception("Keystore DB decrypt failed after 3 retries: $msg"))
+                    com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Keystore DB decrypt failed after 3 retries: $msg")
                     return ByteArray(0)
                 }
             }

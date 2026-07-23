@@ -38,13 +38,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.meshlink.messaging.presentation.ChatDetailScreen
 import com.meshlink.messaging.presentation.ChatsListScreen
-import com.meshlink.ui.analytics.AnalyticsScreen
-import com.meshlink.ui.profile.ProfileSetupScreen
-import com.meshlink.ui.broadcast.BroadcastScreen
+import androidx.compose.runtime.collectAsState
 import com.meshlink.ui.home.HomeScreen
+import com.meshlink.ui.profile.ProfileSetupScreen
 import com.meshlink.ui.nearby.NearbyDevicesScreen
 import com.meshlink.ui.settings.SettingsScreen
-import com.meshlink.ui.sos.SosScreen
 import com.meshlink.util.NotificationHelper
 
 
@@ -69,6 +67,7 @@ fun AppNavigation(
         androidx.compose.ui.platform.LocalContext.current.applicationContext,
         com.meshlink.di.UserRepositoryEntryPoint::class.java
     ).getUserRepository()
+    
     
     val hasProfile by userRepository.hasProfile.collectAsState(initial = null)
 
@@ -146,7 +145,7 @@ fun AppNavigation(
                 
                 composable(Screen.ProfileSetup.route) {
                     ProfileSetupScreen(
-                        onSetupComplete = {
+                        onSetupSuccess = {
                             navController.navigate(Screen.Home.route) {
                                 popUpTo(0)
                             }

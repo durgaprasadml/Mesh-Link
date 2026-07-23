@@ -37,16 +37,14 @@ class VoiceTransport @Inject constructor(
             try {
                 // Signals are encrypted like normal messages
                 val encrypted = cryptoManager.encrypt(signalJson, targetId)
-                if (encrypted != null) {
-                    val packet = MeshPacket(
-                        senderId = senderId,
-                        targetId = targetId,
-                        payload = encrypted,
-                        type = PacketType.VOICE_SIGNAL,
-                        encrypted = true
-                    )
-                    onSendPacket?.invoke(packet)
-                }
+                val packet = MeshPacket(
+                    senderId = senderId,
+                    targetId = targetId,
+                    payload = encrypted,
+                    type = PacketType.VOICE_SIGNAL,
+                    encrypted = true
+                )
+                onSendPacket?.invoke(packet)
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Failed to encrypt signal: ${e.message}")
             }
@@ -63,16 +61,14 @@ class VoiceTransport @Inject constructor(
             val payloadString = "${callId}:${seqNum}:${Base64.encodeToString(pcmData, Base64.NO_WRAP)}"
             val encrypted = cryptoManager.encrypt(payloadString, targetId)
             
-            if (encrypted != null) {
-                val packet = MeshPacket(
-                    senderId = senderId,
-                    targetId = targetId,
-                    payload = encrypted,
-                    type = PacketType.VOICE_FRAME,
-                    encrypted = true
-                )
-                onSendPacket?.invoke(packet)
-            }
+            val packet = MeshPacket(
+                senderId = senderId,
+                targetId = targetId,
+                payload = encrypted,
+                type = PacketType.VOICE_FRAME,
+                encrypted = true
+            )
+            onSendPacket?.invoke(packet)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to send frame: ${e.message}")
         }

@@ -240,7 +240,7 @@ class ChatDetailViewModel @Inject constructor(
             val msg = getMessageUseCase(messageId) ?: return@launch
             if (msg.status == com.meshlink.domain.model.DeliveryStatus.FAILED) {
                 if (msg.messageType == com.meshlink.domain.model.MessageType.TEXT) {
-                    meshRepository.sendMessage(rawPeerIdOrAddress.ifBlank { address }, msg, name)
+                    meshRepository.sendMessage(rawPeerIdOrAddress.ifBlank { address }, msg)
                 } else if (msg.mediaPath != null) {
                     // Resume upload from the beginning (manual retry)
                     val uri = Uri.parse(msg.mediaPath)

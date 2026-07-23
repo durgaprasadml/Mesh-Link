@@ -13,12 +13,9 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.common.power.PowerState
-import com.meshlink.common.power.PowerStateManager
 import com.meshlink.MainActivity
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.ui.components.hasRequiredPermissions
-import com.meshlink.wifi.data.WifiDirectManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -56,11 +53,6 @@ class MeshRelayService : Service() {
     @Inject
     lateinit var meshRepository: MeshRepository
     
-    @Inject
-    lateinit var wifiDirectManager: WifiDirectManager
-
-    @Inject
-    lateinit var powerStateManager: PowerStateManager
 
     private var serviceJob: Job? = null
     private var restartOnDestroy = true
@@ -88,7 +80,6 @@ class MeshRelayService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        wifiDirectManager.registerReceiver()
         
         val filter = android.content.IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
         registerReceiver(bluetoothStateReceiver, filter)
@@ -168,12 +159,6 @@ class MeshRelayService : Service() {
             while (isActive) {
                 delay(15_000L)
                 if (System.currentTimeMillis() - lastRefresh >= BLE_REFRESH_INTERVAL_MS) {
-                    val currentState = powerStateManager.powerState.value
-                    if (currentState == PowerState.DOZE_MODE || currentState == PowerState.RESTRICTED) {
-                        MeshLogger.d(TAG, "Skipping BLE refresh due to power state: $currentState")
-                        lastRefresh = System.currentTimeMillis()
-                        continue
-                    }
                     withWakeLock(30_000L) {
                         try {
                             meshRepository.autoStartMesh()
@@ -263,7 +248,6 @@ class MeshRelayService : Service() {
         serviceScope.cancel()
         serviceJob?.cancel()
         meshRepository.stopMesh()
-        wifiDirectManager.unregisterReceiver()
         try {
             unregisterReceiver(bluetoothStateReceiver)
         } catch (e: Exception) {

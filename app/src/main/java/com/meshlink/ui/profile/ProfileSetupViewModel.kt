@@ -56,16 +56,14 @@ class ProfileSetupViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _uiState.value = ProfileSetupUiState.Loading
-            userRepository.createProfile(trimmedName).fold(
-                onSuccess = {
-                    _uiState.value = ProfileSetupUiState.Idle
-                    _uiEvent.emit(ProfileSetupEvent.SetupSuccess)
-                },
-                onFailure = { error ->
-                    _uiState.value = ProfileSetupUiState.Idle
-                    _uiEvent.emit(ProfileSetupEvent.Error(error.message ?: "Failed to create profile"))
-                }
-            )
+            val result = userRepository.createProfile(trimmedName)
+            if (result.isSuccess) {
+                _uiState.value = ProfileSetupUiState.Idle
+                _uiEvent.emit(ProfileSetupEvent.SetupSuccess)
+            } else {
+                _uiState.value = ProfileSetupUiState.Idle
+                _uiEvent.emit(ProfileSetupEvent.Error(result.exceptionOrNull()?.message ?: "Failed to create profile"))
+            }
         }
     }
 }

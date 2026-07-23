@@ -47,7 +47,7 @@ class SendMessageUseCase @Inject constructor(
 
         chatRepository.saveMessage(message, chatName)
         android.util.Log.d("[DIAG-Stage2]", "  chatRepository.saveMessage() called  ✓")
-        meshRepository.sendMessage(targetMeshId, message, chatName)
+        meshRepository.sendMessage(targetMeshId, message)
         android.util.Log.d("[DIAG-Stage2]", "  meshRepository.sendMessage() called  ✓")
     }
 }

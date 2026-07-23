@@ -1,7 +1,7 @@
 package com.meshlink.routing.data
 
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.analytics.data.MeshAnalytics
+
 import com.meshlink.ble.data.BleGattManager
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.ble.data.MeshPacketParser
@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.first
 @Singleton
 class MeshRouter @Inject constructor(
     private val gattManager: BleGattManager,
-    private val analytics: MeshAnalytics,
+
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,
     private val routingEngine: RoutingEngine,
@@ -266,11 +266,11 @@ class MeshRouter @Inject constructor(
 
         MeshLogger.d(TAG, "Packet [${packet.type}] from=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)} target=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)} ttl=${packet.ttl} hops=${packet.hopCount}")
 
-        analytics.recordNodeSeen(packet.senderId)
+
 
         // Deliver locally if it's for us or a broadcast
         if (isForMe || isBroadcast) {
-            analytics.recordPacketDelivered(packet.hopCount)
+
             
             // If it's a delivery ACK, we can record a successful delivery on our route
             if (packet.type == PacketType.DELIVERY_ACK) {
@@ -323,7 +323,7 @@ class MeshRouter @Inject constructor(
             })
         )
 
-        analytics.recordPacketRelayed(packet.senderId, relayPacket.hopCount)
+
 
         val forwardedJson = MeshPacketParser.toJson(relayPacket)
         val connectedNodes = gattManager.connectedServers.keys + gattManager.activeClients.keys
@@ -419,7 +419,7 @@ class MeshRouter @Inject constructor(
         // ────────────────────────────────────────────────────────────────────────
 
         routingEngine.markPacketProcessed(packet.packetId)
-        analytics.recordPacketSent()
+
         routingEngine.queueOptimizer.enqueue(packet)
     }
 
@@ -428,7 +428,7 @@ class MeshRouter @Inject constructor(
         val finalPacket = packet.copy(ttl = initialTtl)
         
         routingEngine.markPacketProcessed(finalPacket.packetId)
-        analytics.recordPacketSent()
+
         routingEngine.queueOptimizer.enqueue(finalPacket)
     }
 

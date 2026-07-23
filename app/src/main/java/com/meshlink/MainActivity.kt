@@ -16,8 +16,7 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.firebase.crashlytics.FirebaseCrashlytics
+
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.service.MeshRelayService
 import com.meshlink.ui.components.hasRequiredPermissions
@@ -40,8 +39,7 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var meshRepository: MeshRepository
 
-    private var firebaseAnalytics: FirebaseAnalytics? = null
-    
+
     private val pendingIntents = kotlinx.coroutines.channels.Channel<Intent>(kotlinx.coroutines.channels.Channel.UNLIMITED)
 
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -57,9 +55,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         lifecycleScope.launch(Dispatchers.IO) {
-            firebaseAnalytics = FirebaseAnalytics.getInstance(this@MainActivity)
-            FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
-            firebaseAnalytics?.logEvent(FirebaseAnalytics.Event.APP_OPEN, null)
             checkAndStartMesh()
         }
 
@@ -90,10 +85,7 @@ class MainActivity : ComponentActivity() {
                         val address = newIntent.getStringExtra("address")
                         val name = newIntent.getStringExtra("name")
                         if (address != null && name != null) {
-                            firebaseAnalytics?.logEvent(
-                                "chat_opened",
-                                bundleOf("device_name" to name)
-                            )
+
                             navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
                                 launchSingleTop = true
                             }
@@ -105,10 +97,7 @@ class MainActivity : ComponentActivity() {
                     val address = intent.getStringExtra("address")
                     val name = intent.getStringExtra("name")
                     if (address != null && name != null) {
-                        firebaseAnalytics?.logEvent(
-                            "chat_opened",
-                            bundleOf("device_name" to name)
-                        )
+
                         navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
                             launchSingleTop = true
                         }
@@ -143,9 +132,8 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     meshRepository.autoStartMesh()
-                    firebaseAnalytics?.logEvent("mesh_started", null)
                 } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().recordException(e)
+                    com.meshlink.common.logger.MeshLogger.e("MainActivity", "Error starting mesh: ${e.message}")
                 }
             }
         }
@@ -163,10 +151,8 @@ class MainActivity : ComponentActivity() {
                 startService(intent)
             }
 
-            firebaseAnalytics?.logEvent("relay_service_started", null)
-
         } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
+            com.meshlink.common.logger.MeshLogger.e("MainActivity", "Error starting relay service: ${e.message}")
         }
     }
 

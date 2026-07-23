@@ -29,9 +29,7 @@ import com.meshlink.routing.data.MeshRouter
 import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.util.NotificationHelper
 import com.meshlink.voice.transport.VoiceTransport
-import com.meshlink.video.transport.VideoTransport
-import com.meshlink.wifi.data.WifiDirectManager
-import com.meshlink.wifi.data.WifiSocketTransport
+
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.util.UUID
@@ -65,8 +63,7 @@ class BleRepositoryImpl @Inject constructor(
     private val mediaTransferManager: com.meshlink.media.data.MediaTransferManager,
     private val locationProvider: LocationProvider,
     private val cryptoManager: MeshCryptoManager,
-    private val wifiDirectManager: WifiDirectManager,
-    private val wifiSocketTransport: WifiSocketTransport,
+
     private val sessionManager: com.meshlink.security.data.SessionManager,
     private val rekeyManager: com.meshlink.security.data.RekeyManager,
     private val trustManager: com.meshlink.security.data.TrustManager,
@@ -76,7 +73,6 @@ class BleRepositoryImpl @Inject constructor(
     private val routingCoordinator: RoutingCoordinator,
     private val meshMessagingManager: MeshMessagingManager,
     private val voiceTransport: VoiceTransport,
-    private val videoTransport: VideoTransport,
     @ApplicationContext private val context: Context
 ) : MeshRepository {
     companion object {
@@ -161,17 +157,6 @@ class BleRepositoryImpl @Inject constructor(
             meshRouter.sendMediaPacket(packet) // Reuse high-priority routing
         }
 
-        // Wire VideoTransport for outbound real-time video packets
-        videoTransport.onSendPacket = { packet ->
-            meshRouter.sendMediaPacket(packet) // High priority routing
-        }
-
-        // Wire WifiSocketTransport so it routes incoming packets just like MeshRouter
-        wifiSocketTransport.onPacketReceived = { packet ->
-            scope.launch {
-                meshMessagingManager.handleIncomingPacket(packet)
-            }
-        }
 
         scope.launch {
             incomingMeshPayloads.collect { (_, packet) ->
@@ -198,46 +183,7 @@ class BleRepositoryImpl @Inject constructor(
             }
         }
         
-        // Phase 6: Broadcast Wi-Fi Direct capability
-        scope.launch {
-            wifiDirectManager.localDeviceMac.collect { mac ->
-                if (mac != null) {
-                    val user = userRepository.getLocalUser()
-                    if (user != null) {
-                        val localPeerId = networkId(user.meshId)
-                        val wifiPayload = JSONObject().apply {
-                            put("wifiMac", mac)
-                        }.toString()
-                        val packet = MeshPacket(
-                            senderId = localPeerId,
-                            targetId = "BROADCAST",
-                            payload = wifiPayload,
-                            type = PacketType.WIFI_NEGOTIATION,
-                            encrypted = false,
-                            ttl = 15
-                        )
-                        meshRouter.sendMediaPacket(packet)
-                    }
-                }
-            }
-        }
-        
-        // Phase 6: Observe Wi-Fi Direct Connection Lifecycle
-        scope.launch {
-            wifiDirectManager.connectionInfo.collect { info ->
-                if (info != null && info.groupFormed) {
-                    if (info.isGroupOwner) {
-                        wifiSocketTransport.startServer()
-                    } else if (info.groupOwnerAddress != null) {
-                        wifiSocketTransport.connectAsClient(info.groupOwnerAddress.hostAddress ?: "")
-                    }
-                } else {
-                    wifiSocketTransport.disconnect()
-                    wifiSocketTransport.stopServer()
-                }
-            }
-        }
-        
+
         // Phase E2: Observe DiscoveryEngine events for Smart Connect
         scope.launch {
             discoveryEngine.engineEvents.collect { record ->
@@ -361,8 +307,8 @@ class BleRepositoryImpl @Inject constructor(
 
     // ────────── Text Messages (ENCRYPTED) ──────────
 
-    override suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message, chatName: String) {
-        meshMessagingManager.sendMessage(targetMeshId, message, chatName)
+    override suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message) {
+        meshMessagingManager.sendMessage(targetMeshId, message)
     }
 
     override suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String) {

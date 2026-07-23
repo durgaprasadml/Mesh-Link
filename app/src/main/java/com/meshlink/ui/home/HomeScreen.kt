@@ -51,8 +51,6 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToNearby: () -> Unit,
     onNavigateToChat: (String, String) -> Unit,
-    onNavigateToSos: () -> Unit,
-    onNavigateToBroadcast: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val chatsViewModel: ChatsListViewModel = hiltViewModel()
@@ -188,26 +186,7 @@ fun HomeScreen(
                                 iconTintColor = MaterialTheme.colorScheme.primary
                             )
                         }
-                        item(contentType = "dashboard_card") {
-                            DashboardCard(
-                                icon = Icons.Default.Campaign,
-                                title = "Broadcasts",
-                                subtitle = "Send to all",
-                                onClick = onNavigateToBroadcast,
-                                iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                iconTintColor = MaterialTheme.colorScheme.tertiary
-                            )
-                        }
-                        item(contentType = "dashboard_card") {
-                            DashboardCard(
-                                icon = Icons.Default.Warning,
-                                title = "SOS",
-                                subtitle = "Emergency",
-                                onClick = onNavigateToSos,
-                                iconContainerColor = MaterialTheme.colorScheme.errorContainer,
-                                iconTintColor = MaterialTheme.colorScheme.error
-                            )
-                        }
+
                     }
                     
                     Spacer(modifier = Modifier.height(MeshTheme.spacing.large))

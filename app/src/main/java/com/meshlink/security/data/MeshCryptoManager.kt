@@ -10,7 +10,6 @@ import com.meshlink.common.logger.MeshLogger
 import androidx.annotation.RequiresApi
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -479,14 +478,7 @@ class MeshCryptoManager @Inject constructor(
             encrypt(plaintext, peerId, aad)
         } catch (e: Exception) {
             if (requireEncryption) {
-                FirebaseCrashlytics.getInstance().apply {
-                    setCustomKey("peerId", com.meshlink.util.MeshIdNormalizer.canonicalize(peerId))
-                    setCustomKey("messageId", messageId)
-                    setCustomKey("retryCount", retryCount)
-                    setCustomKey("keyPresent", true)
-                    setCustomKey("encryptionMode", "encrypt")
-                    recordException(Exception("Encryption failed: ${e.javaClass.simpleName}"))
-                }
+                MeshLogger.e(TAG, "Encryption failed: ${e.javaClass.simpleName}")
                 return null
             }
             return plaintext to false

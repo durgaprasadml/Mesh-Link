@@ -46,7 +46,6 @@ class MeshMessagingManager @Inject constructor(
     private val meshRouter: MeshRouter,
     private val transferManager: com.meshlink.transfer.TransferManager,
     private val mediaTransferManager: com.meshlink.media.data.MediaTransferManager,
-    private val wifiDirectManager: com.meshlink.wifi.data.WifiDirectManager,
     private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
     private val locationProvider: LocationProvider,
     private val routingCoordinator: RoutingCoordinator,
@@ -54,27 +53,31 @@ class MeshMessagingManager @Inject constructor(
     private val trustManager: com.meshlink.security.data.TrustManager,
     private val rekeyManager: com.meshlink.security.data.RekeyManager,
     private val voiceTransport: com.meshlink.voice.transport.VoiceTransport,
-    private val videoTransport: com.meshlink.video.transport.VideoTransport,
     private val connectionManager: BleConnectionManager,
     private val discoveryManager: DiscoveryManager
 ) {
     private val TAG = "MeshMessagingManager"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-/*
     init {
+        setupTransferManager()
+    }
+
+    private fun setupTransferManager() {
         transferManager.onSendPacket = { packet ->
             meshRouter.sendMediaPacket(packet)
         }
-        transferManager.waitForTransportQueueDrain = { targetId ->
-            meshRouter.waitForTransportQueueDrain(targetId)
-        }
+
         transferManager.onTransferCompleted = { session ->
             scope.launch {
-                receiveMediaMessage(session.transferId, session.filePath, session.mimeType, session.senderId)
+                receiveMediaMessage(
+                    session.transferId,
+                    session.filePath ?: "",
+                    session.mimeType ?: "",
+                    session.senderId
+                )
             }
         }
     }
-*/
 
     suspend fun handleIncomingPacket(packet: MeshPacket) {
         if (packet.targetId == "BROADCAST") {
@@ -185,7 +188,7 @@ class MeshMessagingManager @Inject constructor(
                 }
                 PacketType.VIDEO_SIGNAL,
                 PacketType.VIDEO_FRAME -> {
-                    videoTransport.handleIncomingPacket(processedPacket)
+                    // Handled elsewhere or not needed right now
                 }
                 PacketType.BEACON,
                 PacketType.INCIDENT_REPORT,
@@ -194,9 +197,6 @@ class MeshMessagingManager @Inject constructor(
                 PacketType.RESOURCE_SYNC,
                 PacketType.MAP_SYNC -> {
                     // Handled elsewhere or not needed right now
-                }
-                else -> {
-                    // Fallback
                 }
             }
         } catch (e: Exception) {
@@ -609,7 +609,7 @@ class MeshMessagingManager @Inject constructor(
 
     // ────────── Text Messages (ENCRYPTED) ──────────
 
-    suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message, chatName: String) {
+    suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message) {
         val user = userRepository.getLocalUser() ?: return
         val localPeerId = routingCoordinator.networkId(user.meshId)
         val targetPeerId = routingCoordinator.outgoingChatId(targetMeshId)
@@ -686,12 +686,7 @@ class MeshMessagingManager @Inject constructor(
         // ─────────────────────────────────────────────────────────────────────
 
         val rawPayload = packet.payload
-
         val internalKeywords = setOf("KEY_EXCHANGE", "ACK", "RELAY", "ROUTING", "HANDSHAKE")
-        if (rawPayload.startsWith("v2|") || internalKeywords.contains(rawPayload)) {
-            MeshLogger.w(TAG, "Filtering out internal protocol packet from chat UI: $rawPayload")
-            return
-        }
 
         // Try to parse as JSON (new format with senderName), fall back to plain text
         val (plaintext, senderName) = try {
@@ -705,6 +700,12 @@ class MeshMessagingManager @Inject constructor(
         } catch (_: Exception) {
             // Legacy plain text packet
             rawPayload to com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
+        }
+
+        val trimmedPlaintext = plaintext.trim()
+        if (trimmedPlaintext.startsWith("v2|") || internalKeywords.contains(trimmedPlaintext)) {
+            MeshLogger.w(TAG, "Filtering out internal protocol packet from chat UI (after JSON extraction): $plaintext")
+            return
         }
 
         val message = MessageEntity(
@@ -816,13 +817,13 @@ class MeshMessagingManager @Inject constructor(
         val messageType = when {
             isImage -> MessageType.IMAGE
             isVoice -> MessageType.VOICE
-            else -> com.meshlink.database.data.local.MessageType.DOCUMENT
+            else -> MessageType.TEXT
         }
 
         val previewText = when {
             isImage -> "📷 Image"
             isVoice -> "🎤 Voice Note"
-            else -> "📄 Document"
+            else -> "Unsupported File"
         }
 
         val chatId = routingCoordinator.incomingChatId(completedSenderId)
@@ -867,13 +868,13 @@ class MeshMessagingManager @Inject constructor(
         val messageType = when {
             isImage -> MessageType.IMAGE
             isVoice -> MessageType.VOICE
-            else -> com.meshlink.database.data.local.MessageType.DOCUMENT
+            else -> MessageType.TEXT
         }
 
         val previewText = when {
             isImage -> "📷 Receiving Image..."
             isVoice -> "🎤 Receiving Voice Note..."
-            else -> "📄 Receiving Document..."
+            else -> "Receiving File..."
         }
 
         val chatId = routingCoordinator.incomingChatId(packet.senderId)
@@ -1149,12 +1150,7 @@ class MeshMessagingManager @Inject constructor(
         if (chatDao.getMessageByUuid(packet.packetId) != null) return // Ignore duplicate
 
         val rawPayload = packet.payload
-
         val internalKeywords = setOf("KEY_EXCHANGE", "ACK", "RELAY", "ROUTING", "HANDSHAKE")
-        if (rawPayload.startsWith("v2|") || internalKeywords.contains(rawPayload)) {
-            MeshLogger.w(TAG, "Filtering out internal protocol packet from broadcast UI: $rawPayload")
-            return
-        }
 
         val (plaintext, senderName) = try {
             val json = JSONObject(rawPayload)
@@ -1166,6 +1162,12 @@ class MeshMessagingManager @Inject constructor(
             }
         } catch (_: Exception) {
             rawPayload to com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
+        }
+
+        val trimmedPlaintext = plaintext.trim()
+        if (trimmedPlaintext.startsWith("v2|") || internalKeywords.contains(trimmedPlaintext)) {
+            MeshLogger.w(TAG, "Filtering out internal protocol packet from broadcast UI (after JSON extraction): $plaintext")
+            return
         }
 
         val message = MessageEntity(
@@ -1250,10 +1252,7 @@ class MeshMessagingManager @Inject constructor(
         val json = try { JSONObject(packet.payload) } catch (_: Exception) { return }
         val peerMac = json.optString("wifiMac")
         if (peerMac.isNotEmpty()) {
-            MeshLogger.d(TAG, "Received Wi-Fi Direct MAC from peer: $peerMac, initiating connect...")
-            withContext(Dispatchers.Main) {
-                wifiDirectManager.connectToPeer(peerMac)
-            }
+            MeshLogger.d(TAG, "Received Wi-Fi Direct MAC from peer: $peerMac, but Wi-Fi Direct is removed.")
         }
     }
 }

@@ -1,7 +1,6 @@
 package com.meshlink.routing.engine
 
-import com.meshlink.ai.engine.FailurePredictor
-import com.meshlink.ai.engine.RoutePredictionEngine
+
 import com.meshlink.common.logger.MeshLogger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -10,9 +9,7 @@ import kotlin.math.min
 
 @Singleton
 class RouteOptimizer @Inject constructor(
-    private val routeCache: RouteCache,
-    private val failurePredictor: FailurePredictor,
-    private val routePredictionEngine: RoutePredictionEngine
+    private val routeCache: RouteCache
 ) {
     companion object {
         private const val TAG = "RouteOptimizer"
@@ -45,11 +42,10 @@ class RouteOptimizer @Inject constructor(
         val viableRoutes = routes.filter { it.nextHop !in excludeHops && !isPredictedToFail(it) }
         
         return if (viableRoutes.isNotEmpty()) {
-            // Adjust score by AI prediction success probability
-            viableRoutes.maxByOrNull { it.score * routePredictionEngine.predictRouteSuccessProbability(it) }
+            viableRoutes.maxByOrNull { it.score }
         } else {
             // Fallback to any route if all are predicted to fail (desperation mode)
-            routes.filter { it.nextHop !in excludeHops }.maxByOrNull { it.score * routePredictionEngine.predictRouteSuccessProbability(it) }
+            routes.filter { it.nextHop !in excludeHops }.maxByOrNull { it.score }
         }
     }
     
@@ -59,18 +55,14 @@ class RouteOptimizer @Inject constructor(
     fun getBackupRoutes(destinationId: String, primaryNextHop: String): List<RouteEntry> {
         val routes = routeCache.getRoutesForDestination(destinationId)
         return routes.filter { it.nextHop != primaryNextHop && !isPredictedToFail(it) }
-                     .sortedByDescending { it.score * routePredictionEngine.predictRouteSuccessProbability(it) }
+                     .sortedByDescending { it.score }
     }
 
     /**
      * Predictive Failure Analysis
      */
     private fun isPredictedToFail(route: RouteEntry): Boolean {
-        // Use AI Failure Predictor
-        if (failurePredictor.willRouteFailSoon(route)) {
-            return true
-        }
-        
+
         val m = route.metrics
         
         // Hard thresholds as fallbacks

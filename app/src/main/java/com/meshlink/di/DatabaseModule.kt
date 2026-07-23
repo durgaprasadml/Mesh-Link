@@ -76,11 +76,81 @@ object DatabaseModule {
                     }
 
                 override val databaseName: String? get() = configuration.name
+                
                 override fun setWriteAheadLoggingEnabled(enabled: Boolean) {
                     delegate.setWriteAheadLoggingEnabled(enabled)
                 }
-                override val writableDatabase: androidx.sqlite.db.SupportSQLiteDatabase get() = delegate.writableDatabase
-                override val readableDatabase: androidx.sqlite.db.SupportSQLiteDatabase get() = delegate.readableDatabase
+                
+                private fun handleDatabaseException(e: Exception): androidx.sqlite.db.SupportSQLiteDatabase {
+                    com.meshlink.common.logger.MeshLogger.e("DbSecurity", "SQLite database access failed. Initiating Recovery Diagnostics.", e)
+                    val dbName = configuration.name ?: com.meshlink.security.data.SecurityConstants.DB_NAME
+                    val dbFile = configuration.context.getDatabasePath(dbName)
+                    
+                    val keyguardManager = configuration.context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                    val isLocked = keyguardManager.isDeviceLocked
+                    if (isLocked) {
+                        com.meshlink.common.logger.MeshLogger.e("DbSecurity", "CRITICAL: Database access attempted while device is LOCKED. This is likely the cause of SQLiteNotADatabaseException due to FBE.")
+                        throw e
+                    }
+
+                    if (e is SQLiteNotADatabaseException || e.cause is SQLiteNotADatabaseException) {
+                        com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Database file is not a database or corrupted while unlocked. Checking file...")
+                        if (dbFile.exists()) {
+                            val length = dbFile.length()
+                            if (length == 0L) {
+                                com.meshlink.common.logger.MeshLogger.w("DbSecurity", "Database file is 0 bytes. Safe to delete empty database.")
+                                configuration.context.deleteDatabase(dbName)
+                            } else {
+                                // Check if it's an unencrypted database
+                                var isUnencrypted = false
+                                try {
+                                    android.database.sqlite.SQLiteDatabase.openDatabase(
+                                        dbFile.path,
+                                        null,
+                                        android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+                                    ).use {
+                                        isUnencrypted = true
+                                    }
+                                } catch (ex: Exception) {
+                                    isUnencrypted = false
+                                }
+                                
+                                if (isUnencrypted) {
+                                    com.meshlink.common.logger.MeshLogger.w("DbSecurity", "Database file is an UNENCRYPTED SQLite DB. Re-creating securely.")
+                                    configuration.context.deleteDatabase(dbName)
+                                } else {
+                                    com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Database file is encrypted but invalid (length $length). Preserving file to prevent data loss.")
+                                    throw e
+                                }
+                            }
+                            
+                            // Retry getting database after deletion
+                            try {
+                                com.meshlink.common.logger.MeshLogger.d("DbSecurity", "Retrying delegate database creation after recovery...")
+                                return delegate.writableDatabase
+                            } catch (retryEx: Exception) {
+                                com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Failed to re-create database after corruption deletion", retryEx)
+                                throw retryEx
+                            }
+                        }
+                    }
+                    throw e
+                }
+
+                override val writableDatabase: androidx.sqlite.db.SupportSQLiteDatabase 
+                    get() = try {
+                        delegate.writableDatabase
+                    } catch (e: Exception) {
+                        handleDatabaseException(e)
+                    }
+                    
+                override val readableDatabase: androidx.sqlite.db.SupportSQLiteDatabase 
+                    get() = try {
+                        delegate.readableDatabase
+                    } catch (e: Exception) {
+                        handleDatabaseException(e)
+                    }
+                    
                 override fun close() {
                     _delegate?.close()
                 }

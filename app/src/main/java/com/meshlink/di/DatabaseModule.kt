@@ -100,9 +100,8 @@ object DatabaseModule {
             com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_6_7,
             com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_7_8,
             com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_8_9,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_9_10,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_10_11
-        ).fallbackToDestructiveMigration().openHelperFactory(lazyFactory).build()
+            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_9_10
+        ).openHelperFactory(lazyFactory).build()
     }
 
     @Provides

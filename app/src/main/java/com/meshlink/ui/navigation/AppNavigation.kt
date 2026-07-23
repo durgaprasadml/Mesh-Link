@@ -43,6 +43,8 @@ import com.meshlink.ui.home.HomeScreen
 import com.meshlink.ui.profile.ProfileSetupScreen
 import com.meshlink.ui.nearby.NearbyDevicesScreen
 import com.meshlink.ui.settings.SettingsScreen
+import com.meshlink.ui.broadcast.BroadcastScreen
+import com.meshlink.ui.sos.SosScreen
 import com.meshlink.util.NotificationHelper
 
 
@@ -56,6 +58,8 @@ sealed class Screen(val route: String) {
     }
     object Settings : Screen("settings")
     object ProfileSetup : Screen("profile_setup")
+    object Sos : Screen("sos")
+    object Broadcast : Screen("broadcast")
 }
 
 @Composable
@@ -90,6 +94,7 @@ fun AppNavigation(
     val isTopLevelScreen = currentRoute in listOf(
         Screen.Home.route,
         Screen.Nearby.route,
+        Screen.Sos.route,
         Screen.Settings.route
     )
 
@@ -108,7 +113,7 @@ fun AppNavigation(
             if (showNavigationRail) {
                 MeshNavigationRail(navController, currentRoute)
             }
-            val topLevelRoutes = listOf(Screen.Home.route, Screen.Nearby.route, Screen.Settings.route)
+            val topLevelRoutes = listOf(Screen.Home.route, Screen.Nearby.route, Screen.Sos.route, Screen.Settings.route)
             NavHost(
                 modifier = Modifier.padding(paddingValues),
                 navController = navController,
@@ -159,7 +164,9 @@ fun AppNavigation(
                         onNavigateToNearby = { navController.navigate(Screen.Nearby.route) },
                         onNavigateToChat = { address, name ->
                             navController.navigate(Screen.ChatDetail.createRoute(address, name))
-                        }
+                        },
+                        onNavigateToBroadcast = { navController.navigate(Screen.Broadcast.route) },
+                        onNavigateToSos = { navController.navigate(Screen.Sos.route) }
                     )
                 }
 
@@ -202,6 +209,18 @@ fun AppNavigation(
                         onBack = { navController.popBackStack() }
                     )
                 }
+                
+                composable(Screen.Sos.route) {
+                    SosScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.Broadcast.route) {
+                    BroadcastScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
         }
     }
@@ -231,6 +250,21 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
             onClick = {
                 if (currentRoute != Screen.Nearby.route) {
                     navController.navigate(Screen.Nearby.route) {
+                        popUpTo(Screen.Home.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
+        )
+        
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
+            label = { Text("SOS") },
+            selected = currentRoute == Screen.Sos.route,
+            onClick = {
+                if (currentRoute != Screen.Sos.route) {
+                    navController.navigate(Screen.Sos.route) {
                         popUpTo(Screen.Home.route) { saveState = true }
                         launchSingleTop = true
                         restoreState = true
@@ -280,6 +314,21 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
             onClick = {
                 if (currentRoute != Screen.Nearby.route) {
                     navController.navigate(Screen.Nearby.route) {
+                        popUpTo(Screen.Home.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
+        )
+        
+        NavigationRailItem(
+            icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
+            label = { Text("SOS") },
+            selected = currentRoute == Screen.Sos.route,
+            onClick = {
+                if (currentRoute != Screen.Sos.route) {
+                    navController.navigate(Screen.Sos.route) {
                         popUpTo(Screen.Home.route) { saveState = true }
                         launchSingleTop = true
                         restoreState = true

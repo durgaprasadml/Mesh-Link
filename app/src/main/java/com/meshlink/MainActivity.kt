@@ -68,15 +68,15 @@ class MainActivity : ComponentActivity() {
 
             MeshTheme(
                 themeMode = uiState.themeMode,
-                dynamicColor = true,
-                accentColor = "Blue",
-                fontScale = 1.0f,
-                largeTextEnabled = false,
-                cornerRadiusScale = 1.0f,
-                animationsEnabled = true,
-                glassEffectsEnabled = true,
-                highContrast = false,
-                reduceMotionEnabled = false
+                dynamicColor = uiState.isMaterialYouEnabled,
+                accentColor = uiState.accentColor,
+                fontScale = uiState.fontScale,
+                largeTextEnabled = uiState.largeTextEnabled,
+                cornerRadiusScale = uiState.cornerRadiusScale,
+                animationsEnabled = uiState.animationsEnabled,
+                glassEffectsEnabled = uiState.glassEffectsEnabled,
+                highContrast = uiState.highContrast,
+                reduceMotionEnabled = uiState.reduceMotionEnabled
             ) {
                 val navController = rememberNavController()
 

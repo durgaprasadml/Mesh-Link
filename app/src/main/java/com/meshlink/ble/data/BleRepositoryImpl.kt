@@ -195,7 +195,7 @@ class BleRepositoryImpl @Inject constructor(
                 if (discoveryEngine.connectionPolicy.canConnect(record, isConnected)) {
                     if (state == PeerConnectionState.DISCONNECTED || state == PeerConnectionState.DISCOVERED) {
                         discoveryEngine.notifyConnectionAttempt(record.macAddress)
-                        connectToDevice(record.macAddress)
+                        connectionManager.connectToDevice(record.macAddress, isManual = false)
                     }
                 }
             }
@@ -269,7 +269,8 @@ class BleRepositoryImpl @Inject constructor(
     }
 
     override fun connectToDevice(address: String) {
-        connectionManager.connectToDevice(address)
+        // Exposed via MeshRepository, considered a manual reconnect intent
+        connectionManager.connectToDevice(address, isManual = true)
     }
 
     override fun connectToPeer(peerIdOrAddress: String): Boolean {

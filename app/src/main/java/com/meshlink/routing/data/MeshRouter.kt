@@ -20,11 +20,13 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 
 @Singleton
 class MeshRouter @Inject constructor(
     private val gattManager: BleGattManager,
+    private val connectionManager: com.meshlink.ble.data.BleConnectionManager,
 
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,
@@ -51,9 +53,20 @@ class MeshRouter @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
+    private val enforceEncryptionState = settingsRepository.advancedEncryptionEnforcement
+        .stateIn(scope, SharingStarted.Eagerly, true)
+
+    private val relayEnabledState = settingsRepository.isMeshRelayEnabled
+        .stateIn(scope, SharingStarted.Eagerly, true)
+
+    private val maxHopsState = settingsRepository.meshMaxHops
+        .stateIn(scope, SharingStarted.Eagerly, 5)
+
+    private val meshTtlState = settingsRepository.meshTtl
+        .stateIn(scope, SharingStarted.Eagerly, 10)
+
     init {
         observeIncoming()
-        startReconnectLoop()
         startStoreAndForwardLoop()
         startQueueProcessorLoop()
         routingEngine.start()
@@ -169,31 +182,6 @@ class MeshRouter @Inject constructor(
         }
     }
 
-    // ─────────────────── Reconnect Loop ───────────────────
-
-    private fun startReconnectLoop() {
-        scope.launch {
-            while (isActive) {
-                delay(RECONNECT_INTERVAL_MS)
-                val dests = routingEngine.routeManager.routeCache.getAllDestinations()
-                if (dests.isNotEmpty() && gattManager.activeClients.isEmpty() && gattManager.connectedServers.isEmpty()) {
-                    MeshLogger.d(TAG, "Reconnect loop: trying to re-establish mesh links.")
-                    // Simply grab the best possible route to anyone
-                    val bestRoute = dests.mapNotNull { routingEngine.routeManager.getOptimalRoute(it) }
-                                         .maxByOrNull { it.score }
-                    
-                    if (bestRoute != null) {
-                        try {
-                            gattManager.connectToDevice(bestRoute.nextHop)
-                        } catch (e: Exception) {
-                            MeshLogger.w(TAG, "Reconnect failed for ${bestRoute.nextHop}: ${e.message}")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // ─────────────────── Core Packet Handler ───────────────────
 
     private fun handleIncomingPacket(
@@ -207,7 +195,7 @@ class MeshRouter @Inject constructor(
         val packet = MeshPacketParser.fromJson(json) ?: return
 
         // --- Strict Encryption Enforcement ---
-        val enforceEncryption = runBlocking { settingsRepository.advancedEncryptionEnforcement.first() }
+        val enforceEncryption = enforceEncryptionState.value
         if (enforceEncryption && !packet.encrypted && packet.type != PacketType.KEY_EXCHANGE && packet.type != PacketType.SOS) {
             MeshLogger.w(TAG, "Dropped unencrypted packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} due to Strict Encryption policy")
             return
@@ -303,13 +291,13 @@ class MeshRouter @Inject constructor(
         }
 
         // Check Mesh Relay setting
-        val relayEnabled = runBlocking { settingsRepository.isMeshRelayEnabled.first() }
+        val relayEnabled = relayEnabledState.value
         if (!relayEnabled && !isAckNack) {
             MeshLogger.d(TAG, "Relay disabled in settings, dropping packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
             return
         }
 
-        val maxHops = runBlocking { settingsRepository.meshMaxHops.first() }
+        val maxHops = maxHopsState.value
         if (packet.hopCount >= maxHops) {
             MeshLogger.d(TAG, "Max hops exceeded, dropping packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
             return
@@ -396,7 +384,7 @@ class MeshRouter @Inject constructor(
         encrypted: Boolean = false,
         packetId: String? = null
     ) {
-        val initialTtl = runBlocking { settingsRepository.meshTtl.first() }
+        val initialTtl = meshTtlState.value
         val packet = MeshPacket(
             packetId = packetId ?: java.util.UUID.randomUUID().toString(),
             senderId = myAddressAlias,
@@ -424,7 +412,7 @@ class MeshRouter @Inject constructor(
     }
 
     fun sendMediaPacket(packet: MeshPacket) {
-        val initialTtl = runBlocking { settingsRepository.meshTtl.first() }
+        val initialTtl = meshTtlState.value
         val finalPacket = packet.copy(ttl = initialTtl)
         
         routingEngine.markPacketProcessed(finalPacket.packetId)

@@ -38,8 +38,32 @@ class BleConnectionManager @Inject constructor(
         bleDataSource.stopServer()
     }
 
-    fun connectToDevice(address: String) {
-        bleDataSource.connectToDevice(address)
+    fun connectToDevice(address: String, isManual: Boolean = false) {
+        if (isManual) {
+            discoveryEngine.connectionPolicy.resetPeer(address)
+        }
+        
+        val state = getPeerState(address)
+        val isAlreadyConnected = state == PeerConnectionState.CONNECTING ||
+                                 state == PeerConnectionState.CONNECTED ||
+                                 state == PeerConnectionState.SERVICES_DISCOVERED ||
+                                 state == PeerConnectionState.MTU_READY ||
+                                 state == PeerConnectionState.KEY_EXCHANGE_STARTED ||
+                                 state == PeerConnectionState.KEY_EXCHANGE_COMPLETE ||
+                                 state == PeerConnectionState.IDENTITY_VERIFIED ||
+                                 state == PeerConnectionState.KEY_VERIFIED ||
+                                 state == PeerConnectionState.SESSION_READY ||
+                                 state == PeerConnectionState.SESSION_ESTABLISHED
+                                 
+        if (discoveryEngine.connectionPolicy.canConnect(address, isAlreadyConnected)) {
+            // Update state immediately to prevent duplicate requests if called repeatedly
+            if (state == PeerConnectionState.DISCONNECTED || state == PeerConnectionState.DISCOVERED) {
+                updatePeerState(address, PeerConnectionState.CONNECTING)
+            }
+            bleDataSource.connectToDevice(address)
+        } else {
+            MeshLogger.d(TAG, "SmartConnectionPolicy rejected connection to $address (state=$state, retryState=${discoveryEngine.connectionPolicy.getRetryState(address)})")
+        }
     }
 
     fun disconnectFromDevice(address: String) {

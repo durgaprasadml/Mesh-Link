@@ -317,13 +317,21 @@ class MeshMessagingManager @Inject constructor(
      * A must have a GATT connection to B so packets relay through B to C.
      */
     fun connectToAllScannedDevices() {
-        discoveryManager.scannedDevices.value.values.forEach { device ->
+        // Battery Optimization: Exit early if mesh is practically disabled (not scanning or advertising)
+        if (!discoveryManager.isScanning() && !discoveryManager.isAdvertising()) {
+            return
+        }
+
+        val devices = discoveryManager.scannedDevices.value.values
+        if (devices.isEmpty()) return
+
+        devices.forEach { device ->
             try {
-                if (!connectionManager.activeClients.contains(device.address)) {
-                    connectionManager.connectToDevice(device.address)
-                }
+                // BleConnectionManager now internally checks SmartConnectionPolicy
+                // and PeerConnectionState before attempting a connection.
+                connectionManager.connectToDevice(device.address, isManual = false)
             } catch (e: Exception) {
-                MeshLogger.w(TAG, "Auto-connect failed for ${device.name}: ${e.message}")
+                MeshLogger.w(TAG, "Auto-connect request failed for ${device.name}: ${e.message}")
             }
         }
     }

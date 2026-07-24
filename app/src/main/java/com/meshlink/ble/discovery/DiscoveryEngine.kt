@@ -124,6 +124,11 @@ class DiscoveryEngine @Inject constructor(
         
         val record = cache.getOrPut(macAddress, meshId, name)
         
+        // If the peer was suspended but we are receiving new advertisements, resume it
+        if (connectionPolicy.getRetryState(macAddress) == com.meshlink.ble.discovery.RetryState.SUSPENDED) {
+            connectionPolicy.resetPeer(macAddress)
+        }
+        
         // Ensure name is updated if changed
         record.name = name
         record.capabilities = capabilities
@@ -171,8 +176,8 @@ class DiscoveryEngine @Inject constructor(
         }
     }
 
-    fun notifyConnectionFailure(macAddress: String) {
-        connectionPolicy.recordFailure(macAddress)
+    fun notifyConnectionFailure(macAddress: String, failureType: com.meshlink.ble.discovery.FailureType = com.meshlink.ble.discovery.FailureType.GATT_FAILURE) {
+        connectionPolicy.recordFailure(macAddress, failureType)
         analytics.recordConnectionFailed()
         cache.get(macAddress)?.let {
             it.failedAttempts++

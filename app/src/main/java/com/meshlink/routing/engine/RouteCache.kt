@@ -1,5 +1,6 @@
 package com.meshlink.routing.engine
 
+import com.meshlink.config.RuntimeConfigManager
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -11,7 +12,9 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 @Singleton
-class RouteCache @Inject constructor() {
+class RouteCache @Inject constructor(
+    private val configManager: RuntimeConfigManager
+) {
     
     // Key: destinationId -> Value: List of possible routes (multipath support)
     private val routes = ConcurrentHashMap<String, MutableList<RouteEntry>>()
@@ -30,20 +33,36 @@ class RouteCache @Inject constructor() {
     private val lock = ReentrantLock()
 
     fun addOrUpdateRoute(entry: RouteEntry) {
+        val config = configManager.currentConfig.value
         lock.withLock {
             val destRoutes = routes.getOrPut(entry.destinationId) { mutableListOf() }
             val existing = destRoutes.find { it.nextHop == entry.nextHop }
+            val currentPrimary = destRoutes.firstOrNull()
+
             if (existing != null) {
                 // Update existing route metrics and freshness
                 existing.lastSeen = entry.lastSeen
                 if (entry.hops < existing.hops) existing.hops = entry.hops
-                existing.metrics.rssi = entry.metrics.rssi
+                
+                // EMA RSSI Smoothing
+                existing.metrics.updateRssi(entry.metrics.rssi, config.emaAlpha)
                 existing.score = entry.score
             } else {
                 destRoutes.add(entry)
             }
+            
             // Keep paths sorted by score (highest first)
             destRoutes.sortByDescending { it.score }
+            
+            // Route Stability: prevent flapping if the new best route isn't significantly better
+            if (currentPrimary != null && destRoutes.first() != currentPrimary && destRoutes.contains(currentPrimary)) {
+                val newPrimary = destRoutes.first()
+                if (newPrimary.score - currentPrimary.score < config.routeSwitchingThreshold) {
+                    // Revert current primary to the front to maintain stability
+                    destRoutes.remove(currentPrimary)
+                    destRoutes.add(0, currentPrimary)
+                }
+            }
         }
         
         _routeCount.update { routes.values.sumOf { it.size } }

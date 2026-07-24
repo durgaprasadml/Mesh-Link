@@ -286,7 +286,7 @@ class MeshRouter @Inject constructor(
 
         // Loop guard
         if (routingEngine.isRoutingLoop(packet, localMeshId)) {
-            MeshLogger.d(TAG, "Loop guard: already visited ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}, dropping")
+            MeshLogger.d(TAG, "Loop guard: already visited or TTL expired ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}, dropping")
             return
         }
 

@@ -29,7 +29,7 @@ class SosViewModelTest {
     private val context: Context = mockk(relaxed = true)
     private val cameraManager: CameraManager = mockk(relaxed = true)
 
-    private lateinit classUnderTest: SosViewModel
+    private lateinit var classUnderTest: SosViewModel
     private val testDispatcher = StandardTestDispatcher()
 
     @Before

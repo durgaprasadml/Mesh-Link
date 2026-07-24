@@ -25,6 +25,15 @@ data class RouteMetrics(
             return if (total == 0) 1.0f else successfulDeliveries.toFloat() / total
         }
 
+    fun updateRssi(newRssi: Int, alpha: Float) {
+        if (rssi == -100) {
+            rssi = newRssi
+        } else {
+            // Exponential Moving Average (EMA)
+            rssi = ((1.0f - alpha) * rssi + alpha * newRssi).toInt()
+        }
+    }
+
     fun recordSuccess(latencyMs: Long) {
         successfulDeliveries++
         val total = successfulDeliveries + failedDeliveries

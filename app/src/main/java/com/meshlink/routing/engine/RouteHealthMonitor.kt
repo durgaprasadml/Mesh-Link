@@ -1,6 +1,7 @@
 package com.meshlink.routing.engine
 
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.config.RuntimeConfigManager
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -14,11 +15,11 @@ import kotlinx.coroutines.launch
 @Singleton
 class RouteHealthMonitor @Inject constructor(
     private val routeCache: RouteCache,
-    private val routeScorer: RouteScorer
+    private val routeScorer: RouteScorer,
+    private val configManager: RuntimeConfigManager
 ) {
     companion object {
         private const val TAG = "RouteHealthMonitor"
-        private const val ROUTE_STALE_MS = 5 * 60 * 1000L // 5 minutes
     }
     
     private var cleanupJob: Job? = null
@@ -31,7 +32,8 @@ class RouteHealthMonitor @Inject constructor(
             while (isActive) {
                 delay(60_000L) // Check every minute
                 try {
-                    val evicted = routeCache.evictStaleRoutes(ROUTE_STALE_MS)
+                    val staleThresholdMs = configManager.currentConfig.value.routeTimeoutMs
+                    val evicted = routeCache.evictStaleRoutes(staleThresholdMs)
                     if (evicted > 0) {
                         MeshLogger.d(TAG, "Evicted $evicted stale routes.")
                     }

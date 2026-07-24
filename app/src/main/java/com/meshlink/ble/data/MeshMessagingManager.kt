@@ -55,7 +55,8 @@ class MeshMessagingManager @Inject constructor(
     private val rekeyManager: com.meshlink.security.data.RekeyManager,
     private val voiceTransport: com.meshlink.voice.transport.VoiceTransport,
     private val connectionManager: BleConnectionManager,
-    private val discoveryManager: DiscoveryManager
+    private val discoveryManager: DiscoveryManager,
+    private val keyExchangeReplayCache: com.meshlink.security.data.KeyExchangeReplayCache
 ) {
     enum class MeshStartupState { STOPPED, STARTING, RUNNING }
     private val startupState = AtomicReference(MeshStartupState.STOPPED)
@@ -429,10 +430,34 @@ class MeshMessagingManager @Inject constructor(
                 val signatureBase64 = parts[8]
                 val signingPublicKey = parts[9]
 
+                // 2. Timestamp Validation
                 val now = System.currentTimeMillis()
-                if (Math.abs(now - timestamp) > 120_000) {
-                    MeshLogger.e(TAG, "KEY_EXCHANGE timestamp expired or invalid")
+                val diff = now - timestamp
+                if (Math.abs(diff) > com.meshlink.security.data.SecurityConstants.KEY_EXCHANGE_WINDOW_MS) {
+                    MeshLogger.e(TAG, "KEY_EXCHANGE timestamp expired or invalid (diff = $diff ms)")
+                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.ReplayAttackDetected("Expired timestamp v3"))
                     return
+                }
+
+                // 3. Replay cache lookup (Nonce Validation)
+                if (keyExchangeReplayCache.isReplay(packet.senderId, nonce)) {
+                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.ReplayAttackDetected("Duplicate nonce v3"))
+                    return
+                }
+
+                // 4. Rate-Limiting & Session Check (Before Signature to save CPU)
+                val existingSession = sessionManager.getSession(packet.senderId)
+                var isKeyRotation = false
+                if (existingSession != null) {
+                    // Check if it's a key rotation
+                    val currentSigningKey = cryptoManager.getPeerSigningKey(packet.senderId)
+                    if (currentSigningKey != null && currentSigningKey != signingPublicKey) {
+                        isKeyRotation = true
+                        keyExchangeReplayCache.resetRateLimit(packet.senderId) // Bypass rate limit for rotation
+                    } else if (!keyExchangeReplayCache.canProcessHandshake(packet.senderId)) {
+                        MeshLogger.w(TAG, "Ignoring redundant handshake from ${packet.senderId} (Rate Limited)")
+                        return
+                    }
                 }
 
                 if (peerMaxProtocol < 2) {
@@ -440,6 +465,7 @@ class MeshMessagingManager @Inject constructor(
                     return
                 }
 
+                // 5. Signature Verification
                 val dataToVerify = "${packet.packetId}|$peerMinProtocol|$peerMaxProtocol|$peerCryptoVersion|$peerFeatures|$ecdhPublicKey|$timestamp|$nonce".toByteArray(Charsets.UTF_8)
                 val sigBytes = android.util.Base64.decode(signatureBase64, android.util.Base64.NO_WRAP)
                 if (!cryptoManager.verifySignature(signingPublicKey, dataToVerify, sigBytes)) {
@@ -471,6 +497,10 @@ class MeshMessagingManager @Inject constructor(
                     cryptoVersion = peerCryptoVersion,
                     verified = true
                 )
+
+                // 7. Store replay entry & update rate limit
+                keyExchangeReplayCache.recordNonce(packet.senderId, nonce)
+                keyExchangeReplayCache.recordHandshake(packet.senderId)
 
                 MeshLogger.d(TAG, "🔐 SECURE (v3) Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)} [Proto: $negotiatedProtocol]")
 
@@ -515,12 +545,34 @@ class MeshMessagingManager @Inject constructor(
                 val signatureBase64 = parts[5]
                 val signingPublicKey = parts[6]
 
+                // 2. Timestamp Validation
                 val now = System.currentTimeMillis()
-                if (Math.abs(now - timestamp) > 120_000) {
-                    MeshLogger.e(TAG, "KEY_EXCHANGE timestamp expired or invalid")
+                val diff = now - timestamp
+                if (Math.abs(diff) > com.meshlink.security.data.SecurityConstants.KEY_EXCHANGE_WINDOW_MS) {
+                    MeshLogger.e(TAG, "KEY_EXCHANGE timestamp expired or invalid (diff = $diff ms)")
+                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.ReplayAttackDetected("Expired timestamp v2"))
                     return
                 }
 
+                // 3. Replay cache lookup (Nonce Validation)
+                if (keyExchangeReplayCache.isReplay(packet.senderId, nonce)) {
+                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.ReplayAttackDetected("Duplicate nonce v2"))
+                    return
+                }
+
+                // 4. Rate-Limiting & Session Check (Before Signature)
+                val existingSession = sessionManager.getSession(packet.senderId)
+                if (existingSession != null) {
+                    val currentSigningKey = cryptoManager.getPeerSigningKey(packet.senderId)
+                    if (currentSigningKey != null && currentSigningKey != signingPublicKey) {
+                        keyExchangeReplayCache.resetRateLimit(packet.senderId) // Bypass rate limit for rotation
+                    } else if (!keyExchangeReplayCache.canProcessHandshake(packet.senderId)) {
+                        MeshLogger.w(TAG, "Ignoring redundant handshake from ${packet.senderId} (Rate Limited)")
+                        return
+                    }
+                }
+
+                // 5. Signature Verification
                 val dataToVerify = "${packet.packetId}|$ecdhPublicKey|$timestamp|$nonce|$version".toByteArray(Charsets.UTF_8)
                 val sigBytes = android.util.Base64.decode(signatureBase64, android.util.Base64.NO_WRAP)
                 if (!cryptoManager.verifySignature(signingPublicKey, dataToVerify, sigBytes)) {
@@ -550,6 +602,10 @@ class MeshMessagingManager @Inject constructor(
                     cryptoVersion = 1,
                     verified = true
                 )
+
+                // 7. Store replay entry & update rate limit
+                keyExchangeReplayCache.recordNonce(packet.senderId, nonce)
+                keyExchangeReplayCache.recordHandshake(packet.senderId)
 
                 MeshLogger.d(TAG, "🔐 SECURE (v2) Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)}")
 

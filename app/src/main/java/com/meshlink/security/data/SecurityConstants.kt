@@ -54,4 +54,9 @@ object SecurityConstants {
     const val SELF_SIGNING_PUBLIC_KEY_KEY = "__self_signing_public_key__"
     const val KEY_CREATION_TIME = "__key_creation_time__"
     const val LAST_ROTATION_TIME = "__last_rotation_time__"
+
+    // ────────── Replay Protection ──────────
+    const val KEY_EXCHANGE_WINDOW_MS = 120_000L // ±120 seconds
+    const val KEY_EXCHANGE_REPLAY_CACHE_SIZE = 1000 // Max nonces to store
+    const val HANDSHAKE_RATE_LIMIT_MS = 10_000L // 1 fresh handshake every 10s per peer
 }

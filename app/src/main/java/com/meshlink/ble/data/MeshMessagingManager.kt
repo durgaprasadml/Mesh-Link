@@ -409,8 +409,105 @@ class MeshMessagingManager @Inject constructor(
     private fun handleKeyExchange(packet: MeshPacket) {
         try {
             val parts = packet.payload.split("|")
-            if (parts.size >= 5 && parts[0] == "v2") {
-                // v2 format: v2|ecdhPub|timestamp|nonce|version|signatureBase64|signingPub
+            val isV3 = parts.isNotEmpty() && parts[0] == "v3"
+            val isV2 = parts.size >= 5 && parts[0] == "v2"
+
+            if (isV3) {
+                // v3 format: v3|minProto|maxProto|cryptoVers|features|ecdhPub|timestamp|nonce|signatureBase64|signingPub[|resp]
+                if (parts.size < 10) {
+                    MeshLogger.e(TAG, "Invalid v3 KEY_EXCHANGE format")
+                    return
+                }
+                
+                val peerMinProtocol = parts[1].toIntOrNull() ?: 2
+                val peerMaxProtocol = parts[2].toIntOrNull() ?: 2
+                val peerCryptoVersion = parts[3].toIntOrNull() ?: 1
+                val peerFeatures = parts[4]
+                val ecdhPublicKey = parts[5]
+                val timestamp = parts[6].toLongOrNull() ?: 0L
+                val nonce = parts[7]
+                val signatureBase64 = parts[8]
+                val signingPublicKey = parts[9]
+
+                val now = System.currentTimeMillis()
+                if (Math.abs(now - timestamp) > 120_000) {
+                    MeshLogger.e(TAG, "KEY_EXCHANGE timestamp expired or invalid")
+                    return
+                }
+
+                if (peerMaxProtocol < 2) {
+                    MeshLogger.e(TAG, "Rejecting KEY_EXCHANGE: peer max protocol too low")
+                    return
+                }
+
+                val dataToVerify = "${packet.packetId}|$peerMinProtocol|$peerMaxProtocol|$peerCryptoVersion|$peerFeatures|$ecdhPublicKey|$timestamp|$nonce".toByteArray(Charsets.UTF_8)
+                val sigBytes = android.util.Base64.decode(signatureBase64, android.util.Base64.NO_WRAP)
+                if (!cryptoManager.verifySignature(signingPublicKey, dataToVerify, sigBytes)) {
+                    MeshLogger.e(TAG, "KEY_EXCHANGE signature verification failed")
+                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.InvalidSignature("KEY_EXCHANGE_V3"))
+                    return
+                }
+
+                val fingerprint = cryptoManager.getDeviceFingerprint(signingPublicKey)
+                trustManager.updatePeerIdentity(packet.senderId, fingerprint, null)
+                val trustLevel = trustManager.getTrustLevel(packet.senderId)
+                if (trustLevel == com.meshlink.security.data.TrustLevel.BLOCKED || trustLevel == com.meshlink.security.data.TrustLevel.REVOKED) {
+                    MeshLogger.w(TAG, "Rejecting KEY_EXCHANGE from rogue node ${packet.senderId}")
+                    val address = routingCoordinator.resolvePeerAddress(packet.senderId)
+                    if (address != null) disconnectDevice(address)
+                    return
+                }
+
+                val negotiatedProtocol = Math.max(2, Math.min(3, peerMaxProtocol))
+                trustManager.updateHighestProtocol(packet.senderId, negotiatedProtocol)
+
+                cryptoManager.storePeerPublicKey(packet.senderId, ecdhPublicKey)
+                cryptoManager.storePeerSigningKey(packet.senderId, signingPublicKey)
+                
+                sessionManager.createSession(
+                    peerId = packet.senderId,
+                    fingerprint = fingerprint,
+                    sessionVersion = negotiatedProtocol,
+                    cryptoVersion = peerCryptoVersion,
+                    verified = true
+                )
+
+                MeshLogger.d(TAG, "🔐 SECURE (v3) Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)} [Proto: $negotiatedProtocol]")
+
+                val address = routingCoordinator.resolvePeerAddress(packet.senderId)
+                if (address != null) {
+                    connectionManager.updatePeerState(address, PeerConnectionState.SESSION_ESTABLISHED)
+                    scope.launch { retryPendingMessages() }
+                }
+
+                var isResponse = false
+                if (parts.size >= 11 && parts[10] == "resp") {
+                    isResponse = true
+                }
+
+                if (!isResponse) {
+                    scope.launch {
+                        userRepository.getLocalUser()?.let { user ->
+                            val localPeerId = routingCoordinator.networkId(user.meshId)
+                            if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
+                                val responseKeyEx = generateSignedKeyExchange(localPeerId, isResponse = true).copy(targetId = packet.senderId)
+                                dispatchSinglePacket(packet.senderId, responseKeyEx)
+                            }
+                        }
+                    }
+                }
+            } else if (isV2) {
+                // v2 format: v2|ecdhPub|timestamp|nonce|version|signatureBase64|signingPub[|resp]
+                val highestProtocol = trustManager.getHighestProtocol(packet.senderId)
+                if (highestProtocol > 2) {
+                    MeshLogger.e(TAG, "Rejecting v2 KEY_EXCHANGE from ${packet.senderId}: Downgrade attack detected (Expected v$highestProtocol)")
+                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.DowngradeAttackDetected("Expected v$highestProtocol, got v2"))
+                    trustManager.decreaseTrustScore(packet.senderId, 50, "Protocol downgrade attempt")
+                    val address = routingCoordinator.resolvePeerAddress(packet.senderId)
+                    if (address != null) disconnectDevice(address)
+                    return
+                }
+
                 val ecdhPublicKey = parts[1]
                 val timestamp = parts[2].toLong()
                 val nonce = parts[3]
@@ -442,6 +539,7 @@ class MeshMessagingManager @Inject constructor(
                     return
                 }
 
+                trustManager.updateHighestProtocol(packet.senderId, 2)
                 cryptoManager.storePeerPublicKey(packet.senderId, ecdhPublicKey)
                 cryptoManager.storePeerSigningKey(packet.senderId, signingPublicKey)
                 
@@ -449,10 +547,11 @@ class MeshMessagingManager @Inject constructor(
                     peerId = packet.senderId,
                     fingerprint = fingerprint,
                     sessionVersion = version,
+                    cryptoVersion = 1,
                     verified = true
                 )
 
-                MeshLogger.d(TAG, "🔐 SECURE Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)}")
+                MeshLogger.d(TAG, "🔐 SECURE (v2) Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)}")
 
                 val address = routingCoordinator.resolvePeerAddress(packet.senderId)
                 if (address != null) {
@@ -477,24 +576,11 @@ class MeshMessagingManager @Inject constructor(
                     }
                 }
             } else {
-                // Legacy unauthenticated key exchange
-                cryptoManager.storePeerPublicKey(packet.senderId, packet.payload)
-                MeshLogger.d(TAG, "🔐 LEGACY Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)}")
+                // Reject v1 legacy key exchange
+                MeshLogger.w(TAG, "Rejecting legacy unauthenticated key exchange from ${packet.senderId} (Downgrade protection)")
                 val address = routingCoordinator.resolvePeerAddress(packet.senderId)
-                if (address != null) {
-                    connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
-                    scope.launch { retryPendingMessages() }
-                }
-
-                scope.launch {
-                    userRepository.getLocalUser()?.let { user ->
-                        val localPeerId = routingCoordinator.networkId(user.meshId)
-                        if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
-                            val responseKeyEx = generateSignedKeyExchange(localPeerId, isResponse = true).copy(targetId = packet.senderId)
-                            dispatchSinglePacket(packet.senderId, responseKeyEx)
-                        }
-                    }
-                }
+                if (address != null) disconnectDevice(address)
+                return
             }
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to handle KEY_EXCHANGE: ${e.message}")
@@ -511,15 +597,20 @@ class MeshMessagingManager @Inject constructor(
         val signingPublicKey = cryptoManager.getOrCreateSigningKey()
         val timestamp = System.currentTimeMillis()
         val nonce = UUID.randomUUID().toString()
-        val version = 2
         val uuid = UUID.randomUUID().toString()
         
-        val dataToSign = "$uuid|$ecdhPublicKey|$timestamp|$nonce|$version".toByteArray(Charsets.UTF_8)
+        val minProtocol = 2
+        val maxProtocol = 3
+        val cryptoVersion = 2
+        val supportedFeatures = "SECURE_CHAT,VOICE,MEDIA"
+
+        val dataToSign = "$uuid|$minProtocol|$maxProtocol|$cryptoVersion|$supportedFeatures|$ecdhPublicKey|$timestamp|$nonce".toByteArray(Charsets.UTF_8)
         val signature = cryptoManager.sign(dataToSign)
         val signatureBase64 = android.util.Base64.encodeToString(signature, android.util.Base64.NO_WRAP)
 
         val respTag = if (isResponse) "|resp" else ""
-        val payload = "v2|$ecdhPublicKey|$timestamp|$nonce|$version|$signatureBase64|$signingPublicKey$respTag"
+        val payload = "v3|$minProtocol|$maxProtocol|$cryptoVersion|$supportedFeatures|$ecdhPublicKey|$timestamp|$nonce|$signatureBase64|$signingPublicKey$respTag"
+        
         return MeshPacket(
             packetId = uuid,
             senderId = localPeerId,

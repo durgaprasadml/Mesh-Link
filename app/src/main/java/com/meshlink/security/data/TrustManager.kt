@@ -89,6 +89,25 @@ class TrustManager @Inject constructor(
         }
     }
 
+    fun getHighestProtocol(peerId: String): Int {
+        return trustCache[peerId]?.keyVersion ?: 1
+    }
+
+    fun updateHighestProtocol(peerId: String, protocolVersion: Int) {
+        scope.launch {
+            try {
+                val entity = trustCache[peerId] ?: return@launch
+                if (protocolVersion > entity.keyVersion) {
+                    val updatedEntity = entity.copy(keyVersion = protocolVersion)
+                    trustDao.updatePeerTrust(updatedEntity)
+                    trustCache[peerId] = updatedEntity
+                }
+            } catch (e: Exception) {
+                MeshLogger.e(TAG, "Failed to update highest protocol: ${e.message}")
+            }
+        }
+    }
+
     /**
      * Called when a peer reconnects or presents a new identity/fingerprint.
      */

@@ -13,4 +13,5 @@ sealed class SecurityEvent(
     object UnknownPeer : SecurityEvent(1)
     data class TrustRevoked(val reason: String) : SecurityEvent(3)
     data class BlockedPeer(val peerId: String) : SecurityEvent(2)
+    data class DowngradeAttackDetected(val details: String) : SecurityEvent(5)
 }

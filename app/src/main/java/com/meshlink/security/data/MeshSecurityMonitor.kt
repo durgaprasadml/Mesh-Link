@@ -76,6 +76,9 @@ class MeshSecurityMonitor @Inject constructor(
                     is SecurityEvent.BlockedPeer -> {
                         detailsJson.put("peerId", event.peerId)
                     }
+                    is SecurityEvent.DowngradeAttackDetected -> {
+                        detailsJson.put("details", event.details)
+                    }
                     SecurityEvent.UnknownPeer -> {}
                 }
 

@@ -11,6 +11,7 @@ data class PeerSecureSession(
     val fingerprint: String,
     val sessionStart: Long,
     val sessionVersion: Int,
+    val cryptoVersion: Int = 1,
     val verified: Boolean,
     var lastActivity: Long,
     val packetCounter: AtomicLong = AtomicLong(0),

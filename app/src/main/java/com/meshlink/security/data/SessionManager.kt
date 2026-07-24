@@ -61,6 +61,7 @@ class SessionManager @Inject constructor(
         peerId: String,
         fingerprint: String,
         sessionVersion: Int,
+        cryptoVersion: Int = 1,
         verified: Boolean
     ): PeerSecureSession {
         val localFingerprint = cryptoManager.getLocalFingerprint()
@@ -77,6 +78,7 @@ class SessionManager @Inject constructor(
             fingerprint = fingerprint,
             sessionStart = now,
             sessionVersion = sessionVersion,
+            cryptoVersion = cryptoVersion,
             verified = verified,
             lastActivity = now
         )

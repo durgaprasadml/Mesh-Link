@@ -31,6 +31,7 @@ fun PermissionHandler(
     val bluetoothAdapter = bluetoothManager.adapter
 
     var hasPermissions by remember { mutableStateOf(hasRequiredPermissions(context)) }
+    var permanentlyDenied by remember { mutableStateOf(false) }
     var isBluetoothEnabled by remember { mutableStateOf(bluetoothAdapter?.isEnabled == true) }
 
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
@@ -40,6 +41,27 @@ fun PermissionHandler(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         hasPermissions = results.values.all { it }
+        if (!hasPermissions) {
+            val activity = context.findActivity()
+            if (activity != null) {
+                permanentlyDenied = results.filter { !it.value }.keys.any { permission ->
+                    !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+                }
+            } else {
+                permanentlyDenied = true
+            }
+        } else {
+            permanentlyDenied = false
+        }
+    }
+
+    val settingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        hasPermissions = hasRequiredPermissions(context)
+        if (hasPermissions) {
+            permanentlyDenied = false
+        }
     }
 
     val bluetoothEnableLauncher = rememberLauncherForActivityResult(
@@ -62,7 +84,6 @@ fun PermissionHandler(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.NEARBY_WIFI_DEVICES,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.POST_NOTIFICATIONS
@@ -92,14 +113,33 @@ fun PermissionHandler(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                "Mesh Link requires Bluetooth and Location permissions to discover and chat with nearby devices.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-            Button(onClick = { permissionLauncher.launch(permissionsToRequest) }) {
-                Text("Grant Permissions")
+            if (permanentlyDenied) {
+                Text(
+                    "Permissions were permanently denied. Please open App Settings, tap Permissions, and grant them to use Mesh Link.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
+                Button(onClick = {
+                    val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = android.net.Uri.fromParts("package", context.packageName, null)
+                    }
+                    settingsLauncher.launch(intent)
+                }) {
+                    Text("Open App Settings")
+                }
+            } else {
+                Text(
+                    "Mesh Link requires Bluetooth and Location permissions to discover and chat with nearby devices.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
+                Button(onClick = { permissionLauncher.launch(permissionsToRequest) }) {
+                    Text("Grant Permissions")
+                }
             }
         }
     } else if (!isBluetoothEnabled) {
@@ -113,7 +153,8 @@ fun PermissionHandler(
             Text(
                 "Bluetooth must be turned on to connect with nearby devices.",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
             Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
             Button(onClick = { 
@@ -134,7 +175,8 @@ fun PermissionHandler(
             Text(
                 "Android requires device Location to be turned on to scan for background Bluetooth signals.",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
             Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
             Button(onClick = { 
@@ -155,8 +197,8 @@ fun hasRequiredPermissions(context: Context): Boolean {
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.NEARBY_WIFI_DEVICES,
             Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.POST_NOTIFICATIONS
         )
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -164,16 +206,27 @@ fun hasRequiredPermissions(context: Context): Boolean {
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_FINE_LOCATION
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
         )
     } else {
         listOf(
             Manifest.permission.BLUETOOTH,
-            Manifest.permission.ACCESS_FINE_LOCATION
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
         )
     }
 
     return permissions.all {
         ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
     }
+}
+
+fun Context.findActivity(): Activity? {
+    var context = this
+    while (context is android.content.ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    return null
 }

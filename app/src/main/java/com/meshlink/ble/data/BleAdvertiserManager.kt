@@ -38,6 +38,10 @@ class BleAdvertiserManager @Inject constructor(
     }
     private var advertiseCallback: AdvertiseCallback? = null
 
+    val isAdvertising: Boolean
+        get() = advertiseCallback != null
+
+
     fun startAdvertising(name: String, meshId: String, capabilities: Byte = 0) {
         scope.launch {
             if (!settingsRepository.bleAdvertisingEnabled.first() || !settingsRepository.isBleEnabled.first()) {

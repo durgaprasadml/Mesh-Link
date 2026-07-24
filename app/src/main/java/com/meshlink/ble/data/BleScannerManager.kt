@@ -43,6 +43,10 @@ class BleScannerManager @Inject constructor(
 
     private var scanCallback: ScanCallback? = null
 
+    val isScanning: Boolean
+        get() = scanCallback != null
+
+
     init {
         // Wire up hardware delegates to the Discovery Engine
         discoveryEngine.startScanAction = { startHardwareScan() }

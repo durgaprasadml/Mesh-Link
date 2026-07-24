@@ -17,8 +17,8 @@ class BleMeshDataSourceImpl @Inject constructor(
 
     override val scannedDevices: StateFlow<Map<String, BleDevice>> = scanner.scannedDevices
     override val isBleEnabled: Boolean get() = true
-    override val isAdvertising: Boolean get() = false
-    override val isScanning: Boolean get() = false
+    override val isAdvertising: Boolean get() = advertiser.isAdvertising
+    override val isScanning: Boolean get() = scanner.isScanning
 
     private val _incomingPayloads = MutableSharedFlow<Pair<String, String>>()
     override val incomingPayloads: SharedFlow<Pair<String, String>> = _incomingPayloads

@@ -36,6 +36,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+import java.util.concurrent.atomic.AtomicReference
 
 @Singleton
 class MeshMessagingManager @Inject constructor(
@@ -56,6 +57,9 @@ class MeshMessagingManager @Inject constructor(
     private val connectionManager: BleConnectionManager,
     private val discoveryManager: DiscoveryManager
 ) {
+    enum class MeshStartupState { STOPPED, STARTING, RUNNING }
+    private val startupState = AtomicReference(MeshStartupState.STOPPED)
+
     private val TAG = "MeshMessagingManager"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     init {
@@ -575,28 +579,73 @@ class MeshMessagingManager @Inject constructor(
      * FIX ISSUE 2: Also auto-connects to all scanned devices for mesh relay.
      */
     suspend fun autoStartMesh() {
+        if (!startupState.compareAndSet(MeshStartupState.STOPPED, MeshStartupState.STARTING)) {
+            MeshLogger.d(TAG, "autoStartMesh ignored: already ${startupState.get()}")
+            return
+        }
+
+        try {
+            val user = userRepository.getLocalUser() ?: return
+            val localPeerId = routingCoordinator.networkId(user.meshId)
+            meshRouter.localMeshId = localPeerId
+            
+            // Broadcast routing capabilities
+            discoveryManager.startAdvertising(user.name, user.meshId, 0x01)
+            startServer()
+            startScanning()
+
+            // Wait briefly for scan results before connecting
+            delay(2000)
+            connectToAllScannedDevices()
+
+            // Broadcast our public key so all peers can set up E2E
+            val keyExchangePacket = generateSignedKeyExchange(localPeerId).copy(targetId = "BROADCAST")
+            dispatchSinglePacket("BROADCAST", keyExchangePacket)
+
+            startupState.set(MeshStartupState.RUNNING)
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "autoStartMesh failed: ${e.message}")
+            stopMesh() // clean up
+            throw e
+        }
+    }
+
+    /**
+     * Refresh the mesh without doing a full startup or broadcasting KEY_EXCHANGE.
+     * Only restarts components that are missing.
+     */
+    suspend fun refreshMesh() {
+        if (startupState.get() != MeshStartupState.RUNNING) {
+            MeshLogger.d(TAG, "refreshMesh: Mesh not fully running. Invoking full autoStartMesh.")
+            autoStartMesh()
+            return
+        }
+
+        MeshLogger.d(TAG, "refreshMesh: Checking mesh component health")
         val user = userRepository.getLocalUser() ?: return
-        val localPeerId = routingCoordinator.networkId(user.meshId)
-        meshRouter.localMeshId = localPeerId
+
+        if (!discoveryManager.isAdvertising()) {
+            MeshLogger.d(TAG, "refreshMesh: Restarting advertising")
+            discoveryManager.startAdvertising(user.name, user.meshId, 0x01)
+        }
+        if (!discoveryManager.isScanning()) {
+            MeshLogger.d(TAG, "refreshMesh: Restarting scanning")
+            startScanning()
+        }
         
-        // Broadcast routing capabilities
-        discoveryManager.startAdvertising(user.name, user.meshId, 0x01)
+        // startServer is idempotent inside BleGattManager
         startServer()
-        startScanning()
 
-        // Wait briefly for scan results before connecting
-        delay(2000)
+        // Give a brief delay for scan results if components were just restarted
+        delay(1000)
         connectToAllScannedDevices()
-
-        // Broadcast our public key so all peers can set up E2E
-        val keyExchangePacket = generateSignedKeyExchange(localPeerId).copy(targetId = "BROADCAST")
-        dispatchSinglePacket("BROADCAST", keyExchangePacket)
     }
 
     /**
      * Stop all BLE operations.
      */
     fun stopMesh() {
+        startupState.set(MeshStartupState.STOPPED)
         stopAdvertising()
         stopScanning()
         stopServer()

@@ -291,6 +291,10 @@ class BleRepositoryImpl @Inject constructor(
         meshMessagingManager.autoStartMesh()
     }
 
+    override suspend fun refreshMesh() {
+        meshMessagingManager.refreshMesh()
+    }
+
     /**
      * Stop all BLE operations.
      */

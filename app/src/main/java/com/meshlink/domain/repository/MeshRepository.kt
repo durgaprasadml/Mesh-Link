@@ -24,6 +24,7 @@ interface MeshRepository {
     fun connectToPeer(peerIdOrAddress: String): Boolean
     
     suspend fun autoStartMesh()
+    suspend fun refreshMesh()
     fun stopMesh()
     fun getMeshStatus(): com.meshlink.domain.model.MeshStatus
     

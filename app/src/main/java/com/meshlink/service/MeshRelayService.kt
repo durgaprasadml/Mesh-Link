@@ -161,7 +161,7 @@ class MeshRelayService : Service() {
                 if (System.currentTimeMillis() - lastRefresh >= BLE_REFRESH_INTERVAL_MS) {
                     withWakeLock(30_000L) {
                         try {
-                            meshRepository.autoStartMesh()
+                            meshRepository.refreshMesh()
                             lastRefresh = System.currentTimeMillis()
                             MeshLogger.d(TAG, "BLE refresh cycle completed under scoped WakeLock")
                         } catch (e: Exception) {

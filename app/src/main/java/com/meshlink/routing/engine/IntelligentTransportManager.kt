@@ -11,17 +11,18 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import com.meshlink.di.ApplicationScope
 
 @Singleton
 class IntelligentTransportManager @Inject constructor(
     private val routeOptimizer: RouteOptimizer,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    @ApplicationScope private val applicationScope: CoroutineScope
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var currentPreferredTransport: String = "AUTOMATIC"
 
     init {
-        scope.launch {
+        applicationScope.launch {
             settingsRepository.preferredTransport.collect { mode ->
                 currentPreferredTransport = mode
             }

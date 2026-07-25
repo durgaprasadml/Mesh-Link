@@ -21,6 +21,7 @@ import com.meshlink.media.data.MediaTransferManager
 import com.meshlink.routing.data.MeshRouter
 import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.util.NotificationHelper
+import com.meshlink.di.ApplicationScope
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -56,13 +57,13 @@ class MeshMessagingManager @Inject constructor(
     private val voiceTransport: com.meshlink.voice.transport.VoiceTransport,
     private val connectionManager: BleConnectionManager,
     private val discoveryManager: DiscoveryManager,
-    private val keyExchangeReplayCache: com.meshlink.security.data.KeyExchangeReplayCache
+    private val keyExchangeReplayCache: com.meshlink.security.data.KeyExchangeReplayCache,
+    @ApplicationScope private val applicationScope: CoroutineScope
 ) {
     enum class MeshStartupState { STOPPED, STARTING, RUNNING }
     private val startupState = AtomicReference(MeshStartupState.STOPPED)
 
     private val TAG = "MeshMessagingManager"
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     init {
         setupTransferManager()
     }
@@ -73,7 +74,7 @@ class MeshMessagingManager @Inject constructor(
         }
 
         transferManager.onTransferCompleted = { session ->
-            scope.launch {
+            applicationScope.launch {
                 receiveMediaMessage(
                     session.transferId,
                     session.filePath ?: "",
@@ -507,7 +508,7 @@ class MeshMessagingManager @Inject constructor(
                 val address = routingCoordinator.resolvePeerAddress(packet.senderId)
                 if (address != null) {
                     connectionManager.updatePeerState(address, PeerConnectionState.SESSION_ESTABLISHED)
-                    scope.launch { retryPendingMessages() }
+                    applicationScope.launch { retryPendingMessages() }
                 }
 
                 var isResponse = false
@@ -516,7 +517,7 @@ class MeshMessagingManager @Inject constructor(
                 }
 
                 if (!isResponse) {
-                    scope.launch {
+                    applicationScope.launch {
                         userRepository.getLocalUser()?.let { user ->
                             val localPeerId = routingCoordinator.networkId(user.meshId)
                             if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
@@ -612,7 +613,7 @@ class MeshMessagingManager @Inject constructor(
                 val address = routingCoordinator.resolvePeerAddress(packet.senderId)
                 if (address != null) {
                     connectionManager.updatePeerState(address, PeerConnectionState.SESSION_ESTABLISHED)
-                    scope.launch { retryPendingMessages() }
+                    applicationScope.launch { retryPendingMessages() }
                 }
 
                 var isResponse = false
@@ -621,7 +622,7 @@ class MeshMessagingManager @Inject constructor(
                 }
 
                 if (!isResponse) {
-                    scope.launch {
+                    applicationScope.launch {
                         userRepository.getLocalUser()?.let { user ->
                             val localPeerId = routingCoordinator.networkId(user.meshId)
                             if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
@@ -804,11 +805,6 @@ class MeshMessagingManager @Inject constructor(
         stopAdvertising()
         stopScanning()
         stopServer()
-    }
-
-    @VisibleForTesting
-    fun cancelScope() {
-        scope.cancel()
     }
 
     // ────────── Text Messages (ENCRYPTED) ──────────
@@ -1395,7 +1391,7 @@ class MeshMessagingManager @Inject constructor(
                 ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == address }?.key
                 
             if (peerId != null) {
-                scope.launch {
+                applicationScope.launch {
                     val reqEnc = userRepository.isEncryptionEnabled.first()
                     if (reqEnc) {
                         if (cryptoManager.hasPeerKey(peerId)) {

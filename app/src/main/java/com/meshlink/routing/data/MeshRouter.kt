@@ -3,6 +3,7 @@ package com.meshlink.routing.data
 import com.meshlink.common.logger.MeshLogger
 
 import com.meshlink.ble.data.BleGattManager
+import androidx.annotation.VisibleForTesting
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.ble.data.MeshPacketParser
 import com.meshlink.domain.model.PacketType
@@ -10,6 +11,7 @@ import com.meshlink.database.data.local.RelayDao
 import com.meshlink.database.data.local.RelayPacketEntity
 import com.meshlink.di.IoDispatcher
 import com.meshlink.routing.engine.RoutingEngine
+import com.meshlink.di.ApplicationScope
 import com.meshlink.routing.engine.RouteType
 import com.meshlink.security.data.TrustLevel
 import com.meshlink.security.data.TrustManager
@@ -22,17 +24,18 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import com.meshlink.ble.data.BleConnectionManager
 
 @Singleton
 class MeshRouter @Inject constructor(
     private val gattManager: BleGattManager,
-    private val connectionManager: com.meshlink.ble.data.BleConnectionManager,
+    private val connectionManager: BleConnectionManager,
 
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,
     private val routingEngine: RoutingEngine,
     private val settingsRepository: SettingsRepository,
-    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
+    @ApplicationScope private val applicationScope: CoroutineScope
 ) {
 
     companion object {
@@ -51,19 +54,21 @@ class MeshRouter @Inject constructor(
             routingEngine.routeManager.getOptimalRoute(dest)?.let { dest to it }
         }.toMap()
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private var incomingJob: Job? = null
+    private var storeForwardJob: Job? = null
+    private var queueProcessorJob: Job? = null
 
     private val enforceEncryptionState = settingsRepository.advancedEncryptionEnforcement
-        .stateIn(scope, SharingStarted.Eagerly, true)
+        .stateIn(applicationScope, SharingStarted.Eagerly, true)
 
     private val relayEnabledState = settingsRepository.isMeshRelayEnabled
-        .stateIn(scope, SharingStarted.Eagerly, true)
+        .stateIn(applicationScope, SharingStarted.Eagerly, true)
 
     private val maxHopsState = settingsRepository.meshMaxHops
-        .stateIn(scope, SharingStarted.Eagerly, 5)
+        .stateIn(applicationScope, SharingStarted.Eagerly, 5)
 
     private val meshTtlState = settingsRepository.meshTtl
-        .stateIn(scope, SharingStarted.Eagerly, 10)
+        .stateIn(applicationScope, SharingStarted.Eagerly, 10)
 
     init {
         observeIncoming()
@@ -74,8 +79,10 @@ class MeshRouter @Inject constructor(
 
     // ─────────────────── Incoming Observation ───────────────────
 
-    private fun observeIncoming() {
-        scope.launch {
+    @VisibleForTesting
+    internal fun observeIncoming() {
+        if (incomingJob?.isActive == true) return
+        incomingJob = applicationScope.launch {
             gattManager.incomingMessages.collect { (sender, json) ->
                 // ── [TRANSPORT-B] Packet received from BLE, about to parse ─────────────────────────
                 MeshLogger.d(TAG, "[TRANSPORT-B] ═══ MeshRouter.observeIncoming() ═══")
@@ -106,8 +113,10 @@ class MeshRouter @Inject constructor(
 
     // ─────────────────── Store-and-Forward Loop ───────────────────
 
-    private fun startStoreAndForwardLoop() {
-        scope.launch {
+    @VisibleForTesting
+    internal fun startStoreAndForwardLoop() {
+        if (storeForwardJob?.isActive == true) return
+        storeForwardJob = applicationScope.launch {
             while (isActive) {
                 delay(30_000L)
                 try {
@@ -346,7 +355,7 @@ class MeshRouter @Inject constructor(
     }
     
     private fun storeForLater(packet: MeshPacket) {
-        scope.launch {
+        applicationScope.launch {
             try {
                 routingEngine.congestionMonitor.incrementRelay()
                 relayDao.insertPacket(
@@ -424,8 +433,10 @@ class MeshRouter @Inject constructor(
 
     // ─────────────────── Queue Processor ───────────────────
 
-    private fun startQueueProcessorLoop() {
-        scope.launch {
+    @VisibleForTesting
+    internal fun startQueueProcessorLoop() {
+        if (queueProcessorJob?.isActive == true) return
+        queueProcessorJob = applicationScope.launch {
             while (isActive) {
                 if (routingEngine.queueOptimizer.size() == 0) {
                     delay(10) // Idle sleep

@@ -7,9 +7,11 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Qualifier
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.meshlink.common.logger.MeshLogger
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -48,5 +50,10 @@ object CoroutineModule {
     @ApplicationScope
     fun provideApplicationScope(
         @DefaultDispatcher defaultDispatcher: CoroutineDispatcher
-    ): CoroutineScope = CoroutineScope(SupervisorJob() + defaultDispatcher)
+    ): CoroutineScope {
+        val exceptionHandler = CoroutineExceptionHandler { _, exception ->
+            MeshLogger.e("ApplicationScope", "Unhandled coroutine exception", exception)
+        }
+        return CoroutineScope(SupervisorJob() + defaultDispatcher + exceptionHandler)
+    }
 }

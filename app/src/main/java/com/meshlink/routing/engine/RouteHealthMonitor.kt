@@ -4,10 +4,10 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.config.RuntimeConfigManager
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.meshlink.di.ApplicationScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -16,19 +16,19 @@ import kotlinx.coroutines.launch
 class RouteHealthMonitor @Inject constructor(
     private val routeCache: RouteCache,
     private val routeScorer: RouteScorer,
-    private val configManager: RuntimeConfigManager
+    private val configManager: RuntimeConfigManager,
+    @ApplicationScope private val applicationScope: CoroutineScope
 ) {
     companion object {
         private const val TAG = "RouteHealthMonitor"
     }
     
     private var cleanupJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.Default)
 
     fun start() {
         if (cleanupJob?.isActive == true) return
         
-        cleanupJob = scope.launch {
+        cleanupJob = applicationScope.launch {
             while (isActive) {
                 delay(60_000L) // Check every minute
                 try {
@@ -56,6 +56,5 @@ class RouteHealthMonitor @Inject constructor(
     fun stop() {
         cleanupJob?.cancel()
         cleanupJob = null
-        scope.cancel()
     }
 }

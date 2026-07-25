@@ -14,6 +14,7 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.ble.discovery.DiscoveryEngine
 import com.meshlink.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.meshlink.di.ApplicationScope
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -27,9 +28,9 @@ import kotlinx.coroutines.launch
 class BleScannerManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val discoveryEngine: DiscoveryEngine,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    @ApplicationScope private val applicationScope: CoroutineScope
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     companion object {
         private const val TAG = "BleScanner"
     }
@@ -62,7 +63,7 @@ class BleScannerManager @Inject constructor(
     }
 
     private fun startHardwareScan() {
-        scope.launch {
+        applicationScope.launch {
             if (!settingsRepository.bleScanningEnabled.first() || !settingsRepository.isBleEnabled.first()) {
                 MeshLogger.d(TAG, "BLE Scanning disabled in settings. Skipping.")
                 return@launch
@@ -106,7 +107,7 @@ class BleScannerManager @Inject constructor(
             override fun onScanFailed(errorCode: Int) {
                 MeshLogger.e(TAG, "BLE scan failed with error code: $errorCode")
                 if (errorCode != ScanCallback.SCAN_FAILED_ALREADY_STARTED) {
-                    scope.launch {
+                    applicationScope.launch {
                         if (settingsRepository.bleAutoRestart.first()) {
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                 MeshLogger.d(TAG, "Attempting to restart BLE scan after failure")
@@ -124,7 +125,7 @@ class BleScannerManager @Inject constructor(
             MeshLogger.e(TAG, "SecurityException: Missing BLE scan permission", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception starting hardware scan: ${e.message}", e)
-            scope.launch {
+            applicationScope.launch {
                 if (settingsRepository.bleAutoRestart.first()) {
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                         MeshLogger.d(TAG, "Attempting to restart BLE scan after exception")

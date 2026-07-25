@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Build
 import com.meshlink.common.logger.MeshLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.meshlink.di.ApplicationScope
 import java.io.ByteArrayOutputStream
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -20,8 +21,10 @@ import kotlinx.coroutines.sync.withLock
 
 @Singleton
 @SuppressLint("MissingPermission")
-class BleGattManager @Inject constructor(@ApplicationContext private val context: Context) {
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+class BleGattManager @Inject constructor(
+    @ApplicationContext private val context: Context,
+    @ApplicationScope private val applicationScope: CoroutineScope
+) {
     private val mutex = Mutex()
     private companion object {
         const val DEFAULT_MTU = 23
@@ -161,7 +164,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
         }
         
         // Dispatch to Nodes that connected to us
-        scope.launch {
+        applicationScope.launch {
             val service = gattServer?.getService(BleConstants.MESH_SERVICE_UUID)
             val char = service?.getCharacteristic(BleConstants.MSG_CHAR_UUID)
             
@@ -180,7 +183,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
     }
 
     private fun sendFragmentedNotification(device: BluetoothDevice, char: BluetoothGattCharacteristic, data: ByteArray) {
-        scope.launch {
+        applicationScope.launch {
             val mtu = deviceMtus[device.address] ?: DEFAULT_MTU
             // Ensure maxPayload respects GATT 512-byte value limit and MTU
             val maxPayload = (minOf(mtu - GATT_HEADER_SIZE, MAX_ATTRIBUTE_VALUE_SIZE) - FRAG_HEADER_SIZE).coerceAtLeast(1)
@@ -269,7 +272,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
     }
 
     private fun enqueueClientWrite(address: String, bytes: ByteArray) {
-        scope.launch {
+        applicationScope.launch {
             mutex.withLock {
                 val mtu = deviceMtus[address] ?: DEFAULT_MTU
                 val maxPayload = (minOf(mtu - GATT_HEADER_SIZE, MAX_ATTRIBUTE_VALUE_SIZE) - FRAG_HEADER_SIZE).coerceAtLeast(1)
@@ -304,7 +307,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
     }
 
     private fun flushClientWriteQueue() {
-        scope.launch {
+        applicationScope.launch {
             mutex.withLock {
                 flushClientWriteQueueLocked()
             }
@@ -375,7 +378,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                         pending.nextAttemptTime = now + backoff
                         MeshLogger.w("BleGatt", "[TRANSPORT-A]   ⚠ writeCharacteristic returned false for ${pending.address}. Retry ${pending.retryCount} in ${backoff}ms")
                         // Wait for backoff
-                        scope.launch {
+                        applicationScope.launch {
                             delay(backoff)
                             flushClientWriteQueue()
                         }
@@ -467,7 +470,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                 deviceMtus.remove(gatt.device.address)
                 reassemblyBuffers.remove(gatt.device.address)
                 
-                scope.launch {
+                applicationScope.launch {
                     mutex.withLock {
                         pendingClientWrites.removeAll { it.address == gatt.device.address }
                         if (activeWriteAddress == gatt.device.address) {
@@ -565,7 +568,7 @@ class BleGattManager @Inject constructor(@ApplicationContext private val context
                     MeshLogger.d("BleGatt", "[TRANSPORT-A]   ✓ onCharacteristicWrite SUCCESS for ${gatt.device.address}: status=GATT_SUCCESS")
                 }
                 // ──────────────────────────────────────────────────────────────────────
-                scope.launch {
+                applicationScope.launch {
                     mutex.withLock {
                         if (activeWriteAddress == gatt.device.address) {
                             val index = pendingClientWrites.indexOfFirst { it.address == gatt.device.address }

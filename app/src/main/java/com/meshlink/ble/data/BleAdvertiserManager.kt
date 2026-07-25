@@ -12,6 +12,7 @@ import android.os.PowerManager
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.meshlink.di.ApplicationScope
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -24,9 +25,9 @@ import kotlinx.coroutines.launch
 @SuppressLint("MissingPermission")
 class BleAdvertiserManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    @ApplicationScope private val applicationScope: CoroutineScope
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     companion object {
         private const val TAG = "BleAdvertiser"
         private const val NAME_PREVIEW_LENGTH = 3
@@ -43,7 +44,7 @@ class BleAdvertiserManager @Inject constructor(
 
 
     fun startAdvertising(name: String, meshId: String, capabilities: Byte = 0) {
-        scope.launch {
+        applicationScope.launch {
             if (!settingsRepository.bleAdvertisingEnabled.first() || !settingsRepository.isBleEnabled.first()) {
                 MeshLogger.d(TAG, "BLE Advertising disabled in settings. Skipping.")
                 return@launch
@@ -111,7 +112,7 @@ class BleAdvertiserManager @Inject constructor(
             override fun onStartFailure(errorCode: Int) {
                 MeshLogger.e(TAG, "Advertising failed with error code: $errorCode")
                 if (errorCode != AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED) {
-                    scope.launch {
+                    applicationScope.launch {
                         if (settingsRepository.bleAutoRestart.first()) {
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                 MeshLogger.d(TAG, "Attempting to restart BLE advertising after failure")
@@ -128,7 +129,7 @@ class BleAdvertiserManager @Inject constructor(
             MeshLogger.e(TAG, "SecurityException: Missing BLE advertise permission", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception starting advertising: ${e.message}", e)
-            scope.launch {
+            applicationScope.launch {
                 if (settingsRepository.bleAutoRestart.first()) {
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                         MeshLogger.d(TAG, "Attempting to restart BLE advertising after exception")

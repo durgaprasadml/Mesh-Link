@@ -13,4 +13,6 @@ import android.bluetooth.BluetoothGattCharacteristic
  */
 interface GattNotificationManager {
     fun notifyCharacteristic(device: BluetoothDevice, char: BluetoothGattCharacteristic, value: ByteArray)
+    fun onNotificationSent(device: BluetoothDevice, status: Int)
+    fun clear(address: String)
 }

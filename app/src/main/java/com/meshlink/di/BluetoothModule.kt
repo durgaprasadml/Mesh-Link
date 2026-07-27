@@ -82,13 +82,15 @@ object BluetoothModule {
     @Provides
     @Singleton
     fun provideGattNotificationManager(
-        gattManager: dagger.Lazy<com.meshlink.ble.data.BleGattManager>
+        gattManager: dagger.Lazy<com.meshlink.ble.data.BleGattManager>,
+        @com.meshlink.di.ApplicationScope applicationScope: kotlinx.coroutines.CoroutineScope
     ): com.meshlink.ble.data.gatt.GattNotificationManager {
         // GattNotificationManagerImpl needs a way to get the GATT Server instance
         // which resides in BleGattManager. Using Lazy prevents circular dependency during init.
-        return com.meshlink.ble.data.gatt.GattNotificationManagerImpl {
-            gattManager.get().getGattServer()
-        }
+        return com.meshlink.ble.data.gatt.GattNotificationManagerImpl(
+            { gattManager.get().getGattServer() },
+            applicationScope
+        )
     }
 }
 

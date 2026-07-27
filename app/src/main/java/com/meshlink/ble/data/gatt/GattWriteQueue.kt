@@ -15,7 +15,7 @@ interface GattWriteQueue {
     fun dropAllForDevice(address: String): List<PendingClientWrite>
     fun hasPendingForDevice(address: String): Boolean
     fun getActiveWriteAddress(): String?
-    fun setActiveWriteAddress(address: String?)
+    fun setActiveWrite(write: PendingClientWrite?)
     fun requeueWithBackoff(write: PendingClientWrite, maxRetries: Int = 10, backoffBaseMs: Long = 50L): Long
     fun clear()
 }

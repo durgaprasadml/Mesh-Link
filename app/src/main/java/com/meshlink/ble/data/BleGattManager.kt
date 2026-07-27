@@ -85,7 +85,7 @@ class BleGattManager @Inject constructor(
             
             val msgChar = BluetoothGattCharacteristic(
                 BleConstants.MSG_CHAR_UUID,
-                BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+                BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_NOTIFY or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
                 BluetoothGattCharacteristic.PERMISSION_READ or BluetoothGattCharacteristic.PERMISSION_WRITE
             )
             val cccd = BluetoothGattDescriptor(
@@ -215,8 +215,6 @@ class BleGattManager @Inject constructor(
     }
 
     private fun flushClientWriteQueueLocked() {
-        if (writeQueue.getActiveWriteAddress() != null) return
-
         val now = System.currentTimeMillis()
         val pending = writeQueue.dequeueReady(now) { address -> 
             connectionManager.getDeviceState(address) == BleConnectionState.READY 
@@ -238,25 +236,27 @@ class BleGattManager @Inject constructor(
                 MeshLogger.w("BleGatt", "Service discovery retry failed for ${pending.address}: ${e.message}")
                 BufferPool.returnBuffer(pending.bytes)
             }
-            // Put it back
             writeQueue.enqueue(pending)
             return
         }
 
         try {
-            val method = char.javaClass.getMethod("setValue", ByteArray::class.java)
-            method.invoke(char, pending.bytes)
-            char.writeType = android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            val writeStarted = gatt.writeCharacteristic(char)
+            val writeStarted: Boolean
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val statusCode = gatt.writeCharacteristic(char, pending.bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
+                writeStarted = statusCode == android.bluetooth.BluetoothStatusCodes.SUCCESS
+            } else {
+                @Suppress("DEPRECATION")
+                char.value = pending.bytes
+                char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                @Suppress("DEPRECATION")
+                writeStarted = gatt.writeCharacteristic(char)
+            }
+            
+            MeshLogger.d("BleGatt", "[TRANSPORT-A]   -> writeCharacteristic for ${pending.address} started=$writeStarted size=${pending.bytes.size}")
             
             if (writeStarted) {
-                writeQueue.setActiveWriteAddress(pending.address)
-                // Need to put back in queue so onCharacteristicWrite can remove it and free buffer
-                // The queue implementation of dequeueReady removed it. Let's put it at the front or just keep a separate active tracking.
-                // Wait, GATT write queue should probably hold it. 
-                // Let's modify: `dequeueReady` should leave it in the list, or `setActive` tracks the actual write.
-                // I will add it back to the head for tracking.
-                writeQueue.enqueue(pending)
+                writeQueue.setActiveWrite(pending)
             } else {
                 val backoff = writeQueue.requeueWithBackoff(pending)
                 if (backoff < 0) {
@@ -285,6 +285,7 @@ class BleGattManager @Inject constructor(
                 connectionManager.removeConnectedServer(device.address)
                 mtuManager.removeMtu(device.address)
                 reassembler.clear(device.address)
+                notificationManager.clear(device.address)
                 _gattEvents.tryEmit(GattEvent.Disconnected(device.address))
             }
         }
@@ -329,6 +330,11 @@ class BleGattManager @Inject constructor(
             if (responseNeeded) {
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
             }
+        }
+
+        override fun onNotificationSent(device: BluetoothDevice, status: Int) {
+            super.onNotificationSent(device, status)
+            notificationManager.onNotificationSent(device, status)
         }
     }
 
@@ -417,11 +423,14 @@ class BleGattManager @Inject constructor(
         ) {
             super.onCharacteristicWrite(gatt, characteristic, status)
             if (characteristic.uuid == BleConstants.MSG_CHAR_UUID) {
+                MeshLogger.d("BleGatt", "[TRANSPORT-A]   <- onCharacteristicWrite for ${gatt.device.address} status=$status")
                 applicationScope.launch {
                     mutex.withLock {
                         val removed = writeQueue.removeActive(gatt.device.address)
                         if (removed != null) {
                             BufferPool.returnBuffer(removed.bytes)
+                        } else {
+                            MeshLogger.e("BleGatt", "[TRANSPORT-A]   ✗ No active write found for ${gatt.device.address} on write callback!")
                         }
                         
                         if (!writeQueue.hasPendingForDevice(gatt.device.address)) {

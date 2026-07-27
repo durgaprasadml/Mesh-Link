@@ -44,7 +44,7 @@ class MediaTransferManagerTest {
             java.util.Base64.getDecoder().decode(str)
         }
 
-        manager = MediaTransferManager(context, testDispatcher)
+        manager = MediaTransferManager(context, testDispatcher, mockk(relaxed = true))
     }
 
     @After

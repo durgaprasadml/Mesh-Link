@@ -64,7 +64,7 @@ class MeshCryptoManagerTest {
         every { anyConstructed<androidx.security.crypto.MasterKey.Builder>().setKeyScheme(any()) } answers { callOriginal() }
         every { anyConstructed<androidx.security.crypto.MasterKey.Builder>().build() } returns mockk(relaxed = true)
 
-        cryptoManager = MeshCryptoManager(context)
+        cryptoManager = MeshCryptoManager(context, mockk(relaxed = true))
         
         // Generate software keys for testing
         // Mock shared preferences to return null so it generates new ones

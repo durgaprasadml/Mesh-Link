@@ -45,8 +45,7 @@ class ConcurrencyTests {
         every { mockGattManager.incomingMessages } returns MutableSharedFlow()
         
         meshRouter = MeshRouter(
-            gattManager = mockGattManager,
-            connectionManager = mockk(relaxed = true),
+            bleTransport = mockk(relaxed = true),
             relayDao = relayDao,
             trustManager = mockk(relaxed = true),
             routingEngine = routingEngine,

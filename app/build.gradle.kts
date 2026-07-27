@@ -102,6 +102,11 @@ android {
     
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all { test ->
+            test.testLogging {
+                showStandardStreams = true
+            }
+        }
     }
 
     composeOptions {
@@ -200,6 +205,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation("com.lemonappdev:konsist:0.15.1")
+    testImplementation(kotlin("test"))
     
     // QR Code
     implementation(libs.zxing.core)

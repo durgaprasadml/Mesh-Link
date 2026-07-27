@@ -10,7 +10,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PacketFragmenterTest {
 
-    private lateinit classUnderTest: PacketFragmenterImpl
+    private lateinit var classUnderTest: PacketFragmenterImpl
 
     @Before
     fun setup() {

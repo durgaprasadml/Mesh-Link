@@ -23,9 +23,23 @@ data class PeerDiscoveryRecord(
 class DiscoveryCache {
     private val peers = ConcurrentHashMap<String, PeerDiscoveryRecord>()
 
+    private val MAX_PEERS = 1000
+
     fun getOrPut(macAddress: String, meshId: String, defaultName: String): PeerDiscoveryRecord {
+        if (peers.size >= MAX_PEERS && !peers.containsKey(macAddress)) {
+            // Evict oldest peer to stay within memory limits
+            evictOldest()
+        }
         return peers.getOrPut(macAddress) {
             PeerDiscoveryRecord(macAddress = macAddress, meshId = meshId, name = defaultName)
+        }
+    }
+
+    private fun evictOldest() {
+        peers.values.minByOrNull { it.lastSeenMillis }?.let { oldest ->
+            if (oldest.state != PeerLifecycleState.CONNECTED && oldest.state != PeerLifecycleState.CONNECTING) {
+                peers.remove(oldest.macAddress)
+            }
         }
     }
 

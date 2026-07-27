@@ -1,5 +1,6 @@
 package com.meshlink.transfer
 
+import com.meshlink.common.pool.BufferPool
 import java.io.File
 import java.io.RandomAccessFile
 import javax.inject.Inject
@@ -47,7 +48,7 @@ class ChunkManager @Inject constructor() {
                 raf.seek(offset)
                 
                 val bytesToRead = minOf(chunkSize.toLong(), raf.length() - offset).toInt()
-                val buffer = ByteArray(bytesToRead)
+                val buffer = BufferPool.borrowBuffer(bytesToRead)
                 raf.readFully(buffer)
                 buffer
             }

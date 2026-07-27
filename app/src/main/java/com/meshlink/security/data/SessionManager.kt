@@ -19,14 +19,23 @@ class SessionManager @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
     private val trustManager: com.meshlink.security.data.TrustManager,
     private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
-    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher
+    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
+    private val maintenanceScheduler: com.meshlink.common.maintenance.MaintenanceScheduler
 ) {
     private val activeSessions = ConcurrentHashMap<String, PeerSecureSession>()
     private val scope = CoroutineScope(defaultDispatcher + SupervisorJob())
     private val TAG = "SessionManager"
 
     init {
-        startCleanupRoutine()
+        maintenanceScheduler.schedule("SessionCleanup", 5 * 60 * 1000L) {
+            val now = System.currentTimeMillis()
+            val expiredPeers = activeSessions.entries.filter { it.value.expirationTime < now }.map { it.key }
+            
+            expiredPeers.forEach { peerId ->
+                MeshLogger.w(TAG, "Session expired for peer $peerId. Removing.")
+                removeSession(peerId)
+            }
+        }
     }
 
     fun getSession(peerId: String): PeerSecureSession? {
@@ -98,20 +107,7 @@ class SessionManager @Inject constructor(
         peers.forEach { removeSession(it) }
     }
 
-    private fun startCleanupRoutine() {
-        scope.launch {
-            while (true) {
-                delay(5 * 60 * 1000L) // 5 minutes
-                val now = System.currentTimeMillis()
-                val expiredPeers = activeSessions.entries.filter { it.value.expirationTime < now }.map { it.key }
-                
-                expiredPeers.forEach { peerId ->
-                    MeshLogger.w(TAG, "Session expired for peer $peerId. Removing.")
-                    removeSession(peerId)
-                }
-            }
-        }
-    }
+
 
     /**
      * Generates AAD containing sessionId, sequenceNumber, timestamp.

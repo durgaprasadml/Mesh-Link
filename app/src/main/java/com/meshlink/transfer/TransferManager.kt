@@ -5,6 +5,7 @@ import android.util.Base64
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.common.pool.BufferPool
 import com.meshlink.di.IoDispatcher
 import com.meshlink.routing.engine.IntelligentTransportManager
 import com.meshlink.routing.engine.RouteType
@@ -167,6 +168,7 @@ class TransferManager @Inject constructor(
             }
 
             val b64 = Base64.encodeToString(chunkBytes, Base64.NO_WRAP)
+            BufferPool.returnBuffer(chunkBytes)
             
             sendPacket(
                 session.senderId, session.targetId, session.transferId,
@@ -332,6 +334,7 @@ class TransferManager @Inject constructor(
                 val chunkSize = chunkManager.calculateChunkSize(session.transportUsed)
                 val chunkBytes = chunkManager.readChunkFromFile(file, idx, chunkSize) ?: return@forEach
                 val b64 = Base64.encodeToString(chunkBytes, Base64.NO_WRAP)
+                BufferPool.returnBuffer(chunkBytes)
                 
                 sendPacket(
                     session.senderId, session.targetId, transferId,

@@ -52,16 +52,19 @@ object ImageCompressor {
             // Step 4: Iterative quality compression with dimension fallback
             var result: ByteArray? = null
             var pass = 0
+            val baos = ByteArrayOutputStream()
 
             while (pass < 3) {
-                result = compressToTarget(bitmap)
+                result = compressToTarget(bitmap, baos)
                 if (result != null) break
 
                 // Still too large (> 100KB) — resize by 0.8x and retry
                 val newW = (bitmap.width * 0.8f).toInt().coerceAtLeast(100)
                 val newH = (bitmap.height * 0.8f).toInt().coerceAtLeast(100)
                 val smaller = Bitmap.createScaledBitmap(bitmap, newW, newH, true)
-                if (smaller !== bitmap) bitmap.recycle()
+                if (smaller !== bitmap) {
+                    bitmap.recycle()
+                }
                 bitmap = smaller
                 pass++
                 MeshLogger.d(TAG, "Pass $pass: rescaled to ${bitmap.width}×${bitmap.height}, retrying compression")
@@ -86,8 +89,8 @@ object ImageCompressor {
      * Compress bitmap as JPEG at quality 20. If > 80KB, compress at quality 15.
      * Returns the byte array if size ≤ ABSOLUTE_MAX_BYTES, else null.
      */
-    private fun compressToTarget(bitmap: Bitmap): ByteArray? {
-        val baos = ByteArrayOutputStream()
+    private fun compressToTarget(bitmap: Bitmap, baos: ByteArrayOutputStream): ByteArray? {
+        baos.reset()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 20, baos)
         var bytes = baos.toByteArray()
         
@@ -96,7 +99,6 @@ object ImageCompressor {
             bitmap.compress(Bitmap.CompressFormat.JPEG, 15, baos)
             bytes = baos.toByteArray()
         }
-        baos.close()
 
         return if (bytes.size <= ABSOLUTE_MAX_BYTES) bytes else null
     }

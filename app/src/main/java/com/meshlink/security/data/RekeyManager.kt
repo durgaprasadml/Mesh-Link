@@ -24,7 +24,8 @@ class RekeyManager @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
     private val sessionManager: SessionManager,
     private val userRepository: UserRepository,
-    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher
+    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
+    private val maintenanceScheduler: com.meshlink.common.maintenance.MaintenanceScheduler
 ) {
     private val TAG = "RekeyManager"
     private val scope = CoroutineScope(defaultDispatcher + SupervisorJob())
@@ -45,59 +46,54 @@ class RekeyManager @Inject constructor(
     var forceKeyExchangeCallback: ((peerId: String) -> Unit)? = null
 
     init {
-        startSweepCoroutine()
-    }
+        maintenanceScheduler.schedule("RekeySweep", 60_000L) {
+            val now = System.currentTimeMillis()
+            
+            val user = userRepository.getLocalUser()
+            val myId = user?.meshId ?: return@schedule
 
-    private fun startSweepCoroutine() {
-        scope.launch {
-            while (true) {
-                delay(60_000) // Check every 60 seconds
-                val now = System.currentTimeMillis()
+            for (peerId in sessionManager.getAllSessionPeers()) {
+                val session = sessionManager.getSession(peerId) ?: continue
                 
-                val user = userRepository.getLocalUser()
-                val myId = user?.meshId ?: continue
+                // Cleanup Grace Window (Transition window limit is 60s)
+                if (session.previousKeyVersion != 0 && now > session.rekeyTimestamp + 60_000) {
+                    MeshLogger.d(TAG, "Grace period ended for peer $peerId, deleting previous AES key")
+                    cryptoManager.clearPreviousSharedKey(peerId)
+                    session.previousKeyVersion = 0
+                }
 
-                for (peerId in sessionManager.getAllSessionPeers()) {
-                    val session = sessionManager.getSession(peerId) ?: continue
-                    
-                    // Cleanup Grace Window (Transition window limit is 60s)
-                    if (session.previousKeyVersion != 0 && now > session.rekeyTimestamp + 60_000) {
-                        MeshLogger.d(TAG, "Grace period ended for peer $peerId, deleting previous AES key")
-                        cryptoManager.clearPreviousSharedKey(peerId)
-                        session.previousKeyVersion = 0
-                    }
+                // Check if we are the deterministic initiator
+                if (myId <= peerId) {
+                    continue // We are not the initiator, we just respond.
+                }
 
-                    // Check if we are the deterministic initiator
-                    if (myId <= peerId) {
-                        continue // We are not the initiator, we just respond.
-                    }
+                // Conditions for automatic rekey
+                val sessionAge = now - session.sessionStart
+                val packetCount = session.totalEncryptedPackets.get()
+                
+                if (sessionAge > 30 * 60 * 1000L || packetCount > 10_000) {
+                    val reason = if (packetCount > 10_000) "packet_limit" else "session_age"
+                    initiateRekey(peerId, reason)
+                }
 
-                    // Conditions for automatic rekey
-                    val sessionAge = now - session.sessionStart
-                    val packetCount = session.totalEncryptedPackets.get()
-                    
-                    if (sessionAge > 30 * 60 * 1000L || packetCount > 10_000) {
-                        val reason = if (packetCount > 10_000) "packet_limit" else "session_age"
-                        initiateRekey(peerId, reason)
-                    }
-
-                    // Retry pending rekeys if timeout (5 seconds)
-                    val pending = pendingRekeys[peerId]
-                    if (pending != null && now > pending.timestamp + 5000) {
-                        if (pending.retries < 3) {
-                            pending.retries++
-                            MeshLogger.w(TAG, "Rekey timed out for $peerId. Retrying (${pending.retries}/3)...")
-                            sendRekeyPacket(peerId, session.sessionId, session.keyVersion, pending.nextKeyVersion, pending.myEphemeralPublicKeyBase64)
-                        } else {
-                            MeshLogger.e(TAG, "Rekey failed 3 times for $peerId. Falling back to full handshake.")
-                            destroyPendingRekey(peerId)
-                            forceKeyExchangeCallback?.invoke(peerId)
-                        }
+                // Retry pending rekeys if timeout (5 seconds)
+                val pending = pendingRekeys[peerId]
+                if (pending != null && now > pending.timestamp + 5000) {
+                    if (pending.retries < 3) {
+                        pending.retries++
+                        MeshLogger.w(TAG, "Rekey timed out for $peerId. Retrying (${pending.retries}/3)...")
+                        sendRekeyPacket(peerId, session.sessionId, session.keyVersion, pending.nextKeyVersion, pending.myEphemeralPublicKeyBase64)
+                    } else {
+                        MeshLogger.e(TAG, "Rekey failed 3 times for $peerId. Falling back to full handshake.")
+                        destroyPendingRekey(peerId)
+                        forceKeyExchangeCallback?.invoke(peerId)
                     }
                 }
             }
         }
     }
+
+
 
     fun manualRekey(peerId: String) {
         initiateRekey(peerId, "manual")

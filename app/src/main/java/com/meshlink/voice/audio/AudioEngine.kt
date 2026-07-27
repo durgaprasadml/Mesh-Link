@@ -13,6 +13,7 @@ import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import androidx.core.content.ContextCompat
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.common.pool.BufferPool
 import com.meshlink.di.IoDispatcher
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -48,7 +49,14 @@ class AudioEngine @Inject constructor(
     var isRecording = false
         private set
 
-    fun startRecording() {
+    private val stateLock = Any()
+
+    fun startRecording() = synchronized(stateLock) {
+        if (isRecording) {
+            MeshLogger.w(TAG, "Recording is already active")
+            return
+        }
+
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             MeshLogger.e(TAG, "RECORD_AUDIO permission not granted")
             return
@@ -89,12 +97,16 @@ class AudioEngine @Inject constructor(
             isRecording = true
 
             scope.launch {
-                val buffer = ByteArray(minBufferSize)
-                while (isActive && isRecording) {
-                    val readResult = audioRecord?.read(buffer, 0, buffer.size) ?: -1
-                    if (readResult > 0) {
-                        onAudioDataReady?.invoke(buffer.copyOf(readResult))
+                val buffer = BufferPool.borrowBuffer(minBufferSize)
+                try {
+                    while (isActive && isRecording) {
+                        val readResult = audioRecord?.read(buffer, 0, buffer.size) ?: -1
+                        if (readResult > 0) {
+                            onAudioDataReady?.invoke(buffer.copyOf(readResult))
+                        }
                     }
+                } finally {
+                    BufferPool.returnBuffer(buffer)
                 }
             }
             MeshLogger.d(TAG, "Started recording")
@@ -104,7 +116,8 @@ class AudioEngine @Inject constructor(
         }
     }
 
-    fun stopRecording() {
+    fun stopRecording() = synchronized(stateLock) {
+        if (!isRecording) return
         isRecording = false
         try {
             audioRecord?.stop()
@@ -122,7 +135,11 @@ class AudioEngine @Inject constructor(
         }
     }
 
-    fun startPlayback() {
+    fun startPlayback() = synchronized(stateLock) {
+        if (audioTrack != null) {
+            MeshLogger.w(TAG, "Playback is already active")
+            return
+        }
         val minBufferSize = AudioTrack.getMinBufferSize(
             SAMPLE_RATE, 
             AudioFormat.CHANNEL_OUT_MONO, 
@@ -158,7 +175,8 @@ class AudioEngine @Inject constructor(
         }
     }
 
-    fun stopPlayback() {
+    fun stopPlayback() = synchronized(stateLock) {
+        if (audioTrack == null) return
         try {
             audioTrack?.pause()
             audioTrack?.flush()

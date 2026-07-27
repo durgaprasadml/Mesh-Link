@@ -9,6 +9,8 @@ import java.util.concurrent.ConcurrentHashMap
 class DuplicateFilter(private val windowMillis: Long = 2000L) {
     private val lastSeenMap = ConcurrentHashMap<String, Long>()
 
+    private val MAX_ITEMS = 5000
+
     /**
      * Checks if the device should be processed or dropped as a duplicate.
      * @return true if it's a new/valid advertisement, false if it's a duplicate.
@@ -18,6 +20,9 @@ class DuplicateFilter(private val windowMillis: Long = 2000L) {
         val lastSeen = lastSeenMap[macAddress]
         
         if (lastSeen == null || (now - lastSeen) > windowMillis) {
+            if (lastSeenMap.size >= MAX_ITEMS) {
+                prune()
+            }
             lastSeenMap[macAddress] = now
             return true
         }

@@ -7,6 +7,7 @@ import android.os.Build
 import com.meshlink.common.logger.MeshLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.meshlink.di.ApplicationScope
+import com.meshlink.common.pool.BufferPool
 import java.io.ByteArrayOutputStream
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -189,10 +190,11 @@ class BleGattManager @Inject constructor(
             val maxPayload = (minOf(mtu - GATT_HEADER_SIZE, MAX_ATTRIBUTE_VALUE_SIZE) - FRAG_HEADER_SIZE).coerceAtLeast(1)
             
             if (data.size <= maxPayload) {
-                val packet = ByteArray(data.size + 1)
+                val packet = BufferPool.borrowBuffer(data.size + 1)
                 packet[0] = TYPE_FULL
                 System.arraycopy(data, 0, packet, 1, data.size)
                 notify(device, char, packet)
+                BufferPool.returnBuffer(packet)
             } else {
                 var offset = 0
                 while (offset < data.size) {
@@ -201,7 +203,7 @@ class BleGattManager @Inject constructor(
                     val chunkSize = minOf(remaining, maxPayload)
                     val isLast = offset + chunkSize >= data.size
                     
-                    val packet = ByteArray(chunkSize + 1)
+                    val packet = BufferPool.borrowBuffer(chunkSize + 1)
                     packet[0] = when {
                         isFirst -> TYPE_START
                         isLast -> TYPE_END
@@ -209,6 +211,7 @@ class BleGattManager @Inject constructor(
                     }
                     System.arraycopy(data, offset, packet, 1, chunkSize)
                     notify(device, char, packet)
+                    BufferPool.returnBuffer(packet)
                     offset += chunkSize
                     
                     // Yield instead of delay to maximize throughput
@@ -278,7 +281,7 @@ class BleGattManager @Inject constructor(
                 val maxPayload = (minOf(mtu - GATT_HEADER_SIZE, MAX_ATTRIBUTE_VALUE_SIZE) - FRAG_HEADER_SIZE).coerceAtLeast(1)
                 
                 if (bytes.size <= maxPayload) {
-                    val packet = ByteArray(bytes.size + 1)
+                    val packet = BufferPool.borrowBuffer(bytes.size + 1)
                     packet[0] = TYPE_FULL
                     System.arraycopy(bytes, 0, packet, 1, bytes.size)
                     pendingClientWrites.add(PendingClientWrite(address, packet))
@@ -290,7 +293,7 @@ class BleGattManager @Inject constructor(
                         val chunkSize = minOf(remaining, maxPayload)
                         val isLast = offset + chunkSize >= bytes.size
                         
-                        val packet = ByteArray(chunkSize + 1)
+                        val packet = BufferPool.borrowBuffer(chunkSize + 1)
                         packet[0] = when {
                             isFirst -> TYPE_START
                             isLast -> TYPE_END
@@ -346,6 +349,7 @@ class BleGattManager @Inject constructor(
                     gatt.discoverServices()
                 } catch (e: Exception) {
                     MeshLogger.w("BleGatt", "Service discovery retry failed for ${pending.address}: ${e.message}")
+                    BufferPool.returnBuffer(pending.bytes)
                     iterator.remove()
                 }
                 continue
@@ -372,6 +376,7 @@ class BleGattManager @Inject constructor(
                     pending.retryCount++
                     if (pending.retryCount > 10) {
                         MeshLogger.e("BleGatt", "[TRANSPORT-A]   ⚠ writeCharacteristic permanently failed for ${pending.address}, dropping packet.")
+                        BufferPool.returnBuffer(pending.bytes)
                         iterator.remove()
                     } else {
                         val backoff = 50L * (1 shl pending.retryCount.coerceAtMost(6))
@@ -386,6 +391,7 @@ class BleGattManager @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
+                BufferPool.returnBuffer(pending.bytes)
                 iterator.remove()
                 MeshLogger.e("BleGatt", "[TRANSPORT-A]   ✗ Exception in writeCharacteristic: ${e.message}")
                 MeshLogger.e("BleGatt", "Error writing char: ${e.message}")
@@ -472,6 +478,8 @@ class BleGattManager @Inject constructor(
                 
                 applicationScope.launch {
                     mutex.withLock {
+                        val dropped = pendingClientWrites.filter { it.address == gatt.device.address }
+                        dropped.forEach { BufferPool.returnBuffer(it.bytes) }
                         pendingClientWrites.removeAll { it.address == gatt.device.address }
                         if (activeWriteAddress == gatt.device.address) {
                             activeWriteAddress = null
@@ -573,7 +581,8 @@ class BleGattManager @Inject constructor(
                         if (activeWriteAddress == gatt.device.address) {
                             val index = pendingClientWrites.indexOfFirst { it.address == gatt.device.address }
                             if (index != -1) {
-                                pendingClientWrites.removeAt(index)
+                                val removed = pendingClientWrites.removeAt(index)
+                                BufferPool.returnBuffer(removed.bytes)
                             }
                             activeWriteAddress = null
                         }

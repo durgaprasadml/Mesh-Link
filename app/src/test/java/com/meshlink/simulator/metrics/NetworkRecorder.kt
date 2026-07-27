@@ -73,7 +73,7 @@ class NetworkRecorder {
 
     // ── Storage ───────────────────────────────────────────────────────────────────
 
-    private val events = CopyOnWriteArrayList<PacketEvent>()
+    private val events = java.util.concurrent.ConcurrentLinkedQueue<PacketEvent>()
 
     // ── Recording API ─────────────────────────────────────────────────────────────
 

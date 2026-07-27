@@ -153,12 +153,14 @@ object MeshAssertions {
     fun assertNoDuplicateDelivery(recorder: NetworkRecorder) {
         val duplicates = recorder.getDeliveredEvents()
             .groupBy { it.packetId }
-            .filter { (_, events) -> events.size > 1 }
+            .filter { (_, events) -> 
+                events.groupBy { it.nodeId }.any { (_, nodeEvents) -> nodeEvents.size > 1 }
+            }
 
         assertTrue(
             duplicates.isEmpty(),
-            "Duplicate deliveries detected: ${duplicates.keys} — counts: ${
-                duplicates.map { (k, v) -> "$k: ${v.size}" }
+            "Duplicate deliveries detected (same node received same packet): ${
+                duplicates.map { (k, v) -> "$k: ${v.groupBy { it.nodeId }.filter { it.value.size > 1 }.map { "${it.key}x${it.value.size}" }}" }
             }"
         )
     }

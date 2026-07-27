@@ -56,7 +56,7 @@ class ScenarioBuilderTest {
 
     @Test
     fun `network partition scenario - eventually delivers after heal`() {
-        val result = Scenarios.networkPartition(groupSize = 2).run()
+        val result = Scenarios.networkPartition(groupSize = 3).run()
 
         // Partition + heal is a more complex scenario — assert it at least completes
         assertTrue(result.env.metrics.generateReport().totalPacketsSent > 0,

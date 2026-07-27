@@ -3,6 +3,7 @@ package com.meshlink.simulator.tests
 import com.meshlink.simulator.assertions.MeshAssertions
 import com.meshlink.simulator.core.MeshSimulator
 import com.meshlink.simulator.metrics.NetworkRecorder
+import com.meshlink.simulator.node.SimulatedNode
 import com.meshlink.simulator.profile.NetworkProfile
 import com.meshlink.simulator.topology.TopologyBuilder
 import org.junit.Test
@@ -63,15 +64,17 @@ class NetworkRecorderTest {
     fun `dropped packets reported with reason`() {
         val sim = MeshSimulator.build {
             nodes(listOf("X", "Y"))
-            topology { _ -> emptyList() }  // No links → NO_ROUTE drop
+            topology { ids -> TopologyBuilder.fullyConnected(ids) }
             profile(NetworkProfile.PerfectNetwork)
+            nodeConfig(SimulatedNode.NodeConfig(enforceEncryption = true)) // Enforce encryption so unencrypted packets drop
         }
-        sim.node("X").sendPacket("Y", "will-drop")
+        sim.node("X").sendPacket("Y", "will-drop", encrypted = false)
         sim.runUntilQuiet()
 
         val drops = sim.recorder.getDroppedPackets()
         assertTrue(drops.isNotEmpty(), "At least one drop event should be recorded")
         assertNotNull(drops.first().dropReason, "Drop reason should not be null")
+        assertEquals(NetworkRecorder.DropReason.ENCRYPTION_FAILED, drops.first().dropReason)
     }
 
     @Test

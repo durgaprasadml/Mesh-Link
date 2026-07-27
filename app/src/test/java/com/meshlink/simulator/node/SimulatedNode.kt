@@ -8,6 +8,10 @@ import com.meshlink.simulator.metrics.NetworkRecorder
 import com.meshlink.simulator.security.SimulatedSecurityLayer
 import com.meshlink.simulator.transport.SimulatedTransport
 import com.meshlink.simulator.core.SimulatedClock
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -270,13 +274,11 @@ class SimulatedNode(
         metrics.duplicateCacheLookups.incrementAndGet()
         val isNew = markPacketProcessed(packet.packetId)
         if (!isNew) {
-            if (!isForMe) {
-                recorder.recordDrop(clock.currentTimeMs, meshId, packet,
-                    NetworkRecorder.DropReason.DUPLICATE, immediateSender)
-                metrics.duplicatesSuppressed.incrementAndGet()
-                metrics.duplicateCacheHits.incrementAndGet()
-                return
-            }
+            recorder.recordDrop(clock.currentTimeMs, meshId, packet,
+                NetworkRecorder.DropReason.DUPLICATE, immediateSender)
+            metrics.duplicatesSuppressed.incrementAndGet()
+            metrics.duplicateCacheHits.incrementAndGet()
+            return
         } else {
             metrics.packetsReceived.incrementAndGet()
         }
@@ -404,9 +406,12 @@ class SimulatedNode(
 
     // ── Helpers ───────────────────────────────────────────────────────────────────
 
+    private val nodeScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
+
     /** Synchronous bridge for suspend functions — safe within the single-threaded scheduler. */
+    @OptIn(DelicateCoroutinesApi::class)
     private fun runSuspending(block: suspend () -> Unit) {
-        kotlinx.coroutines.runBlocking { block() }
+        GlobalScope.launch(Dispatchers.Unconfined) { block() }
     }
 
     override fun toString(): String = "SimulatedNode(id=$meshId, state=$state)"

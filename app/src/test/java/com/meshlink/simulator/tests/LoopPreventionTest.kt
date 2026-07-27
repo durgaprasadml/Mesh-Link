@@ -81,14 +81,18 @@ class LoopPreventionTest {
             nodes(nodeIds)
             topology { ids -> TopologyBuilder.ring(ids) }
             profile(NetworkProfile.PerfectNetwork)
-            nodeConfig(NodeConfig(defaultTtl = 4))
+            nodeConfig(NodeConfig(defaultTtl = 2))
         }
-        sim.node("nt0").sendPacket("nt9", "ttl-bounded")
+        sim.node("nt0").sendPacket("nt5", "ttl-bounded")
         sim.runUntilQuiet()
 
-        // With TTL=4 and 9 hops needed, the packet should NOT reach nt9
-        assertTrue(sim.node("nt9").receivedPackets().isEmpty(),
-            "Packet with TTL=4 should not reach node 9 hops away in a ring")
+        // With TTL=2 and 5 hops needed, the packet should NOT reach nt5
+        val received = sim.node("nt5").receivedPackets()
+        if (received.isNotEmpty()) {
+            println("Packet reached nt5! Path: ${received.first().second.visitedPath}, TTL: ${received.first().second.ttl}, Hops: ${received.first().second.hopCount}")
+        }
+        assertTrue(received.isEmpty(),
+            "Packet with TTL=2 should not reach node 5 hops away in a ring")
 
         // TTL expirations should be recorded
         val totalExpired = sim.nodes.sumOf { it.metrics.ttlExpirations.get() }

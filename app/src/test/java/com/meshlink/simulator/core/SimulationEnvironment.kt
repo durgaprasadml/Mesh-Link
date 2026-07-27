@@ -139,6 +139,8 @@ class SimulationEnvironment private constructor(
      */
     fun heal(groupA: List<String>, groupB: List<String>, config: TransportConfig = TransportConfig.TypicalBle) {
         groupA.forEach { a -> groupB.forEach { b -> addLink(a, b, config) } }
+        groupA.forEach { a -> _nodes[a]?.comeOnline() }
+        groupB.forEach { b -> _nodes[b]?.comeOnline() }
         metrics.routeConvergenceTimeMs.set(clock.currentTimeMs)
     }
 

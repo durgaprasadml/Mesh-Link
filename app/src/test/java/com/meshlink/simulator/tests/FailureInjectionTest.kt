@@ -82,7 +82,7 @@ class FailureInjectionTest {
                     Link("dst", "src", config = corruptConfig)
                 )
             }
-            profile(NetworkProfile.PerfectNetwork)
+            profile(NetworkProfile.Custom(corruptConfig))
         }
         sim.node("src").sendPacket("dst", "will-be-corrupted")
         sim.runUntilQuiet()

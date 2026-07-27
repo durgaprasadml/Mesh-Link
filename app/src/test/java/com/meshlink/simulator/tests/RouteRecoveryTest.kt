@@ -139,7 +139,7 @@ class RouteRecoveryTest {
         }
         // Partition the two groups
         sim.partition(groupA, groupB)
-        sim.node("a0").sendPacket("b1", "cross-partition")
+        val traceId = sim.node("a0").sendPacket("b1", "cross-partition")
         sim.step(1_000)
 
         assertTrue(sim.node("b1").receivedPackets().isEmpty(), "No delivery during partition")

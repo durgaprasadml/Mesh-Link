@@ -231,9 +231,12 @@ object Scenarios {
         .withNodeIds(listOf("sender", "relay", "receiver"))
         .withTopology { ids -> TopologyBuilder.line(ids) }
         .withProfile(NetworkProfile.PerfectNetwork)
-        .atVirtualTime(0) { env -> env.goOffline("relay") }
+        .atVirtualTime(0) { env -> env.removeLink("relay", "receiver") }
         .sendMessage("sender", "receiver", "store-and-forward-test", atMs = 100)
-        .atVirtualTime(2_000) { env -> env.comeOnline("relay") }
+        .atVirtualTime(2_000) { env ->
+            env.addLink("relay", "receiver")
+            env.node("relay").comeOnline() // Trigger flush
+        }
         .expectDelivery("sender", "receiver", withinMs = 5_000)
         .withMaxVirtualMs(6_000)
         .build()

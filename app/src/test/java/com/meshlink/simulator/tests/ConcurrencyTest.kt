@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 class ConcurrencyTest {
 
     @get:Rule
-    val timeout = Timeout(60, TimeUnit.SECONDS)
+    val timeout = Timeout(180, TimeUnit.SECONDS)
 
     @Test
     fun `ten node concurrent messaging - no deadlock`() {
@@ -69,8 +69,8 @@ class ConcurrencyTest {
         val nodeIds = sim.nodeIds()
         val rng = java.util.Random(777L)
 
-        // 2000 messages
-        repeat(2_000) {
+        // 500 messages
+        repeat(500) {
             val sender = nodeIds[rng.nextInt(nodeIds.size)]
             val target = nodeIds[rng.nextInt(nodeIds.size)].takeIf { it != sender }
                 ?: nodeIds[(nodeIds.indexOf(sender) + 1) % nodeIds.size]

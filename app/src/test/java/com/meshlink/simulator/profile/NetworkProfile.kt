@@ -103,6 +103,11 @@ sealed class NetworkProfile(val config: TransportConfig) {
         )
     )
 
+    /**
+     * Custom profile with a user-provided config.
+     */
+    class Custom(config: TransportConfig) : NetworkProfile(config)
+
     companion object {
         /** All built-in profiles indexed by name. */
         val all: Map<String, NetworkProfile> = mapOf(

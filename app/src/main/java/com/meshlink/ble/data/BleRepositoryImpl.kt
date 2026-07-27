@@ -13,7 +13,7 @@ import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.model.PacketPriority
 import com.meshlink.domain.model.BroadcastType
-import com.meshlink.ble.data.PeerConnectionState
+import com.meshlink.domain.model.PeerConnectionState
 import com.meshlink.ble.data.source.BleMeshDataSource
 import com.meshlink.data.location.LocationProvider
 import com.meshlink.database.data.local.ChatDao
@@ -25,7 +25,7 @@ import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.media.data.ImageCompressor
 import com.meshlink.transfer.TransferManager
-import com.meshlink.routing.data.MeshRouter
+import com.meshlink.routing.api.Router
 import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.util.NotificationHelper
 import com.meshlink.voice.transport.VoiceTransport
@@ -56,7 +56,7 @@ import kotlinx.coroutines.withContext
 class BleRepositoryImpl @Inject constructor(
     private val application: Application,
     private val bleDataSource: BleMeshDataSource,
-    private val meshRouter: MeshRouter,
+    private val meshRouter: Router,
     private val chatDao: ChatDao,
     private val userRepository: UserRepository,
     private val transferManager: com.meshlink.transfer.TransferManager,

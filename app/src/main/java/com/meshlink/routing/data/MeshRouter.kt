@@ -2,17 +2,17 @@ package com.meshlink.routing.data
 
 import com.meshlink.common.logger.MeshLogger
 
-import com.meshlink.ble.data.BleGattManager
+import com.meshlink.ble.api.BleTransport
 import androidx.annotation.VisibleForTesting
 import com.meshlink.domain.model.MeshPacket
-import com.meshlink.ble.data.MeshPacketParser
+import com.meshlink.common.util.MeshPacketParser
 import com.meshlink.domain.model.PacketType
 import com.meshlink.database.data.local.RelayDao
 import com.meshlink.database.data.local.RelayPacketEntity
 import com.meshlink.di.IoDispatcher
 import com.meshlink.routing.engine.RoutingEngine
 import com.meshlink.di.ApplicationScope
-import com.meshlink.routing.engine.RouteType
+import com.meshlink.domain.model.RouteType
 import com.meshlink.security.data.TrustLevel
 import com.meshlink.security.data.TrustManager
 import com.meshlink.domain.repository.SettingsRepository
@@ -24,19 +24,18 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
-import com.meshlink.ble.data.BleConnectionManager
+
 
 @Singleton
-class MeshRouter @Inject constructor(
-    private val gattManager: BleGattManager,
-    private val connectionManager: BleConnectionManager,
+internal class MeshRouter @Inject constructor(
+    private val bleTransport: BleTransport,
 
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,
     private val routingEngine: RoutingEngine,
     private val settingsRepository: SettingsRepository,
     @ApplicationScope private val applicationScope: CoroutineScope
-) {
+) : com.meshlink.routing.api.Router {
 
     companion object {
         private const val TAG = "MeshRouter"
@@ -44,12 +43,12 @@ class MeshRouter @Inject constructor(
         private const val MAX_RELAY_PACKETS = 1000
     }
 
-    var localMeshId: String = ""
+    override var localMeshId: String = ""
 
     private val _incomingPayloads = MutableSharedFlow<Pair<String, MeshPacket>>(extraBufferCapacity = 200)
-    val incomingPayloads: SharedFlow<Pair<String, MeshPacket>> = _incomingPayloads.asSharedFlow()
+    override val incomingPayloads: SharedFlow<Pair<String, MeshPacket>> = _incomingPayloads.asSharedFlow()
 
-    val routeTable: Map<String, com.meshlink.routing.engine.RouteEntry>
+    override val routeTable: Map<String, com.meshlink.domain.model.RouteEntry>
         get() = routingEngine.routeManager.routeCache.getAllDestinations().mapNotNull { dest ->
             routingEngine.routeManager.getOptimalRoute(dest)?.let { dest to it }
         }.toMap()
@@ -83,27 +82,18 @@ class MeshRouter @Inject constructor(
     internal fun observeIncoming() {
         if (incomingJob?.isActive == true) return
         incomingJob = applicationScope.launch {
-            gattManager.incomingMessages.collect { (sender, json) ->
-                // ── [TRANSPORT-B] Packet received from BLE, about to parse ─────────────────────────
+            bleTransport.incomingPackets.collect { (sender, packet) ->
                 MeshLogger.d(TAG, "[TRANSPORT-B] ═══ MeshRouter.observeIncoming() ═══")
                 MeshLogger.d(TAG, "[TRANSPORT-B]   immediateSender : '$sender'")
-                MeshLogger.d(TAG, "[TRANSPORT-B]   rawJsonBytes    : ${json.toByteArray(Charsets.UTF_8).size} B")
-                MeshLogger.d(TAG, "[TRANSPORT-B]   jsonPreview     : '${json.take(100)}'")
-                val parsed = com.meshlink.ble.data.MeshPacketParser.fromJson(json)
-                if (parsed == null) {
-                    MeshLogger.e(TAG, "[TRANSPORT-B]   ✗ MeshPacketParser.fromJson() returned null — JSON is malformed or empty")
-                } else {
-                    MeshLogger.d(TAG, "[TRANSPORT-B]   ✓ Packet parsed:")
-                    MeshLogger.d(TAG, "[TRANSPORT-B]     packetId  : '${com.meshlink.util.MeshIdNormalizer.canonicalize(parsed.packetId)}'")
-                    MeshLogger.d(TAG, "[TRANSPORT-B]     senderId  : '${parsed.senderId}'")
-                    MeshLogger.d(TAG, "[TRANSPORT-B]     targetId  : '${parsed.targetId}'")
-                    MeshLogger.d(TAG, "[TRANSPORT-B]     type      : '${parsed.type}'")
-                    MeshLogger.d(TAG, "[TRANSPORT-B]     encrypted : ${parsed.encrypted}")
-                    MeshLogger.d(TAG, "[TRANSPORT-B]     ttl       : ${parsed.ttl}")
-                }
-                // ───────────────────────────────────────────────────────────────────────
+                MeshLogger.d(TAG, "[TRANSPORT-B]   ✓ Packet received directly:")
+                MeshLogger.d(TAG, "[TRANSPORT-B]     packetId  : '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
+                MeshLogger.d(TAG, "[TRANSPORT-B]     senderId  : '${packet.senderId}'")
+                MeshLogger.d(TAG, "[TRANSPORT-B]     targetId  : '${packet.targetId}'")
+                MeshLogger.d(TAG, "[TRANSPORT-B]     type      : '${packet.type}'")
+                MeshLogger.d(TAG, "[TRANSPORT-B]     encrypted : ${packet.encrypted}")
+                MeshLogger.d(TAG, "[TRANSPORT-B]     ttl       : ${packet.ttl}")
                 try {
-                    handleIncomingPacket(sender, json)
+                    handleIncomingPacket(sender, packet)
                 } catch (e: Exception) {
                     MeshLogger.e(TAG, "Error handling BLE packet from $sender: ${e.message}")
                 }
@@ -134,7 +124,7 @@ class MeshRouter @Inject constructor(
         val cachedPackets = relayDao.getAllRelayPackets()
         if (cachedPackets.isEmpty()) return
 
-        val connectedNodes = gattManager.connectedServers.keys + gattManager.activeClients.keys
+        val connectedNodes = bleTransport.connectedPeers
         if (connectedNodes.isEmpty()) {
             return
         }
@@ -181,9 +171,9 @@ class MeshRouter @Inject constructor(
             val nextHop = routingEngine.getNextHopForForwarding(packet, connectedNodes, "")
             
             if (nextHop != null) {
-                gattManager.broadcastPacket(json, includeAddress = nextHop)
+                bleTransport.broadcast(packet, includeAddress = nextHop)
             } else {
-                gattManager.broadcastPacket(json)
+                bleTransport.broadcast(packet)
             }
             
             relayDao.deletePacket(entity.packetId)
@@ -195,14 +185,8 @@ class MeshRouter @Inject constructor(
 
     private fun handleIncomingPacket(
         immediateSenderAddress: String,
-        json: String
+        packet: MeshPacket
     ) {
-        if (json.isBlank() || !json.trimStart().startsWith("{")) {
-            return
-        }
-
-        val packet = MeshPacketParser.fromJson(json) ?: return
-
         // --- Strict Encryption Enforcement ---
         val enforceEncryption = enforceEncryptionState.value
         if (enforceEncryption && !packet.encrypted && packet.type != PacketType.KEY_EXCHANGE && packet.type != PacketType.SOS) {
@@ -323,7 +307,7 @@ class MeshRouter @Inject constructor(
 
 
         val forwardedJson = MeshPacketParser.toJson(relayPacket)
-        val connectedNodes = gattManager.connectedServers.keys + gattManager.activeClients.keys
+        val connectedNodes = bleTransport.connectedPeers
         val hasPeersToForward = connectedNodes.any { it != immediateSenderAddress }
 
         // Congestion Check
@@ -386,12 +370,12 @@ class MeshRouter @Inject constructor(
 
     // ─────────────────── Send Methods ───────────────────
 
-    fun sendPayload(
+    override fun sendPayload(
         targetId: String,
         payload: String,
-        myAddressAlias: String = "Me",
-        encrypted: Boolean = false,
-        packetId: String? = null
+        myAddressAlias: String,
+        encrypted: Boolean,
+        packetId: String?
     ) {
         val initialTtl = meshTtlState.value
         val packet = MeshPacket(
@@ -420,7 +404,7 @@ class MeshRouter @Inject constructor(
         routingEngine.queueOptimizer.enqueue(packet)
     }
 
-    fun sendMediaPacket(packet: MeshPacket) {
+    override fun sendMediaPacket(packet: MeshPacket) {
         val initialTtl = meshTtlState.value
         val finalPacket = packet.copy(ttl = initialTtl)
         
@@ -453,7 +437,7 @@ class MeshRouter @Inject constructor(
                 }
 
                 val json = MeshPacketParser.toJson(packet)
-                val connectedNodes = gattManager.connectedServers.keys + gattManager.activeClients.keys
+                val connectedNodes = bleTransport.connectedPeers
                 val nextHop = routingEngine.getNextHopForForwarding(packet, connectedNodes, excludeHop = "")
 
                 // ── [TRANSPORT-A] Queue Dequeue & Dispatch ────────────────────────────────
@@ -482,11 +466,11 @@ class MeshRouter @Inject constructor(
                     }
 
                     if (nextHop != null) {
-                        MeshLogger.d(TAG, "[TRANSPORT-A]   ▶ Calling gattManager.broadcastPacket(includeAddress='$nextHop') -- DIRECTED")
-                        gattManager.broadcastPacket(json, includeAddress = nextHop)
+                        MeshLogger.d(TAG, "[TRANSPORT-A]   ▶ Calling bleTransport.broadcast(includeAddress='$nextHop') -- DIRECTED")
+                        bleTransport.broadcast(packet, includeAddress = nextHop)
                     } else {
-                        MeshLogger.d(TAG, "[TRANSPORT-A]   ▶ Calling gattManager.broadcastPacket() -- BROADCAST to ALL (${connectedNodes.size} nodes)")
-                        gattManager.broadcastPacket(json)
+                        MeshLogger.d(TAG, "[TRANSPORT-A]   ▶ Calling bleTransport.broadcast() -- BROADCAST to ALL (${connectedNodes.size} nodes)")
+                        bleTransport.broadcast(packet)
                     }
                     // ────────────────────────────────────────────────────────────────────
                 } catch (e: Exception) {

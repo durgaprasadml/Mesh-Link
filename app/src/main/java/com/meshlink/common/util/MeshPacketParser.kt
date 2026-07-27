@@ -1,4 +1,4 @@
-package com.meshlink.ble.data
+package com.meshlink.common.util
 
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType

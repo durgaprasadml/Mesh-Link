@@ -1,7 +1,7 @@
 package com.meshlink.security.data
 
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.ble.data.PeerSecureSession
+import com.meshlink.domain.model.PeerSecureSession
 import com.meshlink.di.DefaultDispatcher
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject

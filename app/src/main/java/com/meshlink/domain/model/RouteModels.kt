@@ -1,4 +1,4 @@
-package com.meshlink.routing.engine
+package com.meshlink.domain.model
 
 enum class RouteType {
     BLE,

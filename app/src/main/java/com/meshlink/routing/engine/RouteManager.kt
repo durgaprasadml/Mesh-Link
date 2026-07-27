@@ -2,6 +2,8 @@ package com.meshlink.routing.engine
 
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.meshlink.domain.model.RouteType
+import com.meshlink.domain.model.RouteEntry
 
 @Singleton
 class RouteManager @Inject constructor(

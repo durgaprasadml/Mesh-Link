@@ -5,7 +5,7 @@ import com.meshlink.ble.discovery.DiscoveryEngine
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.repository.UserRepository
-import com.meshlink.routing.data.MeshRouter
+import com.meshlink.routing.api.Router
 import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.security.data.SessionManager
 import com.meshlink.security.data.RekeyManager
@@ -23,7 +23,7 @@ class RoutingCoordinator @Inject constructor(
     private val trustManager: TrustManager,
     private val sessionManager: SessionManager,
     private val rekeyManager: RekeyManager,
-    private val meshRouter: MeshRouter,
+    private val meshRouter: Router,
     private val connectionManager: BleConnectionManager,
     private val discoveryManager: DiscoveryManager
 ) {

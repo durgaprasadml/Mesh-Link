@@ -1,7 +1,7 @@
 package com.meshlink.emergency.rescue
 
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.routing.data.MeshRouter
+import com.meshlink.routing.api.Router
 import com.meshlink.routing.engine.BatteryAwareNetworking
 import com.meshlink.routing.engine.PowerState
 import com.meshlink.domain.model.MeshPacket
@@ -19,7 +19,7 @@ import javax.inject.Singleton
 
 @Singleton
 class EmergencyBeacon @Inject constructor(
-    private val meshRouter: MeshRouter,
+    private val meshRouter: Router,
     private val batteryAwareNetworking: BatteryAwareNetworking
 ) {
     companion object {

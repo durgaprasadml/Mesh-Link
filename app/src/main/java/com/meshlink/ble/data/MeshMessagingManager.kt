@@ -1,10 +1,10 @@
 package com.meshlink.ble.data
+import com.meshlink.domain.model.PeerConnectionState
 
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.VisibleForTesting
-import com.meshlink.ble.data.PeerConnectionState
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.data.location.LocationProvider
 import com.meshlink.database.data.local.ChatDao
@@ -18,7 +18,7 @@ import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.media.data.ImageCompressor
 import com.meshlink.media.data.MediaTransferManager
-import com.meshlink.routing.data.MeshRouter
+import com.meshlink.routing.api.Router
 import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.util.NotificationHelper
 import com.meshlink.di.ApplicationScope
@@ -45,7 +45,7 @@ class MeshMessagingManager @Inject constructor(
     private val userRepository: UserRepository,
     private val chatDao: ChatDao,
     private val cryptoManager: MeshCryptoManager,
-    private val meshRouter: MeshRouter,
+    private val meshRouter: Router,
     private val transferManager: com.meshlink.transfer.TransferManager,
     private val mediaTransferManager: com.meshlink.media.data.MediaTransferManager,
     private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
@@ -1386,7 +1386,7 @@ class MeshMessagingManager @Inject constructor(
 
     fun checkAndTriggerHandshake(address: String) {
         val state = connectionManager.peerStates[address] ?: return
-        if (state == com.meshlink.ble.data.PeerConnectionState.SERVICES_DISCOVERED || state == com.meshlink.ble.data.PeerConnectionState.MTU_READY) {
+        if (state == com.meshlink.domain.model.PeerConnectionState.SERVICES_DISCOVERED || state == com.meshlink.domain.model.PeerConnectionState.MTU_READY) {
             val peerId = discoveryManager.scannedDevices.value.values.firstOrNull { it.address == address }?.meshId
                 ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == address }?.key
                 
@@ -1395,14 +1395,14 @@ class MeshMessagingManager @Inject constructor(
                     val reqEnc = userRepository.isEncryptionEnabled.first()
                     if (reqEnc) {
                         if (cryptoManager.hasPeerKey(peerId)) {
-                            connectionManager.updatePeerState(address, com.meshlink.ble.data.PeerConnectionState.SESSION_READY)
+                            connectionManager.updatePeerState(address, com.meshlink.domain.model.PeerConnectionState.SESSION_READY)
                             retryPendingMessages()
                         } else {
                             val currentState = connectionManager.peerStates[address]
-                            if (currentState != com.meshlink.ble.data.PeerConnectionState.KEY_EXCHANGE_STARTED &&
-                                currentState != com.meshlink.ble.data.PeerConnectionState.SESSION_READY &&
-                                currentState != com.meshlink.ble.data.PeerConnectionState.SESSION_ESTABLISHED) {
-                                connectionManager.peerStates[address] = com.meshlink.ble.data.PeerConnectionState.KEY_EXCHANGE_STARTED
+                            if (currentState != com.meshlink.domain.model.PeerConnectionState.KEY_EXCHANGE_STARTED &&
+                                currentState != com.meshlink.domain.model.PeerConnectionState.SESSION_READY &&
+                                currentState != com.meshlink.domain.model.PeerConnectionState.SESSION_ESTABLISHED) {
+                                connectionManager.peerStates[address] = com.meshlink.domain.model.PeerConnectionState.KEY_EXCHANGE_STARTED
                                 val user = userRepository.getLocalUser()
                                 if (user != null) {
                                     val localPeerId = routingCoordinator.networkId(user.meshId)
@@ -1413,7 +1413,7 @@ class MeshMessagingManager @Inject constructor(
                             }
                         }
                     } else {
-                        connectionManager.updatePeerState(address, com.meshlink.ble.data.PeerConnectionState.SESSION_READY)
+                        connectionManager.updatePeerState(address, com.meshlink.domain.model.PeerConnectionState.SESSION_READY)
                         retryPendingMessages()
                     }
                 }

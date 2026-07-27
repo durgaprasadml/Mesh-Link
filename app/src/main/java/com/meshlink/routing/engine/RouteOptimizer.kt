@@ -6,6 +6,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
 import kotlin.math.min
+import com.meshlink.domain.model.RouteEntry
 
 @Singleton
 class RouteOptimizer @Inject constructor(

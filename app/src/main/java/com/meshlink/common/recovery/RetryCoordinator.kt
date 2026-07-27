@@ -5,7 +5,7 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.database.data.local.ChatDao
 import com.meshlink.database.data.local.RelayDao
 import com.meshlink.domain.repository.MeshRepository
-import com.meshlink.routing.data.MeshRouter
+import com.meshlink.routing.api.Router
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.model.PacketPriority
@@ -25,7 +25,7 @@ import kotlin.math.pow
 class RetryCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val meshRepository: MeshRepository,
-    private val meshRouter: MeshRouter,
+    private val meshRouter: Router,
     private val chatDao: ChatDao,
     private val relayDao: RelayDao
 ) {

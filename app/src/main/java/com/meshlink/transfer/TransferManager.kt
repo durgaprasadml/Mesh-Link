@@ -1,4 +1,5 @@
 package com.meshlink.transfer
+import com.meshlink.domain.model.RouteType
 
 import android.content.Context
 import android.util.Base64
@@ -8,7 +9,6 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.common.pool.BufferPool
 import com.meshlink.di.IoDispatcher
 import com.meshlink.routing.engine.IntelligentTransportManager
-import com.meshlink.routing.engine.RouteType
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject

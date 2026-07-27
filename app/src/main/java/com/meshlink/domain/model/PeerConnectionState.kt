@@ -1,4 +1,4 @@
-package com.meshlink.ble.data
+package com.meshlink.domain.model
 
 
 

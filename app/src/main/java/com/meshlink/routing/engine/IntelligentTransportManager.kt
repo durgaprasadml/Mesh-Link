@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import com.meshlink.di.ApplicationScope
+import com.meshlink.domain.model.RouteType
 
 @Singleton
 class IntelligentTransportManager @Inject constructor(

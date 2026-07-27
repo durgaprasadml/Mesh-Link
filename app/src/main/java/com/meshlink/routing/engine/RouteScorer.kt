@@ -4,6 +4,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
 import kotlin.math.min
+import com.meshlink.domain.model.RouteType
+import com.meshlink.domain.model.RouteEntry
 
 /**
  * RouteScorer evaluates paths based on a multi-factor weighted formula.

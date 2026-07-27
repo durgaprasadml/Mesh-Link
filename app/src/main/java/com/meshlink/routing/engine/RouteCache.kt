@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import com.meshlink.domain.model.RouteEntry
 
 @Singleton
 class RouteCache @Inject constructor(

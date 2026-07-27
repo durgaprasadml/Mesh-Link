@@ -1,4 +1,5 @@
 package com.meshlink.ble.data
+import com.meshlink.domain.model.PeerConnectionState
 
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject

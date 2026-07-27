@@ -199,6 +199,7 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
+    testImplementation("com.lemonappdev:konsist:0.15.1")
     
     // QR Code
     implementation(libs.zxing.core)

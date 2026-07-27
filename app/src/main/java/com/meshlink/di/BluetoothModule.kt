@@ -91,3 +91,13 @@ object BluetoothModule {
         }
     }
 }
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class TransportBindingModule {
+    @Binds
+    @Singleton
+    internal abstract fun bindBleTransport(
+        impl: com.meshlink.ble.data.BleTransportImpl
+    ): com.meshlink.ble.api.BleTransport
+}

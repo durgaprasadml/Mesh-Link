@@ -6,15 +6,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 @Singleton
-class RuntimeConfigManager @Inject constructor() {
+class RuntimeConfigManager @Inject constructor(
+    private val meshConfig: MeshConfig
+) {
     
-    private val _currentConfig = MutableStateFlow(RuntimeConfig())
+    private val _currentConfig = MutableStateFlow(
+        RuntimeConfig(
+            routingRetryCount = meshConfig.routingRetryCount,
+            maxRelayPackets = meshConfig.maxRelayPackets,
+            defaultTtl = meshConfig.defaultTtl
+        )
+    )
     val currentConfig: StateFlow<RuntimeConfig> = _currentConfig
 
     data class RuntimeConfig(
-        val routingRetryCount: Int = MeshConfig.ROUTING_RETRY_COUNT,
-        val maxRelayPackets: Int = MeshConfig.MAX_RELAY_PACKETS,
-        val defaultTtl: Int = MeshConfig.DEFAULT_TTL,
+        val routingRetryCount: Int,
+        val maxRelayPackets: Int,
+        val defaultTtl: Int,
         val bleScanIntervalMs: Long = BleConfig.SCAN_INTERVAL_MS,
         val wifiP2pGroupTimeoutMs: Long = WifiConfig.P2P_GROUP_TIMEOUT_MS,
         

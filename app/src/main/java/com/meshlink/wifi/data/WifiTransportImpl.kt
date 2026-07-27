@@ -31,16 +31,52 @@ internal class WifiTransportImpl @Inject constructor(
         }
     }
 
+    @Deprecated("Use sendPacket instead", ReplaceWith("sendPacket(packet)"))
     override suspend fun send(packet: MeshPacket) {
         wifiSocketTransport.sendPacket(packet)
     }
 
+    override suspend fun sendPacket(packet: MeshPacket): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            wifiSocketTransport.sendPacket(packet)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(
+                com.meshlink.domain.model.MeshError.TransportError("Failed to send Wi-Fi packet", cause = e)
+            )
+        }
+    }
+
+    @Deprecated("Use broadcastPacket instead", ReplaceWith("broadcastPacket(packet, excludeAddress, includeAddress)"))
     override suspend fun broadcast(packet: MeshPacket, excludeAddress: String?, includeAddress: String?) {
         // Wi-Fi socket is typically point-to-point in this implementation
         wifiSocketTransport.sendPacket(packet)
     }
 
+    override suspend fun broadcastPacket(packet: MeshPacket, excludeAddress: String?, includeAddress: String?): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            wifiSocketTransport.sendPacket(packet)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(
+                com.meshlink.domain.model.MeshError.TransportError("Failed to broadcast Wi-Fi packet", cause = e)
+            )
+        }
+    }
+
+    @Deprecated("Use connectToPeer instead", ReplaceWith("connectToPeer(peerId)"))
     override suspend fun connect(peerId: String) {
         wifiSocketTransport.connectAsClient(peerId)
+    }
+
+    override suspend fun connectToPeer(peerId: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            wifiSocketTransport.connectAsClient(peerId)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(
+                com.meshlink.domain.model.MeshError.TransportError("Failed to connect via Wi-Fi", deviceAddress = peerId, cause = e)
+            )
+        }
     }
 }

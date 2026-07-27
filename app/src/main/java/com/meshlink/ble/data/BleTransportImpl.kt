@@ -31,17 +31,55 @@ internal class BleTransportImpl @Inject constructor(
     override val connectedPeers: Set<String>
         get() = gattManager.connectedServers.keys + gattManager.activeClients.keys
 
+    @Deprecated("Use sendPacket instead", ReplaceWith("sendPacket(packet)"))
     override suspend fun send(packet: MeshPacket) {
         val json = MeshPacketParser.toJson(packet)
         gattManager.broadcastPacket(json, includeAddress = packet.targetId)
     }
 
+    override suspend fun sendPacket(packet: MeshPacket): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            val json = MeshPacketParser.toJson(packet)
+            gattManager.broadcastPacket(json, includeAddress = packet.targetId)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(
+                com.meshlink.domain.model.MeshError.TransportError("Failed to send BLE packet", cause = e)
+            )
+        }
+    }
+
+    @Deprecated("Use broadcastPacket instead", ReplaceWith("broadcastPacket(packet, excludeAddress, includeAddress)"))
     override suspend fun broadcast(packet: MeshPacket, excludeAddress: String?, includeAddress: String?) {
         val json = MeshPacketParser.toJson(packet)
         gattManager.broadcastPacket(json, excludeAddress = excludeAddress, includeAddress = includeAddress)
     }
 
+    override suspend fun broadcastPacket(packet: MeshPacket, excludeAddress: String?, includeAddress: String?): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            val json = MeshPacketParser.toJson(packet)
+            gattManager.broadcastPacket(json, excludeAddress = excludeAddress, includeAddress = includeAddress)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(
+                com.meshlink.domain.model.MeshError.TransportError("Failed to broadcast BLE packet", cause = e)
+            )
+        }
+    }
+
+    @Deprecated("Use connectToPeer instead", ReplaceWith("connectToPeer(peerId)"))
     override suspend fun connect(peerId: String) {
         connectionManager.connectToDevice(peerId)
+    }
+
+    override suspend fun connectToPeer(peerId: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            connectionManager.connectToDevice(peerId)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(
+                com.meshlink.domain.model.MeshError.TransportError("Failed to connect via BLE", deviceAddress = peerId, cause = e)
+            )
+        }
     }
 }

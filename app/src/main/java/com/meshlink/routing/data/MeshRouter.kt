@@ -370,6 +370,7 @@ internal class MeshRouter @Inject constructor(
 
     // ─────────────────── Send Methods ───────────────────
 
+    @Deprecated("Use routePayload instead", ReplaceWith("routePayload(targetId, payload, myAddressAlias, encrypted, packetId)"))
     override fun sendPayload(
         targetId: String,
         payload: String,
@@ -387,30 +388,63 @@ internal class MeshRouter @Inject constructor(
             ttl = initialTtl
         )
 
-        // ── [TRANSPORT-A] Packet Created ──────────────────────────────────────────────────
         val serialized = MeshPacketParser.toJson(packet)
         MeshLogger.d(TAG, "[TRANSPORT-A] ═══ Packet Created & Enqueued ═══")
         MeshLogger.d(TAG, "[TRANSPORT-A]   packetId  : '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
-        MeshLogger.d(TAG, "[TRANSPORT-A]   senderId  : '${packet.senderId}'")
-        MeshLogger.d(TAG, "[TRANSPORT-A]   targetId  : '${packet.targetId}'")
-        MeshLogger.d(TAG, "[TRANSPORT-A]   encrypted : ${packet.encrypted}")
-        MeshLogger.d(TAG, "[TRANSPORT-A]   ttl       : ${packet.ttl}")
-        MeshLogger.d(TAG, "[TRANSPORT-A]   serializedBytes : ${serialized.toByteArray(Charsets.UTF_8).size} B")
-        MeshLogger.d(TAG, "[TRANSPORT-A]   payload preview : '${packet.payload.take(60)}'")
-        // ────────────────────────────────────────────────────────────────────────
-
+        
         routingEngine.markPacketProcessed(packet.packetId)
-
         routingEngine.queueOptimizer.enqueue(packet)
     }
 
+    override suspend fun routePayload(
+        targetId: String,
+        payload: String,
+        myAddressAlias: String,
+        encrypted: Boolean,
+        packetId: String?
+    ): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            val initialTtl = meshTtlState.value
+            val packet = MeshPacket(
+                packetId = packetId ?: java.util.UUID.randomUUID().toString(),
+                senderId = myAddressAlias,
+                targetId = targetId,
+                payload = payload,
+                encrypted = encrypted,
+                ttl = initialTtl
+            )
+            routingEngine.markPacketProcessed(packet.packetId)
+            routingEngine.queueOptimizer.enqueue(packet)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(
+                com.meshlink.domain.model.MeshError.RoutingError("Failed to route payload", targetId, e)
+            )
+        }
+    }
+
+    @Deprecated("Use routeMediaPacket instead", ReplaceWith("routeMediaPacket(packet)"))
     override fun sendMediaPacket(packet: MeshPacket) {
         val initialTtl = meshTtlState.value
         val finalPacket = packet.copy(ttl = initialTtl)
         
         routingEngine.markPacketProcessed(finalPacket.packetId)
-
         routingEngine.queueOptimizer.enqueue(finalPacket)
+    }
+
+    override suspend fun routeMediaPacket(packet: MeshPacket): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            val initialTtl = meshTtlState.value
+            val finalPacket = packet.copy(ttl = initialTtl)
+            
+            routingEngine.markPacketProcessed(finalPacket.packetId)
+            routingEngine.queueOptimizer.enqueue(finalPacket)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(
+                com.meshlink.domain.model.MeshError.RoutingError("Failed to route media packet", packet.targetId, e)
+            )
+        }
     }
 
 

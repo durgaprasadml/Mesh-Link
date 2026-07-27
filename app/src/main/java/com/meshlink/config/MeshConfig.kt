@@ -1,9 +1,28 @@
 package com.meshlink.config
 
-object MeshConfig {
-    const val MAX_RELAY_PACKETS = 500
-    const val DEFAULT_TTL = 3
-    const val MAX_HOPS = 10
-    const val ROUTING_RETRY_COUNT = 3
-    const val ROUTING_RETRY_INTERVAL_MS = 2000L
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Global configuration for the Mesh Link application.
+ *
+ * Responsibility: Provide immutable configuration parameters for the mesh network.
+ * Lifecycle: Singleton, application scoped.
+ * Thread Safety: Immutable, thread-safe.
+ */
+@Singleton
+data class MeshConfig(
+    val maxRelayPackets: Int,
+    val defaultTtl: Int,
+    val maxHops: Int,
+    val routingRetryCount: Int,
+    val routingRetryIntervalMs: Long
+) {
+    @Inject constructor() : this(
+        maxRelayPackets = 500,
+        defaultTtl = 3,
+        maxHops = 10,
+        routingRetryCount = 3,
+        routingRetryIntervalMs = 2000L
+    )
 }

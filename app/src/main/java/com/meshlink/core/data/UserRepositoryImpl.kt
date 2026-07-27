@@ -13,6 +13,7 @@ class UserRepositoryImpl @Inject constructor(
 
     override val hasProfile: Flow<Boolean> = localDataSource.hasProfile
     
+    @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name)"))
     override suspend fun createProfile(name: String): Result<Unit> {
         return try {
             // Generate a random meshId and save local user
@@ -23,6 +24,18 @@ class UserRepositoryImpl @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    override suspend fun setupProfile(name: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            val meshId = java.util.UUID.randomUUID().toString()
+            val user = UserEntity(meshId = meshId, name = name)
+            localDataSource.insertUser(user)
+            localDataSource.setProfileCreated(true)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.UnknownError("Failed to setup profile", e))
         }
     }
 

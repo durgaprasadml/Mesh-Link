@@ -32,8 +32,9 @@ import javax.inject.Singleton
  */
 @Singleton
 class MeshCryptoManager @Inject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
-) {
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
+    private val meshConfig: com.meshlink.config.MeshConfig
+) : com.meshlink.security.api.CryptoProvider {
     companion object {
         private const val TAG = "MeshCrypto"
     }
@@ -618,5 +619,41 @@ class MeshCryptoManager @Inject constructor(
 
     fun getLastRotationTime(): Long {
         return peerKeyStore.getLong(SecurityConstants.LAST_ROTATION_TIME, getKeyCreationTime())
+    }
+
+    @Deprecated("Use encryptData instead", ReplaceWith("encryptData(peerId, data)"))
+    override suspend fun encrypt(data: ByteArray, peerId: String): ByteArray {
+        val payload = String(data, Charsets.UTF_8)
+        val enc = encrypt(payload, peerId)
+        return enc.toByteArray(Charsets.UTF_8)
+    }
+
+    override suspend fun encryptData(peerId: String, data: ByteArray): com.meshlink.domain.model.MeshResult<ByteArray> {
+        return try {
+            val payload = String(data, Charsets.UTF_8)
+            val enc = encrypt(payload, peerId)
+            com.meshlink.domain.model.MeshResult.Success(enc.toByteArray(Charsets.UTF_8))
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.SecurityError("Encryption failed", peerId, e))
+        }
+    }
+
+    @Deprecated("Use decryptData instead", ReplaceWith("decryptData(peerId, data)"))
+    override suspend fun decrypt(data: ByteArray, peerId: String): ByteArray {
+        val ciphertext = String(data, Charsets.UTF_8)
+        val dec = decryptOrPassthrough(ciphertext, peerId)
+        if (dec == ciphertext && !ciphertext.startsWith("{")) throw Exception("Decryption failed")
+        return dec.toByteArray(Charsets.UTF_8)
+    }
+
+    override suspend fun decryptData(peerId: String, data: ByteArray): com.meshlink.domain.model.MeshResult<ByteArray> {
+        return try {
+            val ciphertext = String(data, Charsets.UTF_8)
+            val dec = decryptOrPassthrough(ciphertext, peerId)
+            if (dec == ciphertext && !ciphertext.startsWith("{")) throw Exception("Decryption failed")
+            com.meshlink.domain.model.MeshResult.Success(dec.toByteArray(Charsets.UTF_8))
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.SecurityError("Decryption failed", peerId, e))
+        }
     }
 }

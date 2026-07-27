@@ -1,8 +1,16 @@
 package com.meshlink.domain.repository
 
+import com.meshlink.domain.model.MeshResult
 import com.meshlink.domain.model.User
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * Manages local user profile and application settings.
+ *
+ * Responsibility: Provide access to the local user data and preferences.
+ * Lifecycle: Application scoped.
+ * Thread Safety: Implementations must be thread-safe.
+ */
 interface UserRepository {
 
     suspend fun getLocalUser(): User?
@@ -10,7 +18,17 @@ interface UserRepository {
     suspend fun updateProfile(name: String, aboutMe: String?, avatarUri: String?)
     
     val hasProfile: Flow<Boolean>
+
+    @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name)"))
     suspend fun createProfile(name: String): Result<Unit>
+
+    /**
+     * Creates a new local user profile.
+     *
+     * @param name The user's name.
+     * @return [MeshResult.Success] on success, [MeshResult.Error] on IO failure.
+     */
+    suspend fun setupProfile(name: String): MeshResult<Unit>
     
     val isEncryptionEnabled: Flow<Boolean>
     suspend fun setEncryptionEnabled(enabled: Boolean)

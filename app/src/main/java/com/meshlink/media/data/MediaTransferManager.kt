@@ -41,8 +41,9 @@ import kotlinx.coroutines.launch
 @Singleton
 class MediaTransferManager @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
-    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
-) {
+    @com.meshlink.di.IoDispatcher private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher,
+    private val meshConfig: com.meshlink.config.MeshConfig
+) : com.meshlink.media.api.MediaTransfer {
     companion object {
         // 300 bytes of Base64 text per chunk.
         // At 512-byte MTU: 300B B64 + ~80B JSON envelope = 380B < 512B ✓
@@ -563,5 +564,14 @@ class MediaTransferManager @Inject constructor(
                 this[transferId] = progress
             }
         }
+    }
+
+    @Deprecated("Use transferMedia instead", ReplaceWith("transferMedia(peerId, uri)"))
+    override suspend fun sendMedia(uri: String, peerId: String) {
+        throw UnsupportedOperationException("MediaTransferManager doesn't directly send via URI without chat name")
+    }
+
+    override suspend fun transferMedia(peerId: String, uri: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.MediaError("Use createAndSendChunked directly", peerId))
     }
 }

@@ -58,8 +58,9 @@ class MeshMessagingManager @Inject constructor(
     private val connectionManager: BleConnectionManager,
     private val discoveryManager: DiscoveryManager,
     private val keyExchangeReplayCache: com.meshlink.security.data.KeyExchangeReplayCache,
-    @ApplicationScope private val applicationScope: CoroutineScope
-) {
+    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope,
+    private val meshConfig: com.meshlink.config.MeshConfig
+) : com.meshlink.messaging.api.MessageProcessor {
     enum class MeshStartupState { STOPPED, STARTING, RUNNING }
     private val startupState = AtomicReference(MeshStartupState.STOPPED)
 
@@ -1454,5 +1455,27 @@ class MeshMessagingManager @Inject constructor(
         if (peerMac.isNotEmpty()) {
             MeshLogger.d(TAG, "Received Wi-Fi Direct MAC from peer: $peerMac, but Wi-Fi Direct is removed.")
         }
+    }
+    @Deprecated("Use processPacket instead", ReplaceWith("processPacket(packet)"))
+    override suspend fun processIncomingPacket(packet: MeshPacket) {
+        handleIncomingPacket(packet)
+    }
+
+    override suspend fun processPacket(packet: MeshPacket): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            handleIncomingPacket(packet)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.UnknownError("Failed to process packet", e))
+        }
+    }
+
+    @Deprecated("Use sendMessage instead", ReplaceWith("sendMessage(destinationId, payload)"))
+    override suspend fun sendOutgoingMessage(destinationId: String, payload: String) {
+        throw UnsupportedOperationException("Use sendMessage with Message domain model")
+    }
+
+    override suspend fun sendMessage(destinationId: String, payload: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.UnknownError("Use sendMessage with Message domain model"))
     }
 }

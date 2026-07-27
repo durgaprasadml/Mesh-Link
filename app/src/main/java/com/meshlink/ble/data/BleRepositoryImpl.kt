@@ -226,6 +226,7 @@ class BleRepositoryImpl @Inject constructor(
      * - Accepts packetId so retries use the same ID
      * - Only sends when delivery path exists
      */
+    @Deprecated("Use routeTextMessage instead", ReplaceWith("routeTextMessage(targetPeerId, payload, localPeerId, encrypted, packetId)"))
     override fun dispatchTextMessage(
         targetPeerId: String,
         payload: String,
@@ -234,6 +235,25 @@ class BleRepositoryImpl @Inject constructor(
         packetId: String?
     ): Boolean {
         return meshMessagingManager.dispatchTextMessage(targetPeerId, payload, localPeerId, encrypted, packetId)
+    }
+
+    override suspend fun routeTextMessage(
+        targetPeerId: String,
+        payload: String,
+        localPeerId: String,
+        encrypted: Boolean,
+        packetId: String?
+    ): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            val success = meshMessagingManager.dispatchTextMessage(targetPeerId, payload, localPeerId, encrypted, packetId)
+            if (success) {
+                com.meshlink.domain.model.MeshResult.Success(Unit)
+            } else {
+                com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("No path to target", targetPeerId))
+            }
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to route text message", targetPeerId, e))
+        }
     }
 
     
@@ -268,11 +288,22 @@ class BleRepositoryImpl @Inject constructor(
         connectionManager.stopServer()
     }
 
+    @Deprecated("Use connectDevice instead", ReplaceWith("connectDevice(address)"))
     override fun connectToDevice(address: String) {
         // Exposed via MeshRepository, considered a manual reconnect intent
         connectionManager.connectToDevice(address, isManual = true)
     }
 
+    override suspend fun connectDevice(address: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            connectionManager.connectToDevice(address, isManual = true)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.TransportError("Failed to connect", deviceAddress = address, cause = e))
+        }
+    }
+
+    @Deprecated("Use connectPeer instead", ReplaceWith("connectPeer(peerIdOrAddress)"))
     override fun connectToPeer(peerIdOrAddress: String): Boolean {
         val address = resolvePeerAddress(peerIdOrAddress) ?: return false
         return try {
@@ -282,6 +313,12 @@ class BleRepositoryImpl @Inject constructor(
             MeshLogger.w(TAG, "connectToPeer failed for $peerIdOrAddress: ${e.message}")
             false
         }
+    }
+
+    override suspend fun connectPeer(peerIdOrAddress: String): com.meshlink.domain.model.MeshResult<Unit> {
+        val address = resolvePeerAddress(peerIdOrAddress) 
+            ?: return com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.TransportError("Could not resolve address", peerIdOrAddress))
+        return connectDevice(address)
     }
 
     /**
@@ -312,33 +349,102 @@ class BleRepositoryImpl @Inject constructor(
 
     // ────────── Text Messages (ENCRYPTED) ──────────
 
+    @Deprecated("Use dispatchMessage instead", ReplaceWith("dispatchMessage(targetMeshId, message)"))
     override suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message) {
         meshMessagingManager.sendMessage(targetMeshId, message)
     }
 
+    override suspend fun dispatchMessage(targetMeshId: String, message: com.meshlink.domain.model.Message): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            meshMessagingManager.sendMessage(targetMeshId, message)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to send message", targetMeshId, e))
+        }
+    }
+
+    @Deprecated("Use dispatchImage instead", ReplaceWith("dispatchImage(targetMeshId, imageUri, chatName)"))
     override suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String) {
         meshMessagingManager.sendImage(targetMeshId, imageUri, chatName)
     }
 
+    override suspend fun dispatchImage(targetMeshId: String, imageUri: Uri, chatName: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            meshMessagingManager.sendImage(targetMeshId, imageUri, chatName)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.MediaError("Failed to send image", targetMeshId, e))
+        }
+    }
 
+    @Deprecated("Use dispatchVoiceNote instead", ReplaceWith("dispatchVoiceNote(targetMeshId, filePath, durationMs, chatName)"))
     override suspend fun sendVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String) {
         meshMessagingManager.sendVoiceNote(targetMeshId, filePath, durationMs, chatName)
     }
 
+    override suspend fun dispatchVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            meshMessagingManager.sendVoiceNote(targetMeshId, filePath, durationMs, chatName)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.MediaError("Failed to send voice note", targetMeshId, e))
+        }
+    }
+
+    @Deprecated("Use dispatchLocation instead", ReplaceWith("dispatchLocation(targetMeshId, chatName)"))
     override suspend fun sendLocation(targetMeshId: String, chatName: String) {
         meshMessagingManager.sendLocation(targetMeshId, chatName)
     }
 
+    override suspend fun dispatchLocation(targetMeshId: String, chatName: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            meshMessagingManager.sendLocation(targetMeshId, chatName)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to send location", targetMeshId, e))
+        }
+    }
+
+    @Deprecated("Use dispatchReadReceipts instead", ReplaceWith("dispatchReadReceipts(chatId)"))
     override suspend fun sendReadReceipts(chatId: String) {
         meshMessagingManager.sendReadReceipts(chatId)
     }
 
+    override suspend fun dispatchReadReceipts(chatId: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            meshMessagingManager.sendReadReceipts(chatId)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to send read receipts", chatId, e))
+        }
+    }
+
+    @Deprecated("Use dispatchSos instead", ReplaceWith("dispatchSos()"))
     override suspend fun sendSos() {
         meshMessagingManager.sendSos()
     }
 
+    override suspend fun dispatchSos(): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            meshMessagingManager.sendSos()
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to send SOS", null, e))
+        }
+    }
+
+    @Deprecated("Use dispatchBroadcastMessage instead", ReplaceWith("dispatchBroadcastMessage(messageText)"))
     override suspend fun broadcastMessage(messageText: String) {
         meshMessagingManager.broadcastMessage(messageText)
+    }
+
+    override suspend fun dispatchBroadcastMessage(messageText: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return try {
+            meshMessagingManager.broadcastMessage(messageText)
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to broadcast message", null, e))
+        }
     }
 
     override fun getMeshStatus(): com.meshlink.domain.model.MeshStatus {

@@ -43,7 +43,7 @@ class TransferManager @Inject constructor(
     }
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-    var onSendPacket: ((MeshPacket) -> Unit)? = null
+    var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
     var onTransferCompleted: ((TransferSession) -> Unit)? = null
     var onOutgoingTransferCompleted: ((TransferSession) -> Unit)? = null
 
@@ -425,7 +425,7 @@ class TransferManager @Inject constructor(
         cache.cleanUpSession(transferId)
     }
 
-    private fun sendPacket(
+    private suspend fun sendPacket(
         senderId: String, targetId: String, transferId: String,
         payload: String, type: PacketType, index: Int, total: Int, mime: String
     ) {

@@ -3,6 +3,7 @@ package com.meshlink.ble.data.gatt
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothStatusCodes
 import android.os.Build
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.common.pool.BufferPool
@@ -77,7 +78,8 @@ class GattNotificationManagerImpl(
             if (server != null) {
                 val success: Boolean
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    success = server.notifyCharacteristicChanged(device, pending.char, false, pending.value)
+                    val result = server.notifyCharacteristicChanged(device, pending.char, false, pending.value)
+                    success = result == BluetoothStatusCodes.SUCCESS
                 } else {
                     @Suppress("DEPRECATION")
                     pending.char.value = pending.value

@@ -71,7 +71,22 @@ class MeshMessagingManager @Inject constructor(
 
     private fun setupTransferManager() {
         transferManager.onSendPacket = { packet ->
-            meshRouter.sendMediaPacket(packet)
+            val reqEnc = userRepository.isEncryptionEnabled.first()
+            if (reqEnc) {
+                val result = encryptAndWrapPayload(packet.payload, packet.targetId, true, packet.packetId)
+                if (result != null) {
+                    val (encryptedPayload, isEncrypted) = result
+                    val securePacket = packet.copy(
+                        payload = encryptedPayload,
+                        encrypted = isEncrypted
+                    )
+                    meshRouter.sendMediaPacket(securePacket)
+                } else {
+                    MeshLogger.e(TAG, "Failed to encrypt media packet ${packet.packetId}")
+                }
+            } else {
+                meshRouter.sendMediaPacket(packet)
+            }
         }
 
         transferManager.onTransferCompleted = { session ->

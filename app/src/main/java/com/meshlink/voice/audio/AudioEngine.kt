@@ -51,7 +51,8 @@ class AudioEngine @Inject constructor(
 
     private val stateLock = Any()
 
-    fun startRecording() = synchronized(stateLock) {
+    fun startRecording() {
+        synchronized(stateLock) {
         if (isRecording) {
             MeshLogger.w(TAG, "Recording is already active")
             return
@@ -114,9 +115,11 @@ class AudioEngine @Inject constructor(
             MeshLogger.e(TAG, "Failed to start recording: ${e.message}")
             stopRecording()
         }
+        }
     }
 
-    fun stopRecording() = synchronized(stateLock) {
+    fun stopRecording() {
+        synchronized(stateLock) {
         if (!isRecording) return
         isRecording = false
         try {
@@ -133,9 +136,11 @@ class AudioEngine @Inject constructor(
             ns = null
             agc = null
         }
+        }
     }
 
-    fun startPlayback() = synchronized(stateLock) {
+    fun startPlayback() {
+        synchronized(stateLock) {
         if (audioTrack != null) {
             MeshLogger.w(TAG, "Playback is already active")
             return
@@ -163,6 +168,7 @@ class AudioEngine @Inject constructor(
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to start playback: ${e.message}")
         }
+        }
     }
 
     fun playAudioData(pcmData: ByteArray) {
@@ -175,7 +181,8 @@ class AudioEngine @Inject constructor(
         }
     }
 
-    fun stopPlayback() = synchronized(stateLock) {
+    fun stopPlayback() {
+        synchronized(stateLock) {
         if (audioTrack == null) return
         try {
             audioTrack?.pause()
@@ -185,6 +192,7 @@ class AudioEngine @Inject constructor(
             MeshLogger.e(TAG, "Error stopping playback: ${e.message}")
         } finally {
             audioTrack = null
+        }
         }
     }
 }

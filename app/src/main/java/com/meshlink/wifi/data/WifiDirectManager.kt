@@ -12,7 +12,6 @@ import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.domain.repository.SettingsRepository
-import com.google.firebase.analytics.FirebaseAnalytics
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,7 +28,6 @@ import kotlinx.coroutines.flow.asStateFlow
 @Singleton
 class WifiDirectManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val analytics: FirebaseAnalytics,
     private val settingsRepository: SettingsRepository
 ) {
     companion object {

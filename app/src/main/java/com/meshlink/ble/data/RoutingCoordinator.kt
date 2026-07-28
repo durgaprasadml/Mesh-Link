@@ -79,4 +79,14 @@ class RoutingCoordinator @Inject constructor(
         if (routeAddress != null) return true
         return resolvePeerAddress(targetPeerIdOrAddress) != null
     }
+
+    fun isDirectlyConnected(peerIdOrAddress: String): Boolean {
+        if (BleConstants.isBluetoothAddress(peerIdOrAddress)) return true
+        val norm = normalizePeerId(peerIdOrAddress)
+        val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { normalizePeerId(it.meshId) == norm }
+        if (scanned != null) return true
+        val route = meshRouter.routeTable[peerIdOrAddress] ?: meshRouter.routeTable[norm]
+        if (route != null) return route.hops <= 0
+        return false
+    }
 }

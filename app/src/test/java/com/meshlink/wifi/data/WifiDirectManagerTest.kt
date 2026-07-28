@@ -10,7 +10,6 @@ import android.net.wifi.p2p.WifiP2pGroup
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import androidx.test.core.app.ApplicationProvider
-import com.google.firebase.analytics.FirebaseAnalytics
 import com.meshlink.domain.repository.SettingsRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -39,7 +38,6 @@ class WifiDirectManagerTest {
     private lateinit var context: Context
     private lateinit var mockWifiP2pManager: WifiP2pManager
     private lateinit var mockChannel: WifiP2pManager.Channel
-    private lateinit var mockAnalytics: FirebaseAnalytics
     private lateinit var mockSettingsRepository: SettingsRepository
     private lateinit var manager: WifiDirectManager
     private lateinit var receiver: android.content.BroadcastReceiver
@@ -49,7 +47,6 @@ class WifiDirectManagerTest {
         context = ApplicationProvider.getApplicationContext()
         mockWifiP2pManager = mockk(relaxed = true)
         mockChannel = mockk(relaxed = true)
-        mockAnalytics = mockk(relaxed = true)
         mockSettingsRepository = mockk(relaxed = true)
         io.mockk.every { mockSettingsRepository.isWifiDirectEnabled } returns kotlinx.coroutines.flow.flowOf(true)
         io.mockk.every { mockSettingsRepository.wifiAutoConnect } returns kotlinx.coroutines.flow.flowOf(true)
@@ -61,7 +58,7 @@ class WifiDirectManagerTest {
         val shadowApplication = shadowOf(context as android.app.Application)
         shadowApplication.setSystemService(Context.WIFI_P2P_SERVICE, mockWifiP2pManager)
 
-        manager = WifiDirectManager(context, mockAnalytics, mockSettingsRepository)
+        manager = WifiDirectManager(context, mockSettingsRepository)
         
         val receiverField = WifiDirectManager::class.java.getDeclaredField("receiver")
         receiverField.isAccessible = true

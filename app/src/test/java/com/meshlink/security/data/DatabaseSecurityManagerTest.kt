@@ -10,10 +10,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.util.UUID
-import io.mockk.mockkStatic
-import io.mockk.every
-import io.mockk.mockk
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import org.junit.Ignore
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -26,9 +22,6 @@ class DatabaseSecurityManagerTest {
 
     @Before
     fun setup() {
-        mockkStatic(FirebaseCrashlytics::class)
-        val mockCrashlytics = mockk<FirebaseCrashlytics>(relaxed = true)
-        every { FirebaseCrashlytics.getInstance() } returns mockCrashlytics
         context = ApplicationProvider.getApplicationContext()
         databaseSecurityManager = DatabaseSecurityManager(context)
     }

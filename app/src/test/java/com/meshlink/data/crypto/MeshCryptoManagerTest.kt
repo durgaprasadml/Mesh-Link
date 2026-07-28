@@ -10,7 +10,6 @@ import org.junit.Test
 import java.security.KeyPairGenerator
 import java.security.spec.ECGenParameterSpec
 import java.util.Base64
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 class MeshCryptoManagerTest {
 
@@ -49,11 +48,6 @@ class MeshCryptoManagerTest {
         every { android.util.Log.i(any(), any<String>()) } returns 0
         every { android.util.Log.w(any(), any<String>()) } returns 0
         every { android.util.Log.w(any(), any<String>(), any()) } returns 0
-
-        // Mock FirebaseCrashlytics
-        mockkStatic(FirebaseCrashlytics::class)
-        val mockCrashlytics = mockk<FirebaseCrashlytics>(relaxed = true)
-        every { FirebaseCrashlytics.getInstance() } returns mockCrashlytics
 
         // Mock EncryptedSharedPreferences to return our mocked sharedPrefs
         mockkStatic(androidx.security.crypto.EncryptedSharedPreferences::class)

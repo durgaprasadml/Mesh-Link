@@ -26,9 +26,6 @@
 # AndroidX Navigation
 -keepnames class androidx.navigation.NavType { *; }
 
-# Firebase Crashlytics
--keep class com.google.firebase.crashlytics.** { *; }
--dontwarn com.google.firebase.crashlytics.**
 
 # Ensure domain models used with Reflection or Serialization are kept
 -keep class com.meshlink.domain.model.** { *; }

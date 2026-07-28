@@ -187,9 +187,22 @@ internal class MeshRouter @Inject constructor(
         immediateSenderAddress: String,
         packet: MeshPacket
     ) {
+        val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)
+        val canonicalLocalId  = com.meshlink.util.MeshIdNormalizer.canonicalize(localMeshId)
+        val isBroadcast = packet.targetId == "BROADCAST" || canonicalTargetId == "BROADCAST"
+        val isForMe     = canonicalTargetId.isNotBlank() && canonicalLocalId.isNotBlank() && canonicalTargetId == canonicalLocalId
+
         // --- Strict Encryption Enforcement ---
         val enforceEncryption = enforceEncryptionState.value
-        if (enforceEncryption && !packet.encrypted && packet.type != PacketType.KEY_EXCHANGE && packet.type != PacketType.SOS) {
+        val isDirectDelivery = isForMe && packet.hopCount == 0
+        
+        val requiresEncryption = if (packet.type in setOf(PacketType.MEDIA_META, PacketType.MEDIA_CHUNK, PacketType.MEDIA_ACK, PacketType.MEDIA_NACK)) {
+            !isDirectDelivery
+        } else {
+            packet.type != PacketType.KEY_EXCHANGE && packet.type != PacketType.SOS
+        }
+
+        if (enforceEncryption && !packet.encrypted && requiresEncryption) {
             MeshLogger.w(TAG, "Dropped unencrypted packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} due to Strict Encryption policy")
             return
         }
@@ -200,11 +213,6 @@ internal class MeshRouter @Inject constructor(
             MeshLogger.w(TAG, "Dropped packet from rogue node ${packet.senderId}")
             return
         }
-
-        val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)
-        val canonicalLocalId  = com.meshlink.util.MeshIdNormalizer.canonicalize(localMeshId)
-        val isBroadcast = packet.targetId == "BROADCAST" || canonicalTargetId == "BROADCAST"
-        val isForMe     = canonicalTargetId.isNotBlank() && canonicalLocalId.isNotBlank() && canonicalTargetId == canonicalLocalId
 
         // ── DIAGNOSTIC Stage 3 (PRIMARY KILL SWITCH) ─────────────────────────
         MeshLogger.d(TAG, "[DIAG-Stage3] ═══ MeshRouter.handleIncomingPacket() ═══")

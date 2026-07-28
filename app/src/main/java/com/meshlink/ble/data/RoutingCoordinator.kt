@@ -29,42 +29,13 @@ class RoutingCoordinator @Inject constructor(
 ) {
     private val TAG = "RoutingCoordinator"
 
-    private var diagDumped = false
-
-    fun networkId(peerId: String): String {
-        val result = BleConstants.toNetworkId(peerId)
-        if (!diagDumped && peerId.isNotBlank()) {
-            diagDumped = true
-            val altResult = normalizePeerId(peerId)
-            MeshLogger.d("[DIAG-IDs]", "═══ ID Normalization Split-Brain Proof ═══")
-            MeshLogger.d("[DIAG-IDs]", "  RAW peerId                : '$peerId'")
-            MeshLogger.d("[DIAG-IDs]", "  networkId (take 8)        : '$result'")
-            MeshLogger.d("[DIAG-IDs]", "  normalizePeerId (last 8)  : '$altResult'")
-            MeshLogger.d("[DIAG-IDs]", "  MISMATCH = ${result != altResult}")
-            if (result != altResult) {
-                MeshLogger.w("[DIAG-IDs]", "  ⚠ SPLIT-BRAIN CONFIRMED: The two functions produce DIFFERENT strings!")
-                MeshLogger.w("[DIAG-IDs]", "  ⚠ isForMe will ALWAYS be false for personal messages.")
-            } else {
-                MeshLogger.d("[DIAG-IDs]", "  ✓ Both functions produce the same string for this ID (meshId length ≤ 8?)")
-            }
-        }
-        return result
-    }
-
-    fun normalizePeerId(peerIdOrAddress: String): String {
-        return com.meshlink.util.MeshIdNormalizer.canonicalize(peerIdOrAddress)
-    }
-
-    fun incomingChatId(senderMeshId: String): String = normalizePeerId(senderMeshId)
-    fun outgoingChatId(targetMeshId: String): String = normalizePeerId(targetMeshId)
-    fun resolveChatId(peerIdOrAddress: String): String = normalizePeerId(peerIdOrAddress)
 
     fun resolvePeerAddress(peerIdOrAddress: String): String? {
         if (BleConstants.isBluetoothAddress(peerIdOrAddress)) return peerIdOrAddress
 
-        val norm = normalizePeerId(peerIdOrAddress)
+        val norm = com.meshlink.util.MeshIdNormalizer.canonicalize(peerIdOrAddress)
         
-        val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { normalizePeerId(it.meshId) == norm }
+        val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm }
         if (scanned != null) return scanned.address
         
         val route = meshRouter.routeTable[peerIdOrAddress] ?: meshRouter.routeTable[norm]
@@ -82,8 +53,8 @@ class RoutingCoordinator @Inject constructor(
 
     fun isDirectlyConnected(peerIdOrAddress: String): Boolean {
         if (BleConstants.isBluetoothAddress(peerIdOrAddress)) return true
-        val norm = normalizePeerId(peerIdOrAddress)
-        val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { normalizePeerId(it.meshId) == norm }
+        val norm = com.meshlink.util.MeshIdNormalizer.canonicalize(peerIdOrAddress)
+        val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm }
         if (scanned != null) return true
         val route = meshRouter.routeTable[peerIdOrAddress] ?: meshRouter.routeTable[norm]
         if (route != null) return route.hops <= 0

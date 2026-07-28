@@ -106,29 +106,18 @@ class MeshMessagingManager @Inject constructor(
     suspend fun handleIncomingPacket(packet: MeshPacket) {
         if (packet.targetId == "BROADCAST") {
             // Broadcasts are not encrypted
-            MeshLogger.d(TAG, "[DIAG-Stage8] handleIncomingPacket: BROADCAST packet type=${packet.type}")
         } else {
             val myMeshId = userRepository.getLocalUser()?.meshId
-            val myNetworkId = if (myMeshId != null) routingCoordinator.networkId(myMeshId) else null
+            val myNetworkId = if (myMeshId != null) com.meshlink.util.MeshIdNormalizer.canonicalize(myMeshId) else null
             val targetsMe = myNetworkId != null && packet.targetId == myNetworkId
 
             // ── DIAGNOSTIC Stage 8 ───────────────────────────────────────────────
-            MeshLogger.d(TAG, "[DIAG-Stage8] ═══ handleIncomingPacket() guard ═══")
-            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.packetId (last-6) : '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
-            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.senderId           : '${packet.senderId}'")
-            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.targetId           : '${packet.targetId}'")
-            MeshLogger.d(TAG, "[DIAG-Stage8]   RAW myMeshId              : '$myMeshId'")
-            MeshLogger.d(TAG, "[DIAG-Stage8]   networkId(myMeshId)       : '$myNetworkId'  [take(8) = FIRST-8]")
-            MeshLogger.d(TAG, "[DIAG-Stage8]   packet.targetId == myNetworkId  : $targetsMe")
             if (!targetsMe) {
-                MeshLogger.w(TAG, "[DIAG-Stage8]   ⚠ GUARD FIRES — packet NOT for me, will RETURN")
-                MeshLogger.w(TAG, "[DIAG-Stage8]   ⚠ targetId='${packet.targetId}'  networkId='$myNetworkId'  MISMATCH=${packet.targetId != myNetworkId}")
             } else {
-                MeshLogger.d(TAG, "[DIAG-Stage8]   ✓ Guard passes — packet IS for me, continuing")
             }
             // ─────────────────────────────────────────────────────────────────────
 
-            if (myMeshId != null && packet.targetId != routingCoordinator.networkId(myMeshId)) {
+            if (myMeshId != null && packet.targetId != com.meshlink.util.MeshIdNormalizer.canonicalize(myMeshId)) {
                 // Not for me, just route it without decrypting
                 MeshLogger.d(TAG, "Routing packet to ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)}")
                 return
@@ -253,7 +242,7 @@ class MeshMessagingManager @Inject constructor(
                     MeshLogger.w(TAG, "Missing key for ${msg.chatId}, requesting key exchange and postponing retry")
                     val localUser = userRepository.getLocalUser()
                     if (localUser != null) {
-                        val localPeerId = routingCoordinator.networkId(localUser.meshId)
+                        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(localUser.meshId)
                         val packetBase = generateSignedKeyExchange(localPeerId, isResponse = false)
                         val packet = packetBase.copy(targetId = msg.chatId)
                         dispatchSinglePacket(msg.chatId, packet)
@@ -267,7 +256,7 @@ class MeshMessagingManager @Inject constructor(
             when (msg.messageType) {
                 MessageType.TEXT -> {
                     val user = userRepository.getLocalUser() ?: return@forEach
-                    val localPeerId = routingCoordinator.networkId(user.meshId)
+                    val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
                     val wrappedPayload = JSONObject().apply {
                         put("text", msg.text)
                         put("senderName", user.name)
@@ -289,8 +278,8 @@ class MeshMessagingManager @Inject constructor(
                 MessageType.IMAGE, MessageType.VOICE -> {
                     val file = msg.mediaPath?.let { File(it) }
                     if (file != null && file.exists()) {
-                        val targetPeerId = routingCoordinator.outgoingChatId(msg.chatId)
-                        val localPeerId = routingCoordinator.networkId(msg.senderId)
+                        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(msg.chatId)
+                        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId)
                         val priority = if (msg.messageType == MessageType.VOICE) com.meshlink.transfer.TransferPriority.HIGH else com.meshlink.transfer.TransferPriority.MEDIUM
                         transferManager.sendFile(
                             file = file,
@@ -311,7 +300,7 @@ class MeshMessagingManager @Inject constructor(
                     }.toString()
                     val packet = MeshPacket(
                         packetId = msg.messageId, // Use original messageId
-                        senderId = routingCoordinator.networkId(msg.senderId),
+                        senderId = com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId),
                         targetId = msg.chatId,
                         payload = payloadJson,
                         type = PacketType.LOCATION,
@@ -540,7 +529,7 @@ class MeshMessagingManager @Inject constructor(
                 if (!isResponse) {
                     applicationScope.launch {
                         userRepository.getLocalUser()?.let { user ->
-                            val localPeerId = routingCoordinator.networkId(user.meshId)
+                            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
                             if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
                                 val responseKeyEx = generateSignedKeyExchange(localPeerId, isResponse = true).copy(targetId = packet.senderId)
                                 dispatchSinglePacket(packet.senderId, responseKeyEx)
@@ -645,7 +634,7 @@ class MeshMessagingManager @Inject constructor(
                 if (!isResponse) {
                     applicationScope.launch {
                         userRepository.getLocalUser()?.let { user ->
-                            val localPeerId = routingCoordinator.networkId(user.meshId)
+                            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
                             if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
                                 val responseKeyEx = generateSignedKeyExchange(localPeerId, isResponse = true).copy(targetId = packet.senderId)
                                 dispatchSinglePacket(packet.senderId, responseKeyEx)
@@ -763,7 +752,7 @@ class MeshMessagingManager @Inject constructor(
 
         try {
             val user = userRepository.getLocalUser() ?: return
-            val localPeerId = routingCoordinator.networkId(user.meshId)
+            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
             meshRouter.localMeshId = localPeerId
             
             // Broadcast routing capabilities
@@ -832,21 +821,11 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message) {
         val user = userRepository.getLocalUser() ?: return
-        val localPeerId = routingCoordinator.networkId(user.meshId)
-        val targetPeerId = routingCoordinator.outgoingChatId(targetMeshId)
+        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
+        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(targetMeshId)
         meshRouter.localMeshId = localPeerId
 
         // ── DIAGNOSTIC Stage 3/4 ──────────────────────────────────────────────────
-        MeshLogger.d(TAG, "[DIAG-Stage3/4] ═══ sendMessage() ═══")
-        MeshLogger.d(TAG, "[DIAG-Stage3/4]   RAW user.meshId           : '${user.meshId}'")
-        MeshLogger.d(TAG, "[DIAG-Stage3/4]   RAW targetMeshId          : '$targetMeshId'")
-        MeshLogger.d(TAG, "[DIAG-Stage3/4]   networkId(user.meshId)    : '$localPeerId'  [take(8) = FIRST-8]")
-        MeshLogger.d(TAG, "[DIAG-Stage3/4]   outgoingChatId(target)    : '$targetPeerId'  [takeLast(8) = LAST-8]")
-        MeshLogger.d(TAG, "[DIAG-Stage3/4]   meshRouter.localMeshId    : '${meshRouter.localMeshId}'")
-        MeshLogger.d(TAG, "[DIAG-Stage3/4]   Packet will be:")
-        MeshLogger.d(TAG, "[DIAG-Stage3/4]     senderId = '$localPeerId'")
-        MeshLogger.d(TAG, "[DIAG-Stage3/4]     targetId = '$targetPeerId'")
-        MeshLogger.d(TAG, "[DIAG-Stage3/4]   MISMATCH? localMeshId('$localPeerId') == targetPeerId('$targetPeerId'): ${localPeerId == targetPeerId}")
         // ─────────────────────────────────────────────────────────────────────────
 
         // Connect to target AND all scanned devices for mesh relay
@@ -875,16 +854,11 @@ class MeshMessagingManager @Inject constructor(
     }
 
     private suspend fun receiveMessage(packet: MeshPacket) {
-        MeshLogger.d(TAG, "[DIAG-Stage9] ═══ receiveMessage() ═══")
-        MeshLogger.d(TAG, "[DIAG-Stage9]   packet.packetId (last-6): '${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}'")
-        MeshLogger.d(TAG, "[DIAG-Stage9]   packet.senderId          : '${packet.senderId}'")
-        MeshLogger.d(TAG, "[DIAG-Stage9]   packet.targetId          : '${packet.targetId}'")
 
         if (chatDao.getMessageByUuid(packet.packetId) != null) {
-            MeshLogger.d(TAG, "[DIAG-Stage9]   Already processed (duplicate) — sending ACK only")
             // Already processed this message! Just send ACK in case it was lost.
             userRepository.getLocalUser()?.let { user ->
-                val localPeerId = routingCoordinator.networkId(user.meshId)
+                val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
                 val ackPacket = MeshPacket(
                     senderId = localPeerId,
                     targetId = packet.senderId,
@@ -897,15 +871,10 @@ class MeshMessagingManager @Inject constructor(
             return
         }
 
-        val chatId = routingCoordinator.incomingChatId(packet.senderId)
+        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
 
         // ── DIAGNOSTIC Stage 9 (DATABASE WRITE) ────────────────────────────────
         val myMeshId = userRepository.getLocalUser()?.meshId
-        MeshLogger.d(TAG, "[DIAG-Stage9]   RAW myMeshId                      : '$myMeshId'")
-        MeshLogger.d(TAG, "[DIAG-Stage9]   incomingChatId(packet.senderId)   : '$chatId'  [normalizePeerId = takeLast(8)]")
-        MeshLogger.d(TAG, "[DIAG-Stage9]   DB insert: chatId='$chatId'  senderId='${packet.senderId}'")
-        MeshLogger.d(TAG, "[DIAG-Stage9]   NOTE: UI queries chatId via resolveChatId(peer) = normalizePeerId(peer) = takeLast(8)")
-        MeshLogger.d(TAG, "[DIAG-Stage9]   MATCH? chatId stored='$chatId' vs chatId queried by UI='${routingCoordinator.incomingChatId(packet.senderId)}'")
         // ─────────────────────────────────────────────────────────────────────
 
         val rawPayload = packet.payload
@@ -941,13 +910,11 @@ class MeshMessagingManager @Inject constructor(
             status = DeliveryStatus.DELIVERED,
             messageType = MessageType.TEXT
         )
-        MeshLogger.d(TAG, "[DIAG-Stage9]   Inserting MessageEntity: messageId=${com.meshlink.util.MeshIdNormalizer.canonicalize(message.messageId)} chatId=${message.chatId} senderId=${message.senderId}")
         chatDao.insertMessageAndUpdateChat(message, senderName)
-        MeshLogger.d(TAG, "[DIAG-Stage9]   ✓ chatDao.insertMessageAndUpdateChat() called for chatId='${message.chatId}'")
 
         // FIX: Phase 3 - Send Delivery ACK
         userRepository.getLocalUser()?.let { user ->
-            val localPeerId = routingCoordinator.networkId(user.meshId)
+            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
             val ackPacket = MeshPacket(
                 senderId = localPeerId,
                 targetId = packet.senderId,
@@ -965,8 +932,8 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String) {
         val user = userRepository.getLocalUser() ?: return
-        val localPeerId = routingCoordinator.networkId(user.meshId)
-        val targetPeerId = routingCoordinator.outgoingChatId(targetMeshId)
+        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
+        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(targetMeshId)
         meshRouter.localMeshId = localPeerId
 
         // Connect to target and all mesh peers for relay
@@ -1049,7 +1016,7 @@ class MeshMessagingManager @Inject constructor(
             else -> "Unsupported File"
         }
 
-        val chatId = routingCoordinator.incomingChatId(completedSenderId)
+        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(completedSenderId)
         val senderName = com.meshlink.util.MeshIdNormalizer.canonicalize(completedSenderId)
 
         val message = MessageEntity(
@@ -1067,7 +1034,7 @@ class MeshMessagingManager @Inject constructor(
         
         // FIX: Phase 3 - Send Delivery ACK for Media
         userRepository.getLocalUser()?.let { user ->
-            val localPeerId = routingCoordinator.networkId(user.meshId)
+            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
             val ackPacket = MeshPacket(
                 senderId = localPeerId,
                 targetId = completedSenderId,
@@ -1100,7 +1067,7 @@ class MeshMessagingManager @Inject constructor(
             else -> "Receiving File..."
         }
 
-        val chatId = routingCoordinator.incomingChatId(packet.senderId)
+        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
         val senderName = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
 
         val message = MessageEntity(
@@ -1121,8 +1088,8 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun sendVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String) {
         val user = userRepository.getLocalUser() ?: return
-        val localPeerId = routingCoordinator.networkId(user.meshId)
-        val targetPeerId = routingCoordinator.outgoingChatId(targetMeshId)
+        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
+        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(targetMeshId)
         meshRouter.localMeshId = localPeerId
         connectToPeer(targetMeshId)
 
@@ -1157,8 +1124,8 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun sendLocation(targetMeshId: String, chatName: String) {
         val user = userRepository.getLocalUser() ?: return
-        val localPeerId = routingCoordinator.networkId(user.meshId)
-        val targetPeerId = routingCoordinator.outgoingChatId(targetMeshId)
+        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
+        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(targetMeshId)
         meshRouter.localMeshId = localPeerId
         connectToPeer(targetMeshId)
 
@@ -1208,7 +1175,7 @@ class MeshMessagingManager @Inject constructor(
         if (chatDao.getMessageByUuid(packet.packetId) != null) {
             // Already processed this message! Just send ACK in case it was lost.
             userRepository.getLocalUser()?.let { user ->
-                val localPeerId = routingCoordinator.networkId(user.meshId)
+                val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
                 val ackPacket = MeshPacket(
                     senderId = localPeerId,
                     targetId = packet.senderId,
@@ -1230,7 +1197,7 @@ class MeshMessagingManager @Inject constructor(
         val battery = json.optInt("battery", -1)
         val senderName = json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
 
-        val chatId = routingCoordinator.incomingChatId(packet.senderId)
+        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
 
         val message = MessageEntity(
             messageId = packet.packetId,
@@ -1249,7 +1216,7 @@ class MeshMessagingManager @Inject constructor(
         
         // FIX: Phase 3 - Send Delivery ACK for Location
         userRepository.getLocalUser()?.let { user ->
-            val localPeerId = routingCoordinator.networkId(user.meshId)
+            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
             val ackPacket = MeshPacket(
                 senderId = localPeerId,
                 targetId = packet.senderId,
@@ -1268,14 +1235,14 @@ class MeshMessagingManager @Inject constructor(
         if (unreadIds.isEmpty()) return
 
         val user = userRepository.getLocalUser() ?: return
-        val localPeerId = routingCoordinator.networkId(user.meshId)
+        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
 
         // Mark as seen locally
         chatDao.markMessagesAsSeen(unreadIds)
 
         // Send READ_RECEIPT packets
         // The chatId is the target meshId (for direct chats)
-        val targetPeerId = routingCoordinator.outgoingChatId(chatId)
+        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(chatId)
         if (targetPeerId == "BROADCAST") return // No read receipts for broadcasts
 
         unreadIds.forEach { msgId ->
@@ -1294,7 +1261,7 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun sendSos() {
         val user = userRepository.getLocalUser() ?: return
-        val localPeerId = routingCoordinator.networkId(user.meshId)
+        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
         meshRouter.localMeshId = localPeerId
 
         val location = locationProvider.getCurrentLocation()
@@ -1324,7 +1291,7 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun broadcastMessage(messageText: String) {
         val user = userRepository.getLocalUser() ?: return
-        val localPeerId = routingCoordinator.networkId(user.meshId)
+        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
         meshRouter.localMeshId = localPeerId
 
         val payloadJson = JSONObject().apply {
@@ -1418,7 +1385,7 @@ class MeshMessagingManager @Inject constructor(
                                 connectionManager.peerStates[address] = com.meshlink.domain.model.PeerConnectionState.KEY_EXCHANGE_STARTED
                                 val user = userRepository.getLocalUser()
                                 if (user != null) {
-                                    val localPeerId = routingCoordinator.networkId(user.meshId)
+                                    val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
                                     val packetBase = generateSignedKeyExchange(localPeerId)
                                     val packet = packetBase.copy(targetId = peerId)
                                     dispatchSinglePacket(peerId, packet)
@@ -1443,7 +1410,7 @@ class MeshMessagingManager @Inject constructor(
         val battery = json.optInt("battery", -1)
         val senderName = json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
 
-        val chatId = routingCoordinator.incomingChatId(packet.senderId)
+        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
 
         val message = MessageEntity(
             messageId = packet.packetId,

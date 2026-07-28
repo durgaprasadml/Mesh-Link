@@ -88,7 +88,7 @@ class BleAdvertiserManager @Inject constructor(
 
         // Legacy BLE advertising is capped at 31 bytes per packet.
         // We pack 8 bytes Mesh ID, 1 byte Capabilities, 3 bytes Name preview
-        val meshIdBytes = BleConstants.toNetworkId(meshId).toByteArray(Charsets.UTF_8).copyOf(8)
+        val meshIdBytes = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId).toByteArray(Charsets.UTF_8).copyOf(8)
         val nameBytes = name.take(NAME_PREVIEW_LENGTH).padEnd(NAME_PREVIEW_LENGTH, ' ').toByteArray(Charsets.UTF_8).copyOf(3)
         val combinedData = ByteArray(12)
         System.arraycopy(meshIdBytes, 0, combinedData, 0, 8)

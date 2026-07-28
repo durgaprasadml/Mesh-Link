@@ -98,23 +98,19 @@ class BleRepositoryImpl @Inject constructor(
     override val incomingMeshPayloads: SharedFlow<Pair<String, MeshPacket>> = meshRouter.incomingPayloads
     override val transferProgress = transferManager.transferProgress
 
-    private fun networkId(peerId: String): String = routingCoordinator.networkId(peerId)
-    private fun normalizePeerId(peerIdOrAddress: String): String = routingCoordinator.normalizePeerId(peerIdOrAddress)
-    override fun resolveChatId(peerIdOrAddress: String): String = routingCoordinator.resolveChatId(peerIdOrAddress)
-    private fun outgoingChatId(targetMeshId: String): String = routingCoordinator.outgoingChatId(targetMeshId)
-    private fun incomingChatId(senderMeshId: String): String = routingCoordinator.incomingChatId(senderMeshId)
+    override fun resolveChatId(peerIdOrAddress: String): String = com.meshlink.util.MeshIdNormalizer.canonicalize(peerIdOrAddress)
     private fun resolvePeerAddress(peerIdOrAddress: String): String? = routingCoordinator.resolvePeerAddress(peerIdOrAddress)
 
     
     override suspend fun setLocalMeshId(meshId: String) {
-        meshRouter.localMeshId = networkId(meshId)
+        meshRouter.localMeshId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
     }
 
     init {
         // Wire RekeyManager
         rekeyManager.sendPacketCallback = { peerId, packet ->
             val user = userRepository.getLocalUser()
-            val senderId = user?.let { networkId(it.meshId) } ?: ""
+            val senderId = user?.let { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) } ?: ""
             meshMessagingManager.dispatchSinglePacket(peerId, packet.copy(senderId = senderId))
         }
         rekeyManager.forceKeyExchangeCallback = { peerId ->
@@ -124,7 +120,7 @@ class BleRepositoryImpl @Inject constructor(
                     connectionManager.peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
                     val user = userRepository.getLocalUser()
                     if (user != null) {
-                        val localPeerId = networkId(user.meshId)
+                        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
                         val packetBase = meshMessagingManager.generateSignedKeyExchange(localPeerId)
                         val packet = packetBase.copy(targetId = peerId)
                         meshMessagingManager.dispatchSinglePacket(peerId, packet)

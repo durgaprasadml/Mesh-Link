@@ -10,10 +10,7 @@ import android.net.wifi.p2p.WifiP2pGroup
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import androidx.test.core.app.ApplicationProvider
-<<<<<<< HEAD
-=======
 import com.meshlink.domain.repository.SettingsRepository
->>>>>>> main
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -41,10 +38,7 @@ class WifiDirectManagerTest {
     private lateinit var context: Context
     private lateinit var mockWifiP2pManager: WifiP2pManager
     private lateinit var mockChannel: WifiP2pManager.Channel
-<<<<<<< HEAD
-=======
     private lateinit var mockSettingsRepository: SettingsRepository
->>>>>>> main
     private lateinit var manager: WifiDirectManager
     private lateinit var receiver: android.content.BroadcastReceiver
 
@@ -53,13 +47,10 @@ class WifiDirectManagerTest {
         context = ApplicationProvider.getApplicationContext()
         mockWifiP2pManager = mockk(relaxed = true)
         mockChannel = mockk(relaxed = true)
-<<<<<<< HEAD
-=======
         mockSettingsRepository = mockk(relaxed = true)
         io.mockk.every { mockSettingsRepository.isWifiDirectEnabled } returns kotlinx.coroutines.flow.flowOf(true)
         io.mockk.every { mockSettingsRepository.wifiAutoConnect } returns kotlinx.coroutines.flow.flowOf(true)
         io.mockk.every { mockSettingsRepository.wifiPreferredGroupOwner } returns kotlinx.coroutines.flow.flowOf(false)
->>>>>>> main
         
         every { mockWifiP2pManager.initialize(any(), any(), any()) } returns mockChannel
 
@@ -67,11 +58,7 @@ class WifiDirectManagerTest {
         val shadowApplication = shadowOf(context as android.app.Application)
         shadowApplication.setSystemService(Context.WIFI_P2P_SERVICE, mockWifiP2pManager)
 
-<<<<<<< HEAD
-        manager = WifiDirectManager(context)
-=======
         manager = WifiDirectManager(context, mockSettingsRepository, applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined))
->>>>>>> main
         
         val receiverField = WifiDirectManager::class.java.getDeclaredField("receiver")
         receiverField.isAccessible = true

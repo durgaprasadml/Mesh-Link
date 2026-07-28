@@ -2,7 +2,6 @@ package com.meshlink.config
 
 object StorageConfig {
     const val DATABASE_VERSION = 2
-    const val DATABASE_NAME = "meshlink_db"
     const val PREFS_NAME = "meshlink_prefs"
     const val ENCRYPTED_PREFS_NAME = "meshlink_encrypted_prefs"
     

@@ -11,6 +11,6 @@ Mesh Link supports standard Android Enterprise App Restrictions (managed configu
 
 ## Deployment Strategy
 1. **Silent Install:** The APK is fully compliant with zero-touch Android Enterprise enrollment.
-2. **Work Profile Separation:** The application cleanly respects the Android Work Profile sandbox. Mesh packets and the local Room database (`meshlink_db`) are securely isolated within the work profile's encrypted partition and cannot cross-pollinate with the host profile's data.
+2. **Work Profile Separation:** The application cleanly respects the Android Work Profile sandbox. Mesh packets and the local Room database (`mesh_db`) are securely isolated within the work profile's encrypted partition and cannot cross-pollinate with the host profile's data.
 
 **Status:** Certified for Android Enterprise Deployment.

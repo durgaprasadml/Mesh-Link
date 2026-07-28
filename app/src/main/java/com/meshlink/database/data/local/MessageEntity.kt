@@ -40,5 +40,5 @@ data class MessageEntity(
 )
 
 enum class DeliveryStatus {
-    PENDING, SENT, RELAYED, DELIVERED, SEEN, FAILED
+    QUEUED, SENT, RELAYED, DELIVERED, SEEN, FAILED
 }

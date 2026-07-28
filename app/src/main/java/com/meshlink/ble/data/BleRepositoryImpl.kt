@@ -276,11 +276,11 @@ private val discoveryEngine get() = discoveryManager.discoveryEngine
                 type = com.meshlink.domain.model.PacketType.TEXT,
                 encrypted = encrypted
             )
-            val success = meshMessagingManager.dispatchSinglePacket(targetPeerId, packet)
-            if (success) {
+            val result = meshMessagingManager.dispatchSinglePacket(targetPeerId, packet)
+            if (result is com.meshlink.domain.model.DispatchResult.Queued) {
                 com.meshlink.domain.model.MeshResult.Success(Unit)
             } else {
-                com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("No path to target", targetPeerId))
+                com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to dispatch: $result", targetPeerId))
             }
         } catch (e: Exception) {
             com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to route text message", targetPeerId, e))

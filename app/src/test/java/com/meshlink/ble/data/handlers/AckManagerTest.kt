@@ -8,6 +8,7 @@ import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.model.User
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.util.MeshIdNormalizer
+import com.meshlink.messaging.data.DeliveryTracker
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
@@ -21,6 +22,7 @@ class AckManagerTest {
     private lateinit var packetDispatcher: PacketDispatcher
     private lateinit var chatDao: ChatDao
     private lateinit var userRepository: UserRepository
+    private lateinit var deliveryTracker: DeliveryTracker
     private lateinit var ackManager: AckManager
 
     @Before
@@ -28,16 +30,18 @@ class AckManagerTest {
         packetDispatcher = mockk(relaxed = true)
         chatDao = mockk(relaxed = true)
         userRepository = mockk(relaxed = true)
+        deliveryTracker = mockk(relaxed = true)
 
         ackManager = AckManager(
             packetDispatcher = packetDispatcher,
             chatDao = chatDao,
-            userRepository = userRepository
+            userRepository = userRepository,
+            deliveryTracker = deliveryTracker
         )
     }
 
     @Test
-    fun `handleDeliveryAck updates database`() = runBlocking {
+    fun `handleDeliveryAck updates delivery tracker`() = runBlocking {
         val packet = MeshPacket(
             packetId = "p1",
             senderId = "peer",
@@ -48,11 +52,11 @@ class AckManagerTest {
 
         ackManager.handleDeliveryAck(packet)
 
-        coVerify { chatDao.updateMessageStatus("original-packet", DeliveryStatus.DELIVERED) }
+        coVerify { deliveryTracker.onAckReceived("original-packet") }
     }
 
     @Test
-    fun `handleReadReceipt updates database`() = runBlocking {
+    fun `handleReadReceipt updates delivery tracker`() = runBlocking {
         val packet = MeshPacket(
             packetId = "p2",
             senderId = "peer",
@@ -63,7 +67,7 @@ class AckManagerTest {
 
         ackManager.handleReadReceipt(packet)
 
-        coVerify { chatDao.updateMessageStatus("original-packet", DeliveryStatus.SEEN) }
+        coVerify { deliveryTracker.onReadReceiptReceived("original-packet") }
     }
 
     @Test

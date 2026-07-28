@@ -47,6 +47,12 @@ internal class MeshRouter @Inject constructor(
 
     private val _incomingPayloads = MutableSharedFlow<Pair<String, MeshPacket>>(extraBufferCapacity = 200)
     override val incomingPayloads: SharedFlow<Pair<String, MeshPacket>> = _incomingPayloads.asSharedFlow()
+    
+    private val _packetEvents = MutableSharedFlow<com.meshlink.routing.api.PacketStatusEvent>(
+        extraBufferCapacity = 1000,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+    )
+    override val packetEvents: SharedFlow<com.meshlink.routing.api.PacketStatusEvent> = _packetEvents.asSharedFlow()
 
     override val routeTable: Map<String, com.meshlink.domain.model.RouteEntry>
         get() = routingEngine.routeManager.routeCache.getAllDestinations().mapNotNull { dest ->
@@ -406,8 +412,9 @@ internal class MeshRouter @Inject constructor(
         myAddressAlias: String,
         encrypted: Boolean,
         packetId: String?
-    ): com.meshlink.domain.model.MeshResult<Unit> {
+    ): com.meshlink.domain.model.DispatchResult {
         return try {
+
             val initialTtl = meshTtlState.value
             val packet = MeshPacket(
                 packetId = packetId ?: java.util.UUID.randomUUID().toString(),
@@ -419,11 +426,10 @@ internal class MeshRouter @Inject constructor(
             )
             routingEngine.markPacketProcessed(packet.packetId)
             routingEngine.queueOptimizer.enqueue(packet)
-            com.meshlink.domain.model.MeshResult.Success(Unit)
+            _packetEvents.emit(com.meshlink.routing.api.PacketQueued(packet.packetId))
+            com.meshlink.domain.model.DispatchResult.Queued
         } catch (e: Exception) {
-            com.meshlink.domain.model.MeshResult.Error(
-                com.meshlink.domain.model.MeshError.RoutingError("Failed to route payload", targetId, e)
-            )
+            com.meshlink.domain.model.DispatchResult.Error(e)
         }
     }
 
@@ -436,18 +442,18 @@ internal class MeshRouter @Inject constructor(
         routingEngine.queueOptimizer.enqueue(finalPacket)
     }
 
-    override suspend fun routeMediaPacket(packet: MeshPacket): com.meshlink.domain.model.MeshResult<Unit> {
+    override suspend fun routeMediaPacket(packet: MeshPacket): com.meshlink.domain.model.DispatchResult {
         return try {
+
             val initialTtl = meshTtlState.value
             val finalPacket = packet.copy(ttl = initialTtl)
             
             routingEngine.markPacketProcessed(finalPacket.packetId)
             routingEngine.queueOptimizer.enqueue(finalPacket)
-            com.meshlink.domain.model.MeshResult.Success(Unit)
+            _packetEvents.emit(com.meshlink.routing.api.PacketQueued(packet.packetId))
+            com.meshlink.domain.model.DispatchResult.Queued
         } catch (e: Exception) {
-            com.meshlink.domain.model.MeshResult.Error(
-                com.meshlink.domain.model.MeshError.RoutingError("Failed to route media packet", packet.targetId, e)
-            )
+            com.meshlink.domain.model.DispatchResult.Error(e)
         }
     }
 
@@ -490,6 +496,11 @@ internal class MeshRouter @Inject constructor(
                 // ─────────────────────────────────────────────────────────────────────
 
                 try {
+                    // Emit transmission started event
+                    if (packet.senderId == localMeshId) {
+                        _packetEvents.emit(com.meshlink.routing.api.PacketTransmissionStarted(packet.packetId))
+                    }
+                    
                     // Check Intelligent Transport (Wi-Fi vs BLE)
                     val preferredTransport = routingEngine.transportManager.selectTransportForPayload(packet.targetId, packet.type)
 
@@ -510,10 +521,18 @@ internal class MeshRouter @Inject constructor(
                         MeshLogger.d(TAG, "[TRANSPORT-A]   ▶ Calling bleTransport.broadcast() -- BROADCAST to ALL (${connectedNodes.size} nodes)")
                         bleTransport.broadcast(packet)
                     }
+                    
+                    // Emit transmitted event if originating locally
+                    if (packet.senderId == localMeshId) {
+                        _packetEvents.emit(com.meshlink.routing.api.PacketTransmitted(packet.packetId))
+                    }
                     // ────────────────────────────────────────────────────────────────────
                 } catch (e: Exception) {
                     MeshLogger.e(TAG, "[TRANSPORT-A]   ✗ EXCEPTION sending packet: ${e.message}")
                     MeshLogger.e(TAG, "Failed to send packet: ${e.message}")
+                    if (packet.senderId == localMeshId) {
+                        _packetEvents.emit(com.meshlink.routing.api.PacketFailed(packet.packetId, e))
+                    }
                     storeForLater(packet)
                 }
 

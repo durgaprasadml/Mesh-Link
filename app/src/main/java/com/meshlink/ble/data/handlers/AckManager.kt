@@ -7,6 +7,7 @@ import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.util.MeshIdNormalizer
+import com.meshlink.messaging.data.DeliveryTracker
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -14,14 +15,15 @@ import javax.inject.Singleton
 class AckManager @Inject constructor(
     private val userRepository: UserRepository,
     private val chatDao: ChatDao,
-    private val packetDispatcher: PacketDispatcher
+    private val packetDispatcher: PacketDispatcher,
+    private val deliveryTracker: DeliveryTracker
 ) {
     suspend fun handleDeliveryAck(packet: MeshPacket) {
-        chatDao.updateMessageStatus(packet.payload, DeliveryStatus.DELIVERED)
+        deliveryTracker.onAckReceived(packet.payload)
     }
 
     suspend fun handleReadReceipt(packet: MeshPacket) {
-        chatDao.updateMessageStatus(packet.payload, DeliveryStatus.SEEN)
+        deliveryTracker.onReadReceiptReceived(packet.payload)
     }
 
     suspend fun sendReadReceipts(chatId: String) {

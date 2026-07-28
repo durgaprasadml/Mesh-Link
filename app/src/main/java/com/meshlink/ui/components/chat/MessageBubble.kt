@@ -91,7 +91,7 @@ fun MessageBubble(
         append(" at ${formatTime(message.timestamp)}. ")
         if (isMe) {
             val statusStr = when (message.status) {
-                DeliveryStatus.PENDING -> "sending"
+                DeliveryStatus.QUEUED -> "sending"
                 DeliveryStatus.SENT -> "sent"
                 DeliveryStatus.DELIVERED, DeliveryStatus.RELAYED, DeliveryStatus.SEEN -> "delivered"
                 DeliveryStatus.FAILED -> "failed"
@@ -131,7 +131,7 @@ fun MessageBubble(
             when (message.messageType) {
                 MessageType.IMAGE -> {
                     val mediaPath = message.mediaPath
-                    val isComplete = message.status != DeliveryStatus.PENDING && message.status != DeliveryStatus.FAILED
+                    val isComplete = message.status != DeliveryStatus.QUEUED && message.status != DeliveryStatus.FAILED
                     val hasFullFile = mediaPath != null && File(mediaPath).exists()
                     
                     if (isComplete && hasFullFile) {
@@ -275,7 +275,7 @@ fun MessageBubble(
                                     Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                                     Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                 }
-                            } else if (transferProgress != null && transferProgress >= 0f && message.status == DeliveryStatus.PENDING) {
+                            } else if (transferProgress != null && transferProgress >= 0f && message.status == DeliveryStatus.QUEUED) {
                                 Text(
                                     text = if (message.isFromMe) "Sending..." else "Receiving...",
                                     style = MaterialTheme.typography.labelSmall,
@@ -415,7 +415,7 @@ fun MessageBubble(
                 if (isMe) {
                     Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                     val statusIcon = when (message.status) {
-                        DeliveryStatus.PENDING -> Icons.Default.AccessTime
+                        DeliveryStatus.QUEUED -> Icons.Default.AccessTime
                         DeliveryStatus.SENT -> Icons.Default.Check
                         DeliveryStatus.RELAYED -> Icons.Default.DoneAll
                         DeliveryStatus.DELIVERED -> Icons.Default.DoneAll

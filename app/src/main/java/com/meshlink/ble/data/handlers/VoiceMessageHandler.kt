@@ -35,7 +35,7 @@ class VoiceMessageHandler @Inject constructor(
             text = "🎤 Voice Note",
             timestamp = System.currentTimeMillis(),
             isFromMe = true,
-            status = DeliveryStatus.PENDING,
+            status = DeliveryStatus.QUEUED,
             messageType = MessageType.VOICE,
             mediaPath = filePath,
             mediaDurationMs = durationMs

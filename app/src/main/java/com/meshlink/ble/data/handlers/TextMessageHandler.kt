@@ -47,8 +47,17 @@ class TextMessageHandler @Inject constructor(
             type = PacketType.TEXT,
             encrypted = false
         )
-        if (packetDispatcher.dispatchSinglePacket(targetPeerId, packet)) {
-            chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
+        val result = packetDispatcher.dispatchSinglePacket(targetPeerId, packet)
+        when (result) {
+            is com.meshlink.domain.model.DispatchResult.Queued -> {
+                // Do nothing, state remains QUEUED. DeliveryTracker handles subsequent states.
+            }
+            is com.meshlink.domain.model.DispatchResult.NoPeers,
+            is com.meshlink.domain.model.DispatchResult.QueueFull,
+            is com.meshlink.domain.model.DispatchResult.Rejected,
+            is com.meshlink.domain.model.DispatchResult.Error -> {
+                chatDao.updateMessageStatus(messageId, DeliveryStatus.FAILED)
+            }
         }
     }
 

@@ -25,7 +25,7 @@ class CorePacketDispatcher @Inject constructor(
 ) : PacketDispatcher {
     private val TAG = "CorePacketDispatcher"
 
-    override suspend fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): Boolean {
+    override suspend fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): com.meshlink.domain.model.DispatchResult {
         connectToPeer(targetPeerId)
         connectToAllScannedDevices()
         
@@ -45,13 +45,12 @@ class CorePacketDispatcher @Inject constructor(
                     packetToSend = packetToSend.copy(payload = encPayload, encrypted = isEnc)
                 } else {
                     MeshLogger.e(TAG, "Centralized encryption failed for packet type: ${packetToSend.type}")
-                    return false
+                    return com.meshlink.domain.model.DispatchResult.Error(Exception("Encryption failed"))
                 }
             }
         }
 
-        meshRouter.routeMediaPacket(packetToSend)
-        return true
+        return meshRouter.routeMediaPacket(packetToSend)
     }
 
     private fun connectToDevice(address: String) {

@@ -77,7 +77,7 @@ class MediaMessageHandler @Inject constructor(
             text            = "📷 Image",
             timestamp       = System.currentTimeMillis(),
             isFromMe        = true,
-            status          = DeliveryStatus.PENDING,
+            status          = DeliveryStatus.QUEUED,
             messageType     = MessageType.IMAGE,
             mediaPath       = localFile.absolutePath,
             mimeType        = "image/jpeg",
@@ -169,7 +169,7 @@ class MediaMessageHandler @Inject constructor(
             text = previewText,
             timestamp = System.currentTimeMillis(),
             isFromMe = false,
-            status = DeliveryStatus.PENDING,
+            status = DeliveryStatus.QUEUED,
             messageType = messageType,
             mediaPath = null
         )

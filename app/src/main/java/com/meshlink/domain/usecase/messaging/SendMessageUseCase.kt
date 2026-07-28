@@ -37,7 +37,7 @@ class SendMessageUseCase @Inject constructor(
             senderId = myMeshId,
             timestamp = System.currentTimeMillis(),
             isFromMe = true,
-            status = DeliveryStatus.PENDING,
+            status = DeliveryStatus.QUEUED,
             messageType = MessageType.TEXT
         )
 

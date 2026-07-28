@@ -49,7 +49,12 @@ class LocationMessageHandler @Inject constructor(
             type = PacketType.LOCATION,
             encrypted = false
         )
-        val locationDispatched = packetDispatcher.dispatchSinglePacket(targetPeerId, packet)
+        val result = packetDispatcher.dispatchSinglePacket(targetPeerId, packet)
+        
+        val initialStatus = when (result) {
+            is com.meshlink.domain.model.DispatchResult.Queued -> DeliveryStatus.QUEUED
+            else -> DeliveryStatus.FAILED
+        }
 
         val message = MessageEntity(
             messageId = packet.packetId,
@@ -58,7 +63,7 @@ class LocationMessageHandler @Inject constructor(
             text = "📍 Location: $lat, $lng",
             timestamp = System.currentTimeMillis(),
             isFromMe = true,
-            status = if (locationDispatched) DeliveryStatus.SENT else DeliveryStatus.PENDING,
+            status = initialStatus,
             messageType = MessageType.LOCATION,
             latitude = lat,
             longitude = lng,

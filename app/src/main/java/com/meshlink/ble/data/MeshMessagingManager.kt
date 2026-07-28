@@ -118,7 +118,7 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun retryPendingMessages() {
         retryMutex.withLock {
-            val pending = chatDao.getMessagesByStatus(DeliveryStatus.PENDING)
+            val pending = chatDao.getMessagesByStatus(DeliveryStatus.QUEUED)
             if (pending.isEmpty()) return
 
             connectToAllScannedDevices()
@@ -168,8 +168,17 @@ class MeshMessagingManager @Inject constructor(
                             encrypted = false
                         )
                         
-                        if (dispatchSinglePacket(msg.chatId, packet)) {
-                            chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
+                        val result = dispatchSinglePacket(msg.chatId, packet)
+                        when (result) {
+                            is com.meshlink.domain.model.DispatchResult.Queued -> {
+                                // Handled by DeliveryTracker
+                            }
+                            is com.meshlink.domain.model.DispatchResult.NoPeers,
+                            is com.meshlink.domain.model.DispatchResult.QueueFull,
+                            is com.meshlink.domain.model.DispatchResult.Rejected,
+                            is com.meshlink.domain.model.DispatchResult.Error -> {
+                                chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.FAILED)
+                            }
                         }
                     }
                     MessageType.IMAGE, MessageType.VOICE -> {
@@ -203,8 +212,15 @@ class MeshMessagingManager @Inject constructor(
                             type = PacketType.LOCATION,
                             encrypted = false
                         )
-                        if (dispatchSinglePacket(msg.chatId, packet)) {
-                            chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
+                        val result = dispatchSinglePacket(msg.chatId, packet)
+                        when (result) {
+                            is com.meshlink.domain.model.DispatchResult.Queued -> {}
+                            is com.meshlink.domain.model.DispatchResult.NoPeers,
+                            is com.meshlink.domain.model.DispatchResult.QueueFull,
+                            is com.meshlink.domain.model.DispatchResult.Rejected,
+                            is com.meshlink.domain.model.DispatchResult.Error -> {
+                                chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.FAILED)
+                            }
                         }
                     }
                     else -> {}

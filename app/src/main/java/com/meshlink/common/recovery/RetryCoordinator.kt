@@ -68,7 +68,7 @@ private var isRunning = false
                 }
 
                 // Recover Pending Messages that were unsent (status = PENDING)
-                val pendingMessages = chatDao.getMessagesByStatus(com.meshlink.database.data.local.DeliveryStatus.PENDING)
+                val pendingMessages = chatDao.getMessagesByStatus(com.meshlink.database.data.local.DeliveryStatus.QUEUED)
                 if (pendingMessages.isNotEmpty()) {
                     MeshLogger.d(TAG, "Recovering ${pendingMessages.size} pending chat messages.")
                     pendingMessages.forEach { msg: com.meshlink.database.data.local.MessageEntity ->

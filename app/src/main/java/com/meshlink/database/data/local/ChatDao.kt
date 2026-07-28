@@ -40,7 +40,7 @@ interface ChatDao {
     suspend fun insertMessageAndUpdateChat(message: MessageEntity, chatName: String) {
         val existing = getMessageByUuid(message.messageId)
         if (existing != null) {
-            if (existing.status == DeliveryStatus.PENDING && existing.mediaPath == null) {
+            if (existing.status == DeliveryStatus.QUEUED && existing.mediaPath == null) {
                 // Update placeholder to completed
                 updateMediaMessage(message.messageId, message.status, message.text, message.mediaPath)
             }

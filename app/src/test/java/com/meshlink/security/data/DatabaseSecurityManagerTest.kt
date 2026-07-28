@@ -2,33 +2,41 @@ package com.meshlink.security.data
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.util.UUID
-import org.junit.Ignore
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-@Ignore("Robolectric does not fully support AndroidKeyStore AES/GCM")
 class DatabaseSecurityManagerTest {
 
     private lateinit var context: Context
+    private lateinit var keystoreManager: KeystoreManager
     private lateinit var databaseSecurityManager: DatabaseSecurityManager
 
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
-        databaseSecurityManager = DatabaseSecurityManager(context)
+        keystoreManager = mockk(relaxed = true)
+        
+        // Mock default successful encryption/decryption
+        every { keystoreManager.encrypt(any()) } answers { firstArg<ByteArray>() }
+        every { keystoreManager.decrypt(any()) } answers { firstArg<ByteArray>() }
+
+        databaseSecurityManager = DatabaseSecurityManager(context, keystoreManager)
     }
 
     @Test
     fun `getDatabasePassphrase returns secure passphrase bytes`() {
-        // Initial setup
         val passphraseBytes = databaseSecurityManager.getDatabasePassphrase()
         assertNotNull(passphraseBytes)
         assertTrue(passphraseBytes.isNotEmpty())
@@ -40,18 +48,52 @@ class DatabaseSecurityManagerTest {
 
     @Test
     fun `migration from legacy UUID passphrase executes without crash`() {
-        // Simulate a legacy UUID passphrase in SharedPreferences
         val legacyPrefs = context.getSharedPreferences(SecurityConstants.DB_PREFS_NAME_LEGACY, Context.MODE_PRIVATE)
         legacyPrefs.edit().putString(SecurityConstants.KEY_LEGACY_PASSPHRASE, UUID.randomUUID().toString()).commit()
 
-        // getDatabasePassphrase should detect the legacy key, attempt to migrate the DB (which won't exist in test, so it ignores or catches safely)
-        // and clears the legacy pref.
         val passphraseBytes = databaseSecurityManager.getDatabasePassphrase()
         assertNotNull(passphraseBytes)
         assertTrue(passphraseBytes.isNotEmpty())
         
-        // Verify migration completion flag was set and legacy passphrase removed
         val stillHasLegacy = legacyPrefs.contains(SecurityConstants.KEY_LEGACY_PASSPHRASE)
         assertTrue(!stillHasLegacy)
+    }
+
+    @Test
+    fun `getDatabasePassphrase throws SecurityRecoveryException on keystore decrypt failure`() {
+        // Run getDatabasePassphrase once to generate seed
+        databaseSecurityManager.getDatabasePassphrase()
+        
+        // Force decrypt failure
+        every { keystoreManager.decrypt(any()) } throws SecurityRecoveryException("Keystore DB decrypt failed after 3 retries")
+        
+        assertThrows(SecurityRecoveryException::class.java) {
+            databaseSecurityManager.getDatabasePassphrase()
+        }
+    }
+
+    @Test
+    fun `getDatabasePassphrase throws SecurityRecoveryException on permanently invalidated key`() {
+        databaseSecurityManager.getDatabasePassphrase()
+        
+        // Force permanently invalidated key behavior
+        every { keystoreManager.decrypt(any()) } throws SecurityRecoveryException("Keystore DB key permanently invalidated")
+        
+        assertThrows(SecurityRecoveryException::class.java) {
+            databaseSecurityManager.getDatabasePassphrase()
+        }
+    }
+
+    @Test
+    fun `getDatabasePassphrase throws SecurityRecoveryException if decrypted seed is empty`() {
+        databaseSecurityManager.getDatabasePassphrase()
+        
+        // Return empty array instead of decrypting properly
+        every { keystoreManager.decrypt(any()) } returns ByteArray(0)
+        
+        val exception = assertThrows(SecurityRecoveryException::class.java) {
+            databaseSecurityManager.getDatabasePassphrase()
+        }
+        assertTrue(exception.message?.contains("Database seed cannot be recovered") == true)
     }
 }

@@ -33,7 +33,8 @@ import net.zetetic.database.sqlcipher.SQLiteDatabase
  */
 @Singleton
 class DatabaseSecurityManager @Inject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
+    private val keystoreManager: KeystoreManager
 ) {
     companion object {
         private const val TAG = "DbSecurity"
@@ -133,7 +134,7 @@ class DatabaseSecurityManager @Inject constructor(
             seed = ByteArray(SecurityConstants.SEED_LENGTH_BYTES).apply { SecureRandom().nextBytes(this) }
             salt = ByteArray(SecurityConstants.SALT_LENGTH_BYTES).apply { SecureRandom().nextBytes(this) }
 
-            val encryptedSeed = encryptWithKeystore(seed)
+            val encryptedSeed = keystoreManager.encrypt(seed)
 
             encPrefs.edit()
                 .putString(SecurityConstants.KEY_ENCRYPTED_SEED, Base64.encodeToString(encryptedSeed, Base64.NO_WRAP))
@@ -144,10 +145,10 @@ class DatabaseSecurityManager @Inject constructor(
             salt = Base64.decode(saltBase64, Base64.NO_WRAP)
             val encryptedSeed = Base64.decode(encryptedSeedBase64, Base64.NO_WRAP)
             
-            val decryptedSeed = decryptWithKeystore(encryptedSeed)
+            val decryptedSeed = keystoreManager.decrypt(encryptedSeed)
             if (decryptedSeed.isEmpty()) {
                 com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Database seed cannot be recovered. Aborting to prevent data destruction.")
-                return ""
+                throw SecurityRecoveryException("Database seed cannot be recovered. Decrypted seed is empty.")
             }
             seed = decryptedSeed
         }
@@ -255,104 +256,4 @@ class DatabaseSecurityManager @Inject constructor(
         }
     }
 
-    // ────────── Keystore Wrapper ──────────
-
-    private fun getKeystoreKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(SecurityConstants.ANDROID_KEYSTORE).apply { load(null) }
-        
-        if (!keyStore.containsAlias(SecurityConstants.DB_MASTER_KEY_ALIAS)) {
-            generateKeystoreKeyWithStrongBoxFallback()
-        }
-        return keyStore.getKey(SecurityConstants.DB_MASTER_KEY_ALIAS, null) as SecretKey
-    }
-
-    @android.annotation.SuppressLint("NewApi")
-    private fun generateKeystoreKeyWithStrongBoxFallback() {
-        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, SecurityConstants.ANDROID_KEYSTORE)
-        val specBuilder = KeyGenParameterSpec.Builder(SecurityConstants.DB_MASTER_KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(SecurityConstants.AES_KEY_SIZE_BITS)
-            
-        // Attempt StrongBox first
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                keyGenerator.init(specBuilder.setIsStrongBoxBacked(true).build())
-                keyGenerator.generateKey()
-                return
-            } catch (e: StrongBoxUnavailableException) {
-                // Ignore, fallback below
-            } catch (e: ProviderException) {
-                // Ignore, fallback below
-            } catch (e: InvalidAlgorithmParameterException) {
-                // Ignore, fallback below
-            }
-        }
-
-        // Fallback to normal Keystore
-        keyGenerator.init(specBuilder.setIsStrongBoxBacked(false).build())
-        keyGenerator.generateKey()
-    }
-
-    private fun encryptWithKeystore(plaintext: ByteArray): ByteArray {
-        var attempt = 0
-        while (attempt < 3) {
-            try {
-                val key = getKeystoreKey()
-                val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
-                cipher.init(Cipher.ENCRYPT_MODE, key)
-                
-                val iv = cipher.iv
-                val ciphertext = cipher.doFinal(plaintext)
-                
-                val result = ByteArray(iv.size + ciphertext.size)
-                System.arraycopy(iv, 0, result, 0, iv.size)
-                System.arraycopy(ciphertext, 0, result, iv.size, ciphertext.size)
-                return result
-            } catch (e: Exception) {
-                attempt++
-                if (attempt >= 3) {
-                    com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Keystore DB encrypt failed after 3 retries")
-                    throw e
-                }
-            }
-        }
-        return ByteArray(0)
-    }
-
-    private fun decryptWithKeystore(ciphertext: ByteArray): ByteArray {
-        var attempt = 0
-        while (attempt < 3) {
-            try {
-                val key = getKeystoreKey()
-                val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
-                
-                val iv = ciphertext.copyOfRange(0, SecurityConstants.GCM_IV_LENGTH_BYTES)
-                val encrypted = ciphertext.copyOfRange(SecurityConstants.GCM_IV_LENGTH_BYTES, ciphertext.size)
-                
-                cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(SecurityConstants.GCM_TAG_LENGTH_BITS, iv))
-                
-                return cipher.doFinal(encrypted)
-            } catch (e: android.security.keystore.KeyPermanentlyInvalidatedException) {
-                com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Keystore DB key permanently invalidated")
-                // Regenerate the master key but do NOT delete the DB or return dummy byte array
-                try {
-                    val keyStore = KeyStore.getInstance(SecurityConstants.ANDROID_KEYSTORE).apply { load(null) }
-                    keyStore.deleteEntry(SecurityConstants.DB_MASTER_KEY_ALIAS)
-                    generateKeystoreKeyWithStrongBoxFallback()
-                } catch (ignore: Exception) {}
-                // Bubble up failure to avoid destructive Room fallback
-                com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Keystore DB key permanently invalidated", e)
-                return ByteArray(0)
-            } catch (e: Exception) {
-                attempt++
-                if (attempt >= 3) {
-                    val msg = e.javaClass.simpleName
-                    com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Keystore DB decrypt failed after 3 retries: $msg")
-                    return ByteArray(0)
-                }
-            }
-        }
-        return ByteArray(0)
-    }
 }

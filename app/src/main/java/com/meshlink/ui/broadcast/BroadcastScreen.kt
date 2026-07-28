@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.meshlink.domain.model.Message
 import com.meshlink.ui.components.EmptyState
 import com.meshlink.ui.designsystem.theme.MeshTheme
@@ -201,6 +203,18 @@ private fun BroadcastBubble(msg: Message) {
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
     
+    val formattedTime = remember(msg.timestamp) {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.timestamp))
+    }
+    val senderName = remember(msg.senderId) {
+        com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId)
+    }
+
+    val semanticDescription = buildString {
+        if (isMe) append("Your broadcast: ") else append("Broadcast from $senderName: ")
+        append("${msg.text}. Sent at $formattedTime.")
+    }
+
     val shape = if (isMe) {
         RoundedCornerShape(
             topStart = MeshTheme.spacing.mediumLarge, 
@@ -220,14 +234,17 @@ private fun BroadcastBubble(msg: Message) {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
         Column(
             modifier = Modifier
-                .widthIn(max = 280.dp)
+                .widthIn(max = MeshTheme.spacing.extraGiant * 4 + MeshTheme.spacing.extraLarge)
                 .clip(shape)
                 .background(bubbleColor)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = semanticDescription
+                }
                 .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
         ) {
             if (!isMe) {
                 Text(
-                    text = com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId),
+                    text = senderName,
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelSmall
                 )
@@ -236,7 +253,7 @@ private fun BroadcastBubble(msg: Message) {
             Text(text = msg.text, color = textColor, style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
             Text(
-                text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.timestamp)),
+                text = formattedTime,
                 color = textColor.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.End)

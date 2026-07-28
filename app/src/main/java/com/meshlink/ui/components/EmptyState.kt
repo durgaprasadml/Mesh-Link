@@ -32,7 +32,7 @@ fun EmptyState(
     ) {
         Box(
             modifier = Modifier
-                .size(100.dp)
+                .size(MeshTheme.spacing.extraGiant + MeshTheme.spacing.huge)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
             contentAlignment = Alignment.Center
@@ -69,8 +69,8 @@ fun EmptyState(
             Spacer(modifier = Modifier.height(MeshTheme.spacing.giant))
             Button(
                 onClick = onPrimaryButtonClick,
-                shape = MeshTheme.shapes.medium,
-                modifier = Modifier.height(50.dp)
+                shape = MeshTheme.shapes.large,
+                modifier = Modifier.height(MeshTheme.spacing.giant)
             ) {
                 Text(
                     text = primaryButtonText,

@@ -41,6 +41,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import com.meshlink.ui.components.chat.ChatRowItem
+
 enum class ConnectionState {
     CONNECTED, SEARCHING, NO_DEVICES
 }
@@ -110,10 +116,14 @@ fun HomeScreen(
                     // Profile Avatar (Click to navigate to Settings)
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(MeshTheme.spacing.huge + MeshTheme.spacing.mediumSmall)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer)
-                            .clickable(onClick = onNavigateToSettings),
+                            .clickable(role = Role.Button, onClick = onNavigateToSettings)
+                            .semantics(mergeDescendants = true) {
+                                role = Role.Button
+                                contentDescription = "Profile and Settings"
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         val initial = uiState.user?.name?.firstOrNull()?.uppercase() ?: "U"
@@ -239,7 +249,7 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
-                            ChatItem(
+                            ChatRowItem(
                                 chat = chat,
                                 onClick = {
                                     val safeName = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) }
@@ -252,92 +262,4 @@ fun HomeScreen(
             }
         }
     }
-}
-
-@Composable
-fun ChatItem(chat: Chat, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Avatar
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            val displayInitial = chat.name.firstOrNull()?.toString()?.uppercase() ?: "?"
-            Text(
-                text = displayInitial,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Medium
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
-        
-        // Message Content
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) },
-                color = MaterialTheme.colorScheme.onBackground,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-            Text(
-                text = chat.lastMessage ?: "No messages yet",
-                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
-        
-        // Timestamp & Status
-        Column(
-            horizontalAlignment = Alignment.End
-        ) {
-            Text(
-                text = formatTime(chat.lastMessageAt),
-                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium
-            )
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-            if (chat.unreadCount > 0) {
-                Box(
-                    modifier = Modifier
-                        .size(MeshTheme.spacing.extraLarge)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = chat.unreadCount.toString(),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun formatTime(timeInMillis: Long): String {
-    if (timeInMillis == 0L) return ""
-    val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
-    return sdf.format(Date(timeInMillis))
 }

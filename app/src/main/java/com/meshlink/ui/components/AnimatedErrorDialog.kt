@@ -97,8 +97,8 @@ fun AnimatedErrorDialog(
                             onClick = onPrimaryClick,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(50.dp),
-                            shape = MeshTheme.shapes.medium,
+                                .height(MeshTheme.spacing.giant),
+                            shape = MeshTheme.shapes.large,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = MaterialTheme.colorScheme.onPrimary

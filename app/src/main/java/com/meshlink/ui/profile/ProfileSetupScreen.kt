@@ -108,8 +108,8 @@ fun ProfileSetupScreen(
                 onClick = { viewModel.createProfile(displayName) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(MeshTheme.spacing.extraGiant),
-                shape = MeshTheme.shapes.medium,
+                    .height(MeshTheme.spacing.giant),
+                shape = MeshTheme.shapes.large,
                 enabled = uiState !is ProfileSetupUiState.Loading && displayName.length in 2..30
             ) {
                 if (uiState is ProfileSetupUiState.Loading) {

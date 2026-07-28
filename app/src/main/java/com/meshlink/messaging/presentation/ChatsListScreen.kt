@@ -32,6 +32,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import com.meshlink.ui.components.chat.ChatRowItem
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatsListScreen(
@@ -114,7 +116,7 @@ fun ChatsListScreen(
                     contentPadding = PaddingValues(bottom = MeshTheme.spacing.medium)
                 ) {
                     items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
-                        ChatListItem(chat = chat, onClick = {
+                        ChatRowItem(chat = chat, onClick = {
                             val safeName = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) }
                             onNavigateToChat(chat.id, safeName)
                         })
@@ -123,89 +125,4 @@ fun ChatsListScreen(
             }
         }
     }
-}
-
-@Composable
-fun ChatListItem(chat: Chat, onClick: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            }
-            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(MeshTheme.spacing.huge - MeshTheme.spacing.small) // 56dp
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            val displayInitial = chat.name.firstOrNull()?.toString()?.uppercase() ?: "?"
-            Text(
-                text = displayInitial,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Medium
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
-        
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = chat.name, 
-                style = MaterialTheme.typography.titleMedium, 
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-            Text(
-                text = chat.lastMessage ?: "",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-        
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = formatTime(chat.lastMessageAt),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (chat.unreadCount > 0) {
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                Box(
-                    modifier = Modifier
-                        .size(MeshTheme.spacing.mediumLarge)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = chat.unreadCount.toString(),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun formatTime(timeInMillis: Long): String {
-    if (timeInMillis == 0L) return ""
-    val sdf = SimpleDateFormat("MMM dd", Locale.getDefault()) // Keeping consistent
-    return sdf.format(Date(timeInMillis))
 }

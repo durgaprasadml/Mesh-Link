@@ -128,7 +128,7 @@ fun MeshDeviceCard(
                         imageVector = if (isWeakSignal) Icons.Default.SignalCellularOff else Icons.Default.SignalCellular4Bar,
                         contentDescription = "Signal",
                         tint = statusColor,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(MeshTheme.spacing.large)
                     )
                     Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                     Badge(
@@ -195,7 +195,7 @@ fun MeshDeviceCard(
                 Button(
                     onClick = onClick,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = CircleShape,
+                    shape = MeshTheme.shapes.large,
                     enabled = !isConnecting
                 ) {
                     if (isConnecting) {

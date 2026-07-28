@@ -163,7 +163,7 @@ fun ChatDetailScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(MeshTheme.spacing.extraHuge - MeshTheme.spacing.mediumSmall)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
@@ -266,8 +266,8 @@ fun ChatDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp) // tighter spacing between messages, wider spacing handled logic
+            contentPadding = PaddingValues(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.mediumSmall),
+            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small)
         ) {
             itemsIndexed(uiState.messages, key = { _, it -> it.messageId }, contentType = { _, _ -> "message_item" }) { index, msg ->
                 val showDateSeparator = shouldShowDateSeparator(
@@ -284,7 +284,7 @@ fun ChatDetailScreen(
 
                 // Add extra padding if consecutive messages are from different senders
                 val previousMsg = if (index > 0) uiState.messages[index - 1] else null
-                val extraTopPadding = if (previousMsg != null && previousMsg.isFromMe != msg.isFromMe && !showDateSeparator) 8.dp else 0.dp
+                val extraTopPadding = if (previousMsg != null && previousMsg.isFromMe != msg.isFromMe && !showDateSeparator) MeshTheme.spacing.mediumSmall else MeshTheme.spacing.extraSmall
 
                 Box(modifier = Modifier.padding(top = extraTopPadding)) {
                     MessageBubble(
@@ -336,7 +336,7 @@ fun AttachmentMenu(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, bottom = 32.dp, top = 8.dp)
+            .padding(start = MeshTheme.spacing.mediumLarge, end = MeshTheme.spacing.mediumLarge, bottom = MeshTheme.spacing.huge, top = MeshTheme.spacing.mediumSmall)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -376,11 +376,11 @@ fun AttachmentIcon(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .clickable(onClick = onClick)
-            .padding(8.dp)
+            .padding(MeshTheme.spacing.mediumSmall)
     ) {
         Box(
             modifier = Modifier
-                .size(60.dp)
+                .size(MeshTheme.spacing.extraGiant - MeshTheme.spacing.extraSmall)
                 .clip(CircleShape)
                 .background(color),
             contentAlignment = Alignment.Center
@@ -389,10 +389,10 @@ fun AttachmentIcon(
                 imageVector = icon,
                 contentDescription = label,
                 tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(MeshTheme.spacing.extraLarge + MeshTheme.spacing.small)
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,

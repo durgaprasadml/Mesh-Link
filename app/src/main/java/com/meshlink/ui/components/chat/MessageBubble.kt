@@ -399,6 +399,10 @@ fun MessageBubble(
                 }
             }
 
+            val formattedTime = androidx.compose.runtime.remember(message.timestamp) {
+                formatTime(message.timestamp)
+            }
+
             // Timestamp + status row
             Row(
                 modifier = Modifier
@@ -407,10 +411,9 @@ fun MessageBubble(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = formatTime(message.timestamp),
+                    text = formattedTime,
                     style = MaterialTheme.typography.labelSmall,
-                    color = textColor.copy(alpha = 0.7f),
-                    fontSize = 11.sp
+                    color = textColor.copy(alpha = 0.7f)
                 )
                 if (isMe) {
                     Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
@@ -430,7 +433,7 @@ fun MessageBubble(
                     Icon(
                         imageVector = statusIcon,
                         contentDescription = null, // Handled by outer semantics
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(MeshTheme.spacing.medium),
                         tint = iconTint
                     )
                 }

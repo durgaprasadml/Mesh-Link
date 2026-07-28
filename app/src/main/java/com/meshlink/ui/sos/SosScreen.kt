@@ -240,7 +240,6 @@ fun EmergencyStatusCard(state: SosUiState) {
 @Composable
 fun HoldToActivateButton(onActivate: () -> Unit) {
     val haptic = LocalHapticFeedback.current
-    val coroutineScope = rememberCoroutineScope()
     
     var isPressed by remember { mutableStateOf(false) }
     val progress = remember { Animatable(0f) }
@@ -671,7 +670,7 @@ fun ActionChip(
         
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(56.dp),
+        modifier = modifier.height(MeshTheme.spacing.extraGiant - MeshTheme.spacing.mediumSmall),
         shape = MeshTheme.shapes.medium,
         colors = ButtonDefaults.outlinedButtonColors(
             contentColor = contentColor,

@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.meshlink.analytics.data.LogType
 import com.meshlink.analytics.data.MeshStats
 import com.meshlink.analytics.data.RelayLogEntry
@@ -201,7 +203,11 @@ fun DeliveryRateCard(stats: MeshStats) {
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Delivery Success Rate ${stats.deliveryRate.toInt()} percent. ${stats.packetsDelivered} of ${stats.packetsSent} packets delivered. ${stats.packetsRelayed} relayed through mesh."
+            },
         shape = MeshTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -224,10 +230,10 @@ fun DeliveryRateCard(stats: MeshStats) {
         ) {
             // Animated ring
             Box(
-                modifier = Modifier.size(100.dp),
+                modifier = Modifier.size(MeshTheme.spacing.extraGiant + MeshTheme.spacing.huge),
                 contentAlignment = Alignment.Center
             ) {
-                Canvas(modifier = Modifier.size(100.dp)) {
+                Canvas(modifier = Modifier.size(MeshTheme.spacing.extraGiant + MeshTheme.spacing.huge)) {
                     // Background ring
                     drawArc(
                         color = ringColor.copy(alpha = 0.15f),

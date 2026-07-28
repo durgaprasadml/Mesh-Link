@@ -113,11 +113,9 @@ class BleRepositoryImpl @Inject constructor(
     init {
         // Wire RekeyManager
         rekeyManager.sendPacketCallback = { peerId, packet ->
-            scope.launch {
-                val user = userRepository.getLocalUser()
-                val senderId = user?.let { networkId(it.meshId) } ?: ""
-                meshMessagingManager.dispatchSinglePacket(peerId, packet.copy(senderId = senderId))
-            }
+            val user = userRepository.getLocalUser()
+            val senderId = user?.let { networkId(it.meshId) } ?: ""
+            meshMessagingManager.dispatchSinglePacket(peerId, packet.copy(senderId = senderId))
         }
         rekeyManager.forceKeyExchangeCallback = { peerId ->
             scope.launch {

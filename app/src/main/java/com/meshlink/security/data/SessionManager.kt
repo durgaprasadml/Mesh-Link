@@ -175,6 +175,13 @@ class SessionManager @Inject constructor(
             if (kv != session.keyVersion) {
                 if (kv == session.previousKeyVersion && now <= session.rekeyTimestamp + 60_000) {
                     // Allowed during transition window
+                } else if (kv == session.keyVersion + 1 && cryptoManager.hasPeerKey(peerId)) {
+                    // Implicit forward rotation
+                    MeshLogger.d(TAG, "Implicit forward rotation to key version $kv for $peerId")
+                    session.previousKeyVersion = session.keyVersion
+                    session.keyVersion = kv
+                    session.rekeyTimestamp = now
+                    session.rotationReason = "implicit_forward_rotation"
                 } else {
                     MeshLogger.e(TAG, "Rejecting packet: Invalid keyVersion $kv. Current: ${session.keyVersion}, Prev: ${session.previousKeyVersion}")
                     return null

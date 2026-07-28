@@ -42,7 +42,7 @@ class RekeyManager @Inject constructor(
     )
 
     // Callbacks to MeshRepository (to avoid circular dependency loop)
-    var sendPacketCallback: ((peerId: String, packet: MeshPacket) -> Unit)? = null
+    var sendPacketCallback: (suspend (peerId: String, packet: MeshPacket) -> Unit)? = null
     var forceKeyExchangeCallback: ((peerId: String) -> Unit)? = null
 
     init {
@@ -116,18 +116,21 @@ class RekeyManager @Inject constructor(
         )
         pendingRekeys[peerId] = pending
 
-        sendRekeyPacket(peerId, session.sessionId, session.keyVersion, nextKv, pending.myEphemeralPublicKeyBase64)
+        scope.launch {
+            sendRekeyPacket(peerId, session.sessionId, session.keyVersion, nextKv, pending.myEphemeralPublicKeyBase64)
+        }
     }
 
-    private fun sendRekeyPacket(peerId: String, sessionId: String, currentKv: Int, nextKv: Int, ephemeralPubBase64: String) {
-        scope.launch {
-            try {
-                val timestamp = System.currentTimeMillis()
-                val nonce = UUID.randomUUID().toString()
-                val dataToSign = "$sessionId|$currentKv|$nextKv|$ephemeralPubBase64|$timestamp|$nonce".toByteArray(Charsets.UTF_8)
+    private suspend fun sendRekeyPacket(peerId: String, sessionId: String, currentKv: Int, nextKv: Int, ephemeralPubBase64: String) {
+        try {
+            val timestamp = System.currentTimeMillis()
+            val nonce = UUID.randomUUID().toString().substring(0, 8)
+            val dataToSign = "$sessionId|$currentKv|$nextKv|$ephemeralPubBase64|$timestamp|$nonce".toByteArray(Charsets.UTF_8)
+            
+            val user = userRepository.getLocalUser()
+            if (user != null) {
                 val signature = cryptoManager.sign(dataToSign)
                 val signatureBase64 = android.util.Base64.encodeToString(signature, android.util.Base64.NO_WRAP)
-
                 val payload = "rekey|$sessionId|$currentKv|$nextKv|$ephemeralPubBase64|$timestamp|$nonce|$signatureBase64"
                 
                 val packet = MeshPacket(
@@ -138,9 +141,9 @@ class RekeyManager @Inject constructor(
                     encrypted = false
                 )
                 sendPacketCallback?.invoke(peerId, packet)
-            } catch (e: Exception) {
-                MeshLogger.e(TAG, "Failed to send rekey packet: ${e.message}")
             }
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to send rekey packet: ${e.message}")
         }
     }
 
@@ -191,21 +194,26 @@ class RekeyManager @Inject constructor(
             } else {
                 // We are the RESPONDER
                 val ephemeralKeyPair = cryptoManager.generateEphemeralKeyPair()
-                cryptoManager.deriveEphemeralSharedKey(peerId, ephemeralPubBase64, ephemeralKeyPair.private)
 
-                // Securely destroy our ephemeral private key
-                java.util.Arrays.fill(ephemeralKeyPair.private.encoded ?: ByteArray(0), 0.toByte())
+                scope.launch {
+                    // Send back our ephemeral public key
+                    val myEphemeralPubBase64 = android.util.Base64.encodeToString(ephemeralKeyPair.public.encoded, android.util.Base64.NO_WRAP)
+                    sendRekeyPacket(peerId, sessionId, currentKv, nextKv, myEphemeralPubBase64)
 
-                session.previousKeyVersion = session.keyVersion
-                session.keyVersion = nextKv
-                session.rekeyTimestamp = System.currentTimeMillis()
-                session.rotationReason = "responder_success"
+                    // Fix CRITICAL-05 Race Condition: Wait for the packet to be fully dispatched and encrypted
+                    // BEFORE we rotate the keys. This ensures the reply is encrypted with currentKv.
+                    cryptoManager.deriveEphemeralSharedKey(peerId, ephemeralPubBase64, ephemeralKeyPair.private)
 
-                MeshLogger.d(TAG, "✅ Secure rekey successful (Responder). New Key Version: $nextKv")
+                    // Securely destroy our ephemeral private key
+                    java.util.Arrays.fill(ephemeralKeyPair.private.encoded ?: ByteArray(0), 0.toByte())
 
-                // Send back our ephemeral public key
-                val myEphemeralPubBase64 = android.util.Base64.encodeToString(ephemeralKeyPair.public.encoded, android.util.Base64.NO_WRAP)
-                sendRekeyPacket(peerId, sessionId, currentKv, nextKv, myEphemeralPubBase64)
+                    session.previousKeyVersion = session.keyVersion
+                    session.keyVersion = nextKv
+                    session.rekeyTimestamp = System.currentTimeMillis()
+                    session.rotationReason = "responder_success"
+
+                    MeshLogger.d(TAG, "✅ Secure rekey successful (Responder). New Key Version: $nextKv")
+                }
             }
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to handle rekey packet: ${e.message}")

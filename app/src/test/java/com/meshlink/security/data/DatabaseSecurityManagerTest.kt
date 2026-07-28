@@ -37,12 +37,12 @@ class DatabaseSecurityManagerTest {
 
     @Test
     fun `getDatabasePassphrase returns secure passphrase bytes`() {
-        val passphraseBytes = databaseSecurityManager.getDatabasePassphrase()
+        val passphraseBytes = databaseSecurityManager.getDatabasePassphrase().getBytes()
         assertNotNull(passphraseBytes)
         assertTrue(passphraseBytes.isNotEmpty())
         
         // Calling it again should yield the same derived bytes (idempotency)
-        val passphraseBytes2 = databaseSecurityManager.getDatabasePassphrase()
+        val passphraseBytes2 = databaseSecurityManager.getDatabasePassphrase().getBytes()
         assertTrue(passphraseBytes.contentEquals(passphraseBytes2))
     }
 
@@ -51,7 +51,7 @@ class DatabaseSecurityManagerTest {
         val legacyPrefs = context.getSharedPreferences(SecurityConstants.DB_PREFS_NAME_LEGACY, Context.MODE_PRIVATE)
         legacyPrefs.edit().putString(SecurityConstants.KEY_LEGACY_PASSPHRASE, UUID.randomUUID().toString()).commit()
 
-        val passphraseBytes = databaseSecurityManager.getDatabasePassphrase()
+        val passphraseBytes = databaseSecurityManager.getDatabasePassphrase().getBytes()
         assertNotNull(passphraseBytes)
         assertTrue(passphraseBytes.isNotEmpty())
         
@@ -62,37 +62,37 @@ class DatabaseSecurityManagerTest {
     @Test
     fun `getDatabasePassphrase throws SecurityRecoveryException on keystore decrypt failure`() {
         // Run getDatabasePassphrase once to generate seed
-        databaseSecurityManager.getDatabasePassphrase()
+        databaseSecurityManager.getDatabasePassphrase().getBytes()
         
         // Force decrypt failure
         every { keystoreManager.decrypt(any()) } throws SecurityRecoveryException("Keystore DB decrypt failed after 3 retries")
         
         assertThrows(SecurityRecoveryException::class.java) {
-            databaseSecurityManager.getDatabasePassphrase()
+            databaseSecurityManager.getDatabasePassphrase().getBytes()
         }
     }
 
     @Test
     fun `getDatabasePassphrase throws SecurityRecoveryException on permanently invalidated key`() {
-        databaseSecurityManager.getDatabasePassphrase()
+        databaseSecurityManager.getDatabasePassphrase().getBytes()
         
         // Force permanently invalidated key behavior
         every { keystoreManager.decrypt(any()) } throws SecurityRecoveryException("Keystore DB key permanently invalidated")
         
         assertThrows(SecurityRecoveryException::class.java) {
-            databaseSecurityManager.getDatabasePassphrase()
+            databaseSecurityManager.getDatabasePassphrase().getBytes()
         }
     }
 
     @Test
     fun `getDatabasePassphrase throws SecurityRecoveryException if decrypted seed is empty`() {
-        databaseSecurityManager.getDatabasePassphrase()
+        databaseSecurityManager.getDatabasePassphrase().getBytes()
         
         // Return empty array instead of decrypting properly
         every { keystoreManager.decrypt(any()) } returns ByteArray(0)
         
         val exception = assertThrows(SecurityRecoveryException::class.java) {
-            databaseSecurityManager.getDatabasePassphrase()
+            databaseSecurityManager.getDatabasePassphrase().getBytes()
         }
         assertTrue(exception.message?.contains("Database seed cannot be recovered") == true)
     }

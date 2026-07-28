@@ -163,16 +163,7 @@ object DatabaseModule {
             MeshDatabase::class.java,
             com.meshlink.security.data.SecurityConstants.DB_NAME
         ).addMigrations(
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_1_2,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_2_3,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_3_4,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_4_5,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_5_6,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_6_7,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_7_8,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_8_9,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_9_10,
-            com.meshlink.database.data.local.MeshDatabaseMigrations.MIGRATION_10_11
+            *com.meshlink.database.data.local.MeshDatabaseMigrations.ALL_MIGRATIONS
         ).openHelperFactory(lazyFactory).build()
     }
 

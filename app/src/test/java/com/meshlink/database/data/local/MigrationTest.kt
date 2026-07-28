@@ -1,26 +1,31 @@
 package com.meshlink.database.data.local
 
 import org.robolectric.RobolectricTestRunner
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Migration Tests dummy verification.
+ * Migration Tests verification.
  * 
- * MeshDatabase currently relies on `fallbackToDestructiveMigration()` in Debug environments.
- * We do not have explicit `Migration` classes (e.g. `Migration(1, 2)`) inside Room.
- * The primary crypto migration is tested in `DatabaseSecurityManagerTest`.
- * This file acts as a placeholder structure for future Room schema migrations.
+ * Verifies that all continuous migrations in MeshDatabaseMigrations.ALL_MIGRATIONS
+ * cover schema versions from 1 up to current version 11.
  */
 @RunWith(RobolectricTestRunner::class)
 class MigrationTest {
 
     @Test
-    fun `test dummy migration coverage`() {
-        // Since there are no explicit Room migrations (MIGRATION_1_2, etc.) to test using
-        // MigrationTestHelper, we satisfy the coverage requirement by asserting that
-        // no explicit migrations are required for the current DB schema.
-        assertTrue(true)
+    fun `test migration array continuity and completeness`() {
+        val migrations = MeshDatabaseMigrations.ALL_MIGRATIONS
+        assertEquals(10, migrations.size)
+        
+        var currentVersion = 1
+        for (migration in migrations) {
+            assertEquals(currentVersion, migration.startVersion)
+            assertEquals(currentVersion + 1, migration.endVersion)
+            currentVersion = migration.endVersion
+        }
+        assertEquals(11, currentVersion)
     }
 }

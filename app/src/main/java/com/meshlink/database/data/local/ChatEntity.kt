@@ -1,6 +1,5 @@
 package com.meshlink.database.data.local
 
-import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey

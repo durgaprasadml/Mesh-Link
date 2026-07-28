@@ -58,12 +58,13 @@ object DatabaseModule {
                                     } catch (e: UnsatisfiedLinkError) {
                                         com.meshlink.common.logger.MeshLogger.e("DbSecurity", "SQLCipher native library load failed", e)
                                     }
-                                    val passphraseBytes = try {
+                                    val passphraseKey = try {
                                         databaseSecurityManager.getDatabasePassphrase()
                                     } catch (e: com.meshlink.security.data.SecurityRecoveryException) {
                                         com.meshlink.common.logger.MeshLogger.e("DbSecurity", "Security recovery exception during lazy open", e)
                                         throw e
                                     }
+                                    val passphraseBytes = passphraseKey.getBytes()
                                     if (passphraseBytes.isEmpty()) {
                                         throw com.meshlink.security.data.SecurityRecoveryException("Empty passphrase returned")
                                     }

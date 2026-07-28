@@ -2,35 +2,20 @@ package com.meshlink.security.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.os.Build
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import android.security.keystore.StrongBoxUnavailableException
 import android.util.Base64
-import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-
-import java.security.InvalidAlgorithmParameterException
-import java.security.KeyStore
-import java.security.ProviderException
 import java.security.SecureRandom
 import java.util.Arrays
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
-import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import net.zetetic.database.sqlcipher.SQLiteDatabase
 
-/**
- * Handles derivation and protection of the SQLCipher database passphrase using Android Keystore.
- * Implements backward-compatible migration via PRAGMA rekey, PBKDF2 key derivation,
- * memory hygiene, and robust crash safety.
- */
 @Singleton
 class DatabaseSecurityManager @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
@@ -39,6 +24,8 @@ class DatabaseSecurityManager @Inject constructor(
     companion object {
         private const val TAG = "DbSecurity"
     }
+
+    private val migrationMutex = Mutex()
 
     private val encPrefs: SharedPreferences by lazy {
         val masterKey = MasterKey.Builder(context)
@@ -53,76 +40,63 @@ class DatabaseSecurityManager @Inject constructor(
         )
     }
 
-    /**
-     * Retrieves the highly secure, derived SQLCipher passphrase.
-     * Automatically migrates from the legacy UUID passphrase if one exists.
-     * 
-     * Returns a ByteArray containing the UTF-8 bytes of a Base64 string,
-     * which can be directly passed to SQLCipher SupportOpenHelperFactory.
-     */
-    private fun fingerprint(key: ByteArray): String {
-        return try {
-            val digest = java.security.MessageDigest.getInstance("SHA-256")
-            val hash = digest.digest(key)
-            hash.take(8).joinToString("-") { "%02X".format(it) }
-        } catch (e: Exception) {
-            "UNKNOWN"
-        }
-    }
-
     @Throws(SecurityRecoveryException::class)
-    fun getDatabasePassphrase(): ByteArray {
-        com.meshlink.common.logger.MeshLogger.d(TAG, "Initializing database passphrase derivation")
-        val legacyPrefs = context.getSharedPreferences(SecurityConstants.DB_PREFS_NAME_LEGACY, Context.MODE_PRIVATE)
-        
-        // 1. Ensure we have our secure, Keystore-backed passphrase derived via PBKDF2
-        val securePassphraseString = getOrGenerateSecurePassphraseString()
-        val securePassBytes = securePassphraseString.toByteArray(Charsets.UTF_8)
-        val newKeyFingerprint = fingerprint(securePassBytes)
-        com.meshlink.common.logger.MeshLogger.d(TAG, "Derived New PBKDF2 Key Fingerprint: $newKeyFingerprint")
-        
-        // 2. State Machine for Migration
-        val migrationState = encPrefs.getString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_NOT_STARTED)
-        com.meshlink.common.logger.MeshLogger.d(TAG, "Migration state = $migrationState")
-        
-        val dbFile = context.getDatabasePath(SecurityConstants.DB_NAME)
-        com.meshlink.common.logger.MeshLogger.d(TAG, "Database exists = ${dbFile.exists()}, size = ${dbFile.length()} bytes")
-        
-        if (migrationState != SecurityConstants.STATE_VERIFIED) {
-            val legacyPassphrase = legacyPrefs.getString(SecurityConstants.KEY_LEGACY_PASSPHRASE, null)
-            com.meshlink.common.logger.MeshLogger.d(TAG, "Legacy key detected = ${legacyPassphrase != null}")
-            if (legacyPassphrase != null) {
-                val legacyPassBytes = legacyPassphrase.toByteArray(Charsets.UTF_8)
-                val legacyFingerprint = fingerprint(legacyPassBytes)
-                com.meshlink.common.logger.MeshLogger.d(TAG, "Legacy Key Fingerprint: $legacyFingerprint")
+    fun getDatabasePassphrase(): SecureDatabaseKey = runBlocking {
+        migrationMutex.withLock {
+            com.meshlink.common.logger.MeshLogger.d(TAG, "Initializing database passphrase derivation")
+            val legacyPrefs = context.getSharedPreferences(SecurityConstants.DB_PREFS_NAME_LEGACY, Context.MODE_PRIVATE)
+            
+            val secureKey = getOrGenerateSecurePassphrase()
+            
+            val migrationState = encPrefs.getString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_NOT_STARTED)
+            com.meshlink.common.logger.MeshLogger.d(TAG, "Migration state = $migrationState")
+            
+            val dbFile = context.getDatabasePath(SecurityConstants.DB_NAME)
+            
+            if (migrationState != SecurityConstants.STATE_VERIFIED) {
+                val legacyPassphraseStr = legacyPrefs.getString(SecurityConstants.KEY_LEGACY_PASSPHRASE, null)
+                com.meshlink.common.logger.MeshLogger.d(TAG, "Legacy key detected = ${legacyPassphraseStr != null}")
                 
-                // We have a legacy passphrase. Proceed with migration.
-                com.meshlink.common.logger.MeshLogger.d(TAG, "Changing migration state to IN_PROGRESS")
-                encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_IN_PROGRESS).apply()
-                
-                val success = migrateDatabaseIfNeeded(legacyPassphrase, securePassphraseString)
-                if (success) {
-                    com.meshlink.common.logger.MeshLogger.d(TAG, "Migration complete. Deleting legacy key.")
-                    legacyPrefs.edit().remove(SecurityConstants.KEY_LEGACY_PASSPHRASE).apply()
-                    encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_VERIFIED).apply()
+                if (legacyPassphraseStr != null) {
+                    val legacyPassBytes = legacyPassphraseStr.toByteArray(Charsets.UTF_8)
+                    var legacyKey: SecureDatabaseKey? = null
+                    
+                    try {
+                        legacyKey = SecureDatabaseKey(legacyPassBytes)
+                        com.meshlink.common.logger.MeshLogger.d(TAG, "Changing migration state to IN_PROGRESS")
+                        encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_IN_PROGRESS).apply()
+                        
+                        val result = migrateDatabaseIfNeeded(legacyKey, secureKey)
+                        if (result is RekeyResult.Success || result is RekeyResult.MigrationNotRequired) {
+                            com.meshlink.common.logger.MeshLogger.d(TAG, "Migration complete. Deleting legacy key.")
+                            legacyPrefs.edit().remove(SecurityConstants.KEY_LEGACY_PASSPHRASE).apply()
+                            encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_VERIFIED).apply()
+                        } else {
+                            com.meshlink.common.logger.MeshLogger.w(TAG, "Migration failed, falling back to legacy passphrase. State = FAILED.")
+                            encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_FAILED).apply()
+                            
+                            // To fallback without returning destroyed key, we duplicate the legacy key to return
+                            val fallbackBytes = Arrays.copyOf(legacyKey.getBytes(), legacyKey.getBytes().size)
+                            secureKey.close() // Close the new key since we fallback
+                            return@withLock SecureDatabaseKey(fallbackBytes)
+                        }
+                    } finally {
+                        legacyKey?.close()
+                        // Ensure original string bytes are wiped
+                        Arrays.fill(legacyPassBytes, 0.toByte())
+                    }
                 } else {
-                    // Migration failed! Fallback to legacy passphrase to prevent user lockout
-                    com.meshlink.common.logger.MeshLogger.w(TAG, "Migration failed, falling back to legacy passphrase. State = FAILED.")
-                    encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_FAILED).apply()
-                    return legacyPassBytes
+                    com.meshlink.common.logger.MeshLogger.d(TAG, "No legacy key found. Marking VERIFIED.")
+                    encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_VERIFIED).apply()
                 }
-            } else {
-                // If there's no legacy passphrase, it's a fresh install or already migrated previously
-                com.meshlink.common.logger.MeshLogger.d(TAG, "No legacy key found. Marking VERIFIED.")
-                encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_VERIFIED).apply()
             }
+            
+            return@withLock secureKey
         }
-        
-        return securePassBytes
     }
 
     @Throws(SecurityRecoveryException::class)
-    private fun getOrGenerateSecurePassphraseString(): String {
+    private fun getOrGenerateSecurePassphrase(): SecureDatabaseKey {
         val encryptedSeedBase64 = encPrefs.getString(SecurityConstants.KEY_ENCRYPTED_SEED, null)
         val saltBase64 = encPrefs.getString(SecurityConstants.KEY_SALT, null)
 
@@ -130,7 +104,6 @@ class DatabaseSecurityManager @Inject constructor(
         val salt: ByteArray
 
         if (encryptedSeedBase64 == null || saltBase64 == null) {
-            // First time setup (or migration)
             seed = ByteArray(SecurityConstants.SEED_LENGTH_BYTES).apply { SecureRandom().nextBytes(this) }
             salt = ByteArray(SecurityConstants.SALT_LENGTH_BYTES).apply { SecureRandom().nextBytes(this) }
 
@@ -141,119 +114,117 @@ class DatabaseSecurityManager @Inject constructor(
                 .putString(SecurityConstants.KEY_SALT, Base64.encodeToString(salt, Base64.NO_WRAP))
                 .apply()
         } else {
-            // Decrypt existing
             salt = Base64.decode(saltBase64, Base64.NO_WRAP)
             val encryptedSeed = Base64.decode(encryptedSeedBase64, Base64.NO_WRAP)
             
             val decryptedSeed = keystoreManager.decrypt(encryptedSeed)
             if (decryptedSeed.isEmpty()) {
-                com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Database seed cannot be recovered. Aborting to prevent data destruction.")
                 throw SecurityRecoveryException("Database seed cannot be recovered. Decrypted seed is empty.")
             }
             seed = decryptedSeed
         }
 
-        // Derive via PBKDF2
-        val factory = SecretKeyFactory.getInstance(SecurityConstants.PBKDF2_ALGORITHM)
-        val seedChars = Base64.encodeToString(seed, Base64.NO_WRAP).toCharArray()
-        
-        val spec = PBEKeySpec(seedChars, salt, com.meshlink.config.SecurityConfig.PBKDF2_ITERATIONS, SecurityConstants.PBKDF2_KEY_LENGTH_BITS)
-        val secret = factory.generateSecret(spec)
-        val passphraseBytes = secret.encoded
-        
-        val finalPassphraseStr = Base64.encodeToString(passphraseBytes, Base64.NO_WRAP)
+        var seedChars: CharArray? = null
+        var passphraseBytes: ByteArray? = null
+        var finalPassphraseBytes: ByteArray? = null
+        val spec = PBEKeySpec(Base64.encodeToString(seed, Base64.NO_WRAP).toCharArray(), salt, com.meshlink.config.SecurityConfig.PBKDF2_ITERATIONS, SecurityConstants.PBKDF2_KEY_LENGTH_BITS)
 
-        // Memory hygiene
-        Arrays.fill(seed, 0.toByte())
-        Arrays.fill(seedChars, '\u0000')
-        Arrays.fill(passphraseBytes, 0.toByte())
-        spec.clearPassword()
-
-        return finalPassphraseStr
+        try {
+            seedChars = Base64.encodeToString(seed, Base64.NO_WRAP).toCharArray()
+            val factory = SecretKeyFactory.getInstance(SecurityConstants.PBKDF2_ALGORITHM)
+            val secret = factory.generateSecret(spec)
+            passphraseBytes = secret.encoded
+            
+            // To maintain compatibility with legacy databases, the new key must be exactly the UTF-8 bytes of the Base64 representation.
+            val finalPassphraseStr = Base64.encodeToString(passphraseBytes, Base64.NO_WRAP)
+            finalPassphraseBytes = finalPassphraseStr.toByteArray(Charsets.UTF_8)
+            
+            return SecureDatabaseKey(finalPassphraseBytes)
+        } finally {
+            Arrays.fill(seed, 0.toByte())
+            seedChars?.let { Arrays.fill(it, '\u0000') }
+            passphraseBytes?.let { Arrays.fill(it, 0.toByte()) }
+            spec.clearPassword()
+        }
     }
 
-    /**
-     * Executes PRAGMA rekey on the existing database using the legacy passphrase.
-     * Must be executed outside of a transaction and in journal_mode = DELETE.
-     * Includes verification step (SELECT COUNT(*) FROM sqlite_schema).
-     * Returns true if successful, false otherwise.
-     */
-    private fun migrateDatabaseIfNeeded(legacyPassphrase: String, newPassphraseStr: String): Boolean {
+    private fun migrateDatabaseIfNeeded(legacyKey: SecureDatabaseKey, newKey: SecureDatabaseKey): RekeyResult {
         val dbFile = context.getDatabasePath(SecurityConstants.DB_NAME)
-        if (!dbFile.exists()) return true
+        if (!dbFile.exists()) return RekeyResult.MigrationNotRequired
 
         com.meshlink.common.logger.MeshLogger.d(TAG, "Attempting to open database with legacy key for migration")
         var legacyDb: SQLiteDatabase? = null
+        var verifyDb: SQLiteDatabase? = null
+        
         try {
-            // Open using the UTF-8 byte array of the legacy passphrase to match SupportOpenHelperFactory behavior
             legacyDb = SQLiteDatabase.openDatabase(
                 dbFile.path,
-                legacyPassphrase.toByteArray(Charsets.UTF_8),
+                legacyKey.getBytes(),
                 null as SQLiteDatabase.CursorFactory?,
                 SQLiteDatabase.OPEN_READWRITE,
                 null
             )
             
-            // Checkpoint WAL
             com.meshlink.common.logger.MeshLogger.d(TAG, "Checkpointing WAL")
             legacyDb.execSQL("PRAGMA wal_checkpoint(FULL);")
-            // SQLCipher requires WAL mode to be disabled before rekeying
             com.meshlink.common.logger.MeshLogger.d(TAG, "Switching to DELETE journal mode")
             legacyDb.execSQL("PRAGMA journal_mode = DELETE;")
             
-            // PRAGMA rekey changes the encryption key of the database on the fly.
-            // It MUST NOT be executed within a transaction.
             com.meshlink.common.logger.MeshLogger.d(TAG, "Executing PRAGMA rekey")
-            legacyDb.execSQL("PRAGMA rekey = '$newPassphraseStr';")
+            val formattedHexKey = SqlCipherKeyFormatter.formatHexKey(newKey)
+            
+            // PRAGMA rekey changes the encryption key of the database on the fly.
+            legacyDb.execSQL("PRAGMA rekey = $formattedHexKey;")
             com.meshlink.common.logger.MeshLogger.d(TAG, "Rekey executed successfully")
             
         } catch (e: Exception) {
             val sanitizedMsg = e.javaClass.simpleName
             com.meshlink.common.logger.MeshLogger.e(TAG, "Rekey failure: $sanitizedMsg", e)
-            com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Database migration failed during rekey: $sanitizedMsg")
+            return RekeyResult.RekeyFailed(sanitizedMsg)
+        } finally {
             legacyDb?.close()
-            return false
         }
         
-        // Close DB to finalize the rekey and flush caches
-        com.meshlink.common.logger.MeshLogger.d(TAG, "Closing database to finalize rekey")
-        legacyDb.close()
-        
         com.meshlink.common.logger.MeshLogger.d(TAG, "Re-opening with new key to verify")
-        var verifyDb: SQLiteDatabase? = null
         try {
-            // Re-open Using NEW Derived Key
             verifyDb = SQLiteDatabase.openDatabase(
                 dbFile.path,
-                newPassphraseStr.toByteArray(Charsets.UTF_8),
+                newKey.getBytes(),
                 null as SQLiteDatabase.CursorFactory?,
                 SQLiteDatabase.OPEN_READWRITE,
                 null
             )
             
-            // Run schema verification
-            com.meshlink.common.logger.MeshLogger.d(TAG, "Executing SELECT COUNT(*) FROM sqlite_schema")
-            verifyDb.rawQuery("SELECT COUNT(*) FROM sqlite_schema;", null).use { cursor ->
-                if (!cursor.moveToFirst()) {
-                    throw IllegalStateException("Verification query returned empty cursor.")
+            com.meshlink.common.logger.MeshLogger.d(TAG, "Executing PRAGMA integrity_check")
+            verifyDb.rawQuery("PRAGMA integrity_check;", null).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val result = cursor.getString(0)
+                    if (!result.equals("ok", ignoreCase = true)) {
+                        return RekeyResult.VerificationFailed("integrity_check failed: $result")
+                    }
+                } else {
+                    return RekeyResult.VerificationFailed("integrity_check returned empty")
                 }
             }
-            com.meshlink.common.logger.MeshLogger.d(TAG, "Verification succeeded")
             
-            // Restore WAL mode and PRAGMA synchronous
+            com.meshlink.common.logger.MeshLogger.d(TAG, "Reading representative tables")
+            verifyDb.rawQuery("SELECT COUNT(*) FROM sqlite_schema;", null).use { cursor ->
+                if (!cursor.moveToFirst()) {
+                    return RekeyResult.VerificationFailed("sqlite_schema read failed")
+                }
+            }
+            
             com.meshlink.common.logger.MeshLogger.d(TAG, "Restoring WAL mode")
             verifyDb.execSQL("PRAGMA journal_mode = WAL;")
             verifyDb.execSQL("PRAGMA synchronous = NORMAL;")
             
-            return true
+            return RekeyResult.Success
         } catch (e: Exception) {
             val sanitizedMsg = e.javaClass.simpleName
             com.meshlink.common.logger.MeshLogger.e(TAG, "Verification failure: $sanitizedMsg", e)
-            com.meshlink.common.logger.MeshLogger.e("DatabaseSecurityManager", "Database migration failed during verification: $sanitizedMsg")
-            return false
+            return RekeyResult.VerificationFailed(sanitizedMsg)
         } finally {
             verifyDb?.close()
         }
     }
-
 }

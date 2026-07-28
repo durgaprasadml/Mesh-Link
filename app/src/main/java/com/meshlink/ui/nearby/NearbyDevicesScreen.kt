@@ -54,6 +54,18 @@ fun NearbyDevicesScreen(
             }
         }
 
+        com.meshlink.ui.components.AnimatedErrorDialog(
+            visible = uiState.errorMessage != null,
+            title = "Discovery Error",
+            message = uiState.errorMessage ?: "",
+            onDismiss = { viewModel.setErrorMessage(null) },
+            primaryButtonText = "Try Again",
+            onPrimaryClick = {
+                viewModel.setErrorMessage(null)
+                viewModel.startDiscovery()
+            }
+        )
+
         Scaffold(
             containerColor = androidx.compose.ui.graphics.Color.Transparent,
             topBar = {

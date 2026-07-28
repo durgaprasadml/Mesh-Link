@@ -3,12 +3,10 @@ package com.meshlink.ui.settings
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,12 +15,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.components.settings.SettingsItemRow
+import com.meshlink.ui.designsystem.components.cards.MeshCard
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.settings.screens.*
+import kotlinx.coroutines.flow.collectLatest
 
 enum class SettingsDestination {
     HOME, PROFILE, NETWORK, STORAGE, APPEARANCE
@@ -37,45 +36,61 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var currentDestination by remember { mutableStateOf(SettingsDestination.HOME) }
     val userName = uiState.user?.name ?: "User"
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    AnimatedContent(
-        targetState = currentDestination,
-        transitionSpec = {
-            if (targetState != SettingsDestination.HOME) {
-                slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn() togetherWith
-                        slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) + fadeOut()
-            } else {
-                slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300)) + fadeIn() togetherWith
-                        slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut()
+    LaunchedEffect(Unit) {
+        viewModel.uiEvent.collectLatest { event ->
+            when (event) {
+                is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
+                is SettingsEvent.SuccessMessage -> snackbarHostState.showSnackbar(event.message)
             }
-        },
-        label = "SettingsNav"
-    ) { dest ->
-        when (dest) {
-            SettingsDestination.HOME -> SettingsHome(
-                userName = userName,
-                onNavigate = { currentDestination = it },
-                onBack = onBack
-            )
-            SettingsDestination.PROFILE -> com.meshlink.ui.profile.ProfileScreen(
-                onNavigateBack = { currentDestination = SettingsDestination.HOME }
-            )
-            SettingsDestination.NETWORK -> NetworkSettingsScreen(
-                uiState = uiState,
-                viewModel = viewModel,
-                onBack = { currentDestination = SettingsDestination.HOME }
-            )
-            SettingsDestination.STORAGE -> StorageSettingsScreen(
-                uiState = uiState,
-                viewModel = viewModel,
-                onBack = { currentDestination = SettingsDestination.HOME }
-            )
-            SettingsDestination.APPEARANCE -> AppearanceSettingsScreen(
-                uiState = uiState,
-                viewModel = viewModel,
-                onBack = { currentDestination = SettingsDestination.HOME }
-            )
+        }
+    }
 
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
+        Box(modifier = Modifier.padding(paddingValues)) {
+            AnimatedContent(
+                targetState = currentDestination,
+                transitionSpec = {
+                    if (targetState != SettingsDestination.HOME) {
+                        slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn() togetherWith
+                                slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) + fadeOut()
+                    } else {
+                        slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300)) + fadeIn() togetherWith
+                                slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut()
+                    }
+                },
+                label = "SettingsNav"
+            ) { dest ->
+                when (dest) {
+                    SettingsDestination.HOME -> SettingsHome(
+                        userName = userName,
+                        onNavigate = { currentDestination = it },
+                        onBack = onBack
+                    )
+                    SettingsDestination.PROFILE -> com.meshlink.ui.profile.ProfileScreen(
+                        onNavigateBack = { currentDestination = SettingsDestination.HOME }
+                    )
+                    SettingsDestination.NETWORK -> NetworkSettingsScreen(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        onBack = { currentDestination = SettingsDestination.HOME }
+                    )
+                    SettingsDestination.STORAGE -> StorageSettingsScreen(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        onBack = { currentDestination = SettingsDestination.HOME }
+                    )
+                    SettingsDestination.APPEARANCE -> AppearanceSettingsScreen(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        onBack = { currentDestination = SettingsDestination.HOME }
+                    )
+                }
+            }
         }
     }
 }
@@ -109,13 +124,10 @@ fun SettingsHome(
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumLarge)
         ) {
             item {
-                // Profile Card
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigate(SettingsDestination.PROFILE) },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
+                // Profile Card using MeshCard reusable component
+                MeshCard(
+                    onClick = { onNavigate(SettingsDestination.PROFILE) },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
@@ -146,13 +158,9 @@ fun SettingsHome(
             }
 
             item {
-                // Main Settings Group
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
-                ) {
+                // Main Settings Group using MeshCard
+                MeshCard {
                     Column {
-
                         SettingsItemRow(
                             title = "Network & Transport",
                             subtitle = "BLE, Wi-Fi Direct, Relaying",
@@ -176,7 +184,6 @@ fun SettingsHome(
                     }
                 }
             }
-
         }
     }
 }

@@ -160,22 +160,11 @@ fun AnalyticsScreen(
                     label = "recent_log_empty_state_transition"
                 ) { isEmpty ->
                     if (isEmpty) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(MeshTheme.spacing.huge),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
-                                ) {
-                                    Text("No activity yet. Start messaging!", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
+                        com.meshlink.ui.components.EmptyState(
+                            icon = Icons.Default.History,
+                            title = "No recent activity",
+                            description = "Start messaging to view real-time mesh activity and relay logs."
+                        )
                     } else {
                         Column(
                             modifier = Modifier.fillMaxWidth(),

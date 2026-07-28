@@ -58,6 +58,15 @@ fun SosScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    com.meshlink.ui.components.AnimatedErrorDialog(
+        visible = state.errorMessage != null,
+        title = "SOS Action Failed",
+        message = state.errorMessage ?: "",
+        onDismiss = { viewModel.dismissError() },
+        primaryButtonText = "OK",
+        onPrimaryClick = { viewModel.dismissError() }
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(

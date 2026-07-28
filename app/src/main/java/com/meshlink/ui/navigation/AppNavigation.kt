@@ -38,7 +38,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.meshlink.messaging.presentation.ChatDetailScreen
 import com.meshlink.messaging.presentation.ChatsListScreen
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.home.HomeScreen
 import com.meshlink.ui.profile.ProfileSetupScreen
 import com.meshlink.ui.nearby.NearbyDevicesScreen
@@ -68,7 +68,7 @@ fun AppNavigation(
     windowSizeClass: WindowSizeClass,
     viewModel: AppNavigationViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
-    val hasProfile by viewModel.hasProfile.collectAsState(initial = null)
+    val hasProfile by viewModel.hasProfile.collectAsStateWithLifecycle(initialValue = null)
 
     if (hasProfile == null) {
         androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())

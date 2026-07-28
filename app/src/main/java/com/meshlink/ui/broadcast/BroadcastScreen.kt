@@ -9,9 +9,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,45 +20,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.domain.model.Message
-import com.meshlink.domain.repository.MeshRepository
+import com.meshlink.ui.components.EmptyState
 import com.meshlink.ui.designsystem.theme.MeshTheme
-import dagger.hilt.android.lifecycle.HiltViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import javax.inject.Inject
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-
-data class BroadcastUiState(
-    val messages: List<Message> = emptyList()
-)
-
-@HiltViewModel
-class BroadcastViewModel @Inject constructor(
-    private val meshRepository: MeshRepository,
-    private val getBroadcastMessagesUseCase: com.meshlink.domain.usecase.messaging.GetBroadcastMessagesUseCase
-) : ViewModel() {
-
-    fun sendBroadcast(message: String) {
-        viewModelScope.launch {
-            meshRepository.broadcastMessage(message)
-        }
-    }
-
-    // FIX ERROR 3: Expose live broadcast messages from Room
-    val uiState: StateFlow<BroadcastUiState> =
-        getBroadcastMessagesUseCase()
-            .map { BroadcastUiState(messages = it) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BroadcastUiState())
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,7 +134,7 @@ fun BroadcastScreen(
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Send",
+                                contentDescription = "Send broadcast",
                                 tint = if (messageText.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -192,7 +160,7 @@ fun BroadcastScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    com.meshlink.ui.components.EmptyState(
+                    EmptyState(
                         icon = Icons.Default.Campaign,
                         title = "No broadcasts yet",
                         description = "Messages you send will appear here"

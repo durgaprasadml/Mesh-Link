@@ -130,6 +130,10 @@ class SosViewModel @Inject constructor(
         }
     }
 
+    fun dismissError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
 
 
     fun toggleFlashlight() {

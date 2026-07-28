@@ -111,7 +111,7 @@ fun ChatsListScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 16.dp)
+                    contentPadding = PaddingValues(bottom = MeshTheme.spacing.medium)
                 ) {
                     items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
                         ChatListItem(chat = chat, onClick = {
@@ -140,7 +140,7 @@ fun ChatListItem(chat: Chat, onClick: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .size(56.dp)
+                .size(MeshTheme.spacing.huge - MeshTheme.spacing.small) // 56dp
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
@@ -165,7 +165,7 @@ fun ChatListItem(chat: Chat, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
             Text(
                 text = chat.lastMessage ?: "",
                 style = MaterialTheme.typography.bodyMedium,
@@ -184,10 +184,10 @@ fun ChatListItem(chat: Chat, onClick: () -> Unit) {
                 color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (chat.unreadCount > 0) {
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(MeshTheme.spacing.mediumLarge)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center

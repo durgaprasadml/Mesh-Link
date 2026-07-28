@@ -65,15 +65,10 @@ sealed class Screen(val route: String) {
 @Composable
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
-    windowSizeClass: WindowSizeClass
+    windowSizeClass: WindowSizeClass,
+    viewModel: AppNavigationViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
-    val userRepository: com.meshlink.domain.repository.UserRepository = dagger.hilt.EntryPoints.get(
-        androidx.compose.ui.platform.LocalContext.current.applicationContext,
-        com.meshlink.di.UserRepositoryEntryPoint::class.java
-    ).getUserRepository()
-    
-    
-    val hasProfile by userRepository.hasProfile.collectAsState(initial = null)
+    val hasProfile by viewModel.hasProfile.collectAsState(initial = null)
 
     if (hasProfile == null) {
         androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())

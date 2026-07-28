@@ -185,7 +185,7 @@ class SimulatedNode(
         payload: String,
         type: PacketType = PacketType.TEXT,
         priority: PacketPriority = PacketPriority.NORMAL,
-        encrypted: Boolean = false,
+        encrypted: Boolean = true,
         customPacketId: String? = null
     ): String {
         val traceId = "trace:${UUID.randomUUID()}"
@@ -258,9 +258,12 @@ class SimulatedNode(
 
     private fun handleIncomingPacket(immediateSender: String, packet: MeshPacket) {
         // Encryption enforcement
-        if (config.enforceEncryption && !packet.encrypted
-            && packet.type != PacketType.KEY_EXCHANGE
-            && packet.type != PacketType.SOS) {
+        val isValid = com.meshlink.security.policy.PacketEncryptionPolicy.validatePacketEncryption(
+            packet = packet,
+            strictMode = config.enforceEncryption,
+            hasSecureSession = false // Simulator mimics a router passing traffic
+        )
+        if (!isValid) {
             recorder.recordDrop(clock.currentTimeMs, meshId, packet,
                 NetworkRecorder.DropReason.ENCRYPTION_FAILED, immediateSender)
             metrics.packetsDropped.incrementAndGet()

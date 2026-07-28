@@ -10,20 +10,24 @@ import com.meshlink.ble.data.handlers.VoiceMessageHandler
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
+import com.meshlink.domain.repository.SettingsRepository
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.security.data.RekeyManager
 import com.meshlink.security.data.SessionManager
 import com.meshlink.security.data.TrustManager
+import com.meshlink.security.policy.PacketEncryptionPolicy
 import com.meshlink.transfer.TransferManager
 import com.meshlink.util.MeshIdNormalizer
 import com.meshlink.voice.transport.VoiceTransport
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.first
 
 @Singleton
 class IncomingPacketDispatcher @Inject constructor(
     private val userRepository: UserRepository,
+    private val settingsRepository: SettingsRepository,
     private val cryptoManager: MeshCryptoManager,
     private val sessionManager: SessionManager,
     private val trustManager: TrustManager,
@@ -54,7 +58,8 @@ class IncomingPacketDispatcher @Inject constructor(
 
         var processedPacket = packet
 
-        if (packet.encrypted && packet.type != PacketType.KEY_EXCHANGE) {
+        // 1. Always attempt decryption if the packet claims to be encrypted, regardless of type
+        if (packet.encrypted) {
             var finalPayload = packet.payload
             var validAad: ByteArray? = null
             var usePreviousKey = false
@@ -83,6 +88,16 @@ class IncomingPacketDispatcher @Inject constructor(
             processedPacket = packet.copy(payload = decrypted)
         }
 
+        // 2. Validate encryption policy centrally AFTER decryption phase
+        val hasSecureSession = sessionManager.getSession(processedPacket.senderId) != null
+        val strictMode = settingsRepository.advancedEncryptionEnforcement.first()
+        
+        if (!PacketEncryptionPolicy.validatePacketEncryption(processedPacket, strictMode, hasSecureSession)) {
+            MeshLogger.w(TAG, "Dropping packet ${processedPacket.packetId}: fails central Encryption policy")
+            return
+        }
+
+        // 3. Dispatch using exhaustive when (compiler enforces all branches)
         try {
             when (processedPacket.type) {
                 PacketType.KEY_EXCHANGE -> {
@@ -130,8 +145,16 @@ class IncomingPacketDispatcher @Inject constructor(
                 PacketType.VOICE_FRAME -> {
                     voiceTransport.handleIncomingPacket(processedPacket)
                 }
-                else -> {
-                    // Handled elsewhere or not needed right now
+                PacketType.VIDEO_SIGNAL,
+                PacketType.VIDEO_FRAME,
+                PacketType.BEACON,
+                PacketType.INCIDENT_REPORT,
+                PacketType.CHECK_IN,
+                PacketType.FORM_SYNC,
+                PacketType.RESOURCE_SYNC,
+                PacketType.MAP_SYNC -> {
+                    // Currently no-op or handled elsewhere, but must be explicitly defined
+                    MeshLogger.d(TAG, "Received unhandled packet type: ${processedPacket.type}")
                 }
             }
         } catch (e: Exception) {

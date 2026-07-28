@@ -1,7 +1,5 @@
 [
-  {"t":0,"type":"SENT","node":"A","packetId":"167c83ec-6caf-436b-a516-2132407eb5db","traceId":"trace:49734492-442b-4f3c-8e9c-d06193a33664","from":"A","to":"relay","hopCount":0,"ttl":10,"packetType":"TEXT","dropReason":null},
-  {"t":0,"type":"RECEIVED","node":"relay","packetId":"167c83ec-6caf-436b-a516-2132407eb5db","traceId":"trace:49734492-442b-4f3c-8e9c-d06193a33664","from":"A","to":"relay","hopCount":0,"ttl":10,"packetType":"TEXT","dropReason":null},
-  {"t":0,"type":"SENT","node":"relay","packetId":"167c83ec-6caf-436b-a516-2132407eb5db","traceId":"trace:49734492-442b-4f3c-8e9c-d06193a33664","from":"relay","to":"B","hopCount":1,"ttl":9,"packetType":"TEXT","dropReason":null},
-  {"t":0,"type":"RECEIVED","node":"B","packetId":"167c83ec-6caf-436b-a516-2132407eb5db","traceId":"trace:49734492-442b-4f3c-8e9c-d06193a33664","from":"relay","to":"B","hopCount":1,"ttl":9,"packetType":"TEXT","dropReason":null},
-  {"t":0,"type":"DELIVERED","node":"B","packetId":"167c83ec-6caf-436b-a516-2132407eb5db","traceId":"trace:49734492-442b-4f3c-8e9c-d06193a33664","from":"relay","to":"B","hopCount":1,"ttl":9,"packetType":"TEXT","dropReason":null}
+  {"t":0,"type":"SENT","node":"A","packetId":"6f5883c2-c09c-45ca-b7f2-8b9b09040ae5","traceId":"trace:b8ce5e21-ae82-4005-80ce-70c6af82b2f5","from":"A","to":"relay","hopCount":0,"ttl":10,"packetType":"TEXT","dropReason":null},
+  {"t":0,"type":"RECEIVED","node":"relay","packetId":"6f5883c2-c09c-45ca-b7f2-8b9b09040ae5","traceId":"trace:b8ce5e21-ae82-4005-80ce-70c6af82b2f5","from":"A","to":"relay","hopCount":0,"ttl":10,"packetType":"TEXT","dropReason":null},
+  {"t":0,"type":"DROPPED","node":"relay","packetId":"6f5883c2-c09c-45ca-b7f2-8b9b09040ae5","traceId":"trace:b8ce5e21-ae82-4005-80ce-70c6af82b2f5","from":"A","to":null,"hopCount":0,"ttl":10,"packetType":"TEXT","dropReason":"ENCRYPTION_FAILED"}
 ]

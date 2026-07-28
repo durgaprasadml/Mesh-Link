@@ -11,83 +11,87 @@ import com.meshlink.util.MeshIdNormalizer
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
-import org.mockito.Mock
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.verify
-import org.mockito.Mockito.`when`
-import org.mockito.MockitoAnnotations
+import io.mockk.mockk
+import io.mockk.every
+import io.mockk.coEvery
+import io.mockk.coVerify
 
 class AckManagerTest {
 
-    private lateinit var userRepository: UserRepository
-    private lateinit var chatDao: ChatDao
     private lateinit var packetDispatcher: PacketDispatcher
+    private lateinit var chatDao: ChatDao
+    private lateinit var userRepository: UserRepository
     private lateinit var ackManager: AckManager
 
     @Before
     fun setUp() {
-        userRepository = mock(UserRepository::class.java)
-        chatDao = mock(ChatDao::class.java)
-        packetDispatcher = mock(PacketDispatcher::class.java)
-        ackManager = AckManager(userRepository, chatDao, packetDispatcher)
+        packetDispatcher = mockk(relaxed = true)
+        chatDao = mockk(relaxed = true)
+        userRepository = mockk(relaxed = true)
+
+        ackManager = AckManager(
+            packetDispatcher = packetDispatcher,
+            chatDao = chatDao,
+            userRepository = userRepository
+        )
     }
 
     @Test
-    fun `handleDeliveryAck updates message status to DELIVERED`() = runBlocking {
+    fun `handleDeliveryAck updates database`() = runBlocking {
         val packet = MeshPacket(
-            packetId = "ack-id",
+            packetId = "p1",
             senderId = "peer",
-            targetId = "me",
-            payload = "msg-123",
-            type = PacketType.DELIVERY_ACK,
-            encrypted = false
+            targetId = "local",
+            payload = "original-packet",
+            type = PacketType.DELIVERY_ACK
         )
 
         ackManager.handleDeliveryAck(packet)
 
-        verify(chatDao).updateMessageStatus("msg-123", DeliveryStatus.DELIVERED)
+        coVerify { chatDao.updateMessageStatus("original-packet", DeliveryStatus.DELIVERED) }
     }
 
     @Test
-    fun `handleReadReceipt updates message status to SEEN`() = runBlocking {
+    fun `handleReadReceipt updates database`() = runBlocking {
         val packet = MeshPacket(
-            packetId = "rr-id",
+            packetId = "p2",
             senderId = "peer",
-            targetId = "me",
-            payload = "msg-123",
-            type = PacketType.READ_RECEIPT,
-            encrypted = false
+            targetId = "local",
+            payload = "original-packet",
+            type = PacketType.READ_RECEIPT
         )
 
         ackManager.handleReadReceipt(packet)
 
-        verify(chatDao).updateMessageStatus("msg-123", DeliveryStatus.SEEN)
+        coVerify { chatDao.updateMessageStatus("original-packet", DeliveryStatus.SEEN) }
     }
 
     @Test
-    fun `sendReadReceipts sends packets and updates local status`() = runBlocking {
-        val localUser = User(meshId = "me")
-        `when`(userRepository.getLocalUser()).thenReturn(localUser)
-        `when`(chatDao.getUnreadIncomingMessages("peer")).thenReturn(listOf("msg-1", "msg-2"))
+    fun `sendReadReceipts processes all unread messages`() = runBlocking {
+        val localUser = User(meshId = "local", name = "Test User")
+        coEvery { userRepository.getLocalUser() } returns localUser
+        coEvery { chatDao.getUnreadIncomingMessages("peer") } returns listOf("msg-1", "msg-2")
 
         ackManager.sendReadReceipts("peer")
 
-        verify(chatDao).markMessagesAsSeen(listOf("msg-1", "msg-2"))
+        coVerify { chatDao.markMessagesAsSeen(listOf("msg-1", "msg-2")) }
         
         val expectedTarget = MeshIdNormalizer.canonicalize("peer")
-        verify(packetDispatcher).dispatchSinglePacket(
-            org.mockito.kotlin.eq(expectedTarget),
-            org.mockito.kotlin.check { pkt ->
-                assert(pkt.payload == "msg-1")
-                assert(pkt.type == PacketType.READ_RECEIPT)
-            }
-        )
-        verify(packetDispatcher).dispatchSinglePacket(
-            org.mockito.kotlin.eq(expectedTarget),
-            org.mockito.kotlin.check { pkt ->
-                assert(pkt.payload == "msg-2")
-                assert(pkt.type == PacketType.READ_RECEIPT)
-            }
-        )
+        coVerify {
+            packetDispatcher.dispatchSinglePacket(
+                expectedTarget,
+                match { pkt: MeshPacket ->
+                    pkt.payload == "msg-1" && pkt.type == PacketType.READ_RECEIPT
+                }
+            )
+        }
+        coVerify {
+            packetDispatcher.dispatchSinglePacket(
+                expectedTarget,
+                match { pkt: MeshPacket ->
+                    pkt.payload == "msg-2" && pkt.type == PacketType.READ_RECEIPT
+                }
+            )
+        }
     }
 }

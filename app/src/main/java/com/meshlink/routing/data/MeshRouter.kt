@@ -194,13 +194,13 @@ internal class MeshRouter @Inject constructor(
 
         // --- Strict Encryption Enforcement ---
         val enforceEncryption = enforceEncryptionState.value
-        val isDirectDelivery = isForMe && packet.hopCount == 0
-        
-        val encryptionRequirement = com.meshlink.security.policy.PacketEncryptionPolicy.getRequirement(packet.type, isDirectDelivery)
-        val requiresEncryption = encryptionRequirement == com.meshlink.security.policy.EncryptionRequirement.REQUIRED ||
-                (encryptionRequirement == com.meshlink.security.policy.EncryptionRequirement.OPTIONAL && enforceEncryption)
+        val isValid = com.meshlink.security.policy.PacketEncryptionPolicy.validatePacketEncryption(
+            packet = packet,
+            strictMode = enforceEncryption,
+            hasSecureSession = false // Relaying nodes don't check destination session state; local delivery is fully validated post-decryption in dispatcher.
+        )
 
-        if (!packet.encrypted && requiresEncryption) {
+        if (!isValid) {
             MeshLogger.w(TAG, "Dropped unencrypted packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} due to Encryption policy")
             return
         }

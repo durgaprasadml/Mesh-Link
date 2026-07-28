@@ -35,7 +35,7 @@ class CorePacketDispatcher @Inject constructor(
             val shouldEncrypt = when (requirement) {
                 EncryptionRequirement.REQUIRED -> true
                 EncryptionRequirement.OPTIONAL -> userRepository.isEncryptionEnabled.first()
-                EncryptionRequirement.NONE -> false
+                EncryptionRequirement.BOOTSTRAP_ONLY -> false
             }
 
             if (shouldEncrypt) {

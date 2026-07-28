@@ -183,7 +183,7 @@ class MediaTransferManager @Inject constructor(
             return
         }
 
-        MeshLogger.d(TAG, "[$transferId] Dispatching ${packets.size} packets (${packets.size - 1} chunks) to ${packets.first().targetId.takeLast(6)}")
+        MeshLogger.d(TAG) { "[$transferId] Dispatching ${packets.size} packets (${packets.size - 1} chunks) to ${packets.first().targetId.takeLast(6)}" }
         updateProgress(transferId, 0f)
 
         packets.forEachIndexed { i, pkt ->
@@ -199,7 +199,7 @@ class MediaTransferManager @Inject constructor(
             }
         }
 
-        MeshLogger.d(TAG, "[$transferId] All ${packets.size} packets dispatched")
+        MeshLogger.d(TAG) { "[$transferId] All ${packets.size} packets dispatched" }
     }
 
     private fun buildPacketList(
@@ -213,7 +213,7 @@ class MediaTransferManager @Inject constructor(
         val chunks = base64.chunked(CHUNK_SIZE)
         val totalChunks = chunks.size
 
-        MeshLogger.d(TAG, "[$transferId] Building: ${data.size}B raw → ${base64.length}B B64 → $totalChunks chunks")
+        MeshLogger.d(TAG) { "[$transferId] Building: ${data.size}B raw → ${base64.length}B B64 → $totalChunks chunks" }
 
         val packets = java.util.ArrayList<MeshPacket>(totalChunks + 1)
 
@@ -293,7 +293,7 @@ class MediaTransferManager @Inject constructor(
         incomingBuffers.getOrPut(transferId) { ConcurrentHashMap() }
         updateProgress(transferId, 0f)
         startTimeoutWatcher(transferId)
-        MeshLogger.d(TAG, "[$transferId] META: totalChunks=${packet.totalChunks} mime=$mimeType")
+        MeshLogger.d(TAG) { "[$transferId] META: totalChunks=${packet.totalChunks} mime=$mimeType" }
         return null
     }
 
@@ -317,7 +317,7 @@ class MediaTransferManager @Inject constructor(
         val progress = buffer.size.toFloat() / meta.totalChunks.coerceAtLeast(1)
         updateProgress(transferId, progress)
 
-        MeshLogger.d(TAG, "[$transferId] Chunk ${packet.chunkIndex + 1}/${meta.totalChunks} (${buffer.size} buffered, ${String.format(java.util.Locale.US, "%.0f", progress * 100)}%)")
+        MeshLogger.d(TAG) { "[$transferId] Chunk ${packet.chunkIndex + 1}/${meta.totalChunks} (${buffer.size} buffered, ${String.format(java.util.Locale.US, "%.0f", progress * 100)}%)" }
 
         // Req. 4: Send ACK back to sender
         sendAck(packet.senderId, packet.targetId, transferId, packet.chunkIndex)
@@ -340,7 +340,7 @@ class MediaTransferManager @Inject constructor(
             // All chunks ACKed
             pendingTransfers.remove(transferId)
             chunkRetryCount.keys.removeIf { it.startsWith("$transferId:") }
-            MeshLogger.d(TAG, "[$transferId] All $total chunks ACKed by receiver")
+            MeshLogger.d(TAG) { "[$transferId] All $total chunks ACKed by receiver" }
         }
         return null
     }
@@ -358,7 +358,7 @@ class MediaTransferManager @Inject constructor(
         val missingIndices = packet.payload.split(",").mapNotNull { it.trim().toIntOrNull() }
         if (missingIndices.isEmpty()) return null
 
-        MeshLogger.d(TAG, "[$transferId] NACK: retrying chunks $missingIndices")
+        MeshLogger.d(TAG) { "[$transferId] NACK: retrying chunks $missingIndices" }
 
         applicationScope.launch(ioDispatcher) {
             val send = onSendPacket ?: return@launch
@@ -376,7 +376,7 @@ class MediaTransferManager @Inject constructor(
                 if (chunkPacket != null) {
                     send(chunkPacket)
                     delay(INTER_CHUNK_DELAY_MS)
-                    MeshLogger.d(TAG, "[$transferId] Retried chunk $idx (attempt ${retries + 1})")
+                    MeshLogger.d(TAG) { "[$transferId] Retried chunk $idx (attempt ${retries + 1})" }
                 }
             }
         }
@@ -425,7 +425,7 @@ class MediaTransferManager @Inject constructor(
             ttl        = 5
         )
         onSendPacket?.invoke(nack)
-        MeshLogger.d(TAG, "[$transferId] Sent NACK for missing chunks: $missingIndices")
+        MeshLogger.d(TAG) { "[$transferId] Sent NACK for missing chunks: $missingIndices" }
     }
 
     // ─────────────────── Req. 7: Timeout watcher ───────────────────
@@ -524,7 +524,7 @@ class MediaTransferManager @Inject constructor(
             cleanupIncoming(transferId)
             updateProgress(transferId, 1f)
 
-            MeshLogger.d(TAG, "[$transferId] Assembled ${fileBytes.size}B → ${outputFile.absolutePath}")
+            MeshLogger.d(TAG) { "[$transferId] Assembled ${fileBytes.size}B → ${outputFile.absolutePath}" }
 
             CompletedTransfer(
                 transferId = transferId,

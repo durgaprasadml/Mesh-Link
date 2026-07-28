@@ -183,8 +183,7 @@ class BleGattManager @Inject constructor(
     fun broadcastPacket(jsonPacket: String, excludeAddress: String? = null, includeAddress: String? = null) {
         val bytes = jsonPacket.toByteArray(Charsets.UTF_8)
 
-        MeshLogger.d("BleGatt", "[TRANSPORT-A] ═══ broadcastPacket() ═══")
-        MeshLogger.d("BleGatt", "[TRANSPORT-A]   totalBytes      : ${bytes.size} B")
+
         
         // Dispatch to Nodes we initiated connection to
         connectionManager.activeClients.forEach { (address, _) ->
@@ -252,7 +251,7 @@ class BleGattManager @Inject constructor(
             
             if (readyAppMessage != null) {
                 val mtu = mtuManager.getMtu(readyAppMessage.address)
-                MeshLogger.d("BleGatt", "[TRANSPORT-A] Fragmenting message of size ${readyAppMessage.payload.size} with MTU $mtu")
+                MeshLogger.d("BleGatt") { "Fragmenting message of size ${readyAppMessage.payload.size} with MTU $mtu" }
                 fragmenter.fragment(readyAppMessage.payload, mtu) { fragment ->
                     val queuedPacket = BufferPool.borrowBuffer(fragment.size)
                     System.arraycopy(fragment, 0, queuedPacket, 0, fragment.size)
@@ -268,7 +267,7 @@ class BleGattManager @Inject constructor(
 
         val gatt = connectionManager.getClient(pending.address)
         if (gatt == null) {
-            MeshLogger.w("BleGatt", "[TRANSPORT-A]   ⚠ No GATT client for ${pending.address} — dropping fragment")
+            MeshLogger.w("BleGatt", "No GATT client for ${pending.address} — dropping fragment")
             BufferPool.returnBuffer(pending.bytes)
             return
         }
@@ -276,7 +275,7 @@ class BleGattManager @Inject constructor(
         val char = gatt.getService(BleConstants.MESH_SERVICE_UUID)?.getCharacteristic(BleConstants.MSG_CHAR_UUID)
         if (char == null) {
             try {
-                MeshLogger.w("BleGatt", "[TRANSPORT-A]   ⚠ Service not discovered for ${pending.address} — retrying discoverServices()")
+                MeshLogger.w("BleGatt", "Service not discovered for ${pending.address} — retrying discoverServices()")
                 discoveryManager.discoverServices(gatt)
             } catch (e: Exception) {
                 MeshLogger.w("BleGatt", "Service discovery retry failed for ${pending.address}: ${e.message}")
@@ -288,7 +287,7 @@ class BleGattManager @Inject constructor(
 
         try {
             if (!permissionChecker.hasRequiredPermissions(context)) {
-                MeshLogger.w("BleGatt", "[TRANSPORT-A] ⚠ Missing permissions to write characteristic for ${pending.address}")
+                MeshLogger.w("BleGatt", "Missing permissions to write characteristic for ${pending.address}")
                 writeQueue.enqueue(pending)
                 return
             }
@@ -307,17 +306,17 @@ class BleGattManager @Inject constructor(
                 writeStarted = writeRes
             }
             
-            MeshLogger.d("BleGatt", "[TRANSPORT-A]   -> writeCharacteristic for ${pending.address} started=$writeStarted size=${pending.bytes.size}")
+            MeshLogger.d("BleGatt") { "writeCharacteristic for ${pending.address} started=$writeStarted size=${pending.bytes.size}" }
             
             if (writeStarted) {
                 writeQueue.setActiveWrite(pending)
             } else {
                 val backoff = writeQueue.requeueWithBackoff(pending)
                 if (backoff < 0) {
-                    MeshLogger.e("BleGatt", "[TRANSPORT-A]   ⚠ writeCharacteristic permanently failed for ${pending.address}, dropping packet.")
+                    MeshLogger.e("BleGatt", "writeCharacteristic permanently failed for ${pending.address}, dropping packet.")
                     BufferPool.returnBuffer(pending.bytes)
                 } else {
-                    MeshLogger.w("BleGatt", "[TRANSPORT-A]   ⚠ writeCharacteristic returned false. Retry in ${backoff}ms")
+                    MeshLogger.w("BleGatt", "writeCharacteristic returned false. Retry in ${backoff}ms")
                     applicationScope.launch {
                         delay(backoff)
                         flushClientWriteQueue()
@@ -326,7 +325,7 @@ class BleGattManager @Inject constructor(
             }
         } catch (e: Exception) {
             BufferPool.returnBuffer(pending.bytes)
-            MeshLogger.e("BleGatt", "[TRANSPORT-A]   ✗ Exception in writeCharacteristic: ${e.message}")
+            MeshLogger.e("BleGatt", "Exception in writeCharacteristic: ${e.message}")
         }
     }
 
@@ -522,14 +521,14 @@ class BleGattManager @Inject constructor(
         ) {
             super.onCharacteristicWrite(gatt, characteristic, status)
             if (characteristic.uuid == BleConstants.MSG_CHAR_UUID) {
-                MeshLogger.d("BleGatt", "[TRANSPORT-A]   <- onCharacteristicWrite for ${gatt.device.address} status=$status")
+                MeshLogger.d("BleGatt") { "onCharacteristicWrite for ${gatt.device.address} status=$status" }
                 applicationScope.launch {
                     mutex.withLock {
                         val removed = writeQueue.removeActive(gatt.device.address)
                         if (removed != null) {
                             BufferPool.returnBuffer(removed.bytes)
                         } else {
-                            MeshLogger.e("BleGatt", "[TRANSPORT-A]   ✗ No active write found for ${gatt.device.address} on write callback!")
+                            MeshLogger.e("BleGatt", "No active write found for ${gatt.device.address} on write callback!")
                         }
                         
                         if (!writeQueue.hasPendingForDevice(gatt.device.address)) {

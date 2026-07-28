@@ -63,7 +63,27 @@ object MeshLogger {
 
     // Legacy wrappers for backward compatibility during the refactoring process
     fun d(tag: String, message: String) {
-        log(LogLevel.DEBUG, LogCategory.SYSTEM, "[$tag] $message")
+        if (com.meshlink.BuildConfig.DEBUG) {
+            log(LogLevel.DEBUG, LogCategory.SYSTEM, "[$tag] $message")
+        }
+    }
+
+    inline fun d(tag: String, lazyMessage: () -> String) {
+        if (com.meshlink.BuildConfig.DEBUG) {
+            log(LogLevel.DEBUG, LogCategory.SYSTEM, "[$tag] ${lazyMessage()}")
+        }
+    }
+
+    fun v(tag: String, message: String) {
+        if (com.meshlink.BuildConfig.DEBUG) {
+            log(LogLevel.VERBOSE, LogCategory.SYSTEM, "[$tag] $message")
+        }
+    }
+
+    inline fun v(tag: String, lazyMessage: () -> String) {
+        if (com.meshlink.BuildConfig.DEBUG) {
+            log(LogLevel.VERBOSE, LogCategory.SYSTEM, "[$tag] ${lazyMessage()}")
+        }
     }
 
     fun e(tag: String, message: String, throwable: Throwable? = null) {

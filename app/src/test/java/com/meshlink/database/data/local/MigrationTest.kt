@@ -1,6 +1,7 @@
 package com.meshlink.database.data.local
 
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,6 +14,7 @@ import org.junit.runner.RunWith
  * cover schema versions from 1 up to current version 11.
  */
 @RunWith(RobolectricTestRunner::class)
+@Config(manifest = Config.NONE)
 class MigrationTest {
 
     @Test

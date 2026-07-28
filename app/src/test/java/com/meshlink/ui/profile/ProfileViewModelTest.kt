@@ -11,22 +11,23 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 
+import com.meshlink.util.MainDispatcherRule
+import org.junit.Rule
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule(testDispatcher)
+
     private val userRepository = mockk<UserRepository>(relaxed = true)
 
     private lateinit var viewModel: ProfileViewModel
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-    }
-
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
         clearAllMocks()
     }
 

@@ -65,7 +65,7 @@ android {
             buildConfigField("Boolean", "LOGGING_ENABLED", "false")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "benchmark-rules.pro"
+                "proguard-rules.pro"
             )
         }
         getByName("release") {
@@ -101,6 +101,7 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.all { test ->
+            test.maxHeapSize = "2048m"
             test.testLogging {
                 showStandardStreams = true
             }
@@ -190,7 +191,6 @@ dependencies {
 
     // Security
     implementation(libs.androidx.security.crypto)
-    implementation("androidx.biometric:biometric:1.1.0")
 
     testImplementation(libs.junit)
     testImplementation(libs.json)
@@ -199,9 +199,6 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation("com.lemonappdev:konsist:0.15.1")
     testImplementation(kotlin("test"))
-    
-    // QR Code
-    implementation(libs.zxing.core)
     
     testImplementation(libs.robolectric)
     implementation(libs.kotlinx.coroutines.guava)

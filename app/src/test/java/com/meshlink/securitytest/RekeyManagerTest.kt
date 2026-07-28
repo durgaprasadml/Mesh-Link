@@ -223,10 +223,25 @@ class RekeyManagerTest {
 
     @Test
     fun `test strict encryption rejects unencrypted rekey packets via MeshRouter logic`() {
-        // In the full system, MeshRouter explicitly drops unencrypted SESSION_REKEY packets.
-        // We verify that the policy is set to REQUIRED so MeshMessagingManager will encrypt it.
+        // SESSION_REKEY is OPTIONAL in non-strict mode to permit key rollover bootstrapping,
+        // but strict mode explicitly rejects unencrypted SESSION_REKEY packets.
         val requirement = com.meshlink.security.policy.PacketEncryptionPolicy.getRequirement(PacketType.SESSION_REKEY)
-        assertEquals(com.meshlink.security.policy.EncryptionRequirement.REQUIRED, requirement)
+        assertEquals(com.meshlink.security.policy.EncryptionRequirement.OPTIONAL, requirement)
+
+        val unencryptedRekeyPacket = com.meshlink.domain.model.MeshPacket(
+            packetId = "rekey_1",
+            senderId = "peer",
+            targetId = "local",
+            payload = "rekey|s1|1|2|pub|ts|nonce|sig",
+            type = PacketType.SESSION_REKEY,
+            encrypted = false
+        )
+        val validInStrictMode = com.meshlink.security.policy.PacketEncryptionPolicy.validatePacketEncryption(
+            unencryptedRekeyPacket,
+            strictMode = true,
+            hasSecureSession = false
+        )
+        assertFalse(validInStrictMode)
     }
 
     private fun generateKeyPair(): KeyPair {

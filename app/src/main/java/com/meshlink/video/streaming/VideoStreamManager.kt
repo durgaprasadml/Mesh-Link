@@ -44,7 +44,7 @@ class VideoStreamManager @Inject constructor(
         }
 
         // Transport -> Decoder
-        transport.onIncomingFrame = { nalUnit, senderId, seqNum, ptsUs ->
+        transport.onIncomingFrame = { nalUnit, senderId, _, ptsUs ->
             if (isStreaming && senderId == currentTargetId) {
                 // Here we might need a JitterBuffer for video if frames get out of order, 
                 // but for now we pipe directly to decoder.

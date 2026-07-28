@@ -9,7 +9,7 @@ import com.meshlink.domain.model.User
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.util.MeshIdNormalizer
 import com.meshlink.messaging.data.DeliveryTracker
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 import io.mockk.mockk
@@ -41,7 +41,7 @@ class AckManagerTest {
     }
 
     @Test
-    fun `handleDeliveryAck updates delivery tracker`() = runBlocking {
+    fun `handleDeliveryAck updates delivery tracker`() = runTest {
         val packet = MeshPacket(
             packetId = "p1",
             senderId = "peer",
@@ -56,7 +56,7 @@ class AckManagerTest {
     }
 
     @Test
-    fun `handleReadReceipt updates delivery tracker for single message`() = runBlocking {
+    fun `handleReadReceipt updates delivery tracker for single message`() = runTest {
         val packet = MeshPacket(
             packetId = "p2",
             senderId = "peer",
@@ -71,7 +71,7 @@ class AckManagerTest {
     }
 
     @Test
-    fun `handleReadReceipt updates delivery tracker for batched messages`() = runBlocking {
+    fun `handleReadReceipt updates delivery tracker for batched messages`() = runTest {
         val packet = MeshPacket(
             packetId = "p2",
             senderId = "peer",
@@ -88,7 +88,7 @@ class AckManagerTest {
     }
 
     @Test
-    fun `sendReadReceipts batches unread messages into chunks`() = runBlocking {
+    fun `sendReadReceipts batches unread messages into chunks`() = runTest {
         val localUser = User(meshId = "local", name = "Test User")
         coEvery { userRepository.getLocalUser() } returns localUser
         

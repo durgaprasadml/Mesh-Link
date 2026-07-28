@@ -1,4 +1,5 @@
-com.meshlink.**
-androidx.compose.**
-kotlin.**
-kotlinx.coroutines.**
+Lcom/meshlink/**;
+Landroidx/compose/**;
+Lkotlin/**;
+Lkotlinx/coroutines/**;
+

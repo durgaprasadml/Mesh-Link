@@ -19,13 +19,14 @@ class StressScenarioRunner(
     fun run(): SimulationEnvironment {
         val clock = SimulatedClock()
         val recorder = NetworkRecorder()
+        val scheduler = com.meshlink.simulator.core.SimulationScheduler(clock)
         val nodes = (1..scenario.nodeCount).map { i ->
-            SimulatedNode("N$i", clock, recorder, SimulatedTransport("N$i", clock, com.meshlink.simulator.core.SimulationScheduler(clock), recorder, scenario.seed))
+            SimulatedNode("N$i", clock, recorder, SimulatedTransport("N$i", clock, scheduler, recorder, scenario.seed))
         }
 
         // We use a robust topology by default for stress
         val links = TopologyBuilder.randomMesh(nodes.map { it.meshId }, density = 0.4f, seed = scenario.seed)
-        val env = SimulationEnvironment.create(nodes, links, clock = clock, recorder = recorder)
+        val env = SimulationEnvironment.create(nodes, links, clock = clock, scheduler = scheduler, recorder = recorder)
         env.applyProfile(scenario.profile)
 
         val random = Random(scenario.seed)

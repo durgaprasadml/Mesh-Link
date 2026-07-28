@@ -21,8 +21,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
+import com.meshlink.util.MainDispatcherRule
+import org.junit.Rule
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class SosViewModelTest {
+
+    private val testDispatcher = StandardTestDispatcher()
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule(testDispatcher)
 
     private val meshRepository: MeshRepository = mockk(relaxed = true)
     private val locationProvider: LocationProvider = mockk(relaxed = true)
@@ -30,18 +38,11 @@ class SosViewModelTest {
     private val cameraManager: CameraManager = mockk(relaxed = true)
 
     private lateinit var classUnderTest: SosViewModel
-    private val testDispatcher = StandardTestDispatcher()
 
     @Before
     fun setup() {
-        Dispatchers.setMain(testDispatcher)
         every { context.getSystemService(Context.CAMERA_SERVICE) } returns cameraManager
         classUnderTest = SosViewModel(meshRepository, locationProvider, context)
-    }
-
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
     }
 
     @Test

@@ -36,8 +36,6 @@ class SoakTestEnvironment(
         val monitorIntervalMs = 60_000L // every virtual minute
         var nextMonitorMs = monitorIntervalMs
 
-        var totalActiveSessions = 0
-        var totalActiveCoroutines = 0
         var maxObservedQueueSize = 0
 
         val maxQueueSize = 1000

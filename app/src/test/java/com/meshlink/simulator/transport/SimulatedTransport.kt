@@ -108,7 +108,7 @@ class SimulatedTransport(
         val targets = if (includeAddress != null) {
             setOf(includeAddress)
         } else {
-            _connectedPeers.filter { it != excludeAddress }.toSet()
+            connectedPeers.filter { it != excludeAddress }.toSet()
         }
         targets.forEach { peerId -> dispatchToTarget(peerId, packet) }
         return MeshResult.Success(Unit)

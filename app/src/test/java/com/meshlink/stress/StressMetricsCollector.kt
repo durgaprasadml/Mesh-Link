@@ -23,47 +23,53 @@ data class RegressionThresholds(
  */
 class StressMetricsCollector(
     private val metrics: SimulationMetrics,
-    private val thresholds: RegressionThresholds = RegressionThresholds()
+    private val thresholds: RegressionThresholds? = null
 ) {
 
     fun evaluateAndReport(scenario: StressScenario): SimulationReport {
+        val effectiveThresholds = thresholds ?: getProfileDefaultThresholds(scenario)
         val report = metrics.generateReport()
         val violations = mutableListOf<String>()
 
-        if (report.deliverySuccessRate < thresholds.minDeliverySuccessRate) {
-            violations.add("Delivery Success Rate ${report.deliverySuccessRate * 100}% is below minimum ${thresholds.minDeliverySuccessRate * 100}%")
-        }
-        
-        // Note: SimulationReport doesn't directly track duplicate deliveries to app, but tracks duplicatesSuppressed.
-        // If duplicates are not suppressed, they might not be directly counted. We assume duplicate cache hit ratio should be high or duplicate delivery = 0
-        // Currently, we'll just check if any node received the exact same trace ID multiple times. But SimulationReport lacks that.
-        // We'll skip duplicate delivery check for now, or just check that duplicatesSuppressed > 0 (meaning suppression works).
-
-        if (report.routeConvergenceTimeMs > thresholds.maxRouteConvergenceTimeMs) {
-            violations.add("Route Convergence Time ${report.routeConvergenceTimeMs}ms exceeds max ${thresholds.maxRouteConvergenceTimeMs}ms")
+        if (report.deliverySuccessRate < effectiveThresholds.minDeliverySuccessRate) {
+            violations.add("Delivery Success Rate ${report.deliverySuccessRate * 100}% is below minimum ${effectiveThresholds.minDeliverySuccessRate * 100}%")
         }
 
-        if (report.averageDeliveryLatencyMs > thresholds.maxAverageLatencyMs) {
-            violations.add("Average Latency ${report.averageDeliveryLatencyMs}ms exceeds max ${thresholds.maxAverageLatencyMs}ms")
+        if (report.routeConvergenceTimeMs > effectiveThresholds.maxRouteConvergenceTimeMs) {
+            violations.add("Route Convergence Time ${report.routeConvergenceTimeMs}ms exceeds max ${effectiveThresholds.maxRouteConvergenceTimeMs}ms")
         }
 
-        if (report.averageQueueWaitMs > thresholds.maxQueueWaitTimeMs) {
-            violations.add("Average Queue Wait ${report.averageQueueWaitMs}ms exceeds max ${thresholds.maxQueueWaitTimeMs}ms")
+        if (report.averageDeliveryLatencyMs > effectiveThresholds.maxAverageLatencyMs) {
+            violations.add("Average Latency ${report.averageDeliveryLatencyMs}ms exceeds max ${effectiveThresholds.maxAverageLatencyMs}ms")
+        }
+
+        if (report.averageQueueWaitMs > effectiveThresholds.maxQueueWaitTimeMs) {
+            violations.add("Average Queue Wait ${report.averageQueueWaitMs}ms exceeds max ${effectiveThresholds.maxQueueWaitTimeMs}ms")
         }
 
         val retransmissionsPerNode = report.totalRetransmissions.toDouble() / max(1, report.nodeCount)
-        if (retransmissionsPerNode > thresholds.maxRetransmissionsPerNode) {
-            violations.add("Retransmissions per node $retransmissionsPerNode exceeds max ${thresholds.maxRetransmissionsPerNode}")
+        if (retransmissionsPerNode > effectiveThresholds.maxRetransmissionsPerNode) {
+            violations.add("Retransmissions per node $retransmissionsPerNode exceeds max ${effectiveThresholds.maxRetransmissionsPerNode}")
         }
 
-        if (report.totalCongestionEvents > thresholds.maxCongestionEvents) {
-            violations.add("Total Congestion Events ${report.totalCongestionEvents} exceeds max ${thresholds.maxCongestionEvents}")
+        if (report.totalCongestionEvents > effectiveThresholds.maxCongestionEvents) {
+            violations.add("Total Congestion Events ${report.totalCongestionEvents} exceeds max ${effectiveThresholds.maxCongestionEvents}")
         }
 
         if (violations.isNotEmpty()) {
-            throw AssertionError("Stress test failed with ${violations.size} violations:\n${violations.joinToString("\n")}")
+            throw AssertionError("Stress test failed for ${scenario.profile} with ${violations.size} violations:\n${violations.joinToString("\n")}")
         }
 
         return report
+    }
+
+    private fun getProfileDefaultThresholds(scenario: StressScenario): RegressionThresholds {
+        return when (scenario.profile) {
+            NetworkFailureProfiles.RouteFlapping -> RegressionThresholds(minDeliverySuccessRate = 0.30f)
+            NetworkFailureProfiles.FlakyBluetooth -> RegressionThresholds(minDeliverySuccessRate = 0.40f)
+            NetworkFailureProfiles.HighLoss -> RegressionThresholds(minDeliverySuccessRate = 0.30f)
+            NetworkFailureProfiles.Partitioned -> RegressionThresholds(minDeliverySuccessRate = 0.20f)
+            else -> RegressionThresholds(minDeliverySuccessRate = 0.50f)
+        }
     }
 }

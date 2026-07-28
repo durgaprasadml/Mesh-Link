@@ -13,10 +13,16 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 
+import com.meshlink.util.MainDispatcherRule
+import org.junit.Rule
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule(testDispatcher)
 
     private val userRepository = mockk<UserRepository>(relaxed = true)
     private val settingsRepository = mockk<SettingsRepository>(relaxed = true)
@@ -25,8 +31,6 @@ class SettingsViewModelTest {
 
     @Before
     fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-
         every { userRepository.isEncryptionEnabled } returns flowOf(true)
         every { userRepository.isOnlineVisible } returns flowOf(true)
         every { userRepository.meshMode } returns flowOf("Auto")
@@ -60,7 +64,6 @@ class SettingsViewModelTest {
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
         clearAllMocks()
     }
 

@@ -5,6 +5,7 @@ import com.meshlink.domain.model.PacketType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,6 +31,14 @@ class WifiSocketTransportTest {
         transport.disconnect()
     }
 
+    private suspend fun eventually(timeoutMs: Long = 5000L, pollMs: Long = 50L, condition: () -> Boolean) {
+        withTimeout(timeoutMs) {
+            while (!condition()) {
+                delay(pollMs)
+            }
+        }
+    }
+
     @Test
     fun `startServer and connectAsClient establishes successful socket connection`() = runBlocking {
         val serverTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
@@ -43,20 +52,18 @@ class WifiSocketTransportTest {
 
         // Start Server on 127.0.0.1 (Loopback)
         serverTransport.startServer()
-        delay(500) // Give server time to bind
 
         // Client connects
         clientTransport.connectAsClient("127.0.0.1")
-        delay(500) // Give sockets time to establish streams
+        eventually { clientTransport.isConnected() && serverTransport.isConnected() }
 
         assertTrue(clientTransport.isConnected())
-        // serverTransport.isConnected() reflects the activeSocket on the server side which is set when client connects
         assertTrue(serverTransport.isConnected())
 
         // Client sends packet to server
         val packetFromClient = MeshPacket("client_to_server", "client", "server", "hello from client", PacketType.TEXT, encrypted = false)
         clientTransport.sendPacket(packetFromClient)
-        delay(200)
+        eventually { receivedPacketByServer != null }
 
         assertEquals("hello from client", receivedPacketByServer?.payload)
         assertEquals("client_to_server", receivedPacketByServer?.packetId)
@@ -64,7 +71,7 @@ class WifiSocketTransportTest {
         // Server sends packet to client
         val packetFromServer = MeshPacket("server_to_client", "server", "client", "hello from server", PacketType.TEXT, encrypted = false)
         serverTransport.sendPacket(packetFromServer)
-        delay(200)
+        eventually { receivedPacketByClient != null }
 
         assertEquals("hello from server", receivedPacketByClient?.payload)
         assertEquals("server_to_client", receivedPacketByClient?.packetId)
@@ -76,14 +83,14 @@ class WifiSocketTransportTest {
     @Test
     fun `disconnect cleans up streams and socket state`() = runBlocking {
         transport.startServer()
-        delay(200)
         
         val client = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
         client.connectAsClient("127.0.0.1")
-        delay(200)
+        eventually { client.isConnected() }
         
         assertTrue(client.isConnected())
         client.disconnect()
+        eventually { !client.isConnected() }
         
         assertFalse(client.isConnected())
         
@@ -99,18 +106,15 @@ class WifiSocketTransportTest {
         serverTransport.onPacketReceived = { receivedPacket = it }
 
         serverTransport.startServer()
-        delay(500)
         clientTransport.connectAsClient("127.0.0.1")
-        delay(500)
+        eventually { clientTransport.isConnected() && serverTransport.isConnected() }
 
         // Create a 1MB String payload
         val massivePayload = "A".repeat(1024 * 1024)
         val packet = MeshPacket("massive", "client", "server", massivePayload, PacketType.MEDIA_CHUNK, encrypted = false)
         
         clientTransport.sendPacket(packet)
-        
-        // Wait longer for large payload to transit and parse
-        delay(1000)
+        eventually(timeoutMs = 5000L) { receivedPacket != null }
         
         assertNotNull(receivedPacket)
         assertEquals(massivePayload.length, receivedPacket?.payload?.length)

@@ -1,72 +1,81 @@
 package com.meshlink.ble.data
-import com.meshlink.domain.model.PeerConnectionState
 
-import dagger.hilt.android.qualifiers.ApplicationContext
-import android.content.Context
 import android.net.Uri
-import androidx.annotation.VisibleForTesting
+import com.meshlink.ble.api.PacketDispatcher
+import com.meshlink.ble.data.handlers.AckManager
+import com.meshlink.ble.data.handlers.BroadcastHandler
+import com.meshlink.ble.data.handlers.KeyExchangeHandler
+import com.meshlink.ble.data.handlers.LocationMessageHandler
+import com.meshlink.ble.data.handlers.MediaMessageHandler
+import com.meshlink.ble.data.handlers.TextMessageHandler
+import com.meshlink.ble.data.handlers.VoiceMessageHandler
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.data.location.LocationProvider
 import com.meshlink.database.data.local.ChatDao
 import com.meshlink.database.data.local.DeliveryStatus
-import com.meshlink.database.data.local.MessageEntity
 import com.meshlink.database.data.local.MessageType
-import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.PacketType
+import com.meshlink.domain.model.PeerConnectionState
 import com.meshlink.domain.repository.UserRepository
-import com.meshlink.media.data.ImageCompressor
-import com.meshlink.media.data.MediaTransferManager
+import com.meshlink.messaging.api.MessageProcessor
 import com.meshlink.routing.api.Router
 import com.meshlink.security.data.MeshCryptoManager
-import com.meshlink.util.NotificationHelper
-import com.meshlink.di.ApplicationScope
-import java.io.File
-import java.util.UUID
-import javax.inject.Inject
-import javax.inject.Singleton
+import com.meshlink.transfer.TransferManager
+import com.meshlink.util.MeshIdNormalizer
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
-
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
+import javax.inject.Inject
+import javax.inject.Singleton
 
 @Singleton
 class MeshMessagingManager @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val userRepository: UserRepository,
     private val chatDao: ChatDao,
-    private val cryptoManager: MeshCryptoManager,
     private val meshRouter: Router,
-    private val transferManager: com.meshlink.transfer.TransferManager,
-    private val mediaTransferManager: com.meshlink.media.data.MediaTransferManager,
-    private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
-    private val locationProvider: LocationProvider,
-    private val routingCoordinator: RoutingCoordinator,
-    private val sessionManager: com.meshlink.security.data.SessionManager,
-    private val trustManager: com.meshlink.security.data.TrustManager,
-    private val rekeyManager: com.meshlink.security.data.RekeyManager,
-    private val voiceTransport: com.meshlink.voice.transport.VoiceTransport,
+    private val cryptoManager: MeshCryptoManager,
+    private val transferManager: TransferManager,
     private val connectionManager: BleConnectionManager,
     private val discoveryManager: DiscoveryManager,
-    private val keyExchangeReplayCache: com.meshlink.security.data.KeyExchangeReplayCache,
+    private val routingCoordinator: RoutingCoordinator,
     @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope,
-    private val meshConfig: com.meshlink.config.MeshConfig
-) : com.meshlink.messaging.api.MessageProcessor {
+    
+    // Core Dispatchers
+    private val corePacketDispatcher: CorePacketDispatcher,
+    private val incomingPacketDispatcher: IncomingPacketDispatcher,
+    
+    // Extracted Handlers
+    private val keyExchangeHandler: KeyExchangeHandler,
+    private val textMessageHandler: TextMessageHandler,
+    private val mediaMessageHandler: MediaMessageHandler,
+    private val voiceMessageHandler: VoiceMessageHandler,
+    private val locationMessageHandler: LocationMessageHandler,
+    private val broadcastHandler: BroadcastHandler,
+    private val ackManager: AckManager
+) : MessageProcessor, PacketDispatcher by corePacketDispatcher {
+
     enum class MeshStartupState { STOPPED, STARTING, RUNNING }
     private val startupState = AtomicReference(MeshStartupState.STOPPED)
 
     private val TAG = "MeshMessagingManager"
+
+    private val retryMutex = Mutex()
+    private val lastKeyExchangeRequest = ConcurrentHashMap<String, Long>()
+
     init {
         setupTransferManager()
+        
+        keyExchangeHandler.onKeyExchangeComplete = {
+            retryPendingMessages()
+        }
     }
 
     private fun setupTransferManager() {
@@ -75,7 +84,7 @@ class MeshMessagingManager @Inject constructor(
             val isDirect = routingCoordinator.isDirectlyConnected(packet.targetId)
             
             if (reqEnc && !isDirect) {
-                val result = encryptAndWrapPayload(packet.payload, packet.targetId, true, packet.packetId)
+                val result = corePacketDispatcher.encryptAndWrapPayload(packet.payload, packet.targetId, true, packet.packetId)
                 if (result != null) {
                     val (encryptedPayload, isEncrypted) = result
                     val securePacket = packet.copy(
@@ -93,7 +102,7 @@ class MeshMessagingManager @Inject constructor(
 
         transferManager.onTransferCompleted = { session ->
             applicationScope.launch {
-                receiveMediaMessage(
+                mediaMessageHandler.receiveMediaMessage(
                     session.transferId,
                     session.filePath ?: "",
                     session.mimeType ?: "",
@@ -104,215 +113,103 @@ class MeshMessagingManager @Inject constructor(
     }
 
     suspend fun handleIncomingPacket(packet: MeshPacket) {
-        if (packet.targetId == "BROADCAST") {
-            // Broadcasts are not encrypted
-        } else {
-            val myMeshId = userRepository.getLocalUser()?.meshId
-            val myNetworkId = if (myMeshId != null) com.meshlink.util.MeshIdNormalizer.canonicalize(myMeshId) else null
-            val targetsMe = myNetworkId != null && packet.targetId == myNetworkId
-
-            // ── DIAGNOSTIC Stage 8 ───────────────────────────────────────────────
-            if (!targetsMe) {
-            } else {
-            }
-            // ─────────────────────────────────────────────────────────────────────
-
-            if (myMeshId != null && packet.targetId != com.meshlink.util.MeshIdNormalizer.canonicalize(myMeshId)) {
-                // Not for me, just route it without decrypting
-                MeshLogger.d(TAG, "Routing packet to ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)}")
-                return
-            }
-        }
-
-        var processedPacket = packet
-
-        if (packet.encrypted && packet.type != PacketType.KEY_EXCHANGE) {
-            var finalPayload = packet.payload
-            var validAad: ByteArray? = null
-
-            var usePreviousKey = false
-
-            if (finalPayload.startsWith("v2|")) {
-                val unwrapped = sessionManager.validateAndUnwrap(packet.senderId, finalPayload)
-                if (unwrapped == null) {
-                    MeshLogger.w(TAG, "Dropping packet: session validation failed")
-                    return
-                }
-                validAad = unwrapped.first
-                finalPayload = unwrapped.second
-                val packetKv = unwrapped.third
-                val session = sessionManager.getSession(packet.senderId)
-                if (session != null && packetKv == session.previousKeyVersion) {
-                    usePreviousKey = true
-                }
-            }
-
-            val decrypted = cryptoManager.decryptOrPassthrough(finalPayload, packet.senderId, validAad, usePreviousKey)
-            if (decrypted == finalPayload && !finalPayload.startsWith("{")) {
-                MeshLogger.w(TAG, "Dropping packet: Failed to decrypt payload.")
-                return
-            }
-            trustManager.increaseTrustScore(packet.senderId, 1)
-            processedPacket = packet.copy(payload = decrypted)
-        }
-
-        try {
-            when (processedPacket.type) {
-                PacketType.KEY_EXCHANGE -> {
-                    handleKeyExchange(processedPacket)
-                }
-                PacketType.TEXT -> {
-                    if (processedPacket.targetId == "BROADCAST") {
-                        receiveBroadcastTextMessage(processedPacket)
-                    } else {
-                        receiveMessage(processedPacket)
-                    }
-                }
-                PacketType.MEDIA_META,
-                PacketType.MEDIA_CHUNK,
-                PacketType.MEDIA_ACK,
-                PacketType.MEDIA_NACK -> {
-                    if (processedPacket.type == PacketType.MEDIA_META && processedPacket.transferId != null) {
-                        insertPlaceholderIncomingMedia(processedPacket)
-                    }
-                    transferManager.handleIncomingPacket(processedPacket)
-                }
-                PacketType.LOCATION -> {
-                    receiveLocationMessage(processedPacket)
-                }
-                PacketType.SOS -> {
-                    receiveSosMessage(processedPacket)
-                }
-                PacketType.DELIVERY_ACK -> {
-                    chatDao.updateMessageStatus(processedPacket.payload, DeliveryStatus.DELIVERED)
-                }
-                PacketType.READ_RECEIPT -> {
-                    chatDao.updateMessageStatus(processedPacket.payload, DeliveryStatus.SEEN)
-                }
-                PacketType.WIFI_NEGOTIATION -> {
-                    handleWifiNegotiation(processedPacket)
-                }
-                PacketType.SESSION_REKEY -> {
-                    rekeyManager.handleRekeyPacket(processedPacket.senderId, processedPacket.payload, cryptoManager.getPeerPublicKey(processedPacket.senderId))
-                }
-                PacketType.VOICE_SIGNAL,
-                PacketType.VOICE_FRAME -> {
-                    voiceTransport.handleIncomingPacket(processedPacket)
-                }
-                PacketType.VIDEO_SIGNAL,
-                PacketType.VIDEO_FRAME -> {
-                    // Handled elsewhere or not needed right now
-                }
-                PacketType.BEACON,
-                PacketType.INCIDENT_REPORT,
-                PacketType.CHECK_IN,
-                PacketType.FORM_SYNC,
-                PacketType.RESOURCE_SYNC,
-                PacketType.MAP_SYNC -> {
-                    // Handled elsewhere or not needed right now
-                }
-            }
-        } catch (e: Exception) {
-            MeshLogger.e(TAG, "Error handling packet: ${e.message}")
-        }
+        incomingPacketDispatcher.dispatch(packet)
     }
-
-    private val retryMutex = kotlinx.coroutines.sync.Mutex()
-    private val lastKeyExchangeRequest = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     suspend fun retryPendingMessages() {
         retryMutex.withLock {
             val pending = chatDao.getMessagesByStatus(DeliveryStatus.PENDING)
             if (pending.isEmpty()) return
 
-        // FIX ISSUE 2: Auto-connect to all scanned devices before retrying
-        connectToAllScannedDevices()
-        if (!isAnyPeerConnected()) return
+            connectToAllScannedDevices()
+            if (!isAnyPeerConnected()) return
 
-        MeshLogger.d(TAG, "Retrying ${pending.size} pending messages...")
-        pending.forEach { msg ->
-            if (!hasDeliveryPath(msg.chatId)) {
-                return@forEach
-            }
-            val reqEncCheck = userRepository.isEncryptionEnabled.first()
-            if (reqEncCheck && !cryptoManager.hasPeerKey(msg.chatId)) {
-                val now = System.currentTimeMillis()
-                val lastReq = lastKeyExchangeRequest[msg.chatId] ?: 0L
-                if (now - lastReq > 10_000L) {
-                    MeshLogger.w(TAG, "Missing key for ${msg.chatId}, requesting key exchange and postponing retry")
-                    val localUser = userRepository.getLocalUser()
-                    if (localUser != null) {
-                        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(localUser.meshId)
-                        val packetBase = generateSignedKeyExchange(localPeerId, isResponse = false)
-                        val packet = packetBase.copy(targetId = msg.chatId)
-                        dispatchSinglePacket(msg.chatId, packet)
-                        lastKeyExchangeRequest[msg.chatId] = now
-                    }
-                } else {
-                    MeshLogger.d(TAG, "Missing key for ${msg.chatId}, but key exchange recently requested. Waiting...")
+            MeshLogger.d(TAG, "Retrying ${pending.size} pending messages...")
+            pending.forEach { msg ->
+                if (!routingCoordinator.hasDeliveryPath(msg.chatId)) {
+                    return@forEach
                 }
-                return@forEach
-            }
-            when (msg.messageType) {
-                MessageType.TEXT -> {
-                    val user = userRepository.getLocalUser() ?: return@forEach
-                    val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-                    val wrappedPayload = JSONObject().apply {
-                        put("text", msg.text)
-                        put("senderName", user.name)
-                    }.toString()
-                    
-                    val packet = MeshPacket(
-                        packetId = msg.messageId,
-                        senderId = localPeerId,
-                        targetId = msg.chatId,
-                        payload = wrappedPayload,
-                        type = PacketType.TEXT,
-                        encrypted = false
-                    )
-                    
-                    if (dispatchSinglePacket(msg.chatId, packet)) {
-                        chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
+                
+                val reqEncCheck = userRepository.isEncryptionEnabled.first()
+                if (reqEncCheck && !cryptoManager.hasPeerKey(msg.chatId)) {
+                    val now = System.currentTimeMillis()
+                    val lastReq = lastKeyExchangeRequest[msg.chatId] ?: 0L
+                    if (now - lastReq > 10_000L) {
+                        MeshLogger.w(TAG, "Missing key for ${msg.chatId}, requesting key exchange and postponing retry")
+                        val localUser = userRepository.getLocalUser()
+                        if (localUser != null) {
+                            val localPeerId = MeshIdNormalizer.canonicalize(localUser.meshId)
+                            val packetBase = keyExchangeHandler.generateSignedKeyExchange(localPeerId, isResponse = false)
+                            val packet = packetBase.copy(targetId = msg.chatId)
+                            dispatchSinglePacket(msg.chatId, packet)
+                            lastKeyExchangeRequest[msg.chatId] = now
+                        }
+                    } else {
+                        MeshLogger.d(TAG, "Missing key for ${msg.chatId}, but key exchange recently requested. Waiting...")
                     }
+                    return@forEach
                 }
-                MessageType.IMAGE, MessageType.VOICE -> {
-                    val file = msg.mediaPath?.let { File(it) }
-                    if (file != null && file.exists()) {
-                        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(msg.chatId)
-                        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId)
-                        val priority = if (msg.messageType == MessageType.VOICE) com.meshlink.transfer.TransferPriority.HIGH else com.meshlink.transfer.TransferPriority.MEDIUM
-                        transferManager.sendFile(
-                            file = file,
+                
+                when (msg.messageType) {
+                    MessageType.TEXT -> {
+                        val user = userRepository.getLocalUser() ?: return@forEach
+                        val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
+                        val wrappedPayload = JSONObject().apply {
+                            put("text", msg.text)
+                            put("senderName", user.name)
+                        }.toString()
+                        
+                        val packet = MeshPacket(
+                            packetId = msg.messageId,
                             senderId = localPeerId,
-                            targetId = targetPeerId,
-                            priority = priority,
-                            transferId = msg.messageId
+                            targetId = msg.chatId,
+                            payload = wrappedPayload,
+                            type = PacketType.TEXT,
+                            encrypted = false
                         )
+                        
+                        if (dispatchSinglePacket(msg.chatId, packet)) {
+                            chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
+                        }
                     }
-                }
-                MessageType.LOCATION -> {
-                    val payloadJson = JSONObject().apply {
-                        put("lat", msg.latitude)
-                        put("lng", msg.longitude)
-                        put("battery", msg.batteryPercent)
-                        put("timestamp", msg.timestamp)
-                        put("senderName", "Me")
-                    }.toString()
-                    val packet = MeshPacket(
-                        packetId = msg.messageId, // Use original messageId
-                        senderId = com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId),
-                        targetId = msg.chatId,
-                        payload = payloadJson,
-                        type = PacketType.LOCATION,
-                        encrypted = false
-                    )
-                    if (dispatchSinglePacket(msg.chatId, packet)) {
-                        chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
+                    MessageType.IMAGE, MessageType.VOICE -> {
+                        val file = msg.mediaPath?.let { File(it) }
+                        if (file != null && file.exists()) {
+                            val targetPeerId = MeshIdNormalizer.canonicalize(msg.chatId)
+                            val localPeerId = MeshIdNormalizer.canonicalize(msg.senderId)
+                            val priority = if (msg.messageType == MessageType.VOICE) com.meshlink.transfer.TransferPriority.HIGH else com.meshlink.transfer.TransferPriority.MEDIUM
+                            transferManager.sendFile(
+                                file = file,
+                                senderId = localPeerId,
+                                targetId = targetPeerId,
+                                priority = priority,
+                                transferId = msg.messageId
+                            )
+                        }
                     }
+                    MessageType.LOCATION -> {
+                        val payloadJson = JSONObject().apply {
+                            put("lat", msg.latitude)
+                            put("lng", msg.longitude)
+                            put("battery", msg.batteryPercent)
+                            put("timestamp", msg.timestamp)
+                            put("senderName", "Me")
+                        }.toString()
+                        val packet = MeshPacket(
+                            packetId = msg.messageId,
+                            senderId = MeshIdNormalizer.canonicalize(msg.senderId),
+                            targetId = msg.chatId,
+                            payload = payloadJson,
+                            type = PacketType.LOCATION,
+                            encrypted = false
+                        )
+                        if (dispatchSinglePacket(msg.chatId, packet)) {
+                            chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
+                        }
+                    }
+                    else -> {}
                 }
-                else -> {}
             }
-        }
         }
     }
 
@@ -320,13 +217,15 @@ class MeshMessagingManager @Inject constructor(
         return connectionManager.connectedServers.isNotEmpty() || connectionManager.activeClients.isNotEmpty()
     }
 
-    /**
-     * FIX ISSUE 2: Connect to ALL scanned devices to establish GATT links.
-     * This ensures mesh relay works — e.g. if A sees B but not C,
-     * A must have a GATT connection to B so packets relay through B to C.
-     */
+    fun generateSignedKeyExchange(localPeerId: String, isResponse: Boolean = false): MeshPacket {
+        return keyExchangeHandler.generateSignedKeyExchange(localPeerId, isResponse)
+    }
+
+    suspend fun receiveMediaMessage(completedTransferId: String, completedFilePath: String, completedMimeType: String, completedSenderId: String) {
+        mediaMessageHandler.receiveMediaMessage(completedTransferId, completedFilePath, completedMimeType, completedSenderId)
+    }
+
     fun connectToAllScannedDevices() {
-        // Battery Optimization: Exit early if mesh is practically disabled (not scanning or advertising)
         if (!discoveryManager.isScanning() && !discoveryManager.isAdvertising()) {
             return
         }
@@ -336,16 +235,12 @@ class MeshMessagingManager @Inject constructor(
 
         devices.forEach { device ->
             try {
-                // BleConnectionManager now internally checks SmartConnectionPolicy
-                // and PeerConnectionState before attempting a connection.
                 connectionManager.connectToDevice(device.address, isManual = false)
             } catch (e: Exception) {
                 MeshLogger.w(TAG, "Auto-connect request failed for ${device.name}: ${e.message}")
             }
         }
     }
-
-    private fun hasDeliveryPath(targetPeerIdOrAddress: String): Boolean = routingCoordinator.hasDeliveryPath(targetPeerIdOrAddress)
 
     fun dispatchMediaPackets(targetPeerId: String, packets: List<MeshPacket>): Boolean {
         connectToPeer(targetPeerId)
@@ -356,342 +251,8 @@ class MeshMessagingManager @Inject constructor(
         return true
     }
 
-    suspend fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): Boolean {
-        connectToPeer(targetPeerId)
-        connectToAllScannedDevices()
-        
-        var packetToSend = packet
-        if (!packetToSend.encrypted && targetPeerId != "BROADCAST") {
-            val requirement = com.meshlink.security.policy.PacketEncryptionPolicy.getRequirement(packetToSend.type)
-            val shouldEncrypt = when (requirement) {
-                com.meshlink.security.policy.EncryptionRequirement.REQUIRED -> true
-                com.meshlink.security.policy.EncryptionRequirement.OPTIONAL -> userRepository.isEncryptionEnabled.first()
-                com.meshlink.security.policy.EncryptionRequirement.NONE -> false
-            }
-
-            if (shouldEncrypt) {
-                val result = encryptAndWrapPayload(packetToSend.payload, targetPeerId, true, packetToSend.packetId)
-                if (result != null) {
-                    val (encPayload, isEnc) = result
-                    packetToSend = packetToSend.copy(payload = encPayload, encrypted = isEnc)
-                } else {
-                    MeshLogger.e(TAG, "Centralized encryption failed for packet type: ${packetToSend.type}")
-                    return false
-                }
-            }
-        }
-
-        meshRouter.routeMediaPacket(packetToSend)
-        return true
-    }
-
-    // ────────── Crypto Helpers ──────────
-
-    private fun encryptAndWrapPayload(
-        plaintext: String,
-        targetPeerId: String,
-        requireEncryption: Boolean,
-        messageId: String
-    ): Pair<String, Boolean>? {
-        var finalPlaintext = plaintext
-        var aadBytes: ByteArray? = null
-        var aadPrefix = ""
-
-        if (requireEncryption) {
-            val aadResult = sessionManager.generateAad(targetPeerId)
-            if (aadResult != null) {
-                aadBytes = aadResult.first
-                aadPrefix = aadResult.second
-            }
-        }
-
-        val result = cryptoManager.encryptOrPassthrough(finalPlaintext, targetPeerId, requireEncryption, messageId, 0, aadBytes)
-            ?: return null
-
-        val (ciphertext, isEncrypted) = result
-        if (isEncrypted && aadPrefix.isNotEmpty()) {
-            return Pair("$aadPrefix$ciphertext", true)
-        }
-        return result
-    }
-
-    /**
-     * Handle incoming KEY_EXCHANGE: store the peer's ECDH public key.
-     */
-    private suspend fun handleKeyExchange(packet: MeshPacket) {
-        try {
-            val parts = packet.payload.split("|")
-            val isV3 = parts.isNotEmpty() && parts[0] == "v3"
-            val isV2 = parts.size >= 5 && parts[0] == "v2"
-
-            if (isV3) {
-                // v3 format: v3|minProto|maxProto|cryptoVers|features|ecdhPub|timestamp|nonce|signatureBase64|signingPub[|resp]
-                if (parts.size < 10) {
-                    MeshLogger.e(TAG, "Invalid v3 KEY_EXCHANGE format")
-                    return
-                }
-                
-                val peerMinProtocol = parts[1].toIntOrNull() ?: 2
-                val peerMaxProtocol = parts[2].toIntOrNull() ?: 2
-                val peerCryptoVersion = parts[3].toIntOrNull() ?: 1
-                val peerFeatures = parts[4]
-                val ecdhPublicKey = parts[5]
-                val timestamp = parts[6].toLongOrNull() ?: 0L
-                val nonce = parts[7]
-                val signatureBase64 = parts[8]
-                val signingPublicKey = parts[9]
-
-                // 2. Timestamp Validation
-                val now = System.currentTimeMillis()
-                val diff = now - timestamp
-                if (Math.abs(diff) > com.meshlink.security.data.SecurityConstants.KEY_EXCHANGE_WINDOW_MS) {
-                    MeshLogger.e(TAG, "KEY_EXCHANGE timestamp expired or invalid (diff = $diff ms)")
-                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.ReplayAttackDetected("Expired timestamp v3"))
-                    return
-                }
-
-                // 3. Replay cache lookup (Nonce Validation)
-                if (keyExchangeReplayCache.isReplay(packet.senderId, nonce)) {
-                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.ReplayAttackDetected("Duplicate nonce v3"))
-                    return
-                }
-
-                // 4. Rate-Limiting & Session Check (Before Signature to save CPU)
-                val existingSession = sessionManager.getSession(packet.senderId)
-                var isKeyRotation = false
-                if (existingSession != null) {
-                    // Check if it's a key rotation
-                    val currentSigningKey = cryptoManager.getPeerSigningKey(packet.senderId)
-                    if (currentSigningKey != null && currentSigningKey != signingPublicKey) {
-                        isKeyRotation = true
-                        keyExchangeReplayCache.resetRateLimit(packet.senderId) // Bypass rate limit for rotation
-                    } else if (!keyExchangeReplayCache.canProcessHandshake(packet.senderId)) {
-                        MeshLogger.w(TAG, "Ignoring redundant handshake from ${packet.senderId} (Rate Limited)")
-                        return
-                    }
-                }
-
-                if (peerMaxProtocol < 2) {
-                    MeshLogger.e(TAG, "Rejecting KEY_EXCHANGE: peer max protocol too low")
-                    return
-                }
-
-                // 5. Signature Verification
-                val dataToVerify = "${packet.packetId}|$peerMinProtocol|$peerMaxProtocol|$peerCryptoVersion|$peerFeatures|$ecdhPublicKey|$timestamp|$nonce".toByteArray(Charsets.UTF_8)
-                val sigBytes = android.util.Base64.decode(signatureBase64, android.util.Base64.NO_WRAP)
-                if (!cryptoManager.verifySignature(signingPublicKey, dataToVerify, sigBytes)) {
-                    MeshLogger.e(TAG, "KEY_EXCHANGE signature verification failed")
-                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.InvalidSignature("KEY_EXCHANGE_V3"))
-                    return
-                }
-
-                val fingerprint = cryptoManager.getDeviceFingerprint(signingPublicKey)
-                trustManager.updatePeerIdentity(packet.senderId, fingerprint, null)
-                val trustLevel = trustManager.getTrustLevel(packet.senderId)
-                if (trustLevel == com.meshlink.security.data.TrustLevel.BLOCKED || trustLevel == com.meshlink.security.data.TrustLevel.REVOKED) {
-                    MeshLogger.w(TAG, "Rejecting KEY_EXCHANGE from rogue node ${packet.senderId}")
-                    val address = routingCoordinator.resolvePeerAddress(packet.senderId)
-                    if (address != null) disconnectDevice(address)
-                    return
-                }
-
-                val negotiatedProtocol = Math.max(2, Math.min(3, peerMaxProtocol))
-                trustManager.updateHighestProtocol(packet.senderId, negotiatedProtocol)
-
-                cryptoManager.storePeerPublicKey(packet.senderId, ecdhPublicKey)
-                cryptoManager.storePeerSigningKey(packet.senderId, signingPublicKey)
-                
-                sessionManager.createSession(
-                    peerId = packet.senderId,
-                    fingerprint = fingerprint,
-                    sessionVersion = negotiatedProtocol,
-                    cryptoVersion = peerCryptoVersion,
-                    verified = true
-                )
-
-                // 7. Store replay entry & update rate limit
-                keyExchangeReplayCache.recordNonce(packet.senderId, nonce)
-                keyExchangeReplayCache.recordHandshake(packet.senderId)
-
-                MeshLogger.d(TAG, "🔐 SECURE (v3) Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)} [Proto: $negotiatedProtocol]")
-
-                val address = routingCoordinator.resolvePeerAddress(packet.senderId)
-                if (address != null) {
-                    connectionManager.updatePeerState(address, PeerConnectionState.SESSION_ESTABLISHED)
-                    applicationScope.launch { retryPendingMessages() }
-                }
-
-                var isResponse = false
-                if (parts.size >= 11 && parts[10] == "resp") {
-                    isResponse = true
-                }
-
-                if (!isResponse) {
-                    applicationScope.launch {
-                        userRepository.getLocalUser()?.let { user ->
-                            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-                            if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
-                                val responseKeyEx = generateSignedKeyExchange(localPeerId, isResponse = true).copy(targetId = packet.senderId)
-                                dispatchSinglePacket(packet.senderId, responseKeyEx)
-                            }
-                        }
-                    }
-                }
-            } else if (isV2) {
-                // v2 format: v2|ecdhPub|timestamp|nonce|version|signatureBase64|signingPub[|resp]
-                val highestProtocol = trustManager.getHighestProtocol(packet.senderId)
-                if (highestProtocol > 2) {
-                    MeshLogger.e(TAG, "Rejecting v2 KEY_EXCHANGE from ${packet.senderId}: Downgrade attack detected (Expected v$highestProtocol)")
-                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.DowngradeAttackDetected("Expected v$highestProtocol, got v2"))
-                    trustManager.decreaseTrustScore(packet.senderId, 50, "Protocol downgrade attempt")
-                    val address = routingCoordinator.resolvePeerAddress(packet.senderId)
-                    if (address != null) disconnectDevice(address)
-                    return
-                }
-
-                val ecdhPublicKey = parts[1]
-                val timestamp = parts[2].toLong()
-                val nonce = parts[3]
-                val version = parts[4].toInt()
-                val signatureBase64 = parts[5]
-                val signingPublicKey = parts[6]
-
-                // 2. Timestamp Validation
-                val now = System.currentTimeMillis()
-                val diff = now - timestamp
-                if (Math.abs(diff) > com.meshlink.security.data.SecurityConstants.KEY_EXCHANGE_WINDOW_MS) {
-                    MeshLogger.e(TAG, "KEY_EXCHANGE timestamp expired or invalid (diff = $diff ms)")
-                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.ReplayAttackDetected("Expired timestamp v2"))
-                    return
-                }
-
-                // 3. Replay cache lookup (Nonce Validation)
-                if (keyExchangeReplayCache.isReplay(packet.senderId, nonce)) {
-                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.ReplayAttackDetected("Duplicate nonce v2"))
-                    return
-                }
-
-                // 4. Rate-Limiting & Session Check (Before Signature)
-                val existingSession = sessionManager.getSession(packet.senderId)
-                if (existingSession != null) {
-                    val currentSigningKey = cryptoManager.getPeerSigningKey(packet.senderId)
-                    if (currentSigningKey != null && currentSigningKey != signingPublicKey) {
-                        keyExchangeReplayCache.resetRateLimit(packet.senderId) // Bypass rate limit for rotation
-                    } else if (!keyExchangeReplayCache.canProcessHandshake(packet.senderId)) {
-                        MeshLogger.w(TAG, "Ignoring redundant handshake from ${packet.senderId} (Rate Limited)")
-                        return
-                    }
-                }
-
-                // 5. Signature Verification
-                val dataToVerify = "${packet.packetId}|$ecdhPublicKey|$timestamp|$nonce|$version".toByteArray(Charsets.UTF_8)
-                val sigBytes = android.util.Base64.decode(signatureBase64, android.util.Base64.NO_WRAP)
-                if (!cryptoManager.verifySignature(signingPublicKey, dataToVerify, sigBytes)) {
-                    MeshLogger.e(TAG, "KEY_EXCHANGE signature verification failed")
-                    securityMonitor.reportEvent(packet.senderId, com.meshlink.security.data.SecurityEvent.InvalidSignature("KEY_EXCHANGE"))
-                    return
-                }
-
-                val fingerprint = cryptoManager.getDeviceFingerprint(signingPublicKey)
-                trustManager.updatePeerIdentity(packet.senderId, fingerprint, null)
-                val trustLevel = trustManager.getTrustLevel(packet.senderId)
-                if (trustLevel == com.meshlink.security.data.TrustLevel.BLOCKED || trustLevel == com.meshlink.security.data.TrustLevel.REVOKED) {
-                    MeshLogger.w(TAG, "Rejecting KEY_EXCHANGE from rogue node ${packet.senderId}")
-                    val address = routingCoordinator.resolvePeerAddress(packet.senderId)
-                    if (address != null) disconnectDevice(address)
-                    return
-                }
-
-                trustManager.updateHighestProtocol(packet.senderId, 2)
-                cryptoManager.storePeerPublicKey(packet.senderId, ecdhPublicKey)
-                cryptoManager.storePeerSigningKey(packet.senderId, signingPublicKey)
-                
-                sessionManager.createSession(
-                    peerId = packet.senderId,
-                    fingerprint = fingerprint,
-                    sessionVersion = version,
-                    cryptoVersion = 1,
-                    verified = true
-                )
-
-                // 7. Store replay entry & update rate limit
-                keyExchangeReplayCache.recordNonce(packet.senderId, nonce)
-                keyExchangeReplayCache.recordHandshake(packet.senderId)
-
-                MeshLogger.d(TAG, "🔐 SECURE (v2) Key exchanged with: ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)}")
-
-                val address = routingCoordinator.resolvePeerAddress(packet.senderId)
-                if (address != null) {
-                    connectionManager.updatePeerState(address, PeerConnectionState.SESSION_ESTABLISHED)
-                    applicationScope.launch { retryPendingMessages() }
-                }
-
-                var isResponse = false
-                if (parts.size >= 8 && parts[7] == "resp") {
-                    isResponse = true
-                }
-
-                if (!isResponse) {
-                    applicationScope.launch {
-                        userRepository.getLocalUser()?.let { user ->
-                            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-                            if (packet.senderId != localPeerId && packet.senderId.isNotBlank()) {
-                                val responseKeyEx = generateSignedKeyExchange(localPeerId, isResponse = true).copy(targetId = packet.senderId)
-                                dispatchSinglePacket(packet.senderId, responseKeyEx)
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Reject v1 legacy key exchange
-                MeshLogger.w(TAG, "Rejecting legacy unauthenticated key exchange from ${packet.senderId} (Downgrade protection)")
-                val address = routingCoordinator.resolvePeerAddress(packet.senderId)
-                if (address != null) disconnectDevice(address)
-                return
-            }
-        } catch (e: Exception) {
-            MeshLogger.e(TAG, "Failed to handle KEY_EXCHANGE: ${e.message}")
-        }
-    }
-
-    private fun disconnectDevice(address: String) {
-        connectionManager.disconnectFromDevice(address)
-        connectionManager.updatePeerState(address, PeerConnectionState.DISCONNECTED)
-    }
-
-    fun generateSignedKeyExchange(localPeerId: String, isResponse: Boolean = false): MeshPacket {
-        val ecdhPublicKey = cryptoManager.getOrCreatePublicKey()
-        val signingPublicKey = cryptoManager.getOrCreateSigningKey()
-        val timestamp = System.currentTimeMillis()
-        val nonce = UUID.randomUUID().toString()
-        val uuid = UUID.randomUUID().toString()
-        
-        val minProtocol = 2
-        val maxProtocol = 3
-        val cryptoVersion = 2
-        val supportedFeatures = "SECURE_CHAT,VOICE,MEDIA"
-
-        val dataToSign = "$uuid|$minProtocol|$maxProtocol|$cryptoVersion|$supportedFeatures|$ecdhPublicKey|$timestamp|$nonce".toByteArray(Charsets.UTF_8)
-        val signature = cryptoManager.sign(dataToSign)
-        val signatureBase64 = android.util.Base64.encodeToString(signature, android.util.Base64.NO_WRAP)
-
-        val respTag = if (isResponse) "|resp" else ""
-        val payload = "v3|$minProtocol|$maxProtocol|$cryptoVersion|$supportedFeatures|$ecdhPublicKey|$timestamp|$nonce|$signatureBase64|$signingPublicKey$respTag"
-        
-        return MeshPacket(
-            packetId = uuid,
-            senderId = localPeerId,
-            targetId = "",
-            payload = payload,
-            type = PacketType.KEY_EXCHANGE,
-            encrypted = false
-        )
-    }
-
-    // ────────── BLE Lifecycle ──────────
-
     fun startAdvertising(name: String, meshId: String) {
-        discoveryManager.startAdvertising(name, meshId, 0x01) // 0x01 = Routing Support
+        discoveryManager.startAdvertising(name, meshId, 0x01)
     }
 
     fun stopAdvertising() {
@@ -700,8 +261,6 @@ class MeshMessagingManager @Inject constructor(
 
     fun startScanning() {
         discoveryManager.startScanning()
-        // Start the intelligent engine loop
-        // (Assuming BleScannerManager delegates this internally, but we can also trigger engine here)
     }
 
     fun stopScanning() {
@@ -740,10 +299,6 @@ class MeshMessagingManager @Inject constructor(
         }
     }
 
-    /**
-     * Auto-start BLE advertising + scanning + GATT server.
-     * FIX ISSUE 2: Also auto-connects to all scanned devices for mesh relay.
-     */
     suspend fun autoStartMesh() {
         if (!startupState.compareAndSet(MeshStartupState.STOPPED, MeshStartupState.STARTING)) {
             MeshLogger.d(TAG, "autoStartMesh ignored: already ${startupState.get()}")
@@ -752,34 +307,27 @@ class MeshMessagingManager @Inject constructor(
 
         try {
             val user = userRepository.getLocalUser() ?: return
-            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
+            val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
             meshRouter.localMeshId = localPeerId
             
-            // Broadcast routing capabilities
             discoveryManager.startAdvertising(user.name, user.meshId, 0x01)
             startServer()
             startScanning()
 
-            // Wait briefly for scan results before connecting
             delay(2000)
             connectToAllScannedDevices()
 
-            // Broadcast our public key so all peers can set up E2E
-            val keyExchangePacket = generateSignedKeyExchange(localPeerId).copy(targetId = "BROADCAST")
+            val keyExchangePacket = keyExchangeHandler.generateSignedKeyExchange(localPeerId).copy(targetId = "BROADCAST")
             dispatchSinglePacket("BROADCAST", keyExchangePacket)
 
             startupState.set(MeshStartupState.RUNNING)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "autoStartMesh failed: ${e.message}")
-            stopMesh() // clean up
+            stopMesh()
             throw e
         }
     }
 
-    /**
-     * Refresh the mesh without doing a full startup or broadcasting KEY_EXCHANGE.
-     * Only restarts components that are missing.
-     */
     suspend fun refreshMesh() {
         if (startupState.get() != MeshStartupState.RUNNING) {
             MeshLogger.d(TAG, "refreshMesh: Mesh not fully running. Invoking full autoStartMesh.")
@@ -799,17 +347,12 @@ class MeshMessagingManager @Inject constructor(
             startScanning()
         }
         
-        // startServer is idempotent inside BleGattManager
         startServer()
 
-        // Give a brief delay for scan results if components were just restarted
         delay(1000)
         connectToAllScannedDevices()
     }
 
-    /**
-     * Stop all BLE operations.
-     */
     fun stopMesh() {
         startupState.set(MeshStartupState.STOPPED)
         stopAdvertising()
@@ -817,556 +360,37 @@ class MeshMessagingManager @Inject constructor(
         stopServer()
     }
 
-    // ────────── Text Messages (ENCRYPTED) ──────────
-
-    suspend fun sendMessage(targetMeshId: String, message: com.meshlink.domain.model.Message) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(targetMeshId)
-        meshRouter.localMeshId = localPeerId
-
-        // ── DIAGNOSTIC Stage 3/4 ──────────────────────────────────────────────────
-        // ─────────────────────────────────────────────────────────────────────────
-
-        // Connect to target AND all scanned devices for mesh relay
-        connectToPeer(targetMeshId)
-        connectToAllScannedDevices()
-
-        val messageId = message.messageId
-
-        // Wrap text + sender name in JSON so receiver knows who we are
-        val wrappedPayload = JSONObject().apply {
-            put("text", message.text)
-            put("senderName", user.name)
-        }.toString()
-
-        val packet = MeshPacket(
-            packetId = messageId,
-            senderId = localPeerId,
-            targetId = targetPeerId,
-            payload = wrappedPayload,
-            type = PacketType.TEXT,
-            encrypted = false
-        )
-        if (dispatchSinglePacket(targetPeerId, packet)) {
-            chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
-        }
+    suspend fun sendMessage(targetMeshId: String, message: Message) {
+        textMessageHandler.sendMessage(targetMeshId, message)
     }
-
-    private suspend fun receiveMessage(packet: MeshPacket) {
-
-        if (chatDao.getMessageByUuid(packet.packetId) != null) {
-            // Already processed this message! Just send ACK in case it was lost.
-            userRepository.getLocalUser()?.let { user ->
-                val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-                val ackPacket = MeshPacket(
-                    senderId = localPeerId,
-                    targetId = packet.senderId,
-                    payload = packet.packetId,
-                    type = PacketType.DELIVERY_ACK,
-                    encrypted = false
-                )
-                dispatchSinglePacket(packet.senderId, ackPacket)
-            }
-            return
-        }
-
-        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
-
-        // ── DIAGNOSTIC Stage 9 (DATABASE WRITE) ────────────────────────────────
-        val myMeshId = userRepository.getLocalUser()?.meshId
-        // ─────────────────────────────────────────────────────────────────────
-
-        val rawPayload = packet.payload
-        val internalKeywords = setOf("KEY_EXCHANGE", "ACK", "RELAY", "ROUTING", "HANDSHAKE")
-
-        // Try to parse as JSON (new format with senderName), fall back to plain text
-        val (plaintext, senderName) = try {
-            val json = JSONObject(rawPayload)
-            if (json.has("text")) {
-                json.getString("text") to json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
-            } else {
-                MeshLogger.w(TAG, "Filtering out JSON protocol packet masquerading as text: $rawPayload")
-                return
-            }
-        } catch (_: Exception) {
-            // Legacy plain text packet
-            rawPayload to com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
-        }
-
-        val trimmedPlaintext = plaintext.trim()
-        if (trimmedPlaintext.startsWith("v2|") || internalKeywords.contains(trimmedPlaintext)) {
-            MeshLogger.w(TAG, "Filtering out internal protocol packet from chat UI (after JSON extraction): $plaintext")
-            return
-        }
-
-        val message = MessageEntity(
-            messageId = packet.packetId,
-            chatId = chatId,
-            senderId = packet.senderId,
-            text = plaintext,
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = MessageType.TEXT
-        )
-        chatDao.insertMessageAndUpdateChat(message, senderName)
-
-        // FIX: Phase 3 - Send Delivery ACK
-        userRepository.getLocalUser()?.let { user ->
-            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-            val ackPacket = MeshPacket(
-                senderId = localPeerId,
-                targetId = packet.senderId,
-                payload = packet.packetId,
-                type = PacketType.DELIVERY_ACK,
-                encrypted = false
-            )
-            dispatchSinglePacket(packet.senderId, ackPacket)
-        }
-
-        NotificationHelper.showMessageNotification(context, packet.senderId, senderName, plaintext)
-    }
-
-    // ────────── Image Messages (ENCRYPTED metadata) ──────────
 
     suspend fun sendImage(targetMeshId: String, imageUri: Uri, chatName: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(targetMeshId)
-        meshRouter.localMeshId = localPeerId
-
-        // Connect to target and all mesh peers for relay
-        connectToPeer(targetMeshId)
-        connectToAllScannedDevices()
-
-        // Compress image: max 480px, ≤80KB JPEG
-        val compressedBytes = withContext(Dispatchers.IO) {
-            ImageCompressor.compress(context, imageUri)
-        }
-        if (compressedBytes == null) {
-            MeshLogger.e(TAG, "sendImage: compression failed for $imageUri")
-            return
-        }
-        MeshLogger.d(TAG, "sendImage: compressed to ${compressedBytes.size / 1000}KB")
-
-        val thumbnailBase64 = withContext(Dispatchers.IO) {
-            ImageCompressor.generateThumbnailBase64(context, imageUri)
-        }
-
-        // Clean up temp camera file if applicable
-        if (imageUri.scheme == "content" && imageUri.authority?.contains("fileprovider") == true) {
-            try {
-                val tempFile = File(context.cacheDir, "images/${imageUri.lastPathSegment}")
-                if (tempFile.exists()) tempFile.delete()
-            } catch (e: Exception) {
-                MeshLogger.w(TAG, "Failed to delete temp camera file")
-            }
-        }
-
-        // Save local copy
-        val localFile = withContext(Dispatchers.IO) {
-            val mediaDir = File(context.filesDir, "mesh_media")
-            if (!mediaDir.exists()) mediaDir.mkdirs()
-            File(mediaDir, "img_${System.currentTimeMillis()}.jpg").apply {
-                writeBytes(compressedBytes)
-            }
-        }
-
-        val chatId = targetPeerId
-        val messageId = UUID.randomUUID().toString()
-        val message = MessageEntity(
-            messageId       = messageId,
-            chatId          = chatId,
-            senderId        = localPeerId,
-            text            = "📷 Image",
-            timestamp       = System.currentTimeMillis(),
-            isFromMe        = true,
-            status          = DeliveryStatus.PENDING,
-            messageType     = MessageType.IMAGE,
-            mediaPath       = localFile.absolutePath,
-            mimeType        = "image/jpeg",
-            mediaSize       = localFile.length(),
-            thumbnailBase64 = thumbnailBase64
-        )
-        chatDao.insertMessageAndUpdateChat(message, chatName)
-        transferManager.sendFile(
-            file = localFile,
-            senderId = localPeerId,
-            targetId = targetPeerId,
-            transferId = messageId
-        )
+        mediaMessageHandler.sendImage(targetMeshId, imageUri, chatName)
     }
-
-
-    suspend fun receiveMediaMessage(completedTransferId: String, completedFilePath: String, completedMimeType: String, completedSenderId: String) {
-        val isImage = completedMimeType.contains("image")
-        val isVoice = completedMimeType.contains("audio")
-        val isVideo = completedMimeType.contains("video")
-
-        val messageType = when {
-            isImage -> MessageType.IMAGE
-            isVoice -> MessageType.VOICE
-            else -> MessageType.TEXT
-        }
-
-        val previewText = when {
-            isImage -> "📷 Image"
-            isVoice -> "🎤 Voice Note"
-            else -> "Unsupported File"
-        }
-
-        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(completedSenderId)
-        val senderName = com.meshlink.util.MeshIdNormalizer.canonicalize(completedSenderId)
-
-        val message = MessageEntity(
-            messageId = completedTransferId,
-            chatId = chatId,
-            senderId = completedSenderId,
-            text = previewText,
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = messageType,
-            mediaPath = completedFilePath
-        )
-        chatDao.insertMessageAndUpdateChat(message, senderName)
-        
-        // FIX: Phase 3 - Send Delivery ACK for Media
-        userRepository.getLocalUser()?.let { user ->
-            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-            val ackPacket = MeshPacket(
-                senderId = localPeerId,
-                targetId = completedSenderId,
-                payload = completedTransferId,
-                type = PacketType.DELIVERY_ACK,
-                encrypted = false
-            )
-            dispatchSinglePacket(completedSenderId, ackPacket)
-        }
-
-        NotificationHelper.showMessageNotification(context, completedSenderId, senderName, previewText)
-    }
-
-    private suspend fun insertPlaceholderIncomingMedia(packet: MeshPacket) {
-        val transferId = packet.transferId ?: return
-        if (chatDao.getMessageByUuid(transferId) != null) return // Already have a placeholder or completed message
-
-        val isImage = packet.mimeType?.contains("image") == true
-        val isVoice = packet.mimeType?.contains("audio") == true
-
-        val messageType = when {
-            isImage -> MessageType.IMAGE
-            isVoice -> MessageType.VOICE
-            else -> MessageType.TEXT
-        }
-
-        val previewText = when {
-            isImage -> "📷 Receiving Image..."
-            isVoice -> "🎤 Receiving Voice Note..."
-            else -> "Receiving File..."
-        }
-
-        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
-        val senderName = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
-
-        val message = MessageEntity(
-            messageId = transferId,
-            chatId = chatId,
-            senderId = packet.senderId,
-            text = previewText,
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.PENDING,
-            messageType = messageType,
-            mediaPath = null // Missing until complete
-        )
-        chatDao.insertMessageAndUpdateChat(message, senderName)
-    }
-
-    // ────────── Voice Notes (ENCRYPTED metadata) ──────────
 
     suspend fun sendVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(targetMeshId)
-        meshRouter.localMeshId = localPeerId
-        connectToPeer(targetMeshId)
-
-        val voiceFile = File(filePath)
-        if (!voiceFile.exists()) return
-
-        val chatId = targetPeerId
-        val messageId = UUID.randomUUID().toString()
-        val message = MessageEntity(
-            messageId = messageId,
-            chatId = chatId,
-            senderId = localPeerId,
-            text = "🎤 Voice Note",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = true,
-            status = DeliveryStatus.PENDING,
-            messageType = MessageType.VOICE,
-            mediaPath = filePath,
-            mediaDurationMs = durationMs
-        )
-        chatDao.insertMessageAndUpdateChat(message, chatName)
-        transferManager.sendFile(
-            file = File(filePath),
-            senderId = localPeerId,
-            targetId = targetPeerId,
-            transferId = messageId,
-            priority = com.meshlink.transfer.TransferPriority.HIGH
-        )
+        voiceMessageHandler.sendVoiceNote(targetMeshId, filePath, durationMs, chatName)
     }
-
-    // ────────── Location (ENCRYPTED GPS payload) ──────────
 
     suspend fun sendLocation(targetMeshId: String, chatName: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(targetMeshId)
-        meshRouter.localMeshId = localPeerId
-        connectToPeer(targetMeshId)
-
-        val location = locationProvider.getCurrentLocation()
-        val lat = location?.latitude ?: 0.0
-        val lng = location?.longitude ?: 0.0
-        val battery = location?.batteryPercent ?: locationProvider.getBatteryPercent()
-
-        val payloadJson = JSONObject().apply {
-            put("lat", lat)
-            put("lng", lng)
-            put("battery", battery)
-            put("timestamp", System.currentTimeMillis())
-            put("senderName", user.name)
-        }.toString()
-
-        val generatedMessageId = java.util.UUID.randomUUID().toString()
-        val packet = MeshPacket(
-            packetId = generatedMessageId,
-            senderId = localPeerId,
-            targetId = targetPeerId,
-            payload = payloadJson,
-            type = PacketType.LOCATION,
-            encrypted = false
-        )
-        val locationDispatched = dispatchSinglePacket(targetPeerId, packet)
-
-        val chatId = targetPeerId
-        val messageId = packet.packetId
-        val message = MessageEntity(
-            messageId = messageId,
-            chatId = chatId,
-            senderId = localPeerId,
-            text = "📍 Location: $lat, $lng",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = true,
-            status = if (locationDispatched) DeliveryStatus.SENT else DeliveryStatus.PENDING,
-            messageType = MessageType.LOCATION,
-            latitude = lat,
-            longitude = lng,
-            batteryPercent = battery
-        )
-        chatDao.insertMessageAndUpdateChat(message, chatName)
+        locationMessageHandler.sendLocation(targetMeshId, chatName)
     }
-
-    private suspend fun receiveLocationMessage(packet: MeshPacket) {
-        if (chatDao.getMessageByUuid(packet.packetId) != null) {
-            // Already processed this message! Just send ACK in case it was lost.
-            userRepository.getLocalUser()?.let { user ->
-                val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-                val ackPacket = MeshPacket(
-                    senderId = localPeerId,
-                    targetId = packet.senderId,
-                    payload = packet.packetId,
-                    type = PacketType.DELIVERY_ACK,
-                    encrypted = false
-                )
-                dispatchSinglePacket(packet.senderId, ackPacket)
-            }
-            return
-        }
-
-        // Decrypt GPS payload - already decrypted in packet routing layer
-        val rawPayload = packet.payload
-
-        val json = try { JSONObject(rawPayload) } catch (_: Exception) { return }
-        val lat = json.optDouble("lat", 0.0)
-        val lng = json.optDouble("lng", 0.0)
-        val battery = json.optInt("battery", -1)
-        val senderName = json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
-
-        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
-
-        val message = MessageEntity(
-            messageId = packet.packetId,
-            chatId = chatId,
-            senderId = packet.senderId,
-            text = "📍 Location: $lat, $lng",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = MessageType.LOCATION,
-            latitude = lat,
-            longitude = lng,
-            batteryPercent = battery
-        )
-        chatDao.insertMessageAndUpdateChat(message, senderName)
-        
-        // FIX: Phase 3 - Send Delivery ACK for Location
-        userRepository.getLocalUser()?.let { user ->
-            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-            val ackPacket = MeshPacket(
-                senderId = localPeerId,
-                targetId = packet.senderId,
-                payload = packet.packetId,
-                type = PacketType.DELIVERY_ACK,
-                encrypted = false
-            )
-            dispatchSinglePacket(packet.senderId, ackPacket)
-        }
-    }
-
-    // ────────── Read Receipts ──────────
 
     suspend fun sendReadReceipts(chatId: String) {
-        val unreadIds = chatDao.getUnreadIncomingMessages(chatId)
-        if (unreadIds.isEmpty()) return
-
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-
-        // Mark as seen locally
-        chatDao.markMessagesAsSeen(unreadIds)
-
-        // Send READ_RECEIPT packets
-        // The chatId is the target meshId (for direct chats)
-        val targetPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(chatId)
-        if (targetPeerId == "BROADCAST") return // No read receipts for broadcasts
-
-        unreadIds.forEach { msgId ->
-            val receiptPacket = MeshPacket(
-                senderId = localPeerId,
-                targetId = targetPeerId,
-                payload = msgId, // The ID of the message being marked as seen
-                type = PacketType.READ_RECEIPT,
-                encrypted = false
-            )
-            dispatchSinglePacket(targetPeerId, receiptPacket)
-        }
+        ackManager.sendReadReceipts(chatId)
     }
 
-    // ────────── SOS Broadcast (UNENCRYPTED — emergency must be readable by all) ──────────
-
     suspend fun sendSos() {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-        meshRouter.localMeshId = localPeerId
-
-        val location = locationProvider.getCurrentLocation()
-        val lat = location?.latitude ?: 0.0
-        val lng = location?.longitude ?: 0.0
-        val battery = location?.batteryPercent ?: locationProvider.getBatteryPercent()
-
-        val payloadJson = JSONObject().apply {
-            put("lat", lat)
-            put("lng", lng)
-            put("battery", battery)
-            put("timestamp", System.currentTimeMillis())
-            put("senderName", user.name)
-        }.toString()
-
-        // SOS is intentionally NOT encrypted — all nodes must be able to read it
-        val packet = MeshPacket(
-            senderId = localPeerId,
-            targetId = "BROADCAST",
-            payload = payloadJson,
-            type = PacketType.SOS,
-            encrypted = false,
-            ttl = 15
-        )
-        meshRouter.sendMediaPacket(packet)
+        broadcastHandler.sendSos()
     }
 
     suspend fun broadcastMessage(messageText: String) {
-        val user = userRepository.getLocalUser() ?: return
-        val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-        meshRouter.localMeshId = localPeerId
-
-        val payloadJson = JSONObject().apply {
-            put("text", "[BROADCAST] $messageText")
-            put("senderName", user.name)
-            put("timestamp", System.currentTimeMillis())
-        }.toString()
-
-        val packet = MeshPacket(
-            senderId = localPeerId,
-            targetId = "BROADCAST",
-            payload = payloadJson,
-            type = PacketType.TEXT,
-            encrypted = false,
-            ttl = 15
-        )
-        meshRouter.sendMediaPacket(packet)
-
-        // FIX ERROR 3: Store sent broadcast in Room so BroadcastScreen can display it
-        val messageId = packet.packetId
-        val message = MessageEntity(
-            messageId = messageId,
-            chatId = "BROADCAST",
-            senderId = localPeerId,
-            text = "[BROADCAST] $messageText",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = true,
-            status = DeliveryStatus.SENT,
-            messageType = MessageType.TEXT
-        )
-        chatDao.insertMessage(message)
-    }
-
-    // FIX ERROR 3: Store received broadcast TEXT packets in the BROADCAST chatId
-    private suspend fun receiveBroadcastTextMessage(packet: MeshPacket) {
-        if (chatDao.getMessageByUuid(packet.packetId) != null) return // Ignore duplicate
-
-        val rawPayload = packet.payload
-        val internalKeywords = setOf("KEY_EXCHANGE", "ACK", "RELAY", "ROUTING", "HANDSHAKE")
-
-        val (plaintext, senderName) = try {
-            val json = JSONObject(rawPayload)
-            if (json.has("text")) {
-                json.getString("text") to json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
-            } else {
-                MeshLogger.w(TAG, "Filtering out JSON protocol packet masquerading as broadcast text: $rawPayload")
-                return
-            }
-        } catch (_: Exception) {
-            rawPayload to com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
-        }
-
-        val trimmedPlaintext = plaintext.trim()
-        if (trimmedPlaintext.startsWith("v2|") || internalKeywords.contains(trimmedPlaintext)) {
-            MeshLogger.w(TAG, "Filtering out internal protocol packet from broadcast UI (after JSON extraction): $plaintext")
-            return
-        }
-
-        val message = MessageEntity(
-            messageId = packet.packetId,
-            chatId = "BROADCAST",
-            senderId = packet.senderId,
-            text = plaintext,
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = MessageType.TEXT
-        )
-        chatDao.insertMessage(message)
-        NotificationHelper.showMessageNotification(context, packet.senderId, "📢 $senderName", plaintext)
+        broadcastHandler.broadcastMessage(messageText)
     }
 
     fun checkAndTriggerHandshake(address: String) {
         val state = connectionManager.peerStates[address] ?: return
-        if (state == com.meshlink.domain.model.PeerConnectionState.SERVICES_DISCOVERED || state == com.meshlink.domain.model.PeerConnectionState.MTU_READY) {
+        if (state == PeerConnectionState.SERVICES_DISCOVERED || state == PeerConnectionState.MTU_READY) {
             val peerId = discoveryManager.scannedDevices.value.values.firstOrNull { it.address == address }?.meshId
                 ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == address }?.key
                 
@@ -1375,25 +399,25 @@ class MeshMessagingManager @Inject constructor(
                     val reqEnc = userRepository.isEncryptionEnabled.first()
                     if (reqEnc) {
                         if (cryptoManager.hasPeerKey(peerId)) {
-                            connectionManager.updatePeerState(address, com.meshlink.domain.model.PeerConnectionState.SESSION_READY)
+                            connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
                             retryPendingMessages()
                         } else {
                             val currentState = connectionManager.peerStates[address]
-                            if (currentState != com.meshlink.domain.model.PeerConnectionState.KEY_EXCHANGE_STARTED &&
-                                currentState != com.meshlink.domain.model.PeerConnectionState.SESSION_READY &&
-                                currentState != com.meshlink.domain.model.PeerConnectionState.SESSION_ESTABLISHED) {
-                                connectionManager.peerStates[address] = com.meshlink.domain.model.PeerConnectionState.KEY_EXCHANGE_STARTED
+                            if (currentState != PeerConnectionState.KEY_EXCHANGE_STARTED &&
+                                currentState != PeerConnectionState.SESSION_READY &&
+                                currentState != PeerConnectionState.SESSION_ESTABLISHED) {
+                                connectionManager.peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
                                 val user = userRepository.getLocalUser()
                                 if (user != null) {
-                                    val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
-                                    val packetBase = generateSignedKeyExchange(localPeerId)
+                                    val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
+                                    val packetBase = keyExchangeHandler.generateSignedKeyExchange(localPeerId)
                                     val packet = packetBase.copy(targetId = peerId)
                                     dispatchSinglePacket(peerId, packet)
                                 }
                             }
                         }
                     } else {
-                        connectionManager.updatePeerState(address, com.meshlink.domain.model.PeerConnectionState.SESSION_READY)
+                        connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
                         retryPendingMessages()
                     }
                 }
@@ -1401,40 +425,6 @@ class MeshMessagingManager @Inject constructor(
         }
     }
 
-    private suspend fun receiveSosMessage(packet: MeshPacket) {
-        if (chatDao.getMessageByUuid(packet.packetId) != null) return // Ignore duplicate
-
-        val json = try { JSONObject(packet.payload) } catch (_: Exception) { return }
-        val lat = json.optDouble("lat", 0.0)
-        val lng = json.optDouble("lng", 0.0)
-        val battery = json.optInt("battery", -1)
-        val senderName = json.optString("senderName", com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId))
-
-        val chatId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
-
-        val message = MessageEntity(
-            messageId = packet.packetId,
-            chatId = chatId,
-            senderId = packet.senderId,
-            text = "🚨 SOS EMERGENCY from $senderName — Lat: $lat, Lng: $lng — Battery: $battery%",
-            timestamp = System.currentTimeMillis(),
-            isFromMe = false,
-            status = DeliveryStatus.DELIVERED,
-            messageType = MessageType.SOS,
-            latitude = lat,
-            longitude = lng,
-            batteryPercent = battery
-        )
-        chatDao.insertMessageAndUpdateChat(message, "🚨 $senderName")
-    }
-
-    private suspend fun handleWifiNegotiation(packet: MeshPacket) {
-        val json = try { JSONObject(packet.payload) } catch (_: Exception) { return }
-        val peerMac = json.optString("wifiMac")
-        if (peerMac.isNotEmpty()) {
-            MeshLogger.d(TAG, "Received Wi-Fi Direct MAC from peer: $peerMac, but Wi-Fi Direct is removed.")
-        }
-    }
     @Deprecated("Use processPacket instead", ReplaceWith("processPacket(packet)"))
     override suspend fun processIncomingPacket(packet: MeshPacket) {
         handleIncomingPacket(packet)

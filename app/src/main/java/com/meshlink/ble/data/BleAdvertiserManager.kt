@@ -27,7 +27,8 @@ class BleAdvertiserManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
     @ApplicationScope private val applicationScope: CoroutineScope,
-    private val permissionChecker: BluetoothPermissionChecker
+    private val permissionChecker: BluetoothPermissionChecker,
+    private val restartCoordinator: BleRestartCoordinator
 ) {
     companion object {
         private const val TAG = "BleAdvertiser"
@@ -114,16 +115,22 @@ class BleAdvertiserManager @Inject constructor(
         advertiseCallback = object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
                 MeshLogger.d(TAG, "Advertising started")
+                applicationScope.launch {
+                    restartCoordinator.resetRetry(RestartComponent.ADVERTISER)
+                }
             }
             override fun onStartFailure(errorCode: Int) {
                 MeshLogger.e(TAG, "Advertising failed with error code: $errorCode")
-                if (errorCode != AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED) {
-                    applicationScope.launch {
-                        if (settingsRepository.bleAutoRestart.first()) {
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                MeshLogger.d(TAG, "Attempting to restart BLE advertising after failure")
-                                startAdvertising(name, meshId, capabilities)
-                            }, 5000L)
+                val cause = if (errorCode == AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED || errorCode == AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED) {
+                    BleNonRetryableException("Advertise failed", errorCode)
+                } else {
+                    BleException("Advertise failed", errorCode)
+                }
+                
+                applicationScope.launch {
+                    if (settingsRepository.bleAutoRestart.first()) {
+                        restartCoordinator.scheduleRestart(applicationScope, RestartComponent.ADVERTISER, cause) {
+                            startAdvertising(name, meshId, capabilities)
                         }
                     }
                 }
@@ -138,10 +145,9 @@ class BleAdvertiserManager @Inject constructor(
             MeshLogger.e(TAG, "Exception starting advertising: ${e.message}", e)
             applicationScope.launch {
                 if (settingsRepository.bleAutoRestart.first()) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        MeshLogger.d(TAG, "Attempting to restart BLE advertising after exception")
+                    restartCoordinator.scheduleRestart(applicationScope, RestartComponent.ADVERTISER, e) {
                         startAdvertising(name, meshId, capabilities)
-                    }, 5000L)
+                    }
                 }
             }
         }
@@ -149,6 +155,9 @@ class BleAdvertiserManager @Inject constructor(
     }
 
     fun stopAdvertising() {
+        applicationScope.launch {
+            restartCoordinator.cancelRestart(RestartComponent.ADVERTISER)
+        }
         if (!permissionChecker.hasRequiredPermissions(context)) return
         val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return
         try {

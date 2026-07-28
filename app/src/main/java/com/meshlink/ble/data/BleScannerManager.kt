@@ -30,7 +30,8 @@ class BleScannerManager @Inject constructor(
     private val discoveryEngine: DiscoveryEngine,
     private val settingsRepository: SettingsRepository,
     @ApplicationScope private val applicationScope: CoroutineScope,
-    private val permissionChecker: BluetoothPermissionChecker
+    private val permissionChecker: BluetoothPermissionChecker,
+    private val restartCoordinator: BleRestartCoordinator
 ) {
     companion object {
         private const val TAG = "BleScanner"
@@ -112,13 +113,16 @@ class BleScannerManager @Inject constructor(
 
             override fun onScanFailed(errorCode: Int) {
                 MeshLogger.e(TAG, "BLE scan failed with error code: $errorCode")
-                if (errorCode != ScanCallback.SCAN_FAILED_ALREADY_STARTED) {
-                    applicationScope.launch {
-                        if (settingsRepository.bleAutoRestart.first()) {
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                MeshLogger.d(TAG, "Attempting to restart BLE scan after failure")
-                                startHardwareScan()
-                            }, 5000L)
+                val cause = if (errorCode == ScanCallback.SCAN_FAILED_ALREADY_STARTED || errorCode == ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED) {
+                    BleNonRetryableException("Scan failed", errorCode)
+                } else {
+                    BleException("Scan failed", errorCode)
+                }
+                
+                applicationScope.launch {
+                    if (settingsRepository.bleAutoRestart.first()) {
+                        restartCoordinator.scheduleRestart(applicationScope, RestartComponent.SCANNER, cause) {
+                            startHardwareScan()
                         }
                     }
                 }
@@ -128,16 +132,18 @@ class BleScannerManager @Inject constructor(
         try {
             @SuppressLint("MissingPermission") // Safe: checked via permissionChecker at start of method
             val ignored = scanner.startScan(listOf(filter), settings, scanCallback)
+            applicationScope.launch {
+                restartCoordinator.resetRetry(RestartComponent.SCANNER)
+            }
         } catch (e: SecurityException) {
             MeshLogger.e(TAG, "SecurityException: Missing BLE scan permission", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception starting hardware scan: ${e.message}", e)
             applicationScope.launch {
                 if (settingsRepository.bleAutoRestart.first()) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        MeshLogger.d(TAG, "Attempting to restart BLE scan after exception")
+                    restartCoordinator.scheduleRestart(applicationScope, RestartComponent.SCANNER, e) {
                         startHardwareScan()
-                    }, 5000L)
+                    }
                 }
             }
         }
@@ -145,6 +151,9 @@ class BleScannerManager @Inject constructor(
     }
 
     private fun stopHardwareScan() {
+        applicationScope.launch {
+            restartCoordinator.cancelRestart(RestartComponent.SCANNER)
+        }
         if (!permissionChecker.hasRequiredPermissions(context)) return
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
         try {

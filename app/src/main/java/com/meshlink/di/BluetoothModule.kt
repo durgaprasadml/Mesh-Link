@@ -42,6 +42,12 @@ abstract class BluetoothBindingModule {
 
     @Binds
     @Singleton
+    abstract fun bindApplicationMessageQueue(
+        impl: com.meshlink.ble.data.gatt.ApplicationMessageQueueImpl
+    ): com.meshlink.ble.data.gatt.ApplicationMessageQueue
+
+    @Binds
+    @Singleton
     abstract fun bindServiceDiscoveryManager(
         impl: com.meshlink.ble.data.gatt.ServiceDiscoveryManagerImpl
     ): com.meshlink.ble.data.gatt.ServiceDiscoveryManager

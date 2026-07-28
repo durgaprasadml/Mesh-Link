@@ -73,6 +73,7 @@ class BleRepositoryImpl @Inject constructor(
     private val routingCoordinator: RoutingCoordinator,
     private val meshMessagingManager: MeshMessagingManager,
     private val voiceTransport: VoiceTransport,
+    private val gattManager: BleGattManager,
     @ApplicationContext private val context: Context
 ,
     @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) : MeshRepository {
@@ -84,7 +85,7 @@ private val discoveryEngine get() = discoveryManager.discoveryEngine
 
     private fun updatePeerState(address: String, newState: PeerConnectionState) {
         connectionManager.updatePeerState(address, newState)
-        if (newState == PeerConnectionState.SERVICES_DISCOVERED || newState == PeerConnectionState.MTU_READY || newState == PeerConnectionState.CONNECTED) {
+        if (newState == PeerConnectionState.READY || newState == PeerConnectionState.CONNECTED) {
             meshMessagingManager.checkAndTriggerHandshake(address)
         }
     }
@@ -190,6 +191,23 @@ private val discoveryEngine get() = discoveryManager.discoveryEngine
                         discoveryEngine.notifyConnectionAttempt(record.macAddress)
                         connectionManager.connectToDevice(record.macAddress, isManual = false)
                     }
+                }
+            }
+        }
+        
+        applicationScope.launch {
+            gattManager.gattEvents.collect { event ->
+                when (event) {
+                    is GattEvent.Ready -> {
+                        updatePeerState(event.address, PeerConnectionState.READY)
+                    }
+                    is GattEvent.Connected -> {
+                        updatePeerState(event.address, PeerConnectionState.CONNECTED)
+                    }
+                    is GattEvent.Disconnected -> {
+                        updatePeerState(event.address, PeerConnectionState.DISCONNECTED)
+                    }
+                    else -> {}
                 }
             }
         }

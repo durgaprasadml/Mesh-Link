@@ -390,7 +390,7 @@ class MeshMessagingManager @Inject constructor(
 
     fun checkAndTriggerHandshake(address: String) {
         val state = connectionManager.peerStates[address] ?: return
-        if (state == PeerConnectionState.SERVICES_DISCOVERED || state == PeerConnectionState.MTU_READY) {
+        if (state == PeerConnectionState.READY || state == PeerConnectionState.SESSION_READY) {
             val peerId = discoveryManager.scannedDevices.value.values.firstOrNull { it.address == address }?.meshId
                 ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == address }?.key
                 

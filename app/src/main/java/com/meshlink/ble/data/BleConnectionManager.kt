@@ -47,8 +47,7 @@ class BleConnectionManager @Inject constructor(
         val state = getPeerState(address)
         val isAlreadyConnected = state == PeerConnectionState.CONNECTING ||
                                  state == PeerConnectionState.CONNECTED ||
-                                 state == PeerConnectionState.SERVICES_DISCOVERED ||
-                                 state == PeerConnectionState.MTU_READY ||
+                                 state == PeerConnectionState.READY ||
                                  state == PeerConnectionState.KEY_EXCHANGE_STARTED ||
                                  state == PeerConnectionState.KEY_EXCHANGE_COMPLETE ||
                                  state == PeerConnectionState.IDENTITY_VERIFIED ||

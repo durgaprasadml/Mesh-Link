@@ -15,9 +15,11 @@ import com.meshlink.ble.data.gatt.ServiceDiscoveryManager
 import com.meshlink.ble.data.gatt.PacketFragmenter
 import com.meshlink.ble.data.gatt.PacketReassembler
 import com.meshlink.ble.data.gatt.PendingClientWrite
+import com.meshlink.common.config.BleConfig
 import com.meshlink.common.pool.BufferPool
 import com.meshlink.core.permissions.BluetoothPermissionChecker
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.*
@@ -47,14 +49,17 @@ class BleGattManager @Inject constructor(
     private val discoveryManager: ServiceDiscoveryManager,
     private val fragmenter: PacketFragmenter,
     private val reassembler: PacketReassembler,
+    private val appMessageQueue: com.meshlink.ble.data.gatt.ApplicationMessageQueue,
     private val permissionChecker: BluetoothPermissionChecker
 ) {
     private val mutex = Mutex()
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private var gattServer: BluetoothGattServer? = null
 
+    private val mtuTimeoutJobs = ConcurrentHashMap<String, Job>()
+
     enum class BleConnectionState {
-        DISCONNECTED, CONNECTING, CONNECTED, SERVICES_DISCOVERED, READY
+        DISCONNECTED, CONNECTING, CONNECTED, WAITING_FOR_MTU, MTU_NEGOTIATED, SERVICES_DISCOVERED, READY
     }
 
     sealed class GattEvent {
@@ -62,6 +67,7 @@ class BleGattManager @Inject constructor(
         data class Disconnected(val address: String) : GattEvent()
         data class MtuChanged(val address: String, val mtu: Int) : GattEvent()
         data class ServicesDiscovered(val address: String) : GattEvent()
+        data class Ready(val address: String) : GattEvent()
         data class QueueEmpty(val address: String) : GattEvent()
     }
 
@@ -130,11 +136,16 @@ class BleGattManager @Inject constructor(
         connectionManager.clear()
         mtuManager.clear()
         writeQueue.clear()
+        appMessageQueue.clear()
         reassembler.clearAll()
+        for (job in mtuTimeoutJobs.values) {
+            job.cancel()
+        }
+        mtuTimeoutJobs.clear()
     }
 
     fun isQueueEmpty(address: String): Boolean {
-        return !writeQueue.hasPendingForDevice(address)
+        return !writeQueue.hasPendingForDevice(address) && !appMessageQueue.hasPendingForDevice(address)
     }
 
     fun connectToDevice(address: String) {
@@ -214,19 +225,8 @@ class BleGattManager @Inject constructor(
     private fun enqueueClientWrite(address: String, bytes: ByteArray) {
         applicationScope.launch {
             mutex.withLock {
-                val mtu = mtuManager.getMtu(address)
-                fragmenter.fragment(bytes, mtu) { fragment ->
-                    // Make a copy since fragmenter re-uses buffers? Actually fragmenter borrows from pool.
-                    // We need to keep it until written.
-                    // Wait, PacketFragmenter returns a borrowed buffer. The queue will own it until written.
-                    val packetCopy = fragment.copyOf() // Safer to copy since fragment might be returned early? No, fragmenter doesn't return it.
-                    // But just to be safe with the async nature of the queue. Let's borrow and copy.
-                    val queuedPacket = BufferPool.borrowBuffer(fragment.size)
-                    System.arraycopy(fragment, 0, queuedPacket, 0, fragment.size)
-                    BufferPool.returnBuffer(fragment) // return the fragmenter's buffer
-                    
-                    writeQueue.enqueue(PendingClientWrite(address, queuedPacket))
-                }
+                val copy = bytes.copyOf()
+                appMessageQueue.enqueue(com.meshlink.ble.data.gatt.PendingApplicationMessage(address, copy))
                 flushClientWriteQueueLocked()
             }
         }
@@ -240,8 +240,28 @@ class BleGattManager @Inject constructor(
         }
     }
 
-    private fun flushClientWriteQueueLocked() {
+    private suspend fun flushClientWriteQueueLocked() {
         val now = System.currentTimeMillis()
+        
+        // If GATT write queue is empty, try to pull and fragment from app queue
+        if (!writeQueue.hasPendingForDevice(writeQueue.getActiveWriteAddress() ?: "")) {
+            // Find a device that is READY and has app messages
+            val readyAppMessage = appMessageQueue.dequeueReady(connectionManager.activeClients.keys.firstOrNull { 
+                connectionManager.getDeviceState(it) == BleConnectionState.READY && appMessageQueue.hasPendingForDevice(it) 
+            } ?: "")
+            
+            if (readyAppMessage != null) {
+                val mtu = mtuManager.getMtu(readyAppMessage.address)
+                MeshLogger.d("BleGatt", "[TRANSPORT-A] Fragmenting message of size ${readyAppMessage.payload.size} with MTU $mtu")
+                fragmenter.fragment(readyAppMessage.payload, mtu) { fragment ->
+                    val queuedPacket = BufferPool.borrowBuffer(fragment.size)
+                    System.arraycopy(fragment, 0, queuedPacket, 0, fragment.size)
+                    BufferPool.returnBuffer(fragment)
+                    writeQueue.enqueue(PendingClientWrite(readyAppMessage.address, queuedPacket))
+                }
+            }
+        }
+
         val pending = writeQueue.dequeueReady(now) { address -> 
             connectionManager.getDeviceState(address) == BleConnectionState.READY 
         } ?: return
@@ -320,6 +340,7 @@ class BleGattManager @Inject constructor(
                 mtuManager.removeMtu(device.address)
                 reassembler.clear(device.address)
                 notificationManager.clear(device.address)
+                mtuTimeoutJobs.remove(device.address)?.cancel()
                 _gattEvents.tryEmit(GattEvent.Disconnected(device.address))
             }
         }
@@ -384,20 +405,30 @@ class BleGattManager @Inject constructor(
                 connectionManager.updateDeviceState(gatt.device.address, BleConnectionState.CONNECTED)
                 _gattEvents.tryEmit(GattEvent.Connected(gatt.device.address))
                 
+                connectionManager.updateDeviceState(gatt.device.address, BleConnectionState.WAITING_FOR_MTU)
                 val mtuRequested = mtuManager.requestMtu(gatt)
-                if (!mtuRequested) {
-                    discoveryManager.discoverServices(gatt)
+                if (mtuRequested) {
+                    mtuTimeoutJobs[gatt.device.address] = applicationScope.launch {
+                        delay(5000L) // 5 seconds MTU timeout fallback
+                        MeshLogger.w("BleGatt", "MTU negotiation timed out for ${gatt.device.address}. Falling back to 23 bytes.")
+                        mtuTimeoutJobs.remove(gatt.device.address)
+                        handleMtuCompletion(gatt, BleConfig.DEFAULT_MTU, true)
+                    }
+                } else {
+                    handleMtuCompletion(gatt, BleConfig.DEFAULT_MTU, true)
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connectionManager.updateDeviceState(gatt.device.address, BleConnectionState.DISCONNECTED)
                 connectionManager.removeActiveClient(gatt.device.address)
                 mtuManager.removeMtu(gatt.device.address)
                 reassembler.clear(gatt.device.address)
+                mtuTimeoutJobs.remove(gatt.device.address)?.cancel()
                 
                 applicationScope.launch {
                     mutex.withLock {
                         val dropped = writeQueue.dropAllForDevice(gatt.device.address)
                         dropped.forEach { BufferPool.returnBuffer(it.bytes) }
+                        appMessageQueue.dropAllForDevice(gatt.device.address)
                         flushClientWriteQueueLocked()
                     }
                 }
@@ -418,13 +449,29 @@ class BleGattManager @Inject constructor(
             }
         }
 
-        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-            super.onMtuChanged(gatt, mtu, status)
-            if (status == BluetoothGatt.GATT_SUCCESS) {
+        private fun handleMtuCompletion(gatt: BluetoothGatt, mtu: Int, isFallback: Boolean) {
+            val currentState = connectionManager.getDeviceState(gatt.device.address)
+            if (currentState == BleConnectionState.DISCONNECTED) return
+            
+            if (isFallback) {
                 mtuManager.updateMtu(gatt.device.address, mtu)
                 _gattEvents.tryEmit(GattEvent.MtuChanged(gatt.device.address, mtu))
             }
+            connectionManager.updateDeviceState(gatt.device.address, BleConnectionState.MTU_NEGOTIATED)
             discoveryManager.discoverServices(gatt)
+        }
+
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            super.onMtuChanged(gatt, mtu, status)
+            mtuTimeoutJobs.remove(gatt.device.address)?.cancel()
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                mtuManager.updateMtu(gatt.device.address, mtu)
+                _gattEvents.tryEmit(GattEvent.MtuChanged(gatt.device.address, mtu))
+                handleMtuCompletion(gatt, mtu, false)
+            } else {
+                MeshLogger.w("BleGatt", "MTU negotiation failed for ${gatt.device.address} with status $status")
+                handleMtuCompletion(gatt, 23, true)
+            }
         }
 
         @Suppress("DEPRECATION")
@@ -441,6 +488,7 @@ class BleGattManager @Inject constructor(
             super.onDescriptorWrite(gatt, descriptor, status)
             if (status == BluetoothGatt.GATT_SUCCESS && descriptor.uuid == UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")) {
                 connectionManager.updateDeviceState(gatt.device.address, BleConnectionState.READY)
+                _gattEvents.tryEmit(GattEvent.Ready(gatt.device.address))
                 flushClientWriteQueue()
             }
         }

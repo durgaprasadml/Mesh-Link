@@ -22,7 +22,6 @@ data class PeerMetrics(
     var totalBytesTransferred: Long = 0,
     var averageLatencyMs: Long = 0,
     var successfulBleConnections: Long = 0,
-    var successfulWifiConnections: Long = 0,
     var failedConnections: Long = 0,
     var lastSeenTimestamp: Long = 0,
     var connectionDrops: Long = 0

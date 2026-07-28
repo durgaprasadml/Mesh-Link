@@ -81,12 +81,7 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
             return transferId
         }
 
-        val routeType = intelligentTransportManager.selectTransportForPayload(targetId, PacketType.MEDIA_CHUNK, file.length())
-        val transport = when (routeType) {
-            RouteType.BLE -> TransportType.BLE
-            RouteType.WIFI_DIRECT -> TransportType.WIFI_DIRECT
-            RouteType.HYBRID -> TransportType.HYBRID
-        }
+        val transport = TransportType.BLE
         
         val mimeType = metaManager.getMimeTypeForFile(file)
         val checksum = verifier.calculateFileChecksum(file)

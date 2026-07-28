@@ -32,13 +32,5 @@ class TransportAnalytics @Inject constructor() {
         )
     }
 
-    fun getWifiHealth(): TransportHealthScore {
-        return TransportHealthScore(
-            transportType = "WIFI_DIRECT",
-            connectionSuccessRate = 0.85f,
-            averageHandshakeMs = 3000L,
-            gattLatencyMs = null,
-            fragmentationRatio = 0.01f
-        )
-    }
+
 }

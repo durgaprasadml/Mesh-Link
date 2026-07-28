@@ -131,9 +131,7 @@ class IncomingPacketDispatcher @Inject constructor(
                 PacketType.READ_RECEIPT -> {
                     ackManager.handleReadReceipt(processedPacket)
                 }
-                PacketType.WIFI_NEGOTIATION -> {
-                    handleWifiNegotiation(processedPacket)
-                }
+
                 PacketType.SESSION_REKEY -> {
                     rekeyManager.handleRekeyPacket(
                         processedPacket.senderId,
@@ -162,11 +160,4 @@ class IncomingPacketDispatcher @Inject constructor(
         }
     }
 
-    private suspend fun handleWifiNegotiation(packet: MeshPacket) {
-        val json = try { org.json.JSONObject(packet.payload) } catch (_: Exception) { return }
-        val peerMac = json.optString("wifiMac")
-        if (peerMac.isNotEmpty()) {
-            MeshLogger.d(TAG, "Received Wi-Fi Direct MAC from peer: $peerMac, but Wi-Fi Direct is removed.")
-        }
-    }
 }

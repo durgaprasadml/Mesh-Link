@@ -1,7 +1,7 @@
 package com.meshlink.domain.model
 
 enum class TransportType {
-    BLE, WIFI_DIRECT, HYBRID
+    BLE
 }
 
 data class BleDevice(

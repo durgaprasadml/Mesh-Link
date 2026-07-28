@@ -28,15 +28,9 @@ data class SettingsUiState(
     val bleScanInterval: Long = 5000L,
     val bleAutoRestart: Boolean = true,
 
-    // Network - WiFi Direct
-    val isWifiDirectEnabled: Boolean = true,
-    val wifiAutoConnect: Boolean = true,
-    val wifiPeerDiscoveryEnabled: Boolean = true,
-    val wifiPreferredGroupOwner: Boolean = false,
-    val wifiReconnectEnabled: Boolean = true,
 
     // Transport Mode
-    val preferredTransport: String = "HYBRID",
+    val preferredTransport: String = "BLE",
 
     // Relay
     val isMeshRelayEnabled: Boolean = true,
@@ -103,21 +97,16 @@ class SettingsViewModel @Inject constructor(
         },
         combine(
             settingsRepository.bleScanInterval,
-            settingsRepository.bleAutoRestart,
-            settingsRepository.isWifiDirectEnabled,
-            settingsRepository.wifiAutoConnect,
-            settingsRepository.wifiPeerDiscoveryEnabled
-        ) { bleInt, bleAuto, wifi, wifiAuto, wifiDisc ->
-            SettingsGroup3(bleInt, bleAuto, wifi, wifiAuto, wifiDisc)
+            settingsRepository.bleAutoRestart
+        ) { bleInt, bleAuto ->
+            SettingsGroup3(bleInt, bleAuto)
         },
         combine(
-            settingsRepository.wifiPreferredGroupOwner,
-            settingsRepository.wifiReconnectEnabled,
             settingsRepository.preferredTransport,
             settingsRepository.isMeshRelayEnabled,
             settingsRepository.meshMaxHops
-        ) { wifiGo, wifiRec, trans, relay, hops ->
-            SettingsGroup4(wifiGo, wifiRec, trans, relay, hops)
+        ) { trans, relay, hops ->
+            SettingsGroup4(trans, relay, hops)
         },
         combine(
             settingsRepository.meshTtl,
@@ -149,12 +138,7 @@ class SettingsViewModel @Inject constructor(
             
             bleScanInterval = g3.bleInt,
             bleAutoRestart = g3.bleAuto,
-            isWifiDirectEnabled = g3.wifi,
-            wifiAutoConnect = g3.wifiAuto,
-            wifiPeerDiscoveryEnabled = g3.wifiDisc,
             
-            wifiPreferredGroupOwner = g4.wifiGo,
-            wifiReconnectEnabled = g4.wifiRec,
             preferredTransport = g4.trans,
             isMeshRelayEnabled = g4.relay,
             meshMaxHops = g4.hops,
@@ -197,8 +181,8 @@ class SettingsViewModel @Inject constructor(
     // Internal data classes for grouping
     private data class SettingsGroup1(val enc: Boolean, val onl: Boolean, val mesh: String)
     private data class SettingsGroup2(val ble: Boolean, val bleAdv: Boolean, val bleScan: Boolean, val bleTx: Int)
-    private data class SettingsGroup3(val bleInt: Long, val bleAuto: Boolean, val wifi: Boolean, val wifiAuto: Boolean, val wifiDisc: Boolean)
-    private data class SettingsGroup4(val wifiGo: Boolean, val wifiRec: Boolean, val trans: String, val relay: Boolean, val hops: Int)
+    private data class SettingsGroup3(val bleInt: Long, val bleAuto: Boolean)
+    private data class SettingsGroup4(val trans: String, val relay: Boolean, val hops: Int)
     private data class SettingsGroup5(val ttl: Int, val prio: Int, val queue: Int, val encEnf: Boolean, val theme: String)
 
     // Profile Settings
@@ -229,12 +213,6 @@ class SettingsViewModel @Inject constructor(
     fun setBleScanInterval(interval: Long) = viewModelScope.launch { settingsRepository.setBleScanInterval(interval) }
     fun setBleAutoRestart(enabled: Boolean) = viewModelScope.launch { settingsRepository.setBleAutoRestart(enabled) }
 
-    // WiFi Direct Settings
-    fun setWifiDirectEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setWifiDirectEnabled(enabled) }
-    fun setWifiAutoConnect(enabled: Boolean) = viewModelScope.launch { settingsRepository.setWifiAutoConnect(enabled) }
-    fun setWifiPeerDiscoveryEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setWifiPeerDiscoveryEnabled(enabled) }
-    fun setWifiPreferredGroupOwner(enabled: Boolean) = viewModelScope.launch { settingsRepository.setWifiPreferredGroupOwner(enabled) }
-    fun setWifiReconnectEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setWifiReconnectEnabled(enabled) }
 
     // Transport Mode
     fun setPreferredTransport(transport: String) = viewModelScope.launch { settingsRepository.setPreferredTransport(transport) }

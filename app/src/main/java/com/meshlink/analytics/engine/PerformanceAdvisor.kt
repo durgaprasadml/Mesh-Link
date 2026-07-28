@@ -42,23 +42,12 @@ class PerformanceAdvisor @Inject constructor(
             recommendations.add(
                 OptimizationRecommendation(
                     issue = "Network Latency High (RTT > 1.5s)",
-                    recommendation = "Switch heavily loaded peers from BLE to Wi-Fi Direct if available.",
+                    recommendation = "Reduce network congestion by pausing background transfers.",
                     severity = RecommendationSeverity.CRITICAL
                 )
             )
         }
 
-        // 3. Transport Degradation
-        val wifi = transportAnalytics.getWifiHealth()
-        if (wifi.connectionSuccessRate < 0.5f) {
-            recommendations.add(
-                OptimizationRecommendation(
-                    issue = "Wi-Fi Direct Instability Detected",
-                    recommendation = "Restart Wi-Fi P2P Service or fallback to BLE for discovery.",
-                    severity = RecommendationSeverity.WARNING
-                )
-            )
-        }
 
         return recommendations
     }

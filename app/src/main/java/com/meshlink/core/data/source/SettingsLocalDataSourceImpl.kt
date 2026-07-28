@@ -21,12 +21,6 @@ class SettingsLocalDataSourceImpl @Inject constructor(
         val BLE_SCAN_INTERVAL = longPreferencesKey("ble_scan_interval")
         val BLE_AUTO_RESTART = booleanPreferencesKey("ble_auto_restart")
 
-        // Network - WiFi Direct
-        val WIFI_DIRECT_ENABLED = booleanPreferencesKey("wifi_direct_enabled")
-        val WIFI_AUTO_CONNECT = booleanPreferencesKey("wifi_auto_connect")
-        val WIFI_PEER_DISCOVERY = booleanPreferencesKey("wifi_peer_discovery")
-        val WIFI_PREFERRED_GO = booleanPreferencesKey("wifi_preferred_go")
-        val WIFI_RECONNECT = booleanPreferencesKey("wifi_reconnect")
 
         // Transport Mode
         val PREFERRED_TRANSPORT = stringPreferencesKey("preferred_transport")
@@ -82,30 +76,8 @@ class SettingsLocalDataSourceImpl @Inject constructor(
         dataStore.edit { it[BLE_AUTO_RESTART] = enabled }
     }
 
-    // WiFi Direct
-    override val isWifiDirectEnabled: Flow<Boolean> = dataStore.data.map { it[WIFI_DIRECT_ENABLED] ?: true }
-    override suspend fun setWifiDirectEnabled(enabled: Boolean) {
-        dataStore.edit { it[WIFI_DIRECT_ENABLED] = enabled }
-    }
-    override val wifiAutoConnect: Flow<Boolean> = dataStore.data.map { it[WIFI_AUTO_CONNECT] ?: true }
-    override suspend fun setWifiAutoConnect(enabled: Boolean) {
-        dataStore.edit { it[WIFI_AUTO_CONNECT] = enabled }
-    }
-    override val wifiPeerDiscoveryEnabled: Flow<Boolean> = dataStore.data.map { it[WIFI_PEER_DISCOVERY] ?: true }
-    override suspend fun setWifiPeerDiscoveryEnabled(enabled: Boolean) {
-        dataStore.edit { it[WIFI_PEER_DISCOVERY] = enabled }
-    }
-    override val wifiPreferredGroupOwner: Flow<Boolean> = dataStore.data.map { it[WIFI_PREFERRED_GO] ?: false }
-    override suspend fun setWifiPreferredGroupOwner(enabled: Boolean) {
-        dataStore.edit { it[WIFI_PREFERRED_GO] = enabled }
-    }
-    override val wifiReconnectEnabled: Flow<Boolean> = dataStore.data.map { it[WIFI_RECONNECT] ?: true }
-    override suspend fun setWifiReconnectEnabled(enabled: Boolean) {
-        dataStore.edit { it[WIFI_RECONNECT] = enabled }
-    }
-
     // Transport Mode
-    override val preferredTransport: Flow<String> = dataStore.data.map { it[PREFERRED_TRANSPORT] ?: "HYBRID" }
+    override val preferredTransport: Flow<String> = dataStore.data.map { it[PREFERRED_TRANSPORT] ?: "BLE" }
     override suspend fun setPreferredTransport(transport: String) {
         dataStore.edit { it[PREFERRED_TRANSPORT] = transport }
     }

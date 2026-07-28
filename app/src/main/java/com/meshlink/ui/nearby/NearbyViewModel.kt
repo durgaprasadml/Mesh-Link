@@ -94,7 +94,7 @@ class NearbyViewModel @Inject constructor(
     fun connectToDevice(device: BleDevice, onConnected: () -> Unit) {
         viewModelScope.launch {
 
-            if (device.transport == TransportType.BLE || device.transport == TransportType.HYBRID) {
+            if (device.transport == TransportType.BLE) {
                 meshRepository.connectToPeer(device.address)
             }
             onConnected()

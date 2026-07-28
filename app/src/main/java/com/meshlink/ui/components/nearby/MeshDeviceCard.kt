@@ -43,9 +43,7 @@ fun MeshDeviceCard(
         else -> MaterialTheme.colorScheme.onBackground
     }
     
-    val distanceText = if (device.transport == TransportType.WIFI_DIRECT) {
-        "Distance: N/A"
-    } else if (device.distanceConfidence == "LOW") {
+    val distanceText = if (device.distanceConfidence == "LOW") {
         "Approximate Distance"
     } else if (device.distanceMeters != null) {
         val formattedConf = device.distanceConfidence?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Unknown"
@@ -136,8 +134,6 @@ fun MeshDeviceCard(
                     Badge(
                         containerColor = when(device.transport) {
                             TransportType.BLE -> MaterialTheme.colorScheme.primaryContainer
-                            TransportType.WIFI_DIRECT -> MaterialTheme.colorScheme.tertiaryContainer
-                            TransportType.HYBRID -> MaterialTheme.colorScheme.secondaryContainer
                         }
                     ) {
                         Text(
@@ -162,8 +158,6 @@ fun MeshDeviceCard(
                         Icon(
                             imageVector = when (device.transport) {
                                 TransportType.BLE -> Icons.Default.Bluetooth
-                                TransportType.WIFI_DIRECT -> Icons.Default.Wifi
-                                TransportType.HYBRID -> Icons.Default.SwapHoriz
                             },
                             contentDescription = "Transport",
                             tint = MaterialTheme.colorScheme.primary,
@@ -173,8 +167,6 @@ fun MeshDeviceCard(
                         Text(
                             text = when (device.transport) {
                                 TransportType.BLE -> "BLE Only"
-                                TransportType.WIFI_DIRECT -> "Wi-Fi Direct"
-                                TransportType.HYBRID -> "BLE + Wi-Fi Direct"
                             }, 
                             style = MaterialTheme.typography.bodySmall, 
                             color = MaterialTheme.colorScheme.onSurface

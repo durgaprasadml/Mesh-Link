@@ -52,7 +52,7 @@ fun NetworkSettingsScreen(
                     shape = MeshTheme.shapes.large
                 ) {
                     Column {
-                        val modes = listOf("BLE", "WIFI", "HYBRID", "AUTOMATIC")
+                        val modes = listOf("BLE", "AUTOMATIC")
                         modes.forEachIndexed { index, mode ->
                             SettingsItemRow(
                                 title = mode,
@@ -126,78 +126,6 @@ fun NetworkSettingsScreen(
                                 Switch(
                                     checked = uiState.bleAutoRestart, 
                                     onCheckedChange = { viewModel.setBleAutoRestart(it) }
-                                ) 
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Wi-Fi Direct
-            item {
-                Text("Wi-Fi Direct", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
-                ) {
-                    Column {
-                        SettingsItemRow(
-                            title = "Enable Wi-Fi Direct",
-                            subtitle = "Master switch for high-bandwidth transport",
-                            icon = Icons.Default.Wifi,
-                            trailingContent = { 
-                                Switch(
-                                    checked = uiState.isWifiDirectEnabled, 
-                                    onCheckedChange = { viewModel.setWifiDirectEnabled(it) }
-                                ) 
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Auto Connect",
-                            subtitle = "Automatically accept connections",
-                            icon = Icons.Default.Link,
-                            trailingContent = { 
-                                Switch(
-                                    checked = uiState.wifiAutoConnect, 
-                                    onCheckedChange = { viewModel.setWifiAutoConnect(it) }
-                                ) 
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Peer Discovery",
-                            subtitle = "Actively search for Wi-Fi peers",
-                            icon = Icons.Default.Search,
-                            trailingContent = { 
-                                Switch(
-                                    checked = uiState.wifiPeerDiscoveryEnabled, 
-                                    onCheckedChange = { viewModel.setWifiPeerDiscoveryEnabled(it) }
-                                ) 
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Preferred Group Owner",
-                            subtitle = "Force Group Owner role during negotiation",
-                            icon = Icons.Default.Star,
-                            trailingContent = { 
-                                Switch(
-                                    checked = uiState.wifiPreferredGroupOwner, 
-                                    onCheckedChange = { viewModel.setWifiPreferredGroupOwner(it) }
-                                ) 
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Auto Reconnect",
-                            subtitle = "Reconnect if link drops",
-                            icon = Icons.Default.Sync,
-                            trailingContent = { 
-                                Switch(
-                                    checked = uiState.wifiReconnectEnabled, 
-                                    onCheckedChange = { viewModel.setWifiReconnectEnabled(it) }
                                 ) 
                             }
                         )

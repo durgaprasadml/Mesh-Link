@@ -17,7 +17,7 @@ class QoSManager @Inject constructor() {
     fun getPriority(packetType: PacketType): QoSPriority {
         return when (packetType) {
             PacketType.SOS -> QoSPriority.CRITICAL
-            PacketType.KEY_EXCHANGE, PacketType.WIFI_NEGOTIATION, PacketType.SESSION_REKEY -> QoSPriority.HIGH
+            PacketType.KEY_EXCHANGE, PacketType.SESSION_REKEY -> QoSPriority.HIGH
             PacketType.TEXT, PacketType.DELIVERY_ACK, PacketType.READ_RECEIPT -> QoSPriority.MEDIUM
             PacketType.MEDIA_META, PacketType.MEDIA_CHUNK, PacketType.MEDIA_ACK, PacketType.MEDIA_NACK, PacketType.LOCATION -> QoSPriority.LOW
             else -> QoSPriority.MEDIUM

@@ -63,8 +63,8 @@ init {
         val signal = SignalingMessage(SignalType.ACCEPT, callId, session.initiatorId)
         transport.sendSignal("LOCAL", session.initiatorId, serializeSignal(signal))
         
-        // Use BLE bitrate (16kbps) or Wi-Fi (64kbps). Defaulting to Wi-Fi for now, transport selects later.
-        streamer.startStreaming("LOCAL", session.initiatorId, callId, com.meshlink.voice.codec.VoiceCodecManager.BITRATE_WIFI)
+        // Use BLE bitrate (16kbps)
+        streamer.startStreaming("LOCAL", session.initiatorId, callId, com.meshlink.voice.codec.VoiceCodecManager.BITRATE_BLE)
     }
 
     fun rejectCall(callId: String) {
@@ -108,7 +108,7 @@ init {
                     sessionManager.updateSessionState(callId, CallState.ACTIVE)
                     val session = sessionManager.getSession(callId)
                     if (session != null) {
-                        streamer.startStreaming("LOCAL", session.targetId, callId, com.meshlink.voice.codec.VoiceCodecManager.BITRATE_WIFI)
+                        streamer.startStreaming("LOCAL", session.targetId, callId, com.meshlink.voice.codec.VoiceCodecManager.BITRATE_BLE)
                     }
                 }
                 SignalType.REJECT, SignalType.END -> {

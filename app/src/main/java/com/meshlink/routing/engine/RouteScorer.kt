@@ -24,10 +24,6 @@ import com.meshlink.domain.model.RouteEntry
  * - W6 (Stability):   0.05  (Uptime and connection stability)
  * - W7 (Trust):       0.05  (Node trust level)
  * - W8 (HopCount):    0.05  (Penalizes longer paths)
- *
- * Transport Boost:
- * - Wi-Fi Direct: +10 pts
- * - Hybrid: +5 pts
  */
 @Singleton
 class RouteScorer @Inject constructor() {
@@ -92,13 +88,6 @@ class RouteScorer @Inject constructor() {
         // Base total
         var totalScore = (linkQualityScore + reliabilityScore + batteryScore + congestionScore + 
                           latencyScore + stabilityScore + trustScore + hopScore).toInt()
-        
-        // Transport Type Boost
-        when (entry.routeType) {
-            RouteType.WIFI_DIRECT -> totalScore += 10
-            RouteType.HYBRID -> totalScore += 5
-            RouteType.BLE -> { /* Base */ }
-        }
 
         return max(0, min(100, totalScore))
     }

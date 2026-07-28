@@ -21,9 +21,7 @@ enum class CodecType {
 }
 
 enum class TransportType {
-    BLE,
-    WIFI_DIRECT,
-    HYBRID
+    BLE
 }
 
 data class VoiceSession(

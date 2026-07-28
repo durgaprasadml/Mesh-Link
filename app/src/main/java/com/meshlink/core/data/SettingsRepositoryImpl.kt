@@ -37,27 +37,7 @@ class SettingsRepositoryImpl @Inject constructor(
         localDataSource.setBleAutoRestart(enabled)
     }
 
-    // WiFi Direct
-    override val isWifiDirectEnabled: Flow<Boolean> = localDataSource.isWifiDirectEnabled
-    override suspend fun setWifiDirectEnabled(enabled: Boolean) {
-        localDataSource.setWifiDirectEnabled(enabled)
-    }
-    override val wifiAutoConnect: Flow<Boolean> = localDataSource.wifiAutoConnect
-    override suspend fun setWifiAutoConnect(enabled: Boolean) {
-        localDataSource.setWifiAutoConnect(enabled)
-    }
-    override val wifiPeerDiscoveryEnabled: Flow<Boolean> = localDataSource.wifiPeerDiscoveryEnabled
-    override suspend fun setWifiPeerDiscoveryEnabled(enabled: Boolean) {
-        localDataSource.setWifiPeerDiscoveryEnabled(enabled)
-    }
-    override val wifiPreferredGroupOwner: Flow<Boolean> = localDataSource.wifiPreferredGroupOwner
-    override suspend fun setWifiPreferredGroupOwner(enabled: Boolean) {
-        localDataSource.setWifiPreferredGroupOwner(enabled)
-    }
-    override val wifiReconnectEnabled: Flow<Boolean> = localDataSource.wifiReconnectEnabled
-    override suspend fun setWifiReconnectEnabled(enabled: Boolean) {
-        localDataSource.setWifiReconnectEnabled(enabled)
-    }
+
 
     // Transport Mode
     override val preferredTransport: Flow<String> = localDataSource.preferredTransport

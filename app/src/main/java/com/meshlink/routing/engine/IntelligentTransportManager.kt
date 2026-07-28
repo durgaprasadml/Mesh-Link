@@ -35,39 +35,8 @@ class IntelligentTransportManager @Inject constructor(
      * BLE, Wi-Fi Direct, or Hybrid.
      */
     fun selectTransportForPayload(destinationId: String, packetType: PacketType, payloadSizeBytes: Long = 1024L): RouteType {
-        // Enforce user preferred transport
-        when (currentPreferredTransport) {
-            "BLE" -> return RouteType.BLE
-            "WIFI" -> return RouteType.WIFI_DIRECT
-            "HYBRID" -> { /* allow hybrid / fallback */ }
-            "AUTOMATIC" -> { /* default AI behaviour */ }
-        }
-
-        val predictedBest = RouteType.BLE
-        // Find best known route to the destination
-        val bestRoute = routeOptimizer.getOptimalRoute(destinationId)
-        
-        if (bestRoute == null) {
-            // No directed route known, fallback to predicted best (typically BLE broadcast)
-            return predictedBest
-        }
-
-        // Heavy payloads require high bandwidth
-        if (isHighBandwidthRequired(packetType)) {
-            // Force Wi-Fi Direct if available
-            return if (bestRoute.routeType == RouteType.WIFI_DIRECT || bestRoute.routeType == RouteType.HYBRID) {
-                bestRoute.routeType
-            } else {
-                RouteType.BLE
-            }
-        }
-        
-        // Prefer the AI prediction if the route supports it (e.g. if hybrid is available we can pick either)
-        if (bestRoute.routeType == RouteType.HYBRID) {
-            return predictedBest
-        }
-        
-        return bestRoute.routeType
+        // BLE is the only supported transport
+        return RouteType.BLE
     }
     
     private fun isHighBandwidthRequired(packetType: PacketType): Boolean {

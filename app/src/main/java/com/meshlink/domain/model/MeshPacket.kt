@@ -13,7 +13,6 @@ enum class PacketType {
     KEY_EXCHANGE,
     DELIVERY_ACK,
     READ_RECEIPT,
-    WIFI_NEGOTIATION,
     SESSION_REKEY,
     VOICE_SIGNAL,
     VOICE_FRAME,

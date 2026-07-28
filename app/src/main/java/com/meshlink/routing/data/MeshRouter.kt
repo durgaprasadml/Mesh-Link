@@ -507,12 +507,7 @@ internal class MeshRouter @Inject constructor(
                     // ── [TRANSPORT-A] Transport Selection ───────────────────────────────────
                     MeshLogger.d(TAG, "[TRANSPORT-A]   preferredTransport : $preferredTransport")
 
-                    if (preferredTransport == RouteType.WIFI_DIRECT) {
-                        MeshLogger.d(TAG, "[TRANSPORT-A]   Transport = WIFI_DIRECT (fallback to BLE if socket not ready)")
-                        MeshLogger.d(TAG, "Preferred transport is Wi-Fi Direct for packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
-                    } else {
-                        MeshLogger.d(TAG, "[TRANSPORT-A]   Transport = BLE")
-                    }
+                    MeshLogger.d(TAG, "[TRANSPORT-A]   Transport = BLE")
 
                     if (nextHop != null) {
                         MeshLogger.d(TAG, "[TRANSPORT-A]   ▶ Calling bleTransport.broadcast(includeAddress='$nextHop') -- DIRECTED")

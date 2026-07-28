@@ -2,7 +2,6 @@ package com.meshlink.common.logger
 
 enum class LogCategory {
     BLE,
-    WIFI,
     ROUTING,
     MESSAGING,
     SECURITY,

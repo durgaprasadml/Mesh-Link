@@ -25,22 +25,6 @@ interface SettingsLocalDataSource {
     val bleAutoRestart: Flow<Boolean>
     suspend fun setBleAutoRestart(enabled: Boolean)
 
-    // WiFi Direct
-    val isWifiDirectEnabled: Flow<Boolean>
-    suspend fun setWifiDirectEnabled(enabled: Boolean)
-
-    val wifiAutoConnect: Flow<Boolean>
-    suspend fun setWifiAutoConnect(enabled: Boolean)
-    
-    val wifiPeerDiscoveryEnabled: Flow<Boolean>
-    suspend fun setWifiPeerDiscoveryEnabled(enabled: Boolean)
-    
-    val wifiPreferredGroupOwner: Flow<Boolean>
-    suspend fun setWifiPreferredGroupOwner(enabled: Boolean)
-    
-    val wifiReconnectEnabled: Flow<Boolean>
-    suspend fun setWifiReconnectEnabled(enabled: Boolean)
-
     // Transport Mode
     val preferredTransport: Flow<String> // "BLE", "WIFI", "HYBRID", "AUTOMATIC"
     suspend fun setPreferredTransport(transport: String)

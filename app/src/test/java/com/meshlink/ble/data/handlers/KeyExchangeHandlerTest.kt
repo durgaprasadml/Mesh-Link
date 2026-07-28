@@ -72,6 +72,6 @@ class KeyExchangeHandlerTest {
         assertNotNull(packet)
         assertEquals("local-peer-id", packet.senderId)
         assertEquals(PacketType.KEY_EXCHANGE, packet.type)
-        assertTrue(packet.payload.startsWith("v2|"))
+        assertTrue(packet.payload.startsWith("v3|"))
     }
 }

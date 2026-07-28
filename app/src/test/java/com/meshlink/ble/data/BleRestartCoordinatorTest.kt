@@ -30,6 +30,7 @@ class BleRestartCoordinatorTest {
         coordinator.scheduleRestart(this, RestartComponent.SCANNER, BleException("test")) {
             actionExecuted = true
         }
+        testScheduler.runCurrent()
 
         assertEquals(RestartState.SCHEDULED, coordinator.getState(RestartComponent.SCANNER))
         assertEquals(1, coordinator.getAttempts(RestartComponent.SCANNER))
@@ -49,6 +50,7 @@ class BleRestartCoordinatorTest {
         coordinator.scheduleRestart(this, RestartComponent.SCANNER, exception) {
             actionExecuted = true
         }
+        testScheduler.runCurrent()
 
         assertEquals(RestartState.IDLE, coordinator.getState(RestartComponent.SCANNER))
         assertEquals(0, coordinator.getAttempts(RestartComponent.SCANNER))
@@ -63,11 +65,13 @@ class BleRestartCoordinatorTest {
         coordinator.scheduleRestart(this, RestartComponent.SCANNER, BleException("test")) {
             executionCount++
         }
+        testScheduler.runCurrent()
         
         // Attempt duplicate while scheduled
         coordinator.scheduleRestart(this, RestartComponent.SCANNER, BleException("test")) {
             executionCount++
         }
+        testScheduler.runCurrent()
 
         assertEquals(1, coordinator.getAttempts(RestartComponent.SCANNER))
         
@@ -79,6 +83,7 @@ class BleRestartCoordinatorTest {
     @Test
     fun `test reset retry clears state and attempts`() = testScope.runTest {
         coordinator.scheduleRestart(this, RestartComponent.SCANNER, BleException("test")) { }
+        testScheduler.runCurrent()
         
         assertEquals(RestartState.SCHEDULED, coordinator.getState(RestartComponent.SCANNER))
         assertEquals(1, coordinator.getAttempts(RestartComponent.SCANNER))
@@ -95,6 +100,7 @@ class BleRestartCoordinatorTest {
         coordinator.scheduleRestart(this, RestartComponent.ADVERTISER, BleException("test")) {
             actionExecuted = true
         }
+        testScheduler.runCurrent()
         
         coordinator.cancelRestart(RestartComponent.ADVERTISER)
         advanceUntilIdle()

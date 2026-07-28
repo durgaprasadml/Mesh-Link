@@ -23,7 +23,6 @@ class PacketEncryptionPolicyTest {
             PacketType.VOICE_FRAME,
             PacketType.VIDEO_SIGNAL,
             PacketType.VIDEO_FRAME,
-            PacketType.WIFI_NEGOTIATION,
             PacketType.DELIVERY_ACK,
             PacketType.READ_RECEIPT,
             PacketType.INCIDENT_REPORT,

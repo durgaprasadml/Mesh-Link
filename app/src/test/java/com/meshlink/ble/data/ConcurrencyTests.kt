@@ -41,11 +41,16 @@ class ConcurrencyTests {
 
     @Before
     fun setup() {
-        val mockGattManager: com.meshlink.ble.data.BleGattManager = mockk(relaxed = true)
-        every { mockGattManager.incomingMessages } returns MutableSharedFlow()
+        val bleTransport: com.meshlink.ble.api.BleTransport = mockk(relaxed = true)
+        every { bleTransport.incomingPackets } returns MutableSharedFlow()
+
+        every { settingsRepository.advancedEncryptionEnforcement } returns kotlinx.coroutines.flow.flowOf(true)
+        every { settingsRepository.isMeshRelayEnabled } returns kotlinx.coroutines.flow.flowOf(true)
+        every { settingsRepository.meshMaxHops } returns kotlinx.coroutines.flow.flowOf(5)
+        every { settingsRepository.meshTtl } returns kotlinx.coroutines.flow.flowOf(10)
         
         meshRouter = MeshRouter(
-            bleTransport = mockk(relaxed = true),
+            bleTransport = bleTransport,
             relayDao = relayDao,
             trustManager = mockk(relaxed = true),
             routingEngine = routingEngine,

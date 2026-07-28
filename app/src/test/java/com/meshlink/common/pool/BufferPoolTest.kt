@@ -12,6 +12,9 @@ class BufferPoolTest {
     @Before
     fun setup() {
         BufferPool.trimMemory() // Reset for each test
+        BufferPool.hitCount.set(0)
+        BufferPool.missCount.set(0)
+        BufferPool.evictionCount.set(0)
     }
 
     @Test

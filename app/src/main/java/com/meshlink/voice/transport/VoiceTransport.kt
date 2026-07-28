@@ -18,9 +18,9 @@ import org.json.JSONObject
 class VoiceTransport @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
     @com.meshlink.di.IoDispatcher private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher,
-    private val meshConfig: com.meshlink.config.MeshConfig
-,
-    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) : com.meshlink.voice.api.VoiceTransport {
+    private val meshConfig: com.meshlink.config.MeshConfig,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope
+) {
     companion object {
         private const val TAG = "VoiceTransport"
     }
@@ -102,23 +102,5 @@ class VoiceTransport @Inject constructor(
                 MeshLogger.e(TAG, "Failed to parse voice packet: ${e.message}")
             }
         }
-    }
-
-    @Deprecated("Use initiateVoiceCall instead", ReplaceWith("initiateVoiceCall(peerId)"))
-    override suspend fun startVoiceCall(peerId: String) {
-        throw UnsupportedOperationException("Not supported in this layer")
-    }
-
-    override suspend fun initiateVoiceCall(peerId: String): com.meshlink.domain.model.MeshResult<Unit> {
-        return com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.UnknownError("Not supported in this layer"))
-    }
-
-    @Deprecated("Use terminateVoiceCall instead", ReplaceWith("terminateVoiceCall(peerId)"))
-    override suspend fun endVoiceCall(peerId: String) {
-        throw UnsupportedOperationException("Not supported in this layer")
-    }
-
-    override suspend fun terminateVoiceCall(peerId: String): com.meshlink.domain.model.MeshResult<Unit> {
-        return com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.UnknownError("Not supported in this layer"))
     }
 }

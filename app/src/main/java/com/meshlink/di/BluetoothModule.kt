@@ -1,6 +1,5 @@
 package com.meshlink.di
 
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import com.meshlink.ble.data.source.BleMeshDataSource
@@ -69,6 +68,12 @@ abstract class BluetoothBindingModule {
     abstract fun bindPacketDispatcher(
         impl: com.meshlink.ble.data.CorePacketDispatcher
     ): com.meshlink.ble.api.PacketDispatcher
+
+    @Binds
+    @Singleton
+    internal abstract fun bindBleTransport(
+        impl: com.meshlink.ble.data.BleTransportImpl
+    ): com.meshlink.ble.api.BleTransport
 }
 
 @Module
@@ -85,14 +90,6 @@ object BluetoothModule {
 
     @Provides
     @Singleton
-    fun provideBluetoothAdapter(
-        bluetoothManager: BluetoothManager
-    ): BluetoothAdapter? {
-        return bluetoothManager.adapter
-    }
-
-    @Provides
-    @Singleton
     fun provideGattNotificationManager(
         gattManager: dagger.Lazy<com.meshlink.ble.data.BleGattManager>,
         @com.meshlink.di.ApplicationScope applicationScope: kotlinx.coroutines.CoroutineScope
@@ -104,14 +101,4 @@ object BluetoothModule {
             applicationScope
         )
     }
-}
-
-@Module
-@InstallIn(SingletonComponent::class)
-abstract class TransportBindingModule {
-    @Binds
-    @Singleton
-    internal abstract fun bindBleTransport(
-        impl: com.meshlink.ble.data.BleTransportImpl
-    ): com.meshlink.ble.api.BleTransport
 }

@@ -16,6 +16,7 @@ import com.meshlink.ble.data.gatt.PacketFragmenter
 import com.meshlink.ble.data.gatt.PacketReassembler
 import com.meshlink.ble.data.gatt.PendingClientWrite
 import com.meshlink.common.pool.BufferPool
+import com.meshlink.core.permissions.BluetoothPermissionChecker
 import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,7 +37,6 @@ import kotlinx.coroutines.sync.withLock
  *               GattNotificationManager, ServiceDiscoveryManager, PacketFragmenter, PacketReassembler.
  */
 @Singleton
-@SuppressLint("MissingPermission")
 class BleGattManager @Inject constructor(
     @ApplicationContext private val context: Context,
     @ApplicationScope private val applicationScope: CoroutineScope,
@@ -46,7 +46,8 @@ class BleGattManager @Inject constructor(
     private val notificationManager: GattNotificationManager,
     private val discoveryManager: ServiceDiscoveryManager,
     private val fragmenter: PacketFragmenter,
-    private val reassembler: PacketReassembler
+    private val reassembler: PacketReassembler,
+    private val permissionChecker: BluetoothPermissionChecker
 ) {
     private val mutex = Mutex()
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -78,9 +79,15 @@ class BleGattManager @Inject constructor(
     fun getGattServer(): BluetoothGattServer? = gattServer
 
     fun startServer() {
+        if (!permissionChecker.hasRequiredPermissions(context)) {
+            MeshLogger.w("BleGatt", "Missing permissions for starting GATT server")
+            return
+        }
         if (gattServer != null) return
         try {
-            gattServer = bluetoothManager.openGattServer(context, serverCallback)
+            @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+            val newGattServer = bluetoothManager.openGattServer(context, serverCallback)
+            gattServer = newGattServer
             val service = BluetoothGattService(BleConstants.MESH_SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
             
             val msgChar = BluetoothGattCharacteristic(
@@ -94,7 +101,8 @@ class BleGattManager @Inject constructor(
             )
             msgChar.addDescriptor(cccd)
             service.addCharacteristic(msgChar)
-            gattServer?.addService(service)
+            @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+            val ignored = gattServer?.addService(service)
             MeshLogger.d("BleGatt", "GATT Server started")
         } catch (e: SecurityException) {
             MeshLogger.e("BleGatt", "SecurityException starting GATT server", e)
@@ -104,12 +112,19 @@ class BleGattManager @Inject constructor(
     }
 
     fun stopServer() {
-        gattServer?.close()
+        if (permissionChecker.hasRequiredPermissions(context)) {
+            @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+            val ignoredClose = gattServer?.close()
+        }
         gattServer = null
         
         connectionManager.activeClients.values.forEach { 
-            it.disconnect()
-            it.close() 
+            if (permissionChecker.hasRequiredPermissions(context)) {
+                @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+                val ignoredDisconnect = it.disconnect()
+                @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+                val ignoredClientClose = it.close() 
+            }
         }
         
         connectionManager.clear()
@@ -123,9 +138,14 @@ class BleGattManager @Inject constructor(
     }
 
     fun connectToDevice(address: String) {
+        if (!permissionChecker.hasRequiredPermissions(context)) {
+            MeshLogger.w("BleGatt", "Missing permissions to connect to $address")
+            return
+        }
         if (connectionManager.getClient(address) != null) return
         try {
             val device = bluetoothManager.adapter.getRemoteDevice(address)
+            @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
             val gatt = device.connectGatt(context, false, clientCallback)
             connectionManager.addActiveClient(address, gatt)
         } catch (e: SecurityException) {
@@ -136,9 +156,15 @@ class BleGattManager @Inject constructor(
     }
 
     fun disconnectDevice(address: String) {
+        if (!permissionChecker.hasRequiredPermissions(context)) {
+            MeshLogger.w("BleGatt", "Missing permissions to disconnect from $address")
+            return
+        }
         connectionManager.getClient(address)?.let {
-            it.disconnect()
-            it.close()
+            @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+            val ignoredDisconnect = it.disconnect()
+            @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+            val ignoredClose = it.close()
         }
         connectionManager.removeActiveClient(address)
     }
@@ -241,8 +267,14 @@ class BleGattManager @Inject constructor(
         }
 
         try {
+            if (!permissionChecker.hasRequiredPermissions(context)) {
+                MeshLogger.w("BleGatt", "[TRANSPORT-A] ⚠ Missing permissions to write characteristic for ${pending.address}")
+                writeQueue.enqueue(pending)
+                return
+            }
             val writeStarted: Boolean
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
                 val statusCode = gatt.writeCharacteristic(char, pending.bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
                 writeStarted = statusCode == android.bluetooth.BluetoothStatusCodes.SUCCESS
             } else {
@@ -250,7 +282,9 @@ class BleGattManager @Inject constructor(
                 char.value = pending.bytes
                 char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                 @Suppress("DEPRECATION")
-                writeStarted = gatt.writeCharacteristic(char)
+                @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+                val writeRes = gatt.writeCharacteristic(char)
+                writeStarted = writeRes
             }
             
             MeshLogger.d("BleGatt", "[TRANSPORT-A]   -> writeCharacteristic for ${pending.address} started=$writeStarted size=${pending.bytes.size}")
@@ -308,7 +342,10 @@ class BleGattManager @Inject constructor(
             super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value)
             if (characteristic.uuid == BleConstants.MSG_CHAR_UUID) {
                 if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                    if (permissionChecker.hasRequiredPermissions(context)) {
+                        @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+                        val ignoredResponse = gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                    }
                 }
                 val reassembled = reassembler.handleFragment(device.address, value)
                 if (reassembled != null) {
@@ -328,7 +365,10 @@ class BleGattManager @Inject constructor(
         ) {
             super.onDescriptorWriteRequest(device, requestId, descriptor, preparedWrite, responseNeeded, offset, value)
             if (responseNeeded) {
-                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                if (permissionChecker.hasRequiredPermissions(context)) {
+                    @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+                    val ignoredResponse = gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                }
             }
         }
 
@@ -362,7 +402,18 @@ class BleGattManager @Inject constructor(
                     }
                 }
                 
-                gatt.close()
+                if (permissionChecker.hasRequiredPermissions(context)) {
+                    @SuppressLint("MissingPermission") // Safe: checked via permissionChecker
+                    val ignoredClose = gatt.close()
+                } else {
+                    // Safe fallback if permissions are revoked, gatt connection might be dead anyway
+                    try {
+                        @SuppressLint("MissingPermission")
+                        val ignoredClose = gatt.close()
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
+                }
                 _gattEvents.tryEmit(GattEvent.Disconnected(gatt.device.address))
             }
         }

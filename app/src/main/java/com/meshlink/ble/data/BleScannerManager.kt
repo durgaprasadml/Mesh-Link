@@ -15,6 +15,7 @@ import com.meshlink.ble.discovery.DiscoveryEngine
 import com.meshlink.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.meshlink.di.ApplicationScope
+import com.meshlink.core.permissions.BluetoothPermissionChecker
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -24,12 +25,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Singleton
-@SuppressLint("MissingPermission")
 class BleScannerManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val discoveryEngine: DiscoveryEngine,
     private val settingsRepository: SettingsRepository,
-    @ApplicationScope private val applicationScope: CoroutineScope
+    @ApplicationScope private val applicationScope: CoroutineScope,
+    private val permissionChecker: BluetoothPermissionChecker
 ) {
     companion object {
         private const val TAG = "BleScanner"
@@ -66,6 +67,11 @@ class BleScannerManager @Inject constructor(
         applicationScope.launch {
             if (!settingsRepository.bleScanningEnabled.first() || !settingsRepository.isBleEnabled.first()) {
                 MeshLogger.d(TAG, "BLE Scanning disabled in settings. Skipping.")
+                return@launch
+            }
+            
+            if (!permissionChecker.hasRequiredPermissions(context)) {
+                MeshLogger.w(TAG, "Missing permissions for BLE scanning")
                 return@launch
             }
             
@@ -120,7 +126,8 @@ class BleScannerManager @Inject constructor(
         }
         
         try {
-            scanner.startScan(listOf(filter), settings, scanCallback)
+            @SuppressLint("MissingPermission") // Safe: checked via permissionChecker at start of method
+            val ignored = scanner.startScan(listOf(filter), settings, scanCallback)
         } catch (e: SecurityException) {
             MeshLogger.e(TAG, "SecurityException: Missing BLE scan permission", e)
         } catch (e: Exception) {
@@ -138,10 +145,12 @@ class BleScannerManager @Inject constructor(
     }
 
     private fun stopHardwareScan() {
+        if (!permissionChecker.hasRequiredPermissions(context)) return
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
         try {
             scanCallback?.let {
-                scanner.stopScan(it)
+                @SuppressLint("MissingPermission") // Safe: checked via permissionChecker at start of method
+                val ignored = scanner.stopScan(it)
                 scanCallback = null
             }
         } catch (e: Exception) {

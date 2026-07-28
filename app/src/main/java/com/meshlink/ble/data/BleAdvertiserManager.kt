@@ -13,6 +13,7 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.meshlink.di.ApplicationScope
+import com.meshlink.core.permissions.BluetoothPermissionChecker
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -22,11 +23,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Singleton
-@SuppressLint("MissingPermission")
 class BleAdvertiserManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
-    @ApplicationScope private val applicationScope: CoroutineScope
+    @ApplicationScope private val applicationScope: CoroutineScope,
+    private val permissionChecker: BluetoothPermissionChecker
 ) {
     companion object {
         private const val TAG = "BleAdvertiser"
@@ -47,6 +48,11 @@ class BleAdvertiserManager @Inject constructor(
         applicationScope.launch {
             if (!settingsRepository.bleAdvertisingEnabled.first() || !settingsRepository.isBleEnabled.first()) {
                 MeshLogger.d(TAG, "BLE Advertising disabled in settings. Skipping.")
+                return@launch
+            }
+
+            if (!permissionChecker.hasRequiredPermissions(context)) {
+                MeshLogger.w(TAG, "Missing permissions for BLE advertising")
                 return@launch
             }
 
@@ -124,7 +130,8 @@ class BleAdvertiserManager @Inject constructor(
             }
         }
         try {
-            advertiser.startAdvertising(settings, data, scanResponse, advertiseCallback)
+            @SuppressLint("MissingPermission") // Safe: checked via permissionChecker at start of method
+            val ignored = advertiser.startAdvertising(settings, data, scanResponse, advertiseCallback)
         } catch (e: SecurityException) {
             MeshLogger.e(TAG, "SecurityException: Missing BLE advertise permission", e)
         } catch (e: Exception) {
@@ -142,10 +149,12 @@ class BleAdvertiserManager @Inject constructor(
     }
 
     fun stopAdvertising() {
+        if (!permissionChecker.hasRequiredPermissions(context)) return
         val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return
         try {
             advertiseCallback?.let {
-                advertiser.stopAdvertising(it)
+                @SuppressLint("MissingPermission") // Safe: checked via permissionChecker at start of method
+                val ignored = advertiser.stopAdvertising(it)
                 advertiseCallback = null
                 MeshLogger.d(TAG, "Advertising stopped")
             }

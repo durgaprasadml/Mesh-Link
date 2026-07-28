@@ -57,6 +57,12 @@ abstract class BluetoothBindingModule {
     abstract fun bindPacketReassembler(
         impl: com.meshlink.ble.data.gatt.PacketReassemblerImpl
     ): com.meshlink.ble.data.gatt.PacketReassembler
+
+    @Binds
+    @Singleton
+    abstract fun bindPacketDispatcher(
+        impl: com.meshlink.ble.data.CorePacketDispatcher
+    ): com.meshlink.ble.api.PacketDispatcher
 }
 
 @Module

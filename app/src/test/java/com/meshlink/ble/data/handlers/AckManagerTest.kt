@@ -56,7 +56,7 @@ class AckManagerTest {
     }
 
     @Test
-    fun `handleReadReceipt updates delivery tracker`() = runBlocking {
+    fun `handleReadReceipt updates delivery tracker for single message`() = runBlocking {
         val packet = MeshPacket(
             packetId = "p2",
             senderId = "peer",
@@ -71,21 +71,46 @@ class AckManagerTest {
     }
 
     @Test
-    fun `sendReadReceipts processes all unread messages`() = runBlocking {
+    fun `handleReadReceipt updates delivery tracker for batched messages`() = runBlocking {
+        val packet = MeshPacket(
+            packetId = "p2",
+            senderId = "peer",
+            targetId = "local",
+            payload = "msg-1, msg-2, msg-3",
+            type = PacketType.READ_RECEIPT
+        )
+
+        ackManager.handleReadReceipt(packet)
+
+        coVerify { deliveryTracker.onReadReceiptReceived("msg-1") }
+        coVerify { deliveryTracker.onReadReceiptReceived("msg-2") }
+        coVerify { deliveryTracker.onReadReceiptReceived("msg-3") }
+    }
+
+    @Test
+    fun `sendReadReceipts batches unread messages into chunks`() = runBlocking {
         val localUser = User(meshId = "local", name = "Test User")
         coEvery { userRepository.getLocalUser() } returns localUser
-        coEvery { chatDao.getUnreadIncomingMessages("peer") } returns listOf("msg-1", "msg-2")
+        
+        val unreadList = (1..25).map { "msg-$it" }
+        coEvery { chatDao.getUnreadIncomingMessages("peer") } returns unreadList
 
         ackManager.sendReadReceipts("peer")
 
-        coVerify { chatDao.markMessagesAsSeen(listOf("msg-1", "msg-2")) }
-        
+        coVerify { chatDao.markMessagesAsSeen(unreadList) }
+
         val expectedTarget = MeshIdNormalizer.canonicalize("peer")
+        
+        // 25 messages chunked by 10 => 3 packets (10, 10, 5)
+        coVerify(exactly = 3) {
+            packetDispatcher.dispatchSinglePacket(expectedTarget, any())
+        }
+
         coVerify {
             packetDispatcher.dispatchSinglePacket(
                 expectedTarget,
                 match { pkt: MeshPacket ->
-                    pkt.payload == "msg-1" && pkt.type == PacketType.READ_RECEIPT
+                    pkt.payload == (1..10).joinToString(",") { "msg-$it" } && pkt.type == PacketType.READ_RECEIPT
                 }
             )
         }
@@ -93,7 +118,15 @@ class AckManagerTest {
             packetDispatcher.dispatchSinglePacket(
                 expectedTarget,
                 match { pkt: MeshPacket ->
-                    pkt.payload == "msg-2" && pkt.type == PacketType.READ_RECEIPT
+                    pkt.payload == (11..20).joinToString(",") { "msg-$it" } && pkt.type == PacketType.READ_RECEIPT
+                }
+            )
+        }
+        coVerify {
+            packetDispatcher.dispatchSinglePacket(
+                expectedTarget,
+                match { pkt: MeshPacket ->
+                    pkt.payload == (21..25).joinToString(",") { "msg-$it" } && pkt.type == PacketType.READ_RECEIPT
                 }
             )
         }

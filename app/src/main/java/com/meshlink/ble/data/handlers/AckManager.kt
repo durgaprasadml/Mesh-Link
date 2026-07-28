@@ -18,12 +18,25 @@ class AckManager @Inject constructor(
     private val packetDispatcher: PacketDispatcher,
     private val deliveryTracker: DeliveryTracker
 ) {
+    companion object {
+        const val MAX_BATCH_SIZE = 10
+    }
+
     suspend fun handleDeliveryAck(packet: MeshPacket) {
         deliveryTracker.onAckReceived(packet.payload)
     }
 
     suspend fun handleReadReceipt(packet: MeshPacket) {
-        deliveryTracker.onReadReceiptReceived(packet.payload)
+        val payload = packet.payload.trim()
+        if (payload.isBlank()) return
+
+        val ids = payload.split(",")
+        ids.forEach { id ->
+            val cleanId = id.trim()
+            if (cleanId.isNotBlank()) {
+                deliveryTracker.onReadReceiptReceived(cleanId)
+            }
+        }
     }
 
     suspend fun sendReadReceipts(chatId: String) {
@@ -41,11 +54,12 @@ class AckManager @Inject constructor(
         val targetPeerId = MeshIdNormalizer.canonicalize(chatId)
         if (targetPeerId == "BROADCAST") return // No read receipts for broadcasts
 
-        unreadIds.forEach { msgId ->
+        unreadIds.chunked(MAX_BATCH_SIZE).forEach { batch ->
+            val batchPayload = batch.joinToString(",")
             val receiptPacket = MeshPacket(
                 senderId = localPeerId,
                 targetId = targetPeerId,
-                payload = msgId, // The ID of the message being marked as seen
+                payload = batchPayload,
                 type = PacketType.READ_RECEIPT,
                 encrypted = false
             )

@@ -58,7 +58,7 @@ data class MeshPacket(
     val totalChunks: Int = 0,
     val mimeType: String? = null,
     val encrypted: Boolean = false,
-    var ttl: Int = 10,
-    var hopCount: Int = 0,
-    val visitedPath: MutableList<String> = mutableListOf()
+    val ttl: Int = 10,
+    val hopCount: Int = 0,
+    val visitedPath: List<String> = emptyList()
 )

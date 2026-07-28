@@ -72,7 +72,7 @@ object MeshPacketParser {
                 encrypted = json.optBoolean("encrypted", false),
                 ttl = json.optInt("ttl", 10),
                 hopCount = json.optInt("hopCount", 0),
-                visitedPath = path
+                visitedPath = path.toList()
             )
         } catch (e: Exception) {
             null

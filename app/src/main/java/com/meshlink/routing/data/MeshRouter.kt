@@ -160,7 +160,7 @@ internal class MeshRouter @Inject constructor(
                 encrypted = entity.encrypted,
                 ttl = entity.ttl - 1,
                 hopCount = entity.hopCount + 1,
-                visitedPath = mutableListOf()
+                visitedPath = emptyList()
             )
 
             routingEngine.markPacketProcessed(packet.packetId)
@@ -307,9 +307,7 @@ internal class MeshRouter @Inject constructor(
         val relayPacket = packet.copy(
             ttl = packet.ttl - 1,
             hopCount = packet.hopCount + 1,
-            visitedPath = (packet.visitedPath.toMutableList().also {
-                if (localMeshId.isNotBlank()) it.add(localMeshId)
-            })
+            visitedPath = if (localMeshId.isNotBlank()) packet.visitedPath + localMeshId else packet.visitedPath
         )
 
 

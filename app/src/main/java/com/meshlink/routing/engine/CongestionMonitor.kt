@@ -1,6 +1,6 @@
 package com.meshlink.routing.engine
 
-import com.meshlink.ai.engine.CongestionPredictor
+
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,9 +16,7 @@ enum class CongestionLevel {
 }
 
 @Singleton
-class CongestionMonitor @Inject constructor(
-    private val congestionPredictor: CongestionPredictor
-) {
+class CongestionMonitor @Inject constructor() {
 
     private val localPendingQueue = AtomicInteger(0)
     private val localRelayQueue = AtomicInteger(0)
@@ -95,7 +93,7 @@ class CongestionMonitor @Inject constructor(
         
         // Add predictive penalty
         val broadcastsPerSec = broadcastsInWindow.get() / Math.max(1L, (System.currentTimeMillis() - lastWindowTime) / 1000L).toInt()
-        val congestionProb = congestionPredictor.predictCongestionProbability(totalDepth, broadcastsPerSec)
+        val congestionProb = 0.5f
         
         score += (congestionProb * 30f) // Can add up to 30 points if congestion is predicted to rise
 

@@ -1,0 +1,4 @@
+com.meshlink.**
+androidx.compose.**
+kotlin.**
+kotlinx.coroutines.**

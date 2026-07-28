@@ -5,7 +5,7 @@ import com.meshlink.ble.discovery.DiscoveryEngine
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.repository.UserRepository
-import com.meshlink.routing.data.MeshRouter
+import com.meshlink.routing.api.Router
 import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.security.data.SessionManager
 import com.meshlink.security.data.RekeyManager
@@ -23,29 +23,25 @@ class RoutingCoordinator @Inject constructor(
     private val trustManager: TrustManager,
     private val sessionManager: SessionManager,
     private val rekeyManager: RekeyManager,
-    private val meshRouter: MeshRouter,
+    private val meshRouter: Router,
     private val connectionManager: BleConnectionManager,
     private val discoveryManager: DiscoveryManager
 ) {
     private val TAG = "RoutingCoordinator"
 
-    fun networkId(peerId: String): String = BleConstants.toNetworkId(peerId)
-
-    fun normalizePeerId(peerIdOrAddress: String): String {
-        val withoutColons = peerIdOrAddress.replace(":", "").uppercase()
-        return if (withoutColons.length > 8) withoutColons.takeLast(8) else withoutColons
-    }
-
-    fun incomingChatId(senderMeshId: String): String = normalizePeerId(senderMeshId)
-    fun outgoingChatId(targetMeshId: String): String = normalizePeerId(targetMeshId)
-    fun resolveChatId(peerIdOrAddress: String): String = normalizePeerId(peerIdOrAddress)
 
     fun resolvePeerAddress(peerIdOrAddress: String): String? {
-        val norm = normalizePeerId(peerIdOrAddress)
-        return connectionManager.connectedServers.firstOrNull { normalizePeerId(it) == norm }
-            ?: connectionManager.activeClients.firstOrNull { normalizePeerId(it) == norm }
-            ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == peerIdOrAddress }?.key
-            ?: discoveryManager.scannedDevices.value.keys.firstOrNull { normalizePeerId(it) == norm }
+        if (BleConstants.isBluetoothAddress(peerIdOrAddress)) return peerIdOrAddress
+
+        val norm = com.meshlink.util.MeshIdNormalizer.canonicalize(peerIdOrAddress)
+        
+        val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm }
+        if (scanned != null) return scanned.address
+        
+        val route = meshRouter.routeTable[peerIdOrAddress] ?: meshRouter.routeTable[norm]
+        if (route != null) return route.nextHop
+
+        return null
     }
 
     fun hasDeliveryPath(targetPeerIdOrAddress: String): Boolean {
@@ -53,5 +49,15 @@ class RoutingCoordinator @Inject constructor(
         val routeAddress = meshRouter.routeTable[targetPeerIdOrAddress]?.nextHop
         if (routeAddress != null) return true
         return resolvePeerAddress(targetPeerIdOrAddress) != null
+    }
+
+    fun isDirectlyConnected(peerIdOrAddress: String): Boolean {
+        if (BleConstants.isBluetoothAddress(peerIdOrAddress)) return true
+        val norm = com.meshlink.util.MeshIdNormalizer.canonicalize(peerIdOrAddress)
+        val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm }
+        if (scanned != null) return true
+        val route = meshRouter.routeTable[peerIdOrAddress] ?: meshRouter.routeTable[norm]
+        if (route != null) return route.hops <= 0
+        return false
     }
 }

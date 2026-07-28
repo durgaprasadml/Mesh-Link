@@ -27,14 +27,13 @@ class VoiceManager @Inject constructor(
     private val transport: VoiceTransport,
     private val streamer: AudioStreamer,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "VoiceManager"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-
-    init {
+init {
         transport.onIncomingSignal = { json, senderId -> handleIncomingSignal(json, senderId) }
     }
 

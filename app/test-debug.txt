@@ -1,0 +1,7 @@
+[
+  {"t":0,"type":"SENT","node":"A","packetId":"23759854-a0a9-445e-99c3-827e2bbe312c","traceId":"trace:962f1b20-e42f-41a2-96b2-6ec43ccd647d","from":"A","to":"relay","hopCount":0,"ttl":10,"packetType":"TEXT","dropReason":null},
+  {"t":0,"type":"RECEIVED","node":"relay","packetId":"23759854-a0a9-445e-99c3-827e2bbe312c","traceId":"trace:962f1b20-e42f-41a2-96b2-6ec43ccd647d","from":"A","to":"relay","hopCount":0,"ttl":10,"packetType":"TEXT","dropReason":null},
+  {"t":0,"type":"SENT","node":"relay","packetId":"23759854-a0a9-445e-99c3-827e2bbe312c","traceId":"trace:962f1b20-e42f-41a2-96b2-6ec43ccd647d","from":"relay","to":"B","hopCount":1,"ttl":9,"packetType":"TEXT","dropReason":null},
+  {"t":0,"type":"RECEIVED","node":"B","packetId":"23759854-a0a9-445e-99c3-827e2bbe312c","traceId":"trace:962f1b20-e42f-41a2-96b2-6ec43ccd647d","from":"relay","to":"B","hopCount":1,"ttl":9,"packetType":"TEXT","dropReason":null},
+  {"t":0,"type":"DELIVERED","node":"B","packetId":"23759854-a0a9-445e-99c3-827e2bbe312c","traceId":"trace:962f1b20-e42f-41a2-96b2-6ec43ccd647d","from":"relay","to":"B","hopCount":1,"ttl":9,"packetType":"TEXT","dropReason":null}
+]

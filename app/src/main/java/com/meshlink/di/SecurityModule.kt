@@ -18,4 +18,9 @@ abstract class SecurityModule {
         impl: CryptoDataSourceImpl
     ): CryptoDataSource
 
+    @Binds
+    @Singleton
+    abstract fun bindKeystoreManager(
+        impl: com.meshlink.security.data.KeystoreManagerImpl
+    ): com.meshlink.security.data.KeystoreManager
 }

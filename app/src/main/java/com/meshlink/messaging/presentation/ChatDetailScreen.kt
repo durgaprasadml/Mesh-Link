@@ -49,7 +49,7 @@ fun ChatDetailScreen(
         initialFirstVisibleItemIndex = if (uiState.messages.isNotEmpty()) uiState.messages.size - 1 else 0
     )
 
-    var fullscreenImagePath by remember { mutableStateOf<String?>(null) }
+    var fullscreenMessageId by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -60,6 +60,7 @@ fun ChatDetailScreen(
         uri?.let { viewModel.sendImage(it) }
     }
 
+
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
@@ -69,12 +70,13 @@ fun ChatDetailScreen(
         }
     }
 
-    var previousMessageCount by remember { mutableIntStateOf(0) }
-    LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty() && uiState.messages.size > previousMessageCount) {
+    var previousLastMessageId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(uiState.messages) {
+        val currentLast = uiState.messages.lastOrNull()?.messageId
+        if (currentLast != null && currentLast != previousLastMessageId) {
             listState.animateScrollToItem(uiState.messages.size - 1)
         }
-        previousMessageCount = uiState.messages.size
+        previousLastMessageId = currentLast
     }
 
     LaunchedEffect(uiState.messages.lastOrNull()?.messageId) {
@@ -83,22 +85,37 @@ fun ChatDetailScreen(
         }
     }
 
-    if (fullscreenImagePath != null) {
-        Dialog(onDismissRequest = { fullscreenImagePath = null }) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-                    .clickable { fullscreenImagePath = null },
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = File(fullscreenImagePath!!),
-                    contentDescription = "Full Image",
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Fit
-                )
-            }
+    if (fullscreenMessageId != null) {
+        val mediaMessages = uiState.messages.filter { it.messageType == com.meshlink.domain.model.MessageType.IMAGE }
+        val initialIndex = mediaMessages.indexOfFirst { it.messageId == fullscreenMessageId }.coerceAtLeast(0)
+        
+        Dialog(
+            onDismissRequest = { fullscreenMessageId = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = false
+            )
+        ) {
+            MediaViewerScreen(
+                mediaMessages = mediaMessages,
+                initialIndex = initialIndex,
+                onBack = { fullscreenMessageId = null },
+                onDelete = { msg ->
+                    if (!uiState.selectedMessageIds.contains(msg.messageId)) {
+                        viewModel.toggleMessageSelection(msg.messageId)
+                    }
+                    viewModel.deleteSelectedMessages()
+                    fullscreenMessageId = null
+                }
+            )
+        }
+    }
+
+    DisposableEffect(viewModel.address) {
+        com.meshlink.util.NotificationHelper.setCurrentChatId(viewModel.address)
+        onDispose {
+            com.meshlink.util.NotificationHelper.setCurrentChatId(null)
         }
     }
 
@@ -114,6 +131,7 @@ fun ChatDetailScreen(
                     showAttachmentSheet = false
                     imagePickerLauncher.launch("image/*")
                 },
+
                 onCameraClick = {
                     showAttachmentSheet = false
                     val dir = File(context.cacheDir, "images")
@@ -279,7 +297,7 @@ fun ChatDetailScreen(
                         onToggleSelection = { viewModel.toggleMessageSelection(msg.messageId) },
                         onPlayVoice = { viewModel.playVoice(it) },
                         onStopPlayback = { viewModel.stopPlayback() },
-                        onImageClick = { if (!uiState.isSelectionMode) fullscreenImagePath = it },
+                        onImageClick = { if (!uiState.isSelectionMode) fullscreenMessageId = it },
                         onLocationClick = { lat, lng ->
                             if (!uiState.isSelectionMode) {
                                 try {
@@ -330,6 +348,7 @@ fun AttachmentMenu(
                 color = MaterialTheme.colorScheme.secondary,
                 onClick = onGalleryClick
             )
+
             AttachmentIcon(
                 icon = Icons.Default.CameraAlt,
                 label = "Camera",

@@ -1,63 +1,23 @@
 import re
-import os
 
-filepath = 'app/src/main/java/com/meshlink/ble/data/MeshMessagingManager.kt'
-with open(filepath, 'r') as f:
-    content = f.read()
+file_path = "app/src/main/java/com/meshlink/ble/data/MeshMessagingManager.kt"
 
-# 1. Update imports
-imports = """import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import androidx.annotation.VisibleForTesting
-import com.meshlink.media.data.ImageCompressor
-import java.io.File
-import org.json.JSONObject
-import java.util.UUID
-import kotlinx.coroutines.flow.first
-import android.net.Uri
-import com.meshlink.util.NotificationHelper
-import com.meshlink.domain.model.DeliveryStatus
-import com.meshlink.domain.model.MessageType
-import com.meshlink.data.local.entity.MessageEntity
-import com.meshlink.ble.model.MeshDevice
-import com.meshlink.ble.model.PeerConnectionState
-import com.meshlink.ble.model.MeshPacket
-import com.meshlink.ble.model.PacketType
-"""
+with open(file_path, "r") as f:
+    lines = f.readlines()
 
-# Replace package declaration and imports block if needed, but let's just insert after package.
-content = re.sub(r'package com\.meshlink\.ble\.data\n', r'package com.meshlink.ble.data\n\n' + imports + '\n', content)
+new_lines = []
+for line in lines:
+    # Delete DIAG-Stage logs
+    if "DIAG-Stage" in line:
+        continue
+    
+    # Replace RoutingCoordinator methods with canonicalize
+    line = line.replace("routingCoordinator.networkId(", "com.meshlink.util.MeshIdNormalizer.canonicalize(")
+    line = line.replace("routingCoordinator.outgoingChatId(", "com.meshlink.util.MeshIdNormalizer.canonicalize(")
+    line = line.replace("routingCoordinator.incomingChatId(", "com.meshlink.util.MeshIdNormalizer.canonicalize(")
+    line = line.replace("routingCoordinator.resolveChatId(", "com.meshlink.util.MeshIdNormalizer.canonicalize(")
+    
+    new_lines.append(line)
 
-# 2. Fix constructor
-old_constructor = r"private val transferManager: MediaTransferManager,"
-new_constructor = r"""private val transferManager: com.meshlink.transfer.TransferManager,
-    private val mediaTransferManager: com.meshlink.media.data.MediaTransferManager,
-    private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,"""
-content = content.replace(old_constructor, new_constructor)
-
-# 3. Add scope
-old_scope = r"private val TAG = \"MeshMessagingManager\""
-new_scope = r"private val TAG = \"MeshMessagingManager\"\n    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)"
-content = content.replace(old_scope, new_scope)
-
-# 4. Replace routingCoordinator methods
-content = content.replace("resolvePeerAddress(", "routingCoordinator.resolvePeerAddress(")
-content = content.replace("networkId(", "routingCoordinator.networkId(")
-content = content.replace("outgoingChatId(", "routingCoordinator.outgoingChatId(")
-content = content.replace("incomingChatId(", "routingCoordinator.incomingChatId(")
-
-# 5. Replace updatePeerState
-content = content.replace("updatePeerState(", "connectionManager.updatePeerState(")
-
-# 6. Fix scannedDevices
-content = content.replace("scannedDevices.value.values.forEach", "discoveryManager.scannedDevices.value.values.forEach")
-
-with open(filepath, 'w') as f:
-    f.write(content)
-
-print("Done")
+with open(file_path, "w") as f:
+    f.writelines(new_lines)

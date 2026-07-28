@@ -1,5 +1,6 @@
 package com.meshlink.ui.home
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -66,14 +67,16 @@ fun HomeScreen(
         else -> ConnectionState.SEARCHING
     }
     
-    val filteredChats = if (searchQuery.isBlank()) {
-        chatsState.chats
-    } else {
-        chatsState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    val filteredChats = remember(searchQuery, chatsState.chats) {
+        if (searchQuery.isBlank()) {
+            chatsState.chats
+        } else {
+            chatsState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToNearby,
@@ -175,7 +178,7 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = MeshTheme.spacing.mediumLarge),
                         horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                     ) {
-                        item {
+                        item(contentType = "dashboard_card") {
                             DashboardCard(
                                 icon = Icons.Default.Wifi,
                                 title = "Nearby Devices",
@@ -185,7 +188,7 @@ fun HomeScreen(
                                 iconTintColor = MaterialTheme.colorScheme.primary
                             )
                         }
-                        item {
+                        item(contentType = "dashboard_card") {
                             DashboardCard(
                                 icon = Icons.Default.Campaign,
                                 title = "Broadcasts",
@@ -195,7 +198,7 @@ fun HomeScreen(
                                 iconTintColor = MaterialTheme.colorScheme.tertiary
                             )
                         }
-                        item {
+                        item(contentType = "dashboard_card") {
                             DashboardCard(
                                 icon = Icons.Default.Warning,
                                 title = "SOS",
@@ -219,26 +222,31 @@ fun HomeScreen(
                 modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)
             )
 
-            if (filteredChats.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Outlined.ChatBubbleOutline,
-                    title = if (searchQuery.isNotBlank()) "No results found" else "No recent chats",
-                    description = if (searchQuery.isNotBlank()) "Try a different search term." else "Tap the + button to find nearby devices and start chatting.",
-                    primaryButtonText = if (searchQuery.isBlank()) "Find Nearby Devices" else null,
-                    onPrimaryButtonClick = if (searchQuery.isBlank()) onNavigateToNearby else null
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredChats, key = { it.id }) { chat ->
-                        ChatItem(
-                            chat = chat,
-                            onClick = {
-                                val safeName = chat.name.ifBlank { chat.id.takeLast(8) }
-                                onNavigateToChat(chat.id, safeName)
-                            }
-                        )
+            AnimatedContent<Boolean>(
+                targetState = filteredChats.isEmpty(),
+                label = "chat_list_empty_state_transition"
+            ) { isEmpty ->
+                if (isEmpty) {
+                    EmptyState(
+                        icon = Icons.Outlined.ChatBubbleOutline,
+                        title = if (searchQuery.isNotBlank()) "No results found" else "No recent chats",
+                        description = if (searchQuery.isNotBlank()) "Try a different search term." else "Tap the + button to find nearby devices and start chatting.",
+                        primaryButtonText = if (searchQuery.isBlank()) "Find Nearby Devices" else null,
+                        onPrimaryButtonClick = if (searchQuery.isBlank()) onNavigateToNearby else null
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
+                            ChatItem(
+                                chat = chat,
+                                onClick = {
+                                    val safeName = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) }
+                                    onNavigateToChat(chat.id, safeName)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -279,7 +287,7 @@ fun ChatItem(chat: Chat, onClick: () -> Unit) {
             modifier = Modifier.weight(1f)
         ) {
             Text(
-                text = chat.name.ifBlank { chat.id.takeLast(8) },
+                text = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) },
                 color = MaterialTheme.colorScheme.onBackground,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,

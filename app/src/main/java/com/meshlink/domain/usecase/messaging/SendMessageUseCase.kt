@@ -22,19 +22,32 @@ class SendMessageUseCase @Inject constructor(
         val user = userRepository.getLocalUser() ?: return
         val myMeshId = user.meshId
 
+        val normalizedChatId = meshRepository.resolveChatId(targetMeshId)
+
+        android.util.Log.d("[DIAG-Stage2]", "═══ SendMessageUseCase ═══")
+        android.util.Log.d("[DIAG-Stage2]", "  RAW targetMeshId       : '$targetMeshId'")
+        android.util.Log.d("[DIAG-Stage2]", "  RAW myMeshId           : '$myMeshId'")
+        android.util.Log.d("[DIAG-Stage2]", "  resolveChatId(target)  : '$normalizedChatId'  [used as chatId in DB]")
+
         val messageId = UUID.randomUUID().toString()
         val message = Message(
             messageId = messageId,
-            chatId = targetMeshId,
+            chatId = normalizedChatId,
             text = messageText,
             senderId = myMeshId,
             timestamp = System.currentTimeMillis(),
             isFromMe = true,
-            status = DeliveryStatus.PENDING,
+            status = DeliveryStatus.QUEUED,
             messageType = MessageType.TEXT
         )
-        
+
+        android.util.Log.d("[DIAG-Stage2]", "  message.chatId         : '${message.chatId}'")
+        android.util.Log.d("[DIAG-Stage2]", "  message.senderId       : '${message.senderId}'")
+        android.util.Log.d("[DIAG-Stage2]", "  message.messageId      : '${message.messageId.takeLast(6)}'")
+
         chatRepository.saveMessage(message, chatName)
-        meshRepository.sendMessage(message, chatName)
+        android.util.Log.d("[DIAG-Stage2]", "  chatRepository.saveMessage() called  ✓")
+        meshRepository.sendMessage(targetMeshId, message)
+        android.util.Log.d("[DIAG-Stage2]", "  meshRepository.sendMessage() called  ✓")
     }
 }

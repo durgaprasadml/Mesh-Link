@@ -21,7 +21,7 @@ class WifiSocketTransportTest {
 
     @Before
     fun setup() {
-        transport = WifiSocketTransport()
+        transport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
     }
 
     @After
@@ -32,8 +32,8 @@ class WifiSocketTransportTest {
 
     @Test
     fun `startServer and connectAsClient establishes successful socket connection`() = runBlocking {
-        val serverTransport = WifiSocketTransport()
-        val clientTransport = WifiSocketTransport()
+        val serverTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
+        val clientTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
 
         var receivedPacketByServer: MeshPacket? = null
         var receivedPacketByClient: MeshPacket? = null
@@ -78,7 +78,7 @@ class WifiSocketTransportTest {
         transport.startServer()
         delay(200)
         
-        val client = WifiSocketTransport()
+        val client = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
         client.connectAsClient("127.0.0.1")
         delay(200)
         
@@ -92,8 +92,8 @@ class WifiSocketTransportTest {
     
     @Test
     fun `massive packet serialization handles large payloads over TCP`() = runBlocking {
-        val serverTransport = WifiSocketTransport()
-        val clientTransport = WifiSocketTransport()
+        val serverTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
+        val clientTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
 
         var receivedPacket: MeshPacket? = null
         serverTransport.onPacketReceived = { receivedPacket = it }

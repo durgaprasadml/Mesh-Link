@@ -2,7 +2,8 @@ package com.meshlink.routing.engine
 
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.common.logger.MeshLogger
-import java.util.Collections
+import com.meshlink.config.RuntimeConfigManager
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
@@ -18,23 +19,52 @@ class RoutingEngine @Inject constructor(
     val transportManager: IntelligentTransportManager,
     val retryEngine: IntelligentRetryEngine,
     val queueOptimizer: QueueOptimizer,
-    private val routeOptimizer: RouteOptimizer
+    private val routeOptimizer: RouteOptimizer,
+    private val configManager: RuntimeConfigManager
 ) {
     companion object {
         private const val TAG = "RoutingEngine"
-        private const val DEDUP_CACHE_SIZE = 20000
     }
-    
-    // Tracks processed packets to prevent broadcast storms and routing loops
-    private val processedPackets = Collections.newSetFromMap(
-        Collections.synchronizedMap(
-            object : java.util.LinkedHashMap<String, Boolean>(DEDUP_CACHE_SIZE, 0.75f, true) {
-                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?): Boolean {
-                    return size > DEDUP_CACHE_SIZE
+
+    /**
+     * A production-grade time-bounded, size-bounded duplicate cache.
+     * Uses O(1) lookup and lazy eviction for efficiency.
+     */
+    private inner class TimeBoundedDuplicateCache {
+        private val cache = ConcurrentHashMap<String, Long>()
+
+        fun addIfAbsent(packetId: String): Boolean {
+            val config = configManager.currentConfig.value
+            val now = System.currentTimeMillis()
+            
+            // Lazy eviction: cleanup periodically if we exceed the threshold
+            if (cache.size > config.duplicateCacheSize) {
+                evictStale(now, config.duplicateCacheLifetimeMs)
+                // Hard cap fallback
+                if (cache.size > config.duplicateCacheSize) {
+                    cache.clear() // Drastic, but ensures O(1) constraints if heavily flooded
                 }
             }
-        )
-    )
+            
+            val existing = cache.putIfAbsent(packetId, now)
+            if (existing != null) {
+                // Was already in cache. Check if it's expired.
+                if (now - existing > config.duplicateCacheLifetimeMs) {
+                    // It was expired, so we should consider it new and update timestamp
+                    cache[packetId] = now
+                    return true
+                }
+                return false
+            }
+            return true
+        }
+
+        private fun evictStale(now: Long, maxAgeMs: Long) {
+            cache.entries.removeIf { now - it.value > maxAgeMs }
+        }
+    }
+    
+    private val duplicateCache = TimeBoundedDuplicateCache()
 
     fun start() {
         routeHealthMonitor.start()
@@ -48,14 +78,20 @@ class RoutingEngine @Inject constructor(
      * Records a packet as processed. Returns true if it was new, false if duplicate.
      */
     fun markPacketProcessed(packetId: String): Boolean {
-        return processedPackets.add(packetId)
+        return duplicateCache.addIfAbsent(packetId)
     }
 
     /**
      * Determines if a packet is caught in a routing loop.
+     * Enforces strict validation based on path and ttl.
      */
     fun isRoutingLoop(packet: MeshPacket, localMeshId: String): Boolean {
-        return localMeshId.isNotBlank() && packet.visitedPath.contains(localMeshId)
+        if (packet.ttl <= 0) return true
+        if (localMeshId.isNotBlank() && packet.visitedPath.contains(localMeshId)) {
+            MeshLogger.w(TAG, "Routing loop detected: Local ID $localMeshId already in visited path for packet ${packet.packetId}")
+            return true
+        }
+        return false
     }
     
     /**
@@ -76,7 +112,11 @@ class RoutingEngine @Inject constructor(
      * Probabilistic Relay for broadcasts.
      */
     fun shouldRelayBroadcast(packetType: com.meshlink.domain.model.PacketType): Boolean {
-        if (packetType == com.meshlink.domain.model.PacketType.SOS) return true // Always relay SOS
+        if (packetType == com.meshlink.domain.model.PacketType.SOS ||
+            packetType == com.meshlink.domain.model.PacketType.TEXT ||
+            packetType == com.meshlink.domain.model.PacketType.LOCATION) {
+            return true // Always relay critical user data
+        }
         
         if (!batteryAwareNetworking.canRelayBackgroundTraffic()) {
             return false // Drop if battery is critical

@@ -10,7 +10,6 @@ import com.meshlink.common.logger.MeshLogger
 import androidx.annotation.RequiresApi
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -30,11 +29,20 @@ import javax.inject.Singleton
 
 /**
  * End-to-End encryption engine for the Mesh Link network.
+ *
+ * JVM Memory Security Notice:
+ * Standard JCA providers on the JVM and Android typically do not support true memory
+ * erasure for software-backed `PrivateKey` objects. The `Destroyable.destroy()` method 
+ * often throws `DestroyFailedException` or `UnsupportedOperationException`.
+ * As a result, software keys remain in memory until garbage collected. Where intermediate
+ * byte arrays (like getEncoded() or decoded bytes) are used, they are securely wiped with 
+ * Arrays.fill(), but this does NOT clear the original key from the JVM heap.
  */
 @Singleton
 class MeshCryptoManager @Inject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
-) {
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
+    private val meshConfig: com.meshlink.config.MeshConfig
+) : com.meshlink.security.api.CryptoProvider {
     companion object {
         private const val TAG = "MeshCrypto"
     }
@@ -42,6 +50,13 @@ class MeshCryptoManager @Inject constructor(
     // In-memory cache of derived AES keys per peer
     private val derivedKeys = java.util.concurrent.ConcurrentHashMap<String, SecretKey>()
     private val previousDerivedKeys = java.util.concurrent.ConcurrentHashMap<String, SecretKey>()
+
+    private val encryptCipherLocal = object : ThreadLocal<Cipher>() {
+        override fun initialValue() = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+    }
+    private val decryptCipherLocal = object : ThreadLocal<Cipher>() {
+        override fun initialValue() = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+    }
 
     // EncryptedSharedPreferences for persistent peer public key storage
     private val peerKeyStore: SharedPreferences by lazy {
@@ -149,6 +164,8 @@ class MeshCryptoManager @Inject constructor(
                 .putString(SecurityConstants.SELF_PRIVATE_KEY_KEY, privBase64)
                 .apply()
 
+            // Note: This only clears the intermediate byte array copy.
+            // The original PrivateKey object (kp.private) remains in memory until garbage collected.
             java.util.Arrays.fill(encoded, 0.toByte())
             pubBase64
         } catch (e: Exception) {
@@ -168,6 +185,8 @@ class MeshCryptoManager @Inject constructor(
             val privBytes = Base64.decode(privBase64, Base64.NO_WRAP)
             val keyFactory = KeyFactory.getInstance(SecurityConstants.EC_ALGORITHM)
             val privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privBytes))
+            // Clear the intermediate buffer containing the decoded bytes.
+            // Note: The resulting privateKey object in memory cannot be deterministically erased.
             java.util.Arrays.fill(privBytes, 0.toByte())
             return privateKey
         }
@@ -333,34 +352,32 @@ class MeshCryptoManager @Inject constructor(
     // ────────── ECDH Key Agreement ──────────
 
     private fun deriveSharedKey(peerId: String): SecretKey {
-        derivedKeys[peerId]?.let { return it }
+        return derivedKeys.computeIfAbsent(peerId) {
+            val peerPublicKeyBase64 = getPeerPublicKey(peerId)
+            if (peerPublicKeyBase64 == null) {
+                com.meshlink.common.logger.MeshLogger.w("MeshCryptoManager", "No public key for peer $peerId")
+                return@computeIfAbsent SecretKeySpec(ByteArray(32), SecurityConstants.AES_GCM_CIPHER)
+            }
 
-        val peerPublicKeyBase64 = getPeerPublicKey(peerId)
-        if (peerPublicKeyBase64 == null) {
-            com.meshlink.common.logger.MeshLogger.w("MeshCryptoManager", "No public key for peer $peerId")
-            // Return a dummy key to fail gracefully instead of crashing
-            return SecretKeySpec(ByteArray(32), SecurityConstants.AES_GCM_CIPHER)
+            val peerKeyBytes = Base64.decode(peerPublicKeyBase64, Base64.NO_WRAP)
+            val keyFactory = KeyFactory.getInstance(SecurityConstants.EC_ALGORITHM)
+            val peerPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(peerKeyBytes))
+
+            val keyAgreement = KeyAgreement.getInstance(SecurityConstants.ECDH_ALGORITHM)
+            keyAgreement.init(getPrivateKey())
+            keyAgreement.doPhase(peerPublicKey, true)
+            val sharedSecret = keyAgreement.generateSecret()
+
+            val digest = MessageDigest.getInstance(SecurityConstants.SHA_256_ALGORITHM)
+            val aesKeyBytes = digest.digest(sharedSecret)
+            
+            val aesKey = SecretKeySpec(aesKeyBytes, "AES")
+
+            java.util.Arrays.fill(sharedSecret, 0.toByte())
+            java.util.Arrays.fill(aesKeyBytes, 0.toByte())
+
+            aesKey
         }
-
-        val peerKeyBytes = Base64.decode(peerPublicKeyBase64, Base64.NO_WRAP)
-        val keyFactory = KeyFactory.getInstance(SecurityConstants.EC_ALGORITHM)
-        val peerPublicKey = keyFactory.generatePublic(X509EncodedKeySpec(peerKeyBytes))
-
-        val keyAgreement = KeyAgreement.getInstance(SecurityConstants.ECDH_ALGORITHM)
-        keyAgreement.init(getPrivateKey())
-        keyAgreement.doPhase(peerPublicKey, true)
-        val sharedSecret = keyAgreement.generateSecret()
-
-        val digest = MessageDigest.getInstance(SecurityConstants.SHA_256_ALGORITHM)
-        val aesKeyBytes = digest.digest(sharedSecret)
-        
-        val aesKey = SecretKeySpec(aesKeyBytes, "AES")
-
-        java.util.Arrays.fill(sharedSecret, 0.toByte())
-        java.util.Arrays.fill(aesKeyBytes, 0.toByte())
-
-        derivedKeys[peerId] = aesKey
-        return aesKey
     }
 
     // ────────── Ephemeral ECDH Rekey (Phase A2.3) ──────────
@@ -405,7 +422,7 @@ class MeshCryptoManager @Inject constructor(
     fun encrypt(plaintext: String, peerId: String, aad: ByteArray? = null): String {
         val key = deriveSharedKey(peerId)
 
-        val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+        val cipher = encryptCipherLocal.get()!!
         val iv = ByteArray(SecurityConstants.GCM_IV_LENGTH_BYTES)
         java.security.SecureRandom().nextBytes(iv)
         val spec = GCMParameterSpec(SecurityConstants.GCM_TAG_LENGTH_BITS, iv)
@@ -440,7 +457,7 @@ class MeshCryptoManager @Inject constructor(
             val iv = combined.copyOfRange(0, SecurityConstants.GCM_IV_LENGTH_BYTES)
             val ciphertextWithTag = combined.copyOfRange(SecurityConstants.GCM_IV_LENGTH_BYTES, combined.size)
 
-            val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+            val cipher = decryptCipherLocal.get()!!
             val spec = GCMParameterSpec(SecurityConstants.GCM_TAG_LENGTH_BITS, iv)
             cipher.init(Cipher.DECRYPT_MODE, key, spec)
 
@@ -474,14 +491,7 @@ class MeshCryptoManager @Inject constructor(
             encrypt(plaintext, peerId, aad)
         } catch (e: Exception) {
             if (requireEncryption) {
-                FirebaseCrashlytics.getInstance().apply {
-                    setCustomKey("peerId", peerId.takeLast(8))
-                    setCustomKey("messageId", messageId)
-                    setCustomKey("retryCount", retryCount)
-                    setCustomKey("keyPresent", true)
-                    setCustomKey("encryptionMode", "encrypt")
-                    recordException(Exception("Encryption failed: ${e.javaClass.simpleName}"))
-                }
+                MeshLogger.e(TAG, "Encryption failed: ${e.javaClass.simpleName}")
                 return null
             }
             return plaintext to false
@@ -497,5 +507,165 @@ class MeshCryptoManager @Inject constructor(
     fun removeSharedKey(peerId: String) {
         derivedKeys.remove(peerId)
         previousDerivedKeys.remove(peerId)
+    }
+
+    // ────────── Identity Management ──────────
+
+    fun rotateIdentityKeys() {
+        val now = System.currentTimeMillis()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val keyStore = KeyStore.getInstance(SecurityConstants.ANDROID_KEYSTORE)
+                keyStore.load(null)
+                keyStore.deleteEntry(SecurityConstants.MESH_KEYSTORE_ALIAS)
+                keyStore.deleteEntry(SecurityConstants.SIGNING_KEYSTORE_ALIAS)
+            }
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to delete Keystore entries during rotation: ${e.message}")
+        }
+        
+        peerKeyStore.edit()
+            .remove(SecurityConstants.SELF_PUBLIC_KEY_KEY)
+            .remove(SecurityConstants.SELF_PRIVATE_KEY_KEY)
+            .putLong(SecurityConstants.LAST_ROTATION_TIME, now)
+            .apply()
+            
+        peerSigningKeyStore.edit()
+            .remove(SecurityConstants.SELF_SIGNING_PUBLIC_KEY_KEY)
+            .remove(SecurityConstants.SELF_SIGNING_PRIVATE_KEY_KEY)
+            .apply()
+            
+        // Pre-generate new keys
+        getOrCreatePublicKey()
+        getOrCreateSigningKey()
+    }
+
+    fun deleteIdentityKeys() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val keyStore = KeyStore.getInstance(SecurityConstants.ANDROID_KEYSTORE)
+                keyStore.load(null)
+                keyStore.deleteEntry(SecurityConstants.MESH_KEYSTORE_ALIAS)
+                keyStore.deleteEntry(SecurityConstants.SIGNING_KEYSTORE_ALIAS)
+            }
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to delete Keystore entries: ${e.message}")
+        }
+        
+        peerKeyStore.edit()
+            .remove(SecurityConstants.SELF_PUBLIC_KEY_KEY)
+            .remove(SecurityConstants.SELF_PRIVATE_KEY_KEY)
+            .remove(SecurityConstants.KEY_CREATION_TIME)
+            .remove(SecurityConstants.LAST_ROTATION_TIME)
+            .apply()
+            
+        peerSigningKeyStore.edit()
+            .remove(SecurityConstants.SELF_SIGNING_PUBLIC_KEY_KEY)
+            .remove(SecurityConstants.SELF_SIGNING_PRIVATE_KEY_KEY)
+            .apply()
+    }
+
+    fun exportIdentity(): String {
+        // Can only export software keys
+        val pubKey = peerKeyStore.getString(SecurityConstants.SELF_PUBLIC_KEY_KEY, null)
+        val privKey = peerKeyStore.getString(SecurityConstants.SELF_PRIVATE_KEY_KEY, null)
+        val signPubKey = peerSigningKeyStore.getString(SecurityConstants.SELF_SIGNING_PUBLIC_KEY_KEY, null)
+        val signPrivKey = peerSigningKeyStore.getString(SecurityConstants.SELF_SIGNING_PRIVATE_KEY_KEY, null)
+        
+        if (pubKey == null || privKey == null || signPubKey == null || signPrivKey == null) {
+            throw IllegalStateException("Cannot export hardware-backed identities or missing keys.")
+        }
+        
+        val json = org.json.JSONObject()
+        json.put("pub", pubKey)
+        json.put("priv", privKey)
+        json.put("sign_pub", signPubKey)
+        json.put("sign_priv", signPrivKey)
+        return Base64.encodeToString(json.toString().toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+    }
+
+    fun importIdentity(identityBackupBase64: String) {
+        try {
+            val jsonString = String(Base64.decode(identityBackupBase64, Base64.NO_WRAP), Charsets.UTF_8)
+            val json = org.json.JSONObject(jsonString)
+            val pub = json.getString("pub")
+            val priv = json.getString("priv")
+            val signPub = json.getString("sign_pub")
+            val signPriv = json.getString("sign_priv")
+            
+            // Delete existing hardware keys if present
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val keyStore = KeyStore.getInstance(SecurityConstants.ANDROID_KEYSTORE)
+                    keyStore.load(null)
+                    keyStore.deleteEntry(SecurityConstants.MESH_KEYSTORE_ALIAS)
+                    keyStore.deleteEntry(SecurityConstants.SIGNING_KEYSTORE_ALIAS)
+                }
+            } catch (ignore: Exception) {}
+            
+            peerKeyStore.edit()
+                .putString(SecurityConstants.SELF_PUBLIC_KEY_KEY, pub)
+                .putString(SecurityConstants.SELF_PRIVATE_KEY_KEY, priv)
+                .apply()
+                
+            peerSigningKeyStore.edit()
+                .putString(SecurityConstants.SELF_SIGNING_PUBLIC_KEY_KEY, signPub)
+                .putString(SecurityConstants.SELF_SIGNING_PRIVATE_KEY_KEY, signPriv)
+                .apply()
+                
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to import identity: ${e.message}")
+            throw IllegalArgumentException("Invalid identity backup format")
+        }
+    }
+
+    fun getKeyCreationTime(): Long {
+        val time = peerKeyStore.getLong(SecurityConstants.KEY_CREATION_TIME, 0L)
+        if (time == 0L) {
+            val now = System.currentTimeMillis()
+            peerKeyStore.edit().putLong(SecurityConstants.KEY_CREATION_TIME, now).apply()
+            return now
+        }
+        return time
+    }
+
+    fun getLastRotationTime(): Long {
+        return peerKeyStore.getLong(SecurityConstants.LAST_ROTATION_TIME, getKeyCreationTime())
+    }
+
+    @Deprecated("Use encryptData instead", ReplaceWith("encryptData(peerId, data)"))
+    override suspend fun encrypt(data: ByteArray, peerId: String): ByteArray {
+        val payload = String(data, Charsets.UTF_8)
+        val enc = encrypt(payload, peerId)
+        return enc.toByteArray(Charsets.UTF_8)
+    }
+
+    override suspend fun encryptData(peerId: String, data: ByteArray): com.meshlink.domain.model.MeshResult<ByteArray> {
+        return try {
+            val payload = String(data, Charsets.UTF_8)
+            val enc = encrypt(payload, peerId)
+            com.meshlink.domain.model.MeshResult.Success(enc.toByteArray(Charsets.UTF_8))
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.SecurityError("Encryption failed", peerId, e))
+        }
+    }
+
+    @Deprecated("Use decryptData instead", ReplaceWith("decryptData(peerId, data)"))
+    override suspend fun decrypt(data: ByteArray, peerId: String): ByteArray {
+        val ciphertext = String(data, Charsets.UTF_8)
+        val dec = decryptOrPassthrough(ciphertext, peerId)
+        if (dec == ciphertext && !ciphertext.startsWith("{")) throw Exception("Decryption failed")
+        return dec.toByteArray(Charsets.UTF_8)
+    }
+
+    override suspend fun decryptData(peerId: String, data: ByteArray): com.meshlink.domain.model.MeshResult<ByteArray> {
+        return try {
+            val ciphertext = String(data, Charsets.UTF_8)
+            val dec = decryptOrPassthrough(ciphertext, peerId)
+            if (dec == ciphertext && !ciphertext.startsWith("{")) throw Exception("Decryption failed")
+            com.meshlink.domain.model.MeshResult.Success(dec.toByteArray(Charsets.UTF_8))
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.SecurityError("Decryption failed", peerId, e))
+        }
     }
 }

@@ -21,6 +21,54 @@ abstract class BluetoothBindingModule {
     abstract fun bindBleMeshDataSource(
         impl: BleMeshDataSourceImpl
     ): BleMeshDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindGattConnectionManager(
+        impl: com.meshlink.ble.data.gatt.GattConnectionManagerImpl
+    ): com.meshlink.ble.data.gatt.GattConnectionManager
+
+    @Binds
+    @Singleton
+    abstract fun bindMtuNegotiationManager(
+        impl: com.meshlink.ble.data.gatt.MtuNegotiationManagerImpl
+    ): com.meshlink.ble.data.gatt.MtuNegotiationManager
+
+    @Binds
+    @Singleton
+    abstract fun bindGattWriteQueue(
+        impl: com.meshlink.ble.data.gatt.GattWriteQueueImpl
+    ): com.meshlink.ble.data.gatt.GattWriteQueue
+
+    @Binds
+    @Singleton
+    abstract fun bindApplicationMessageQueue(
+        impl: com.meshlink.ble.data.gatt.ApplicationMessageQueueImpl
+    ): com.meshlink.ble.data.gatt.ApplicationMessageQueue
+
+    @Binds
+    @Singleton
+    abstract fun bindServiceDiscoveryManager(
+        impl: com.meshlink.ble.data.gatt.ServiceDiscoveryManagerImpl
+    ): com.meshlink.ble.data.gatt.ServiceDiscoveryManager
+
+    @Binds
+    @Singleton
+    abstract fun bindPacketFragmenter(
+        impl: com.meshlink.ble.data.gatt.PacketFragmenterImpl
+    ): com.meshlink.ble.data.gatt.PacketFragmenter
+
+    @Binds
+    @Singleton
+    abstract fun bindPacketReassembler(
+        impl: com.meshlink.ble.data.gatt.PacketReassemblerImpl
+    ): com.meshlink.ble.data.gatt.PacketReassembler
+
+    @Binds
+    @Singleton
+    abstract fun bindPacketDispatcher(
+        impl: com.meshlink.ble.data.CorePacketDispatcher
+    ): com.meshlink.ble.api.PacketDispatcher
 }
 
 @Module
@@ -42,4 +90,28 @@ object BluetoothModule {
     ): BluetoothAdapter? {
         return bluetoothManager.adapter
     }
+
+    @Provides
+    @Singleton
+    fun provideGattNotificationManager(
+        gattManager: dagger.Lazy<com.meshlink.ble.data.BleGattManager>,
+        @com.meshlink.di.ApplicationScope applicationScope: kotlinx.coroutines.CoroutineScope
+    ): com.meshlink.ble.data.gatt.GattNotificationManager {
+        // GattNotificationManagerImpl needs a way to get the GATT Server instance
+        // which resides in BleGattManager. Using Lazy prevents circular dependency during init.
+        return com.meshlink.ble.data.gatt.GattNotificationManagerImpl(
+            { gattManager.get().getGattServer() },
+            applicationScope
+        )
+    }
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class TransportBindingModule {
+    @Binds
+    @Singleton
+    internal abstract fun bindBleTransport(
+        impl: com.meshlink.ble.data.BleTransportImpl
+    ): com.meshlink.ble.api.BleTransport
 }

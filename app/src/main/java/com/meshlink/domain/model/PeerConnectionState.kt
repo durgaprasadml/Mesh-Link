@@ -1,0 +1,17 @@
+package com.meshlink.domain.model
+
+
+
+enum class PeerConnectionState {
+    DISCONNECTED,
+    DISCOVERED,
+    CONNECTING,
+    CONNECTED,
+    READY,
+    KEY_EXCHANGE_STARTED,
+    KEY_EXCHANGE_COMPLETE,
+    IDENTITY_VERIFIED,
+    KEY_VERIFIED,
+    SESSION_READY,
+    SESSION_ESTABLISHED
+}

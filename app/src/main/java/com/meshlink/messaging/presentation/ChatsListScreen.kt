@@ -44,10 +44,12 @@ fun ChatsListScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
-    val filteredChats = if (searchQuery.isBlank()) {
-        uiState.chats
-    } else {
-        uiState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    val filteredChats = remember(searchQuery, uiState.chats) {
+        if (searchQuery.isBlank()) {
+            uiState.chats
+        } else {
+            uiState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
     }
 
     Scaffold(
@@ -113,7 +115,7 @@ fun ChatsListScreen(
                 ) {
                     items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
                         ChatListItem(chat = chat, onClick = {
-                            val safeName = chat.name.ifBlank { chat.id.takeLast(8) }
+                            val safeName = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) }
                             onNavigateToChat(chat.id, safeName)
                         })
                     }

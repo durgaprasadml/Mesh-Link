@@ -27,9 +27,8 @@ fun DashboardCard(
     badgeCount: Int = 0
 ) {
     Card(
-        modifier = modifier
-            .width(160.dp)
-            .clickable(onClick = onClick),
+        onClick = onClick,
+        modifier = modifier.width(160.dp),
         shape = MeshTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = MeshTheme.elevation.level2)

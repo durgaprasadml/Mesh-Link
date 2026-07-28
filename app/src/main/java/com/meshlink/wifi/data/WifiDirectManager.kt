@@ -11,23 +11,42 @@ import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import com.meshlink.common.logger.MeshLogger
+<<<<<<< HEAD
+=======
+import com.meshlink.domain.repository.SettingsRepository
+>>>>>>> main
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 @Singleton
 class WifiDirectManager @Inject constructor(
+<<<<<<< HEAD
     @ApplicationContext private val context: Context
 ) {
+=======
+    @ApplicationContext private val context: Context,
+    private val settingsRepository: SettingsRepository
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
+>>>>>>> main
     companion object {
         private const val TAG = "WifiDirectManager"
     }
 
     private val manager: WifiP2pManager? = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
-    private var channel: WifiP2pManager.Channel? = null
+    private val channel: WifiP2pManager.Channel? by lazy {
+        manager?.initialize(context, context.mainLooper, null)
+    }
 
     // Map of peer MAC address to WifiP2pDevice
     private val _discoveredPeers = MutableStateFlow<Map<String, WifiP2pDevice>>(emptyMap())
@@ -43,6 +62,12 @@ class WifiDirectManager @Inject constructor(
     
     private val _localDeviceMac = MutableStateFlow<String?>(null)
     val localDeviceMac: StateFlow<String?> = _localDeviceMac.asStateFlow()
+
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val restartDiscoveryRunnable = Runnable {
+        MeshLogger.d(TAG, "Restarting P2P Discovery (timeout)")
+        startDiscovery()
+    }
 
     private val intentFilter = IntentFilter().apply {
         addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
@@ -90,7 +115,18 @@ class WifiDirectManager @Inject constructor(
                     } else {
                         MeshLogger.d(TAG, "P2P Disconnected")
                         _connectionInfo.value = null
+                        
+                        val disconnectedMac = _connectedPeerMac.value
                         _connectedPeerMac.value = null
+                        
+                        if (disconnectedMac != null) {
+                            applicationScope.launch {
+                                if (settingsRepository.wifiReconnectEnabled.first()) {
+                                    MeshLogger.d(TAG, "wifiReconnectEnabled is true. Attempting to reconnect to $disconnectedMac")
+                                    connectToPeer(disconnectedMac)
+                                }
+                            }
+                        }
                     }
                 }
                 WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION -> {
@@ -102,52 +138,79 @@ class WifiDirectManager @Inject constructor(
         }
     }
 
-    init {
-        channel = manager?.initialize(context, context.mainLooper, null)
-    }
-
-    fun registerReceiver() {
-        context.registerReceiver(receiver, intentFilter)
+    private var isReceiverRegistered = false
+fun registerReceiver() {
+        if (!isReceiverRegistered) {
+            context.registerReceiver(receiver, intentFilter)
+            isReceiverRegistered = true
+        }
     }
 
     fun unregisterReceiver() {
-        try {
-            context.unregisterReceiver(receiver)
-        } catch (e: Exception) {
-            // Ignored
+        if (isReceiverRegistered) {
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (e: Exception) {
+                // Ignored
+            }
+            isReceiverRegistered = false
         }
     }
 
     @SuppressLint("MissingPermission")
     fun startDiscovery() {
-        try {
-            manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
-                override fun onSuccess() {
-                    MeshLogger.d(TAG, "P2P Discovery Started")
-                }
+        applicationScope.launch {
+            if (!settingsRepository.isWifiDirectEnabled.first() || !settingsRepository.wifiPeerDiscoveryEnabled.first()) {
+                MeshLogger.d(TAG, "Wi-Fi Direct or Discovery disabled by settings. Not starting discovery.")
+                return@launch
+            }
+            registerReceiver()
+            try {
+                manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        MeshLogger.d(TAG, "P2P Discovery Started")
+                        handler.removeCallbacks(restartDiscoveryRunnable)
+                        handler.postDelayed(restartDiscoveryRunnable, 110000L)
+                    }
                 override fun onFailure(reasonCode: Int) {
                     MeshLogger.e(TAG, "P2P Discovery Failed: $reasonCode")
+                    handler.removeCallbacks(restartDiscoveryRunnable)
+                    handler.postDelayed(restartDiscoveryRunnable, 10000L)
                 }
             })
         } catch (e: SecurityException) {
             MeshLogger.e(TAG, "SecurityException: Missing WiFi Direct permission", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception starting WiFi discovery: ${e.message}", e)
+            handler.removeCallbacks(restartDiscoveryRunnable)
+            handler.postDelayed(restartDiscoveryRunnable, 10000L)
+        }
         }
     }
 
     @SuppressLint("MissingPermission")
     fun connectToPeer(deviceAddress: String) {
-        val config = WifiP2pConfig().apply {
-            this.deviceAddress = deviceAddress
-            
-            // Deterministic Group Owner election based on MAC address comparison
-            val localMac = _localDeviceMac.value
-            if (localMac != null) {
-                // Higher MAC becomes Group Owner (intent = 15), lower becomes client (intent = 0)
-                groupOwnerIntent = if (localMac > deviceAddress) 15 else 0
+        applicationScope.launch {
+            if (!settingsRepository.isWifiDirectEnabled.first() || !settingsRepository.wifiAutoConnect.first()) {
+                MeshLogger.d(TAG, "Wi-Fi Direct connect skipped due to settings")
+                return@launch
             }
-        }
+            val forceGo = settingsRepository.wifiPreferredGroupOwner.first()
+
+            val config = WifiP2pConfig().apply {
+                this.deviceAddress = deviceAddress
+                
+                if (forceGo) {
+                    groupOwnerIntent = 15
+                } else {
+                    // Deterministic Group Owner election based on MAC address comparison
+                    val localMac = _localDeviceMac.value
+                    if (localMac != null) {
+                        // Higher MAC becomes Group Owner (intent = 15), lower becomes client (intent = 0)
+                        groupOwnerIntent = if (localMac > deviceAddress) 15 else 0
+                    }
+                }
+            }
         
         try {
             manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
@@ -162,6 +225,25 @@ class WifiDirectManager @Inject constructor(
             MeshLogger.e(TAG, "SecurityException: Missing WiFi Direct permission for connect", e)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Exception connecting to WiFi peer: ${e.message}", e)
+        }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun disconnect() {
+        try {
+            manager?.removeGroup(channel, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    MeshLogger.d(TAG, "P2P Disconnected successfully")
+                }
+                override fun onFailure(reason: Int) {
+                    MeshLogger.e(TAG, "P2P Disconnect failed: $reason")
+                }
+            })
+        } catch (e: SecurityException) {
+            MeshLogger.e(TAG, "SecurityException: Missing WiFi Direct permission for disconnect", e)
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Exception disconnecting from WiFi peer: ${e.message}", e)
         }
     }
 }

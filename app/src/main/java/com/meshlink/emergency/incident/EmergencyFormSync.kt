@@ -1,7 +1,7 @@
 package com.meshlink.emergency.incident
 
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.routing.data.MeshRouter
+import com.meshlink.routing.api.Router
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.model.PacketPriority
@@ -28,14 +28,14 @@ data class EmergencyForm(
 
 @Singleton
 class EmergencyFormSync @Inject constructor(
-    private val meshRouter: MeshRouter
-) {
+    private val meshRouter: Router
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "EmergencyFormSync"
     }
 
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val localForms = mutableMapOf<String, EmergencyForm>()
+private val localForms = mutableMapOf<String, EmergencyForm>()
 
     /**
      * Submit a form locally and broadcast it securely to the mesh using HIGH priority.

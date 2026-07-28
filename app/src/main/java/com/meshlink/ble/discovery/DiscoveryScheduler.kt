@@ -20,28 +20,28 @@ class DiscoveryScheduler(private val batteryAwareScanner: BatteryAwareScanner) {
         return when (powerState) {
             PowerState.OPTIMAL -> {
                 if (hasActiveConnections) {
-                    WindowConfig(scanDurationMs = 5000L, idleDurationMs = 5000L)
+                    WindowConfig(scanDurationMs = 10000L, idleDurationMs = 1000L)
                 } else {
                     // Aggressive scanning if plugged in and disconnected
-                    WindowConfig(scanDurationMs = 10000L, idleDurationMs = 2000L)
+                    WindowConfig(scanDurationMs = 10000L, idleDurationMs = 1000L)
                 }
             }
             PowerState.BALANCED -> {
                 if (hasActiveConnections) {
                     // Stable network, save battery
-                    WindowConfig(scanDurationMs = 3000L, idleDurationMs = 12000L)
+                    WindowConfig(scanDurationMs = 8000L, idleDurationMs = 2000L)
                 } else {
                     // Need to find a network
-                    WindowConfig(scanDurationMs = 5000L, idleDurationMs = 5000L)
+                    WindowConfig(scanDurationMs = 10000L, idleDurationMs = 1000L)
                 }
             }
             PowerState.RESTRICTED -> {
                 if (hasActiveConnections) {
                     // Bare minimum to maintain awareness
-                    WindowConfig(scanDurationMs = 2000L, idleDurationMs = 20000L)
+                    WindowConfig(scanDurationMs = 4000L, idleDurationMs = 6000L)
                 } else {
                     // Still need to find a network, but respect battery
-                    WindowConfig(scanDurationMs = 3000L, idleDurationMs = 15000L)
+                    WindowConfig(scanDurationMs = 5000L, idleDurationMs = 5000L)
                 }
             }
         }

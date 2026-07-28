@@ -3,8 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
-    alias(libs.plugins.google.services)
-    alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -102,6 +100,11 @@ android {
     
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all { test ->
+            test.testLogging {
+                showStandardStreams = true
+            }
+        }
     }
 
     composeOptions {
@@ -123,16 +126,20 @@ android {
 
 dependencies {
 
+<<<<<<< HEAD
     // 🔥 Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics.ktx)
 
+=======
+>>>>>>> main
     // Compose BOM
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.process)
@@ -190,12 +197,19 @@ dependencies {
 
     // Security
     implementation(libs.androidx.security.crypto)
+    implementation("androidx.biometric:biometric:1.1.0")
 
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
+    testImplementation("com.lemonappdev:konsist:0.15.1")
+    testImplementation(kotlin("test"))
+    
+    // QR Code
+    implementation(libs.zxing.core)
+    
     testImplementation(libs.robolectric)
     implementation(libs.kotlinx.coroutines.guava)
     

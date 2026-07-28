@@ -5,7 +5,7 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.database.data.local.ChatDao
 import com.meshlink.database.data.local.RelayDao
 import com.meshlink.domain.repository.MeshRepository
-import com.meshlink.routing.data.MeshRouter
+import com.meshlink.routing.api.Router
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.model.PacketPriority
@@ -25,10 +25,11 @@ import kotlin.math.pow
 class RetryCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val meshRepository: MeshRepository,
-    private val meshRouter: MeshRouter,
+    private val meshRouter: Router,
     private val chatDao: ChatDao,
     private val relayDao: RelayDao
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "RetryCoordinator"
         private const val BASE_BACKOFF_MS = 2000L
@@ -36,8 +37,7 @@ class RetryCoordinator @Inject constructor(
         private const val MAX_RETRIES = 10
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var isRunning = false
+private var isRunning = false
 
     fun start() {
         if (isRunning) return
@@ -57,7 +57,7 @@ class RetryCoordinator @Inject constructor(
     }
 
     private fun recoverPendingQueues() {
-        scope.launch {
+        applicationScope.launch {
             try {
                 // Recover from RelayDao (Store-and-Forward)
                 val storedRelays = relayDao.getAllRelayPackets()
@@ -68,7 +68,7 @@ class RetryCoordinator @Inject constructor(
                 }
 
                 // Recover Pending Messages that were unsent (status = PENDING)
-                val pendingMessages = chatDao.getMessagesByStatus(com.meshlink.database.data.local.DeliveryStatus.PENDING)
+                val pendingMessages = chatDao.getMessagesByStatus(com.meshlink.database.data.local.DeliveryStatus.QUEUED)
                 if (pendingMessages.isNotEmpty()) {
                     MeshLogger.d(TAG, "Recovering ${pendingMessages.size} pending chat messages.")
                     pendingMessages.forEach { msg: com.meshlink.database.data.local.MessageEntity ->
@@ -89,7 +89,7 @@ class RetryCoordinator @Inject constructor(
     }
 
     private fun startConnectionRetryLoop() {
-        scope.launch {
+        applicationScope.launch {
             var attempt = 0
             while (isActive && isRunning) {
                 delay(calculateBackoff(attempt))

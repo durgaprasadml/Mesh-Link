@@ -1,5 +1,6 @@
 package com.meshlink.transfer
 
+import com.meshlink.common.pool.BufferPool
 import java.io.File
 import java.io.RandomAccessFile
 import javax.inject.Inject
@@ -11,8 +12,8 @@ class ChunkManager @Inject constructor() {
 
     companion object {
         // Base64 expansion is roughly 4/3. 
-        // 300 bytes of raw data -> 400 bytes Base64 -> fits in 512 MTU
-        const val BLE_MTU_CHUNK_BYTES = 300 
+        // 180 bytes of raw data -> 240 bytes Base64 -> fits in safe MTU limits
+        const val BLE_MTU_CHUNK_BYTES = 180 
         
         // Wi-Fi can handle much larger packets. Let's do 64KB chunks.
         // 64KB -> ~85KB Base64
@@ -47,7 +48,7 @@ class ChunkManager @Inject constructor() {
                 raf.seek(offset)
                 
                 val bytesToRead = minOf(chunkSize.toLong(), raf.length() - offset).toInt()
-                val buffer = ByteArray(bytesToRead)
+                val buffer = BufferPool.borrowBuffer(bytesToRead)
                 raf.readFully(buffer)
                 buffer
             }

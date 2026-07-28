@@ -35,6 +35,10 @@ import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.io.File
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -82,10 +86,17 @@ fun MessageBubble(
             MessageType.VOICE -> append("Voice note.")
             MessageType.LOCATION -> append("Location shared.")
             MessageType.SOS -> append("SOS Emergency alert.")
+
         }
         append(" at ${formatTime(message.timestamp)}. ")
         if (isMe) {
-            append("Status: ${message.status.name.lowercase()}. ")
+            val statusStr = when (message.status) {
+                DeliveryStatus.QUEUED -> "sending"
+                DeliveryStatus.SENT -> "sent"
+                DeliveryStatus.DELIVERED, DeliveryStatus.RELAYED, DeliveryStatus.SEEN -> "delivered"
+                DeliveryStatus.FAILED -> "failed"
+            }
+            append("Status: $statusStr. ")
         }
         if (isSelected) {
             append("Selected. ")
@@ -120,17 +131,84 @@ fun MessageBubble(
             when (message.messageType) {
                 MessageType.IMAGE -> {
                     val mediaPath = message.mediaPath
-                    if (mediaPath != null && File(mediaPath).exists()) {
+                    val isComplete = message.status != DeliveryStatus.QUEUED && message.status != DeliveryStatus.FAILED
+                    val hasFullFile = mediaPath != null && File(mediaPath).exists()
+                    
+                    if (isComplete && hasFullFile) {
                         AsyncImage(
-                            model = File(mediaPath),
+                            model = File(mediaPath!!),
                             contentDescription = "View full image",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 120.dp, max = 260.dp)
                                 .clip(RoundedCornerShape(MeshTheme.spacing.medium))
-                                .clickable { onImageClick(mediaPath) },
+                                .clickable { onImageClick(message.messageId) },
                             contentScale = ContentScale.Crop
                         )
+                    } else if (!message.thumbnailBase64.isNullOrEmpty()) {
+                        // Decode base64 to bitmap efficiently on background thread
+                        val imageBitmapState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+                        androidx.compose.runtime.LaunchedEffect(message.thumbnailBase64) {
+                            if (!message.thumbnailBase64.isNullOrEmpty()) {
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        val bytes = Base64.decode(message.thumbnailBase64, Base64.DEFAULT)
+                                        imageBitmapState.value = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                                    } catch (e: Exception) {
+                                        // Ignore
+                                    }
+                                }
+                            }
+                        }
+                        val imageBitmap = imageBitmapState.value
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 120.dp, max = 260.dp)
+                                .clip(RoundedCornerShape(MeshTheme.spacing.medium))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            if (imageBitmap != null) {
+                                Image(
+                                    bitmap = imageBitmap,
+                                    contentDescription = "Image thumbnail",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                    alpha = 0.5f // Dim thumbnail while loading
+                                )
+                            }
+                            
+                            // Overlay progress or retry
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
+                                    if (message.status == DeliveryStatus.FAILED) {
+                                        IconButton(
+                                            onClick = { onRetryMedia(message.messageId) },
+                                            modifier = Modifier.background(MaterialTheme.colorScheme.error, CircleShape).size(36.dp)
+                                        ) {
+                                            Icon(Icons.Default.Refresh, contentDescription = "Retry image transfer", tint = MaterialTheme.colorScheme.onPrimary)
+                                        }
+                                        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
+                                        Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    } else if (transferProgress != null && transferProgress >= 0f) {
+                                        CircularProgressIndicator(
+                                            progress = { transferProgress },
+                                            color = MaterialTheme.colorScheme.primary,
+                                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        )
+                                    } else {
+                                        CircularProgressIndicator(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         Box(
                             modifier = Modifier
@@ -141,7 +219,7 @@ fun MessageBubble(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
-                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(36.dp))
+                                Icon(Icons.Default.Image, contentDescription = "Image message", modifier = Modifier.size(36.dp))
                                 Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                                 Text(if (message.isFromMe) "Sending image..." else "Receiving image...", style = MaterialTheme.typography.labelSmall)
                                 if (message.status == DeliveryStatus.FAILED) {
@@ -193,11 +271,11 @@ fun MessageBubble(
                         Column(modifier = Modifier.weight(1f).padding(start = MeshTheme.spacing.medium)) {
                             if (message.status == DeliveryStatus.FAILED) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                                    Icon(Icons.Default.Refresh, contentDescription = "Failed to send, tap to retry", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
                                     Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                                     Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                 }
-                            } else if (transferProgress != null && transferProgress >= 0f && message.status == DeliveryStatus.PENDING) {
+                            } else if (transferProgress != null && transferProgress >= 0f && message.status == DeliveryStatus.QUEUED) {
                                 Text(
                                     text = if (message.isFromMe) "Sending..." else "Receiving...",
                                     style = MaterialTheme.typography.labelSmall,
@@ -238,10 +316,27 @@ fun MessageBubble(
                                 }
                             }
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MeshTheme.spacing.large))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Location Shared", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        // Mini map placeholder
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .clip(RoundedCornerShape(MeshTheme.spacing.medium))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Map,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Location message",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(32.dp).offset(y = (-8).dp)
+                            )
                         }
                         Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
                         if (message.latitude != null && message.longitude != null) {
@@ -283,13 +378,24 @@ fun MessageBubble(
                         }
                     }
                 }
+
                 MessageType.TEXT -> {
-                    Text(
-                        text = message.text,
-                        color = textColor,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(bottom = MeshTheme.spacing.extraSmall)
-                    )
+                    Column {
+                        Text(
+                            text = message.text,
+                            color = textColor,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = MeshTheme.spacing.extraSmall)
+                        )
+                        if (message.status == DeliveryStatus.FAILED) {
+                            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Retry message", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                                Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+                                Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -309,7 +415,7 @@ fun MessageBubble(
                 if (isMe) {
                     Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                     val statusIcon = when (message.status) {
-                        DeliveryStatus.PENDING -> Icons.Default.AccessTime
+                        DeliveryStatus.QUEUED -> Icons.Default.AccessTime
                         DeliveryStatus.SENT -> Icons.Default.Check
                         DeliveryStatus.RELAYED -> Icons.Default.DoneAll
                         DeliveryStatus.DELIVERED -> Icons.Default.DoneAll

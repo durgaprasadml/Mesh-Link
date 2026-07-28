@@ -17,15 +17,15 @@ import org.json.JSONObject
 @Singleton
 class VoiceTransport @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
-    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
-) {
+    @com.meshlink.di.IoDispatcher private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher,
+    private val meshConfig: com.meshlink.config.MeshConfig
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) : com.meshlink.voice.api.VoiceTransport {
     companion object {
         private const val TAG = "VoiceTransport"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-    
-    // Callback for BleRepositoryImpl or MeshRouter to actually dispatch over network
+// Callback for BleRepositoryImpl or MeshRouter to actually dispatch over network
     var onSendPacket: ((MeshPacket) -> Unit)? = null
 
     // Callback for AudioStreamer/VoiceManager when a frame/signal arrives
@@ -33,20 +33,18 @@ class VoiceTransport @Inject constructor(
     var onIncomingFrame: ((ByteArray, String, Long) -> Unit)? = null
 
     fun sendSignal(senderId: String, targetId: String, signalJson: String) {
-        scope.launch {
+        applicationScope.launch {
             try {
                 // Signals are encrypted like normal messages
                 val encrypted = cryptoManager.encrypt(signalJson, targetId)
-                if (encrypted != null) {
-                    val packet = MeshPacket(
-                        senderId = senderId,
-                        targetId = targetId,
-                        payload = encrypted,
-                        type = PacketType.VOICE_SIGNAL,
-                        encrypted = true
-                    )
-                    onSendPacket?.invoke(packet)
-                }
+                val packet = MeshPacket(
+                    senderId = senderId,
+                    targetId = targetId,
+                    payload = encrypted,
+                    type = PacketType.VOICE_SIGNAL,
+                    encrypted = true
+                )
+                onSendPacket?.invoke(packet)
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Failed to encrypt signal: ${e.message}")
             }
@@ -63,16 +61,14 @@ class VoiceTransport @Inject constructor(
             val payloadString = "${callId}:${seqNum}:${Base64.encodeToString(pcmData, Base64.NO_WRAP)}"
             val encrypted = cryptoManager.encrypt(payloadString, targetId)
             
-            if (encrypted != null) {
-                val packet = MeshPacket(
-                    senderId = senderId,
-                    targetId = targetId,
-                    payload = encrypted,
-                    type = PacketType.VOICE_FRAME,
-                    encrypted = true
-                )
-                onSendPacket?.invoke(packet)
-            }
+            val packet = MeshPacket(
+                senderId = senderId,
+                targetId = targetId,
+                payload = encrypted,
+                type = PacketType.VOICE_FRAME,
+                encrypted = true
+            )
+            onSendPacket?.invoke(packet)
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to send frame: ${e.message}")
         }
@@ -81,9 +77,10 @@ class VoiceTransport @Inject constructor(
     fun handleIncomingPacket(packet: MeshPacket) {
         if (!packet.encrypted) return
         
-        scope.launch {
+        applicationScope.launch {
             try {
-                val decrypted = cryptoManager.decryptOrPassthrough(packet.payload, packet.senderId)
+                // Payload is already decrypted by the routing layer
+                val decrypted = packet.payload
                 
                 when (packet.type) {
                     PacketType.VOICE_SIGNAL -> {
@@ -102,8 +99,26 @@ class VoiceTransport @Inject constructor(
                     else -> {}
                 }
             } catch (e: Exception) {
-                MeshLogger.e(TAG, "Failed to decrypt voice packet: ${e.message}")
+                MeshLogger.e(TAG, "Failed to parse voice packet: ${e.message}")
             }
         }
+    }
+
+    @Deprecated("Use initiateVoiceCall instead", ReplaceWith("initiateVoiceCall(peerId)"))
+    override suspend fun startVoiceCall(peerId: String) {
+        throw UnsupportedOperationException("Not supported in this layer")
+    }
+
+    override suspend fun initiateVoiceCall(peerId: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.UnknownError("Not supported in this layer"))
+    }
+
+    @Deprecated("Use terminateVoiceCall instead", ReplaceWith("terminateVoiceCall(peerId)"))
+    override suspend fun endVoiceCall(peerId: String) {
+        throw UnsupportedOperationException("Not supported in this layer")
+    }
+
+    override suspend fun terminateVoiceCall(peerId: String): com.meshlink.domain.model.MeshResult<Unit> {
+        return com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.UnknownError("Not supported in this layer"))
     }
 }

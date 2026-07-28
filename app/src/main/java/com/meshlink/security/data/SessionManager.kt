@@ -1,7 +1,7 @@
 package com.meshlink.security.data
 
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.ble.data.PeerSecureSession
+import com.meshlink.domain.model.PeerSecureSession
 import com.meshlink.di.DefaultDispatcher
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -13,38 +13,81 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-
+import java.security.MessageDigest
 @Singleton
 class SessionManager @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
     private val trustManager: com.meshlink.security.data.TrustManager,
     private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
-    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher
-) {
+    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
+    private val maintenanceScheduler: com.meshlink.common.maintenance.MaintenanceScheduler
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     private val activeSessions = ConcurrentHashMap<String, PeerSecureSession>()
-    private val scope = CoroutineScope(defaultDispatcher + SupervisorJob())
-    private val TAG = "SessionManager"
+private val TAG = "SessionManager"
 
     init {
-        startCleanupRoutine()
+        maintenanceScheduler.schedule("SessionCleanup", 5 * 60 * 1000L) {
+            val now = System.currentTimeMillis()
+            val expiredPeers = activeSessions.entries.filter { it.value.expirationTime < now }.map { it.key }
+            
+            expiredPeers.forEach { peerId ->
+                MeshLogger.w(TAG, "Session expired for peer $peerId. Removing.")
+                removeSession(peerId)
+            }
+        }
     }
 
     fun getSession(peerId: String): PeerSecureSession? {
-        return activeSessions[peerId]
+        val existing = activeSessions[peerId]
+        if (existing != null) return existing
+        if (cryptoManager.hasPeerKey(peerId)) {
+            val fingerprint = cryptoManager.getPeerSigningKey(peerId)?.let { cryptoManager.getDeviceFingerprint(it) } ?: "ESTABLISHED"
+            val localFingerprint = cryptoManager.getLocalFingerprint()
+            val sorted = listOf(localFingerprint, fingerprint).sorted()
+            val combined = sorted[0] + ":" + sorted[1]
+            val digest = MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(combined.toByteArray(Charsets.UTF_8))
+            val derivedSessionId = hash.joinToString("") { "%02x".format(it) }.take(16)
+
+            val restored = PeerSecureSession(
+                peerId = peerId,
+                sessionId = derivedSessionId,
+                fingerprint = fingerprint,
+                sessionStart = System.currentTimeMillis(),
+                sessionVersion = 2,
+                verified = true,
+                lastActivity = System.currentTimeMillis()
+            )
+            activeSessions[peerId] = restored
+            MeshLogger.d(TAG, "Auto-restored session for peer $peerId from persisted keys")
+            return restored
+        }
+        return null
     }
 
     fun createSession(
         peerId: String,
         fingerprint: String,
         sessionVersion: Int,
+        cryptoVersion: Int = 1,
         verified: Boolean
     ): PeerSecureSession {
+        val localFingerprint = cryptoManager.getLocalFingerprint()
+        val sorted = listOf(localFingerprint, fingerprint).sorted()
+        val combined = sorted[0] + ":" + sorted[1]
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hash = digest.digest(combined.toByteArray(Charsets.UTF_8))
+        val derivedSessionId = hash.joinToString("") { "%02x".format(it) }.take(16)
+
         val now = System.currentTimeMillis()
         val session = PeerSecureSession(
             peerId = peerId,
+            sessionId = derivedSessionId,
             fingerprint = fingerprint,
             sessionStart = now,
             sessionVersion = sessionVersion,
+            cryptoVersion = cryptoVersion,
             verified = verified,
             lastActivity = now
         )
@@ -59,20 +102,12 @@ class SessionManager @Inject constructor(
 
     fun getAllSessionPeers(): Set<String> = activeSessions.keys
 
-    private fun startCleanupRoutine() {
-        scope.launch {
-            while (true) {
-                delay(5 * 60 * 1000L) // 5 minutes
-                val now = System.currentTimeMillis()
-                val expiredPeers = activeSessions.entries.filter { it.value.expirationTime < now }.map { it.key }
-                
-                expiredPeers.forEach { peerId ->
-                    MeshLogger.w(TAG, "Session expired for peer $peerId. Removing.")
-                    removeSession(peerId)
-                }
-            }
-        }
+    fun terminateAllSessions() {
+        val peers = activeSessions.keys.toList()
+        peers.forEach { removeSession(it) }
     }
+
+
 
     /**
      * Generates AAD containing sessionId, sequenceNumber, timestamp.
@@ -80,8 +115,8 @@ class SessionManager @Inject constructor(
      */
     fun generateAad(peerId: String): Pair<ByteArray, String>? {
         val trustLevel = trustManager.getTrustLevel(peerId)
-        if (trustLevel != com.meshlink.security.data.TrustLevel.VERIFIED && trustLevel != com.meshlink.security.data.TrustLevel.TRUSTED) {
-            MeshLogger.w(TAG, "Cannot generate AAD: Peer $peerId is not VERIFIED or TRUSTED (Level: $trustLevel)")
+        if (trustLevel == com.meshlink.security.data.TrustLevel.BLOCKED || trustLevel == com.meshlink.security.data.TrustLevel.REVOKED) {
+            MeshLogger.w(TAG, "Cannot generate AAD: Peer $peerId is BLOCKED or REVOKED (Level: $trustLevel)")
             return null
         }
 
@@ -140,6 +175,13 @@ class SessionManager @Inject constructor(
             if (kv != session.keyVersion) {
                 if (kv == session.previousKeyVersion && now <= session.rekeyTimestamp + 60_000) {
                     // Allowed during transition window
+                } else if (kv == session.keyVersion + 1 && cryptoManager.hasPeerKey(peerId)) {
+                    // Implicit forward rotation
+                    MeshLogger.d(TAG, "Implicit forward rotation to key version $kv for $peerId")
+                    session.previousKeyVersion = session.keyVersion
+                    session.keyVersion = kv
+                    session.rekeyTimestamp = now
+                    session.rotationReason = "implicit_forward_rotation"
                 } else {
                     MeshLogger.e(TAG, "Rejecting packet: Invalid keyVersion $kv. Current: ${session.keyVersion}, Prev: ${session.previousKeyVersion}")
                     return null

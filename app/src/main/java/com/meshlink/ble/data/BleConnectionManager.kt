@@ -1,4 +1,5 @@
 package com.meshlink.ble.data
+import com.meshlink.domain.model.PeerConnectionState
 
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -16,7 +17,13 @@ class BleConnectionManager @Inject constructor(
     private val TAG = "BleConnectionManager"
 
     // Moving peerStates from BleRepositoryImpl here
-    val peerStates = ConcurrentHashMap<String, PeerConnectionState>()
+    val peerStates: MutableMap<String, PeerConnectionState> = java.util.Collections.synchronizedMap(
+        object : java.util.LinkedHashMap<String, PeerConnectionState>(100, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PeerConnectionState>?): Boolean {
+                return size > 1000
+            }
+        }
+    )
     
     val activeClients: Set<String>
         get() = bleDataSource.activeClients
@@ -32,8 +39,31 @@ class BleConnectionManager @Inject constructor(
         bleDataSource.stopServer()
     }
 
-    fun connectToDevice(address: String) {
-        bleDataSource.connectToDevice(address)
+    fun connectToDevice(address: String, isManual: Boolean = false) {
+        if (isManual) {
+            discoveryEngine.connectionPolicy.resetPeer(address)
+        }
+        
+        val state = getPeerState(address)
+        val isAlreadyConnected = state == PeerConnectionState.CONNECTING ||
+                                 state == PeerConnectionState.CONNECTED ||
+                                 state == PeerConnectionState.READY ||
+                                 state == PeerConnectionState.KEY_EXCHANGE_STARTED ||
+                                 state == PeerConnectionState.KEY_EXCHANGE_COMPLETE ||
+                                 state == PeerConnectionState.IDENTITY_VERIFIED ||
+                                 state == PeerConnectionState.KEY_VERIFIED ||
+                                 state == PeerConnectionState.SESSION_READY ||
+                                 state == PeerConnectionState.SESSION_ESTABLISHED
+                                 
+        if (discoveryEngine.connectionPolicy.canConnect(address, isAlreadyConnected)) {
+            // Update state immediately to prevent duplicate requests if called repeatedly
+            if (state == PeerConnectionState.DISCONNECTED || state == PeerConnectionState.DISCOVERED) {
+                updatePeerState(address, PeerConnectionState.CONNECTING)
+            }
+            bleDataSource.connectToDevice(address)
+        } else {
+            MeshLogger.d(TAG, "SmartConnectionPolicy rejected connection to $address (state=$state, retryState=${discoveryEngine.connectionPolicy.getRetryState(address)})")
+        }
     }
 
     fun disconnectFromDevice(address: String) {
@@ -59,10 +89,12 @@ class BleConnectionManager @Inject constructor(
     }
     
     fun updateAnalyticsConnectionCount() {
-        val count = peerStates.values.count { 
-            it == PeerConnectionState.CONNECTED || 
-            it == PeerConnectionState.SESSION_READY || 
-            it == PeerConnectionState.SESSION_ESTABLISHED 
+        val count = synchronized(peerStates) {
+            peerStates.values.count { 
+                it == PeerConnectionState.CONNECTED || 
+                it == PeerConnectionState.SESSION_READY || 
+                it == PeerConnectionState.SESSION_ESTABLISHED 
+            }
         }
         discoveryEngine.analytics.updateActiveConnections(count)
     }

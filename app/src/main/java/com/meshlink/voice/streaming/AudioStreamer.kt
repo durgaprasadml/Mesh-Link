@@ -20,19 +20,18 @@ class AudioStreamer @Inject constructor(
     private val codecManager: VoiceCodecManager,
     private val jitterBuffer: JitterBuffer,
     private val transport: VoiceTransport
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "AudioStreamer"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+@Volatile private var isStreaming = false
+    @Volatile private var currentCallId: String? = null
+    @Volatile private var currentTargetId: String? = null
+    @Volatile private var currentSenderId: String? = null
     
-    private var isStreaming = false
-    private var currentCallId: String? = null
-    private var currentTargetId: String? = null
-    private var currentSenderId: String? = null
-    
-    private var outboundSeqNum = 0L
+    private val outboundSeqNum = java.util.concurrent.atomic.AtomicLong(0)
 
     init {
         // Microphone -> Encoder -> Transport
@@ -47,7 +46,7 @@ class AudioStreamer @Inject constructor(
                 currentCallId?.let { callId ->
                     currentTargetId?.let { targetId ->
                         currentSenderId?.let { senderId ->
-                            transport.sendVoiceFrame(senderId, targetId, callId, outboundSeqNum++, encodedData)
+                            transport.sendVoiceFrame(senderId, targetId, callId, outboundSeqNum.getAndIncrement(), encodedData)
                         }
                     }
                 }
@@ -71,13 +70,14 @@ class AudioStreamer @Inject constructor(
         }
     }
 
+    @Synchronized
     fun startStreaming(senderId: String, targetId: String, callId: String, bitrate: Int) {
         if (isStreaming) return
         isStreaming = true
         currentCallId = callId
         currentTargetId = targetId
         currentSenderId = senderId
-        outboundSeqNum = 0L
+        outboundSeqNum.set(0)
 
         codecManager.startEncoder(bitrate)
         codecManager.startDecoder()
@@ -87,6 +87,7 @@ class AudioStreamer @Inject constructor(
         MeshLogger.d(TAG, "Started full-duplex streaming for call $callId")
     }
 
+    @Synchronized
     fun stopStreaming() {
         if (!isStreaming) return
         isStreaming = false

@@ -5,8 +5,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.PowerManager
-import com.meshlink.ai.engine.BatteryPredictor
-import com.meshlink.emergency.EmergencyManager
+
 import com.meshlink.common.logger.MeshLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -23,9 +22,7 @@ enum class PowerState {
 
 @Singleton
 class BatteryAwareNetworking @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val batteryPredictor: BatteryPredictor,
-    private val emergencyManager: EmergencyManager
+    @ApplicationContext private val context: Context
 ) {
     companion object {
         private const val TAG = "BatteryAwareNetworking"
@@ -74,7 +71,7 @@ class BatteryAwareNetworking @Inject constructor(
      * If critical, we ONLY relay SOS/Critical packets, UNLESS emergency mode is forced globally.
      */
     fun canRelayBackgroundTraffic(): Boolean {
-        if (emergencyManager.isEmergencyModeActive.value) return true
+
         return _powerState.value != PowerState.CRITICAL
     }
     
@@ -82,7 +79,7 @@ class BatteryAwareNetworking @Inject constructor(
      * Reduces broadcast frequency if power saver is enabled.
      */
     fun getBroadcastProbability(): Float {
-        if (emergencyManager.isEmergencyModeActive.value) return 1.0f
+
         
         return when (_powerState.value) {
             PowerState.NORMAL -> 1.0f

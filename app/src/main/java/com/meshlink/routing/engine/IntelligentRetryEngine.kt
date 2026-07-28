@@ -1,6 +1,6 @@
 package com.meshlink.routing.engine
 
-import com.meshlink.ai.data.LearningRepository
+
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
@@ -9,8 +9,7 @@ import kotlin.random.Random
 @Singleton
 class IntelligentRetryEngine @Inject constructor(
     private val congestionMonitor: CongestionMonitor,
-    private val batteryAwareNetworking: BatteryAwareNetworking,
-    private val learningRepository: LearningRepository
+    private val batteryAwareNetworking: BatteryAwareNetworking
 ) {
 
     /**
@@ -19,8 +18,7 @@ class IntelligentRetryEngine @Inject constructor(
      * @return Delay in milliseconds.
      */
     fun calculateRetryDelay(attempt: Int): Long {
-        // AI component: If retries generally fail a lot globally, increase the base penalty to save battery
-        val globalRetrySuccess = learningRepository.getGlobalMetric("avg_retry_success", 0.5f)
+        val globalRetrySuccess = 0.5f
         
         // Base delay is 2 seconds, but scaled inverse to historical success
         var baseDelay = (2000L * (1.0f + (1.0f - globalRetrySuccess)) * (2.0.pow(attempt.toDouble()))).toLong()

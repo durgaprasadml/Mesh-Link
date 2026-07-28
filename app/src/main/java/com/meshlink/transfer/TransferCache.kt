@@ -1,7 +1,9 @@
 package com.meshlink.transfer
 
 import android.content.Context
+import com.google.gson.Gson
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.transfer.TransferSession
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,6 +19,8 @@ class TransferCache @Inject constructor(
         private const val CACHE_DIR_NAME = "mesh_transfer_staging"
     }
 
+    private val gson = Gson()
+
     private val stagingDir: File by lazy {
         File(context.cacheDir, CACHE_DIR_NAME).also {
             if (!it.exists()) it.mkdirs()
@@ -29,6 +33,38 @@ class TransferCache @Inject constructor(
             return@withContext sessionDir.mkdirs()
         }
         true
+    }
+
+    suspend fun persistSession(session: TransferSession) = withContext(Dispatchers.IO) {
+        try {
+            val sessionDir = File(stagingDir, session.transferId)
+            if (!sessionDir.exists()) sessionDir.mkdirs()
+            val metaFile = File(sessionDir, "session.json")
+            metaFile.writeText(gson.toJson(session))
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to persist session ${session.transferId}: ${e.message}")
+        }
+    }
+
+    suspend fun loadPersistedSessions(): List<TransferSession> = withContext(Dispatchers.IO) {
+        val sessions = mutableListOf<TransferSession>()
+        if (stagingDir.exists()) {
+            stagingDir.listFiles()?.forEach { sessionDir ->
+                if (sessionDir.isDirectory) {
+                    val metaFile = File(sessionDir, "session.json")
+                    if (metaFile.exists()) {
+                        try {
+                            val json = metaFile.readText()
+                            val session = gson.fromJson(json, TransferSession::class.java)
+                            if (session != null) sessions.add(session)
+                        } catch (e: Exception) {
+                            MeshLogger.e(TAG, "Failed to load session from ${sessionDir.name}: ${e.message}")
+                        }
+                    }
+                }
+            }
+        }
+        sessions
     }
 
     suspend fun writeChunk(transferId: String, chunkIndex: Int, data: ByteArray): Boolean = withContext(Dispatchers.IO) {

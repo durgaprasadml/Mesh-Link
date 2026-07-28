@@ -13,13 +13,9 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.common.power.PowerState
-import com.meshlink.common.power.PowerStateManager
 import com.meshlink.MainActivity
-import com.meshlink.common.diagnostics.RuntimeWatchdog
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.ui.components.hasRequiredPermissions
-import com.meshlink.wifi.data.WifiDirectManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -57,23 +53,37 @@ class MeshRelayService : Service() {
     @Inject
     lateinit var meshRepository: MeshRepository
     
-    @Inject
-    lateinit var wifiDirectManager: WifiDirectManager
-
-    @Inject
-    lateinit var powerStateManager: PowerStateManager
-
-    @Inject
-    lateinit var runtimeWatchdog: RuntimeWatchdog
 
     private var serviceJob: Job? = null
     private var restartOnDestroy = true
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private val bluetoothStateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (intent?.action == android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED) {
+                val state = intent.getIntExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, -1)
+                if (state == android.bluetooth.BluetoothAdapter.STATE_ON) {
+                    MeshLogger.d(TAG, "Bluetooth turned ON, restarting Mesh Relay")
+                    if (hasRequiredPermissions(this@MeshRelayService)) {
+                        serviceScope.launch {
+                            meshRepository.autoStartMesh()
+                        }
+                    }
+                } else if (state == android.bluetooth.BluetoothAdapter.STATE_OFF) {
+                    MeshLogger.d(TAG, "Bluetooth turned OFF, stopping Mesh operations temporarily")
+                    meshRepository.stopMesh()
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        wifiDirectManager.registerReceiver()
+        
+        val filter = android.content.IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+        registerReceiver(bluetoothStateReceiver, filter)
+        
         MeshLogger.d(TAG, "MeshRelayService created")
     }
 
@@ -110,10 +120,16 @@ class MeshRelayService : Service() {
                     }
                 } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
                     MeshLogger.e(TAG, "Not allowed to start foreground service from background", e)
-                    _serviceState.value = ServiceState.ERROR
+                    _serviceState.value = ServiceState.STOPPED
+                    restartOnDestroy = false
+                    stopSelf()
+                    return START_NOT_STICKY
                 } catch (e: Exception) {
                     MeshLogger.e(TAG, "Failed to start foreground service", e)
-                    _serviceState.value = ServiceState.ERROR
+                    _serviceState.value = ServiceState.STOPPED
+                    restartOnDestroy = false
+                    stopSelf()
+                    return START_NOT_STICKY
                 }
                 
                 if (hasRequiredPermissions(this)) {
@@ -141,18 +157,11 @@ class MeshRelayService : Service() {
             
             var lastRefresh = System.currentTimeMillis()
             while (isActive) {
-                runtimeWatchdog.ping("MeshRelayService")
                 delay(15_000L)
                 if (System.currentTimeMillis() - lastRefresh >= BLE_REFRESH_INTERVAL_MS) {
-                    val currentState = powerStateManager.powerState.value
-                    if (currentState == PowerState.DOZE_MODE || currentState == PowerState.RESTRICTED) {
-                        MeshLogger.d(TAG, "Skipping BLE refresh due to power state: $currentState")
-                        lastRefresh = System.currentTimeMillis()
-                        continue
-                    }
                     withWakeLock(30_000L) {
                         try {
-                            meshRepository.autoStartMesh()
+                            meshRepository.refreshMesh()
                             lastRefresh = System.currentTimeMillis()
                             MeshLogger.d(TAG, "BLE refresh cycle completed under scoped WakeLock")
                         } catch (e: Exception) {
@@ -239,8 +248,11 @@ class MeshRelayService : Service() {
         serviceScope.cancel()
         serviceJob?.cancel()
         meshRepository.stopMesh()
-        wifiDirectManager.unregisterReceiver()
-        runtimeWatchdog.remove("MeshRelayService")
+        try {
+            unregisterReceiver(bluetoothStateReceiver)
+        } catch (e: Exception) {
+            // Ignored
+        }
         if (restartOnDestroy) {
             scheduleRestart()
         }

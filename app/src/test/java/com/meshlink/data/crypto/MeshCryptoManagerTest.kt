@@ -10,7 +10,6 @@ import org.junit.Test
 import java.security.KeyPairGenerator
 import java.security.spec.ECGenParameterSpec
 import java.util.Base64
-import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 class MeshCryptoManagerTest {
 
@@ -50,11 +49,6 @@ class MeshCryptoManagerTest {
         every { android.util.Log.w(any(), any<String>()) } returns 0
         every { android.util.Log.w(any(), any<String>(), any()) } returns 0
 
-        // Mock FirebaseCrashlytics
-        mockkStatic(FirebaseCrashlytics::class)
-        val mockCrashlytics = mockk<FirebaseCrashlytics>(relaxed = true)
-        every { FirebaseCrashlytics.getInstance() } returns mockCrashlytics
-
         // Mock EncryptedSharedPreferences to return our mocked sharedPrefs
         mockkStatic(androidx.security.crypto.EncryptedSharedPreferences::class)
         every { androidx.security.crypto.EncryptedSharedPreferences.create(any<Context>(), any<String>(), any<androidx.security.crypto.MasterKey>(), any(), any()) } returns sharedPrefs
@@ -64,7 +58,7 @@ class MeshCryptoManagerTest {
         every { anyConstructed<androidx.security.crypto.MasterKey.Builder>().setKeyScheme(any()) } answers { callOriginal() }
         every { anyConstructed<androidx.security.crypto.MasterKey.Builder>().build() } returns mockk(relaxed = true)
 
-        cryptoManager = MeshCryptoManager(context)
+        cryptoManager = MeshCryptoManager(context, mockk(relaxed = true))
         
         // Generate software keys for testing
         // Mock shared preferences to return null so it generates new ones
@@ -147,5 +141,51 @@ class MeshCryptoManagerTest {
         
         assertNotNull(fingerprint)
         assertTrue("Fingerprint should contain colons", fingerprint.contains(":"))
+    }
+
+    @Test
+    fun `test rotateIdentityKeys`() {
+        val pubKeyBase64 = cryptoManager.getOrCreatePublicKey()
+        val signKeyBase64 = cryptoManager.getOrCreateSigningKey()
+        
+        // Mock capture for new keys
+        val newPubCaptor = slot<String>()
+        val newSignCaptor = slot<String>()
+        every { editor.putString("__self_public_key__", capture(newPubCaptor)) } returns editor
+        every { editor.putString("__self_signing_public_key__", capture(newSignCaptor)) } returns editor
+        every { sharedPrefs.getString("__self_public_key__", null) } answers {
+            if (newPubCaptor.isCaptured) newPubCaptor.captured else null
+        }
+        
+        cryptoManager.rotateIdentityKeys()
+        
+        // Verify delete was called
+        verify { editor.remove("__self_public_key__") }
+        verify { editor.remove("__self_private_key__") }
+        
+        val newPubKey = cryptoManager.getOrCreatePublicKey()
+        
+        // If keys are generated randomly, they shouldn't match.
+        // In our mock they might be the same if we just mocked return values, 
+        // but we verify that the clear mechanism was invoked.
+        assertNotNull(newPubKey)
+    }
+
+    @Test
+    fun `test export and import identity`() {
+        every { sharedPrefs.getString("__self_public_key__", null) } returns "pub_key"
+        every { sharedPrefs.getString("__self_private_key__", null) } returns "priv_key"
+        every { sharedPrefs.getString("__self_signing_public_key__", null) } returns "sign_pub_key"
+        every { sharedPrefs.getString("__self_signing_private_key__", null) } returns "sign_priv_key"
+
+        val exported = cryptoManager.exportIdentity()
+        assertNotNull(exported)
+        
+        cryptoManager.importIdentity(exported)
+        
+        verify { editor.putString("__self_public_key__", "pub_key") }
+        verify { editor.putString("__self_private_key__", "priv_key") }
+        verify { editor.putString("__self_signing_public_key__", "sign_pub_key") }
+        verify { editor.putString("__self_signing_private_key__", "sign_priv_key") }
     }
 }

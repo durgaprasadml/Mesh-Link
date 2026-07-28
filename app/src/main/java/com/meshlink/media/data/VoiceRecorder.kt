@@ -20,14 +20,14 @@ class VoiceRecorder @Inject constructor(
     @ApplicationContext private val context: Context,
     @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
     @MainDispatcher private val mainDispatcher: CoroutineDispatcher
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
-        private const val MAX_DURATION_MS = 10_000L
+        private const val MAX_DURATION_MS = 60_000L
         private const val TAG = "VoiceRecorder"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + defaultDispatcher)
-    private var recorder: MediaRecorder? = null
+private var recorder: MediaRecorder? = null
     private var outputFile: File? = null
     private var timerJob: Job? = null
 
@@ -54,8 +54,9 @@ class VoiceRecorder @Inject constructor(
                 setAudioSource(MediaRecorder.AudioSource.MIC)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioEncodingBitRate(64000)
-                setAudioSamplingRate(44100)
+                setAudioChannels(1) // Mono
+                setAudioEncodingBitRate(16_000) // 16 kbps
+                setAudioSamplingRate(16_000) // 16 kHz
                 setMaxDuration(MAX_DURATION_MS.toInt())
                 setOutputFile(outputFile!!.absolutePath)
                 prepare()
@@ -66,7 +67,7 @@ class VoiceRecorder @Inject constructor(
             _elapsedMs.value = 0L
 
             // Timer with auto-stop at 10 seconds
-            timerJob = scope.launch {
+            timerJob = applicationScope.launch(defaultDispatcher) {
                 val startTime = System.currentTimeMillis()
                 while (isActive && _isRecording.value) {
                     val elapsed = System.currentTimeMillis() - startTime

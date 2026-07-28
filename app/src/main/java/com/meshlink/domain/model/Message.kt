@@ -12,6 +12,12 @@ data class Message(
     val status: DeliveryStatus,
     val messageType: MessageType,
     val mediaPath: String? = null,
+    val mimeType: String? = null,
+    val mediaWidth: Int? = null,
+    val mediaHeight: Int? = null,
+    val mediaSize: Long? = null,
+    val mediaChecksum: String? = null,
+    val thumbnailBase64: String? = null,
     val mediaDurationMs: Long? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
@@ -19,7 +25,7 @@ data class Message(
 )
 
 enum class DeliveryStatus {
-    PENDING, SENT, RELAYED, DELIVERED, SEEN, FAILED
+    QUEUED, SENT, RELAYED, DELIVERED, SEEN, FAILED
 }
 
 enum class MessageType {

@@ -5,6 +5,13 @@ import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * Manages chat and message data storage and retrieval.
+ *
+ * Responsibility: Provide access to chats and messages, and handle local persistence.
+ * Lifecycle: Application scoped.
+ * Thread Safety: Implementations must be thread-safe.
+ */
 interface ChatRepository {
     fun getMessagesForChat(chatId: String): Flow<List<Message>>
     suspend fun getMessageByUuid(messageId: String): Message?

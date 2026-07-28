@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
@@ -70,13 +71,21 @@ fun BroadcastScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
-    // Auto-scroll to top (newest) when new messages arrive
+    // Auto-scroll to bottom only when user is already at bottom
     LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty()) listState.animateScrollToItem(0)
+        if (uiState.messages.isNotEmpty()) {
+            val visibleItems = listState.layoutInfo.visibleItemsInfo
+            val isAtBottom = visibleItems.isEmpty() || 
+                (visibleItems.last().index >= listState.layoutInfo.totalItemsCount - 2)
+            
+            if (isAtBottom) {
+                listState.animateScrollToItem(uiState.messages.size - 1)
+            }
+        }
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
                 navigationIcon = {
@@ -110,7 +119,7 @@ fun BroadcastScreen(
                             .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                        Icon(Icons.Default.Info, contentDescription = "Information", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
                         Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
                         Text(
                             "Message will be sent to all nearby devices",
@@ -172,37 +181,44 @@ fun BroadcastScreen(
             }
         }
     ) { paddingValues ->
-        if (uiState.messages.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("📡", style = MaterialTheme.typography.displayMedium)
-                    Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
-                    Text("No broadcasts yet", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                    Text("Messages you send will appear here", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), style = MaterialTheme.typography.bodyMedium)
+        AnimatedContent<Boolean>(
+            targetState = uiState.messages.isEmpty(),
+            label = "broadcast_list_transition"
+        ) { isEmpty ->
+            if (isEmpty) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    com.meshlink.ui.components.EmptyState(
+                        icon = Icons.Default.Campaign,
+                        title = "No broadcasts yet",
+                        description = "Messages you send will appear here"
+                    )
                 }
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall),
-                verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumSmall),
-                reverseLayout = false
-            ) {
-                items(uiState.messages, key = { it.messageId }) { msg ->
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn() + slideInVertically { it / 2 }
-                    ) {
-                        BroadcastBubble(msg)
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentPadding = PaddingValues(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall),
+                    verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumSmall),
+                    reverseLayout = false
+                ) {
+                    items(
+                        items = uiState.messages,
+                        key = { it.messageId },
+                        contentType = { "broadcast_message" }
+                    ) { msg ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + slideInVertically { it / 2 }
+                        ) {
+                            BroadcastBubble(msg)
+                        }
                     }
                 }
             }
@@ -243,7 +259,7 @@ private fun BroadcastBubble(msg: Message) {
         ) {
             if (!isMe) {
                 Text(
-                    text = msg.senderId.takeLast(8),
+                    text = com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId),
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelSmall
                 )

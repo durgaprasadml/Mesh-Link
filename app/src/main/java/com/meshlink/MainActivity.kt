@@ -8,18 +8,26 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
+<<<<<<< HEAD
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+=======
+
+>>>>>>> main
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.service.MeshRelayService
 import com.meshlink.ui.components.hasRequiredPermissions
 import com.meshlink.ui.navigation.AppNavigation
 import com.meshlink.ui.navigation.Screen
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.activity.viewModels
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
@@ -34,8 +42,14 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var meshRepository: MeshRepository
+<<<<<<< HEAD
     
     private val pendingIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
+=======
+
+
+    private val pendingIntents = kotlinx.coroutines.channels.Channel<Intent>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+>>>>>>> main
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -46,23 +60,49 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
+<<<<<<< HEAD
         // ✅ Init Firebase Crashlytics
         FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
+=======
+        lifecycleScope.launch(Dispatchers.IO) {
+            checkAndStartMesh()
+        }
+>>>>>>> main
 
         requestNotificationPermissionIfNeeded()
 
         setContent {
             val windowSizeClass = @OptIn(ExperimentalMaterial3WindowSizeClassApi::class) calculateWindowSizeClass(this)
-            MeshTheme {
+            
+            val settingsViewModel: com.meshlink.ui.settings.SettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+            val uiState by settingsViewModel.uiState.collectAsState()
+
+            MeshTheme(
+                themeMode = uiState.themeMode,
+                dynamicColor = uiState.isMaterialYouEnabled,
+                accentColor = uiState.accentColor,
+                fontScale = uiState.fontScale,
+                largeTextEnabled = uiState.largeTextEnabled,
+                cornerRadiusScale = uiState.cornerRadiusScale,
+                animationsEnabled = uiState.animationsEnabled,
+                glassEffectsEnabled = uiState.glassEffectsEnabled,
+                highContrast = uiState.highContrast,
+                reduceMotionEnabled = uiState.reduceMotionEnabled
+            ) {
                 val navController = rememberNavController()
 
                 LaunchedEffect(Unit) {
-                    pendingIntents.collect { newIntent ->
+                    for (newIntent in pendingIntents) {
                         val address = newIntent.getStringExtra("address")
                         val name = newIntent.getStringExtra("name")
                         if (address != null && name != null) {
+<<<<<<< HEAD
+=======
+
+>>>>>>> main
                             navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
                                 launchSingleTop = true
                             }
@@ -74,6 +114,10 @@ class MainActivity : ComponentActivity() {
                     val address = intent.getStringExtra("address")
                     val name = intent.getStringExtra("name")
                     if (address != null && name != null) {
+<<<<<<< HEAD
+=======
+
+>>>>>>> main
                         navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
                             launchSingleTop = true
                         }
@@ -83,17 +127,12 @@ class MainActivity : ComponentActivity() {
                 AppNavigation(navController = navController, windowSizeClass = windowSizeClass)
             }
         }
-
-        lifecycleScope.launch {
-            kotlinx.coroutines.delay(500)
-            checkAndStartMesh()
-        }
     }
     
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingIntents.tryEmit(intent)
+        pendingIntents.trySend(intent)
     }
 
     // FIX ERROR 1: suppress system notifications while app is in foreground
@@ -114,7 +153,7 @@ class MainActivity : ComponentActivity() {
                 try {
                     meshRepository.autoStartMesh()
                 } catch (e: Exception) {
-                    FirebaseCrashlytics.getInstance().recordException(e)
+                    com.meshlink.common.logger.MeshLogger.e("MainActivity", "Error starting mesh: ${e.message}")
                 }
             }
         }
@@ -133,7 +172,7 @@ class MainActivity : ComponentActivity() {
             }
 
         } catch (e: Exception) {
-            FirebaseCrashlytics.getInstance().recordException(e)
+            com.meshlink.common.logger.MeshLogger.e("MainActivity", "Error starting relay service: ${e.message}")
         }
     }
 

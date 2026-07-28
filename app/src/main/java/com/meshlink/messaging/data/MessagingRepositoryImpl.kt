@@ -56,11 +56,28 @@ class MessagingRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteMessages(messageIds: List<String>) {
-        chatLocalDataSource.deleteMessages(messageIds)
+        val messages = chatLocalDataSource.getMessagesByIds(messageIds)
+        deleteMediaForMessages(messages)
+        chatLocalDataSource.deleteMessagesAndUpdateChat(messageIds)
     }
 
     override suspend fun deleteChat(chatId: String) {
+        val messages = chatLocalDataSource.getMessagesListForChat(chatId)
+        deleteMediaForMessages(messages)
         chatLocalDataSource.deleteChat(chatId)
+    }
+
+    private fun deleteMediaForMessages(messages: List<com.meshlink.database.data.local.MessageEntity>) {
+        messages.forEach { msg ->
+            msg.mediaPath?.let { path ->
+                try {
+                    val file = java.io.File(path)
+                    if (file.exists()) file.delete()
+                } catch (e: Exception) {
+                    com.meshlink.common.logger.MeshLogger.e("MessagingRepository", "Failed to delete media", e)
+                }
+            }
+        }
     }
 
     override suspend fun markChatAsRead(chatId: String) {
@@ -78,6 +95,12 @@ private fun com.meshlink.database.data.local.MessageEntity.toDomain() = Message(
     status = com.meshlink.domain.model.DeliveryStatus.valueOf(status.name),
     messageType = com.meshlink.domain.model.MessageType.valueOf(messageType.name),
     mediaPath = mediaPath,
+    mimeType = mimeType,
+    mediaWidth = mediaWidth,
+    mediaHeight = mediaHeight,
+    mediaSize = mediaSize,
+    mediaChecksum = mediaChecksum,
+    thumbnailBase64 = thumbnailBase64,
     mediaDurationMs = mediaDurationMs,
     latitude = latitude,
     longitude = longitude,
@@ -102,6 +125,12 @@ private fun Message.toEntity() = com.meshlink.database.data.local.MessageEntity(
     status = com.meshlink.database.data.local.DeliveryStatus.valueOf(status.name),
     messageType = com.meshlink.database.data.local.MessageType.valueOf(messageType.name),
     mediaPath = mediaPath,
+    mimeType = mimeType,
+    mediaWidth = mediaWidth,
+    mediaHeight = mediaHeight,
+    mediaSize = mediaSize,
+    mediaChecksum = mediaChecksum,
+    thumbnailBase64 = thumbnailBase64,
     mediaDurationMs = mediaDurationMs,
     latitude = latitude,
     longitude = longitude,

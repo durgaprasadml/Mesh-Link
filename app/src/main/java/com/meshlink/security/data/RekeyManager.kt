@@ -24,12 +24,12 @@ class RekeyManager @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
     private val sessionManager: SessionManager,
     private val userRepository: UserRepository,
-    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher
-) {
+    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
+    private val maintenanceScheduler: com.meshlink.common.maintenance.MaintenanceScheduler
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     private val TAG = "RekeyManager"
-    private val scope = CoroutineScope(defaultDispatcher + SupervisorJob())
-
-    // Map of peerId -> PendingRekey state
+// Map of peerId -> PendingRekey state
     private val pendingRekeys = ConcurrentHashMap<String, PendingRekey>()
 
     data class PendingRekey(
@@ -41,63 +41,58 @@ class RekeyManager @Inject constructor(
     )
 
     // Callbacks to MeshRepository (to avoid circular dependency loop)
-    var sendPacketCallback: ((peerId: String, packet: MeshPacket) -> Unit)? = null
+    var sendPacketCallback: (suspend (peerId: String, packet: MeshPacket) -> Unit)? = null
     var forceKeyExchangeCallback: ((peerId: String) -> Unit)? = null
 
     init {
-        startSweepCoroutine()
-    }
+        maintenanceScheduler.schedule("RekeySweep", 60_000L) {
+            val now = System.currentTimeMillis()
+            
+            val user = userRepository.getLocalUser()
+            val myId = user?.meshId ?: return@schedule
 
-    private fun startSweepCoroutine() {
-        scope.launch {
-            while (true) {
-                delay(60_000) // Check every 60 seconds
-                val now = System.currentTimeMillis()
+            for (peerId in sessionManager.getAllSessionPeers()) {
+                val session = sessionManager.getSession(peerId) ?: continue
                 
-                val user = userRepository.getLocalUser()
-                val myId = user?.meshId ?: continue
+                // Cleanup Grace Window (Transition window limit is 60s)
+                if (session.previousKeyVersion != 0 && now > session.rekeyTimestamp + 60_000) {
+                    MeshLogger.d(TAG, "Grace period ended for peer $peerId, deleting previous AES key")
+                    cryptoManager.clearPreviousSharedKey(peerId)
+                    session.previousKeyVersion = 0
+                }
 
-                for (peerId in sessionManager.getAllSessionPeers()) {
-                    val session = sessionManager.getSession(peerId) ?: continue
-                    
-                    // Cleanup Grace Window (Transition window limit is 60s)
-                    if (session.previousKeyVersion != 0 && now > session.rekeyTimestamp + 60_000) {
-                        MeshLogger.d(TAG, "Grace period ended for peer $peerId, deleting previous AES key")
-                        cryptoManager.clearPreviousSharedKey(peerId)
-                        session.previousKeyVersion = 0
-                    }
+                // Check if we are the deterministic initiator
+                if (myId <= peerId) {
+                    continue // We are not the initiator, we just respond.
+                }
 
-                    // Check if we are the deterministic initiator
-                    if (myId <= peerId) {
-                        continue // We are not the initiator, we just respond.
-                    }
+                // Conditions for automatic rekey
+                val sessionAge = now - session.sessionStart
+                val packetCount = session.totalEncryptedPackets.get()
+                
+                if (sessionAge > 30 * 60 * 1000L || packetCount > 10_000) {
+                    val reason = if (packetCount > 10_000) "packet_limit" else "session_age"
+                    initiateRekey(peerId, reason)
+                }
 
-                    // Conditions for automatic rekey
-                    val sessionAge = now - session.sessionStart
-                    val packetCount = session.totalEncryptedPackets.get()
-                    
-                    if (sessionAge > 30 * 60 * 1000L || packetCount > 10_000) {
-                        val reason = if (packetCount > 10_000) "packet_limit" else "session_age"
-                        initiateRekey(peerId, reason)
-                    }
-
-                    // Retry pending rekeys if timeout (5 seconds)
-                    val pending = pendingRekeys[peerId]
-                    if (pending != null && now > pending.timestamp + 5000) {
-                        if (pending.retries < 3) {
-                            pending.retries++
-                            MeshLogger.w(TAG, "Rekey timed out for $peerId. Retrying (${pending.retries}/3)...")
-                            sendRekeyPacket(peerId, session.sessionId, session.keyVersion, pending.nextKeyVersion, pending.myEphemeralPublicKeyBase64)
-                        } else {
-                            MeshLogger.e(TAG, "Rekey failed 3 times for $peerId. Falling back to full handshake.")
-                            destroyPendingRekey(peerId)
-                            forceKeyExchangeCallback?.invoke(peerId)
-                        }
+                // Retry pending rekeys if timeout (5 seconds)
+                val pending = pendingRekeys[peerId]
+                if (pending != null && now > pending.timestamp + 5000) {
+                    if (pending.retries < 3) {
+                        pending.retries++
+                        MeshLogger.w(TAG, "Rekey timed out for $peerId. Retrying (${pending.retries}/3)...")
+                        sendRekeyPacket(peerId, session.sessionId, session.keyVersion, pending.nextKeyVersion, pending.myEphemeralPublicKeyBase64)
+                    } else {
+                        MeshLogger.e(TAG, "Rekey failed 3 times for $peerId. Falling back to full handshake.")
+                        destroyPendingRekey(peerId)
+                        forceKeyExchangeCallback?.invoke(peerId)
                     }
                 }
             }
         }
     }
+
+
 
     fun manualRekey(peerId: String) {
         initiateRekey(peerId, "manual")
@@ -120,18 +115,21 @@ class RekeyManager @Inject constructor(
         )
         pendingRekeys[peerId] = pending
 
-        sendRekeyPacket(peerId, session.sessionId, session.keyVersion, nextKv, pending.myEphemeralPublicKeyBase64)
+        applicationScope.launch(defaultDispatcher) {
+            sendRekeyPacket(peerId, session.sessionId, session.keyVersion, nextKv, pending.myEphemeralPublicKeyBase64)
+        }
     }
 
-    private fun sendRekeyPacket(peerId: String, sessionId: String, currentKv: Int, nextKv: Int, ephemeralPubBase64: String) {
-        scope.launch {
-            try {
-                val timestamp = System.currentTimeMillis()
-                val nonce = UUID.randomUUID().toString()
-                val dataToSign = "$sessionId|$currentKv|$nextKv|$ephemeralPubBase64|$timestamp|$nonce".toByteArray(Charsets.UTF_8)
+    private suspend fun sendRekeyPacket(peerId: String, sessionId: String, currentKv: Int, nextKv: Int, ephemeralPubBase64: String) {
+        try {
+            val timestamp = System.currentTimeMillis()
+            val nonce = UUID.randomUUID().toString().substring(0, 8)
+            val dataToSign = "$sessionId|$currentKv|$nextKv|$ephemeralPubBase64|$timestamp|$nonce".toByteArray(Charsets.UTF_8)
+            
+            val user = userRepository.getLocalUser()
+            if (user != null) {
                 val signature = cryptoManager.sign(dataToSign)
                 val signatureBase64 = android.util.Base64.encodeToString(signature, android.util.Base64.NO_WRAP)
-
                 val payload = "rekey|$sessionId|$currentKv|$nextKv|$ephemeralPubBase64|$timestamp|$nonce|$signatureBase64"
                 
                 val packet = MeshPacket(
@@ -142,9 +140,9 @@ class RekeyManager @Inject constructor(
                     encrypted = false
                 )
                 sendPacketCallback?.invoke(peerId, packet)
-            } catch (e: Exception) {
-                MeshLogger.e(TAG, "Failed to send rekey packet: ${e.message}")
             }
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to send rekey packet: ${e.message}")
         }
     }
 
@@ -195,21 +193,35 @@ class RekeyManager @Inject constructor(
             } else {
                 // We are the RESPONDER
                 val ephemeralKeyPair = cryptoManager.generateEphemeralKeyPair()
-                cryptoManager.deriveEphemeralSharedKey(peerId, ephemeralPubBase64, ephemeralKeyPair.private)
 
-                // Securely destroy our ephemeral private key
-                java.util.Arrays.fill(ephemeralKeyPair.private.encoded ?: ByteArray(0), 0.toByte())
+                applicationScope.launch(defaultDispatcher) {
+                    // Send back our ephemeral public key
+                    val myEphemeralPubBase64 = android.util.Base64.encodeToString(ephemeralKeyPair.public.encoded, android.util.Base64.NO_WRAP)
+                    sendRekeyPacket(peerId, sessionId, currentKv, nextKv, myEphemeralPubBase64)
 
-                session.previousKeyVersion = session.keyVersion
-                session.keyVersion = nextKv
-                session.rekeyTimestamp = System.currentTimeMillis()
-                session.rotationReason = "responder_success"
+                    // Fix CRITICAL-05 Race Condition: Wait for the packet to be fully dispatched and encrypted
+                    // BEFORE we rotate the keys. This ensures the reply is encrypted with currentKv.
+                    cryptoManager.deriveEphemeralSharedKey(peerId, ephemeralPubBase64, ephemeralKeyPair.private)
 
-                MeshLogger.d(TAG, "✅ Secure rekey successful (Responder). New Key Version: $nextKv")
+                    // Attempt to securely destroy our ephemeral private key.
+                    // Note: Standard Android JCA providers often throw DestroyFailedException here.
+                    try {
+                        if (!ephemeralKeyPair.private.isDestroyed) {
+                            ephemeralKeyPair.private.destroy()
+                        }
+                    } catch (e: javax.security.auth.DestroyFailedException) {
+                        MeshLogger.d(TAG, "JVM Limitation: Secure erasure of ephemeral private key not supported by provider.")
+                    } catch (e: UnsupportedOperationException) {
+                        MeshLogger.d(TAG, "JVM Limitation: Secure erasure of ephemeral private key not supported by provider.")
+                    }
 
-                // Send back our ephemeral public key
-                val myEphemeralPubBase64 = android.util.Base64.encodeToString(ephemeralKeyPair.public.encoded, android.util.Base64.NO_WRAP)
-                sendRekeyPacket(peerId, sessionId, currentKv, nextKv, myEphemeralPubBase64)
+                    session.previousKeyVersion = session.keyVersion
+                    session.keyVersion = nextKv
+                    session.rekeyTimestamp = System.currentTimeMillis()
+                    session.rotationReason = "responder_success"
+
+                    MeshLogger.d(TAG, "✅ Secure rekey successful (Responder). New Key Version: $nextKv")
+                }
             }
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to handle rekey packet: ${e.message}")
@@ -219,9 +231,15 @@ class RekeyManager @Inject constructor(
     private fun destroyPendingRekey(peerId: String) {
         val pending = pendingRekeys.remove(peerId)
         if (pending != null) {
-            val encoded = pending.myEphemeralPrivateKey.encoded
-            if (encoded != null) {
-                java.util.Arrays.fill(encoded, 0.toByte())
+            // Attempt to securely destroy the ephemeral private key.
+            try {
+                if (!pending.myEphemeralPrivateKey.isDestroyed) {
+                    pending.myEphemeralPrivateKey.destroy()
+                }
+            } catch (e: javax.security.auth.DestroyFailedException) {
+                MeshLogger.d(TAG, "JVM Limitation: Secure erasure of ephemeral private key not supported by provider.")
+            } catch (e: UnsupportedOperationException) {
+                MeshLogger.d(TAG, "JVM Limitation: Secure erasure of ephemeral private key not supported by provider.")
             }
         }
     }

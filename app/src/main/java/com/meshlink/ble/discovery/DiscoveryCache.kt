@@ -6,8 +6,10 @@ data class PeerDiscoveryRecord(
     val macAddress: String,
     val meshId: String,
     var name: String,
-    val rssiFilter: RssiFilter = RssiFilter(),
+    val rssiFilter: KalmanFilter = KalmanFilter(),
     var smoothedRssi: Int = -100,
+    var distanceMeters: Double? = null,
+    var distanceConfidence: String? = null,
     var lastSeenMillis: Long = System.currentTimeMillis(),
     var failedAttempts: Int = 0,
     var capabilities: Byte = 0, // Battery, Routing, etc.
@@ -21,9 +23,23 @@ data class PeerDiscoveryRecord(
 class DiscoveryCache {
     private val peers = ConcurrentHashMap<String, PeerDiscoveryRecord>()
 
+    private val MAX_PEERS = 1000
+
     fun getOrPut(macAddress: String, meshId: String, defaultName: String): PeerDiscoveryRecord {
+        if (peers.size >= MAX_PEERS && !peers.containsKey(macAddress)) {
+            // Evict oldest peer to stay within memory limits
+            evictOldest()
+        }
         return peers.getOrPut(macAddress) {
             PeerDiscoveryRecord(macAddress = macAddress, meshId = meshId, name = defaultName)
+        }
+    }
+
+    private fun evictOldest() {
+        peers.values.minByOrNull { it.lastSeenMillis }?.let { oldest ->
+            if (oldest.state != PeerLifecycleState.CONNECTED && oldest.state != PeerLifecycleState.CONNECTING) {
+                peers.remove(oldest.macAddress)
+            }
         }
     }
 

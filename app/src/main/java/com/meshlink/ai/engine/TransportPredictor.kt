@@ -1,7 +1,7 @@
 package com.meshlink.ai.engine
 
 import com.meshlink.ai.data.LearningRepository
-import com.meshlink.routing.engine.RouteType
+import com.meshlink.domain.model.RouteType
 import javax.inject.Inject
 import javax.inject.Singleton
 

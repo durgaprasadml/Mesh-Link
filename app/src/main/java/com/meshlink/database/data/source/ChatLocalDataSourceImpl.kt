@@ -25,6 +25,10 @@ class ChatLocalDataSourceImpl @Inject constructor(
 
     override suspend fun getUnreadIncomingMessages(chatId: String): List<String> = chatDao.getUnreadIncomingMessages(chatId)
 
+    override suspend fun getMessagesListForChat(chatId: String): List<MessageEntity> = chatDao.getMessagesListForChat(chatId)
+
+    override suspend fun getMessagesByIds(messageIds: List<String>): List<MessageEntity> = chatDao.getMessagesByIds(messageIds)
+
     override suspend fun insertChat(chat: ChatEntity) {
         chatDao.insertChat(chat)
     }
@@ -59,6 +63,10 @@ class ChatLocalDataSourceImpl @Inject constructor(
 
     override suspend fun deleteMessages(messageIds: List<String>) {
         chatDao.deleteMessages(messageIds)
+    }
+
+    override suspend fun deleteMessagesAndUpdateChat(messageIds: List<String>) {
+        chatDao.deleteMessagesAndUpdateChat(messageIds)
     }
 
     override suspend fun deleteMessagesForChat(chatId: String) {

@@ -57,7 +57,7 @@ class MessagingRepositoryImplTest {
 
     @Test
     fun `saveMessage should call insertMessageAndUpdateChat if chatName is provided`() = runTest {
-        val message = com.meshlink.util.TestDataFactory.createMessage(messageId = "msg_1", status = DeliveryStatus.PENDING)
+        val message = com.meshlink.util.TestDataFactory.createMessage(messageId = "msg_1", status = DeliveryStatus.QUEUED)
 
         repository.saveMessage(message, "John Doe")
 
@@ -67,7 +67,7 @@ class MessagingRepositoryImplTest {
 
     @Test
     fun `saveMessage should call insertMessage if chatName is null`() = runTest {
-        val message = com.meshlink.util.TestDataFactory.createMessage(messageId = "msg_1", status = DeliveryStatus.PENDING)
+        val message = com.meshlink.util.TestDataFactory.createMessage(messageId = "msg_1", status = DeliveryStatus.QUEUED)
 
         repository.saveMessage(message, null)
 
@@ -88,7 +88,7 @@ class MessagingRepositoryImplTest {
     fun `deleteMessages should call source`() = runTest {
         val ids = listOf("msg_1")
         repository.deleteMessages(ids)
-        coVerify(exactly = 1) { chatLocalDataSource.deleteMessages(ids) }
+        coVerify(exactly = 1) { chatLocalDataSource.deleteMessagesAndUpdateChat(ids) }
     }
 
     @Test

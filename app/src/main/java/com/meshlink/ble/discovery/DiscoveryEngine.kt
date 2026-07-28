@@ -47,7 +47,9 @@ class DiscoveryEngine @Inject constructor(
                 meshId = record.meshId,
                 name = record.name,
                 address = record.macAddress,
-                rssi = record.smoothedRssi
+                rssi = record.smoothedRssi,
+                distanceMeters = record.distanceMeters,
+                distanceConfidence = record.distanceConfidence
             )
         }
         _scannedDevices.value = map
@@ -122,13 +124,26 @@ class DiscoveryEngine @Inject constructor(
         
         val record = cache.getOrPut(macAddress, meshId, name)
         
+        // If the peer was suspended but we are receiving new advertisements, resume it
+        if (connectionPolicy.getRetryState(macAddress) == com.meshlink.ble.discovery.RetryState.SUSPENDED) {
+            connectionPolicy.resetPeer(macAddress)
+        }
+        
         // Ensure name is updated if changed
         record.name = name
         record.capabilities = capabilities
         record.lastSeenMillis = System.currentTimeMillis()
         
         // Smooth RSSI
-        record.smoothedRssi = record.rssiFilter.filter(rssi)
+        record.smoothedRssi = record.rssiFilter.filter(rssi.toDouble()).toInt()
+        
+        // Estimate Distance
+        val estimate = DistanceEstimator.estimateDistance(
+            rssi = record.smoothedRssi.toDouble(),
+            errorCovariance = record.rssiFilter.getVariance()
+        )
+        record.distanceMeters = estimate.distanceMeters
+        record.distanceConfidence = estimate.confidence.name
         
         // Calculate dynamic score
         record.score = PeerScoreCalculator.calculateScore(
@@ -161,8 +176,8 @@ class DiscoveryEngine @Inject constructor(
         }
     }
 
-    fun notifyConnectionFailure(macAddress: String) {
-        connectionPolicy.recordFailure(macAddress)
+    fun notifyConnectionFailure(macAddress: String, failureType: com.meshlink.ble.discovery.FailureType = com.meshlink.ble.discovery.FailureType.GATT_FAILURE) {
+        connectionPolicy.recordFailure(macAddress, failureType)
         analytics.recordConnectionFailed()
         cache.get(macAddress)?.let {
             it.failedAttempts++

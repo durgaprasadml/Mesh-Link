@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.meshlink.common.util.MeshPacketParser
 
 class MeshPacketParserTest {
 

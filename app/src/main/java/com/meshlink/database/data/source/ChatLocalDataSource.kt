@@ -14,6 +14,8 @@ interface ChatLocalDataSource {
     suspend fun getChatById(chatId: String): ChatEntity?
     suspend fun getMessagesByStatus(status: DeliveryStatus): List<MessageEntity>
     suspend fun getUnreadIncomingMessages(chatId: String): List<String>
+    suspend fun getMessagesListForChat(chatId: String): List<MessageEntity>
+    suspend fun getMessagesByIds(messageIds: List<String>): List<MessageEntity>
     
     suspend fun insertChat(chat: ChatEntity)
     suspend fun insertMessage(message: MessageEntity)
@@ -27,6 +29,7 @@ interface ChatLocalDataSource {
     
     suspend fun deleteMessage(messageId: String)
     suspend fun deleteMessages(messageIds: List<String>)
+    suspend fun deleteMessagesAndUpdateChat(messageIds: List<String>)
     suspend fun deleteMessagesForChat(chatId: String)
     suspend fun deleteChat(chatId: String)
 }

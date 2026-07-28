@@ -24,9 +24,5 @@ object SystemModule {
         )
     }
 
-<<<<<<< HEAD
-=======
 
-
->>>>>>> main
 }

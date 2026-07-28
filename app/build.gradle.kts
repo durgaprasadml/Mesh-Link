@@ -126,13 +126,6 @@ android {
 
 dependencies {
 
-<<<<<<< HEAD
-    // 🔥 Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.crashlytics.ktx)
-
-=======
->>>>>>> main
     // Compose BOM
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)

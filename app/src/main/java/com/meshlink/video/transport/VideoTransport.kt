@@ -18,21 +18,20 @@ import org.json.JSONObject
 class VideoTransport @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "VideoTransport"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-    
-    var onSendPacket: ((MeshPacket) -> Unit)? = null
+var onSendPacket: ((MeshPacket) -> Unit)? = null
     var onIncomingSignal: ((JSONObject, String) -> Unit)? = null
     
     // (NAL unit, Sender ID, Sequence Number, Presentation Time)
     var onIncomingFrame: ((ByteArray, String, Long, Long) -> Unit)? = null
 
     fun sendSignal(senderId: String, targetId: String, signalJson: String) {
-        scope.launch {
+        applicationScope.launch {
             try {
                 val encrypted = cryptoManager.encrypt(signalJson, targetId)
                 if (encrypted != null) {
@@ -75,7 +74,7 @@ class VideoTransport @Inject constructor(
     fun handleIncomingPacket(packet: MeshPacket) {
         if (!packet.encrypted) return
         
-        scope.launch {
+        applicationScope.launch {
             try {
                 // Payload is already decrypted by the routing layer
                 val decrypted = packet.payload

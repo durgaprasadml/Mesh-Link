@@ -24,14 +24,13 @@ class VideoManager @Inject constructor(
     private val transport: VideoTransport,
     private val streamManager: VideoStreamManager,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "VideoManager"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-
-    init {
+init {
         transport.onIncomingSignal = { json, senderId -> handleIncomingSignal(json, senderId) }
     }
 

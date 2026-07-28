@@ -58,7 +58,7 @@ class WifiDirectManagerTest {
         val shadowApplication = shadowOf(context as android.app.Application)
         shadowApplication.setSystemService(Context.WIFI_P2P_SERVICE, mockWifiP2pManager)
 
-        manager = WifiDirectManager(context, mockSettingsRepository)
+        manager = WifiDirectManager(context, mockSettingsRepository, applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined))
         
         val receiverField = WifiDirectManager::class.java.getDeclaredField("receiver")
         receiverField.isAccessible = true

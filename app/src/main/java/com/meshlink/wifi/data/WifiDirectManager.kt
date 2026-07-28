@@ -29,7 +29,8 @@ import kotlinx.coroutines.flow.asStateFlow
 class WifiDirectManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "WifiDirectManager"
     }
@@ -111,7 +112,7 @@ class WifiDirectManager @Inject constructor(
                         _connectedPeerMac.value = null
                         
                         if (disconnectedMac != null) {
-                            scope.launch {
+                            applicationScope.launch {
                                 if (settingsRepository.wifiReconnectEnabled.first()) {
                                     MeshLogger.d(TAG, "wifiReconnectEnabled is true. Attempting to reconnect to $disconnectedMac")
                                     connectToPeer(disconnectedMac)
@@ -130,9 +131,7 @@ class WifiDirectManager @Inject constructor(
     }
 
     private var isReceiverRegistered = false
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    fun registerReceiver() {
+fun registerReceiver() {
         if (!isReceiverRegistered) {
             context.registerReceiver(receiver, intentFilter)
             isReceiverRegistered = true
@@ -152,7 +151,7 @@ class WifiDirectManager @Inject constructor(
 
     @SuppressLint("MissingPermission")
     fun startDiscovery() {
-        scope.launch {
+        applicationScope.launch {
             if (!settingsRepository.isWifiDirectEnabled.first() || !settingsRepository.wifiPeerDiscoveryEnabled.first()) {
                 MeshLogger.d(TAG, "Wi-Fi Direct or Discovery disabled by settings. Not starting discovery.")
                 return@launch
@@ -183,7 +182,7 @@ class WifiDirectManager @Inject constructor(
 
     @SuppressLint("MissingPermission")
     fun connectToPeer(deviceAddress: String) {
-        scope.launch {
+        applicationScope.launch {
             if (!settingsRepository.isWifiDirectEnabled.first() || !settingsRepository.wifiAutoConnect.first()) {
                 MeshLogger.d(TAG, "Wi-Fi Direct connect skipped due to settings")
                 return@launch

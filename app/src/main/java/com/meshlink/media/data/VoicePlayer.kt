@@ -13,14 +13,14 @@ import kotlinx.coroutines.flow.asStateFlow
 @Singleton
 class VoicePlayer @Inject constructor(
     @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
 
     companion object {
         private const val TAG = "VoicePlayer"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + defaultDispatcher)
-    private var mediaPlayer: MediaPlayer? = null
+private var mediaPlayer: MediaPlayer? = null
     private var progressJob: Job? = null
 
     // Currently playing file path (null = nothing playing)
@@ -67,7 +67,7 @@ class VoicePlayer @Inject constructor(
             }
 
             // Progress tracking loop
-            progressJob = scope.launch {
+            progressJob = applicationScope.launch(defaultDispatcher) {
                 while (isActive) {
                     try {
                         val player = mediaPlayer ?: break

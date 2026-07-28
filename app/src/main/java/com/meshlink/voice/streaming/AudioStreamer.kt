@@ -20,14 +20,13 @@ class AudioStreamer @Inject constructor(
     private val codecManager: VoiceCodecManager,
     private val jitterBuffer: JitterBuffer,
     private val transport: VoiceTransport
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "AudioStreamer"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    
-    @Volatile private var isStreaming = false
+@Volatile private var isStreaming = false
     @Volatile private var currentCallId: String? = null
     @Volatile private var currentTargetId: String? = null
     @Volatile private var currentSenderId: String? = null

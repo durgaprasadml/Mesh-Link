@@ -28,7 +28,8 @@ class RetryCoordinator @Inject constructor(
     private val meshRouter: Router,
     private val chatDao: ChatDao,
     private val relayDao: RelayDao
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "RetryCoordinator"
         private const val BASE_BACKOFF_MS = 2000L
@@ -36,8 +37,7 @@ class RetryCoordinator @Inject constructor(
         private const val MAX_RETRIES = 10
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var isRunning = false
+private var isRunning = false
 
     fun start() {
         if (isRunning) return
@@ -57,7 +57,7 @@ class RetryCoordinator @Inject constructor(
     }
 
     private fun recoverPendingQueues() {
-        scope.launch {
+        applicationScope.launch {
             try {
                 // Recover from RelayDao (Store-and-Forward)
                 val storedRelays = relayDao.getAllRelayPackets()
@@ -89,7 +89,7 @@ class RetryCoordinator @Inject constructor(
     }
 
     private fun startConnectionRetryLoop() {
-        scope.launch {
+        applicationScope.launch {
             var attempt = 0
             while (isActive && isRunning) {
                 delay(calculateBackoff(attempt))

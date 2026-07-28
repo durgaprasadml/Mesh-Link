@@ -34,12 +34,12 @@ class TrustManagerTest {
         coEvery { trustDao.getAllPeers() } returns emptyList()
         coEvery { trustDao.getPeerByFingerprint(any()) } returns null
         
-        trustManager = TrustManager(trustDao, securityMonitor, UnconfinedTestDispatcher())
+        trustManager = TrustManager(trustDao, securityMonitor, UnconfinedTestDispatcher(), applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.test.UnconfinedTestDispatcher()))
     }
 
     @After
-    fun teardown() {
-        trustManager.cancelScope()
+    fun tearDown() {
+        // Hilt test environments tear down ApplicationScope automatically
     }
 
     @Test
@@ -72,7 +72,7 @@ class TrustManagerTest {
             identityHistory = "[]"
         )
         coEvery { trustDao.getAllPeers() } returns listOf(existingEntity)
-        trustManager = TrustManager(trustDao, securityMonitor, UnconfinedTestDispatcher()) // re-init to load cache
+        trustManager = TrustManager(trustDao, securityMonitor, UnconfinedTestDispatcher(), applicationScope = backgroundScope) // re-init to load cache
         
         // Present new fingerprint
         trustManager.updatePeerIdentity("peer1", "fingerprint2", "uuid1")
@@ -102,7 +102,7 @@ class TrustManagerTest {
             identityHistory = "[]"
         )
         coEvery { trustDao.getAllPeers() } returns listOf(existingEntity)
-        trustManager = TrustManager(trustDao, securityMonitor, UnconfinedTestDispatcher())
+        trustManager = TrustManager(trustDao, securityMonitor, UnconfinedTestDispatcher(), applicationScope = backgroundScope)
         
         trustManager.increaseTrustScore("peer1", 5) // Should cross 80
         

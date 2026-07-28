@@ -13,13 +13,13 @@ import kotlinx.coroutines.launch
 class AdaptiveMeshPowerManager @Inject constructor(
     private val powerStateManager: PowerStateManager,
     private val meshRepository: MeshRepository
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "AdaptivePower"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var isStarted = false
+private var isStarted = false
 
     fun start() {
         if (isStarted) return
@@ -27,7 +27,7 @@ class AdaptiveMeshPowerManager @Inject constructor(
         
         powerStateManager.startMonitoring()
         
-        scope.launch {
+        applicationScope.launch {
             powerStateManager.powerState.collect { state ->
                 applyPowerPolicy(state)
             }
@@ -46,7 +46,7 @@ class AdaptiveMeshPowerManager @Inject constructor(
                 // In a real implementation, we would call into BleManager to set SCAN_MODE_LOW_LATENCY
                 // For now, we simulate adjusting the internal power profile via MeshRepository
                 MeshLogger.d(TAG, "Setting BLE/Wi-Fi to HIGH PERFORMANCE mode")
-                scope.launch {
+                applicationScope.launch {
                     meshRepository.autoStartMesh() // Ensures mesh is fully active
                 }
             }

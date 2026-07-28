@@ -43,7 +43,8 @@ class MediaTransferManager @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
     @com.meshlink.di.IoDispatcher private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher,
     private val meshConfig: com.meshlink.config.MeshConfig
-) : com.meshlink.media.api.MediaTransfer {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) : com.meshlink.media.api.MediaTransfer {
     companion object {
         // 300 bytes of Base64 text per chunk.
         // At 512-byte MTU: 300B B64 + ~80B JSON envelope = 380B < 512B ✓
@@ -79,9 +80,7 @@ class MediaTransferManager @Inject constructor(
 
     // ─────────────────── Internal state ───────────────────
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-
-    // Receiver side
+// Receiver side
     private val incomingBuffers  = ConcurrentHashMap<String, ConcurrentHashMap<Int, String>>()
     private val transferMeta     = ConcurrentHashMap<String, TransferMeta>()
     private val timeoutJobs      = ConcurrentHashMap<String, Job>()
@@ -142,7 +141,7 @@ class MediaTransferManager @Inject constructor(
         pendingTransfers[transferId] = PendingOutbound(packets, targetId)
         updateProgress(transferId, 0f)
 
-        scope.launch {
+        applicationScope.launch(ioDispatcher) {
             dispatchAllPackets(transferId, packets)
             
             // Sender-side timeout to prevent unbounded pendingTransfers leaks
@@ -361,7 +360,7 @@ class MediaTransferManager @Inject constructor(
 
         MeshLogger.d(TAG, "[$transferId] NACK: retrying chunks $missingIndices")
 
-        scope.launch {
+        applicationScope.launch(ioDispatcher) {
             val send = onSendPacket ?: return@launch
             missingIndices.forEach { idx ->
                 val retryKey = "$transferId:$idx"
@@ -437,7 +436,7 @@ class MediaTransferManager @Inject constructor(
      */
     private fun startTimeoutWatcher(transferId: String) {
         timeoutJobs[transferId]?.cancel()
-        timeoutJobs[transferId] = scope.launch {
+        timeoutJobs[transferId] = applicationScope.launch(ioDispatcher) {
             delay(TRANSFER_TIMEOUT_MS)
 
             val meta   = transferMeta[transferId] ?: return@launch

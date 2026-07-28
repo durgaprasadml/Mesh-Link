@@ -19,14 +19,13 @@ class VoiceTransport @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
     @com.meshlink.di.IoDispatcher private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher,
     private val meshConfig: com.meshlink.config.MeshConfig
-) : com.meshlink.voice.api.VoiceTransport {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) : com.meshlink.voice.api.VoiceTransport {
     companion object {
         private const val TAG = "VoiceTransport"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-    
-    // Callback for BleRepositoryImpl or MeshRouter to actually dispatch over network
+// Callback for BleRepositoryImpl or MeshRouter to actually dispatch over network
     var onSendPacket: ((MeshPacket) -> Unit)? = null
 
     // Callback for AudioStreamer/VoiceManager when a frame/signal arrives
@@ -34,7 +33,7 @@ class VoiceTransport @Inject constructor(
     var onIncomingFrame: ((ByteArray, String, Long) -> Unit)? = null
 
     fun sendSignal(senderId: String, targetId: String, signalJson: String) {
-        scope.launch {
+        applicationScope.launch {
             try {
                 // Signals are encrypted like normal messages
                 val encrypted = cryptoManager.encrypt(signalJson, targetId)
@@ -78,7 +77,7 @@ class VoiceTransport @Inject constructor(
     fun handleIncomingPacket(packet: MeshPacket) {
         if (!packet.encrypted) return
         
-        scope.launch {
+        applicationScope.launch {
             try {
                 // Payload is already decrypted by the routing layer
                 val decrypted = packet.payload

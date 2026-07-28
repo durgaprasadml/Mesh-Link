@@ -29,13 +29,13 @@ data class EmergencyForm(
 @Singleton
 class EmergencyFormSync @Inject constructor(
     private val meshRouter: Router
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "EmergencyFormSync"
     }
 
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val localForms = mutableMapOf<String, EmergencyForm>()
+private val localForms = mutableMapOf<String, EmergencyForm>()
 
     /**
      * Submit a form locally and broadcast it securely to the mesh using HIGH priority.

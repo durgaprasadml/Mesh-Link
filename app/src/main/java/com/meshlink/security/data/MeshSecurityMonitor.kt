@@ -18,20 +18,19 @@ import org.json.JSONObject
 class MeshSecurityMonitor @Inject constructor(
     private val auditLogDao: AuditLogDao,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "MeshSecurityMonitor"
         private const val MAX_AUDIT_LOG_ENTRIES = 1000
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-    
-    // PeerId -> Recent failures
+// PeerId -> Recent failures
     private val recentSignatureFailures = ConcurrentHashMap<String, Int>()
     private val recentReplayAttempts = ConcurrentHashMap<String, Int>()
 
     fun reportEvent(peerId: String, event: SecurityEvent) {
-        scope.launch {
+        applicationScope.launch {
             try {
                 // Log event
                 val eventName = event::class.simpleName ?: "Unknown"

@@ -21,10 +21,10 @@ class SessionManager @Inject constructor(
     private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
     @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
     private val maintenanceScheduler: com.meshlink.common.maintenance.MaintenanceScheduler
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     private val activeSessions = ConcurrentHashMap<String, PeerSecureSession>()
-    private val scope = CoroutineScope(defaultDispatcher + SupervisorJob())
-    private val TAG = "SessionManager"
+private val TAG = "SessionManager"
 
     init {
         maintenanceScheduler.schedule("SessionCleanup", 5 * 60 * 1000L) {

@@ -74,14 +74,13 @@ class BleRepositoryImpl @Inject constructor(
     private val meshMessagingManager: MeshMessagingManager,
     private val voiceTransport: VoiceTransport,
     @ApplicationContext private val context: Context
-) : MeshRepository {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) : MeshRepository {
     companion object {
         private const val TAG = "MeshRepository"
     }
 
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
-    private val discoveryEngine get() = discoveryManager.discoveryEngine
+private val discoveryEngine get() = discoveryManager.discoveryEngine
 
     private fun updatePeerState(address: String, newState: PeerConnectionState) {
         connectionManager.updatePeerState(address, newState)
@@ -114,7 +113,7 @@ class BleRepositoryImpl @Inject constructor(
             meshMessagingManager.dispatchSinglePacket(peerId, packet.copy(senderId = senderId))
         }
         rekeyManager.forceKeyExchangeCallback = { peerId ->
-            scope.launch {
+            applicationScope.launch {
                 val address = resolvePeerAddress(peerId)
                 if (address != null) {
                     connectionManager.peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
@@ -135,13 +134,13 @@ class BleRepositoryImpl @Inject constructor(
         }
         
         transferManager.onTransferCompleted = { session ->
-            scope.launch {
+            applicationScope.launch {
                 meshMessagingManager.receiveMediaMessage(session.transferId, session.filePath!!, session.mimeType, session.senderId)
             }
         }
 
         transferManager.onOutgoingTransferCompleted = { session ->
-            scope.launch {
+            applicationScope.launch {
                 chatDao.updateMessageStatus(session.transferId, DeliveryStatus.SENT)
             }
         }
@@ -152,7 +151,7 @@ class BleRepositoryImpl @Inject constructor(
         }
 
 
-        scope.launch {
+        applicationScope.launch {
             incomingMeshPayloads.collect { (_, packet) ->
                 meshMessagingManager.handleIncomingPacket(packet)
             }
@@ -162,14 +161,14 @@ class BleRepositoryImpl @Inject constructor(
         // We will collect state flow updates from TransferScheduler if UI needs it.
 
         // Periodically retry sending PENDING messages if we are connected to anyone
-        scope.launch {
-            while (scope.isActive) {
+        applicationScope.launch {
+            while (applicationScope.isActive) {
                 delay(15000)
                 meshMessagingManager.retryPendingMessages()
             }
         }
 
-        scope.launch {
+        applicationScope.launch {
             scannedDevices.collect { devices ->
                 if (devices.isNotEmpty()) {
                     meshMessagingManager.retryPendingMessages()
@@ -179,7 +178,7 @@ class BleRepositoryImpl @Inject constructor(
         
 
         // Phase E2: Observe DiscoveryEngine events for Smart Connect
-        scope.launch {
+        applicationScope.launch {
             discoveryEngine.engineEvents.collect { record ->
                 val state = connectionManager.peerStates[record.macAddress] ?: PeerConnectionState.DISCONNECTED
                 val isConnected = state == PeerConnectionState.CONNECTED || 
@@ -356,10 +355,6 @@ class BleRepositoryImpl @Inject constructor(
         stopServer()
     }
 
-    @VisibleForTesting
-    fun cancelScope() {
-        scope.cancel()
-    }
 
     // ────────── Text Messages (ENCRYPTED) ──────────
 

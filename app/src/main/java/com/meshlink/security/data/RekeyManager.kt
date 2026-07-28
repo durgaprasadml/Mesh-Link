@@ -26,11 +26,10 @@ class RekeyManager @Inject constructor(
     private val userRepository: UserRepository,
     @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
     private val maintenanceScheduler: com.meshlink.common.maintenance.MaintenanceScheduler
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     private val TAG = "RekeyManager"
-    private val scope = CoroutineScope(defaultDispatcher + SupervisorJob())
-
-    // Map of peerId -> PendingRekey state
+// Map of peerId -> PendingRekey state
     private val pendingRekeys = ConcurrentHashMap<String, PendingRekey>()
 
     data class PendingRekey(
@@ -116,7 +115,7 @@ class RekeyManager @Inject constructor(
         )
         pendingRekeys[peerId] = pending
 
-        scope.launch {
+        applicationScope.launch(defaultDispatcher) {
             sendRekeyPacket(peerId, session.sessionId, session.keyVersion, nextKv, pending.myEphemeralPublicKeyBase64)
         }
     }
@@ -195,7 +194,7 @@ class RekeyManager @Inject constructor(
                 // We are the RESPONDER
                 val ephemeralKeyPair = cryptoManager.generateEphemeralKeyPair()
 
-                scope.launch {
+                applicationScope.launch(defaultDispatcher) {
                     // Send back our ephemeral public key
                     val myEphemeralPubBase64 = android.util.Base64.encodeToString(ephemeralKeyPair.public.encoded, android.util.Base64.NO_WRAP)
                     sendRekeyPacket(peerId, sessionId, currentKv, nextKv, myEphemeralPubBase64)

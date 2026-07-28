@@ -70,7 +70,8 @@ class RekeyManagerTest {
             trustManager,
             securityMonitor,
             testDispatcher,
-            maintenanceScheduler
+            maintenanceScheduler,
+            applicationScope = kotlinx.coroutines.test.TestScope(testDispatcher)
         )
         
         mockkStatic(android.util.Base64::class)
@@ -118,7 +119,8 @@ class RekeyManagerTest {
             sessionManager,
             userRepository,
             testDispatcher,
-            maintenanceScheduler
+            maintenanceScheduler,
+            applicationScope = kotlinx.coroutines.test.TestScope(testDispatcher)
         )
     }
 

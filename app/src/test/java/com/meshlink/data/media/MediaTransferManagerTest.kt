@@ -44,7 +44,7 @@ class MediaTransferManagerTest {
             java.util.Base64.getDecoder().decode(str)
         }
 
-        manager = MediaTransferManager(context, testDispatcher, mockk(relaxed = true))
+        manager = MediaTransferManager(context, testDispatcher, mockk(relaxed = true), applicationScope = kotlinx.coroutines.test.TestScope())
     }
 
     @After

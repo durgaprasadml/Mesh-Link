@@ -14,7 +14,8 @@ import kotlinx.coroutines.launch
 @Singleton
 class JitterBuffer @Inject constructor(
     @com.meshlink.di.DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         // Buffers approx 150ms of audio (assuming 20ms frames)
         private const val TARGET_BUFFER_SIZE = 8 
@@ -22,8 +23,7 @@ class JitterBuffer @Inject constructor(
         private const val POP_DELAY_MS = 20L
     }
 
-    private val scope = CoroutineScope(defaultDispatcher)
-    private var playoutJob: Job? = null
+private var playoutJob: Job? = null
 
     // Min-heap based on sequenceNumber
     private val buffer = PriorityBlockingQueue<AudioFrame>(MAX_BUFFER_SIZE, compareBy { it.sequenceNumber })
@@ -38,7 +38,7 @@ class JitterBuffer @Inject constructor(
         lastPlayedSeqNum = -1
         buffer.clear()
         
-        playoutJob = scope.launch {
+        playoutJob = applicationScope.launch(defaultDispatcher) {
             while (isActive) {
                 if (isBuffering) {
                     if (buffer.size >= TARGET_BUFFER_SIZE) {

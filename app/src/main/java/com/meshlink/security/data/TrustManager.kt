@@ -24,7 +24,8 @@ class TrustManager @Inject constructor(
     private val trustDao: TrustDao,
     private val securityMonitor: MeshSecurityMonitor,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "TrustManager"
         private const val SCORE_MAX = 100
@@ -33,9 +34,7 @@ class TrustManager @Inject constructor(
         private const val SCORE_TRUSTED_THRESHOLD = 80
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-    
-    // In-memory cache for fast lookups
+// In-memory cache for fast lookups
     private val trustCache = ConcurrentHashMap<String, TrustEntity>()
     
     // UI state
@@ -43,7 +42,7 @@ class TrustManager @Inject constructor(
     val trustStates: StateFlow<Map<String, TrustLevel>> = _trustStates.asStateFlow()
 
     init {
-        scope.launch {
+        applicationScope.launch(ioDispatcher) {
             try {
                 val peers = trustDao.getAllPeers()
                 peers.forEach { entity ->
@@ -94,7 +93,7 @@ class TrustManager @Inject constructor(
     }
 
     fun updateHighestProtocol(peerId: String, protocolVersion: Int) {
-        scope.launch {
+        applicationScope.launch(ioDispatcher) {
             try {
                 val entity = trustCache[peerId] ?: return@launch
                 if (protocolVersion > entity.keyVersion) {
@@ -112,7 +111,7 @@ class TrustManager @Inject constructor(
      * Called when a peer reconnects or presents a new identity/fingerprint.
      */
     fun updatePeerIdentity(peerId: String, fingerprint: String, deviceUUID: String? = null) {
-        scope.launch {
+        applicationScope.launch(ioDispatcher) {
             try {
                 val existingEntity = trustCache[peerId]
                 
@@ -180,7 +179,7 @@ class TrustManager @Inject constructor(
      * Called when a peer successfully completes an authenticated action (e.g. handshake, valid packet).
      */
     fun increaseTrustScore(peerId: String, amount: Int = 5) {
-        scope.launch {
+        applicationScope.launch(ioDispatcher) {
             try {
                 val entity = trustCache[peerId] ?: return@launch
                 
@@ -209,7 +208,7 @@ class TrustManager @Inject constructor(
      * Called when a peer does something bad (e.g. replay attack, invalid signature).
      */
     fun decreaseTrustScore(peerId: String, amount: Int = 10, reason: String = "") {
-        scope.launch {
+        applicationScope.launch(ioDispatcher) {
             try {
                 val entity = trustCache[peerId] ?: return@launch
                 val newScore = (entity.trustScore - amount).coerceAtLeast(SCORE_MIN)
@@ -230,7 +229,7 @@ class TrustManager @Inject constructor(
     }
 
     fun blockPeer(peerId: String) {
-        scope.launch {
+        applicationScope.launch(ioDispatcher) {
             try {
                 val entity = trustCache[peerId] ?: return@launch
                 trustDao.updateTrustScoreAndLevel(peerId, SCORE_MIN, TrustLevel.BLOCKED.name)
@@ -244,7 +243,7 @@ class TrustManager @Inject constructor(
     }
     
     fun verifyDevice(peerId: String) {
-        scope.launch {
+        applicationScope.launch(ioDispatcher) {
             try {
                 val entity = trustCache[peerId] ?: return@launch
                 val updatedEntity = entity.copy(
@@ -260,8 +259,4 @@ class TrustManager @Inject constructor(
         }
     }
 
-    @VisibleForTesting
-    fun cancelScope() {
-        scope.cancel()
-    }
 }

@@ -20,10 +20,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 @Singleton
 class MaintenanceScheduler @Inject constructor(
     @DefaultDispatcher private val dispatcher: CoroutineDispatcher
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope
 ) {
+    @androidx.annotation.VisibleForTesting var timeProvider: () -> Long = { System.currentTimeMillis() }
     private val TAG = "MaintenanceScheduler"
-    private val scope = CoroutineScope(dispatcher + SupervisorJob())
-    private var maintenanceJob: Job? = null
+private var maintenanceJob: Job? = null
 
     // Base tick interval: 60 seconds
     private val BASE_INTERVAL_MS = 60_000L
@@ -46,11 +48,11 @@ class MaintenanceScheduler @Inject constructor(
         if (maintenanceJob?.isActive == true) return
         
         MeshLogger.d(TAG, "Starting centralized maintenance scheduler")
-        maintenanceJob = scope.launch {
+        maintenanceJob = applicationScope.launch(dispatcher) {
             while (isActive) {
                 delay(BASE_INTERVAL_MS)
                 
-                val now = System.currentTimeMillis()
+                val now = timeProvider()
                 for (task in tasks) {
                     if (now - task.lastExecutionMs >= task.intervalMs) {
                         try {

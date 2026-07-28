@@ -28,7 +28,8 @@ import kotlinx.coroutines.launch
 class AudioEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "AudioEngine"
         const val SAMPLE_RATE = 16000
@@ -36,9 +37,7 @@ class AudioEngine @Inject constructor(
         const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-
-    private var audioRecord: AudioRecord? = null
+private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
 
     private var aec: AcousticEchoCanceler? = null
@@ -97,7 +96,7 @@ class AudioEngine @Inject constructor(
             audioRecord?.startRecording()
             isRecording = true
 
-            scope.launch {
+            applicationScope.launch {
                 val buffer = BufferPool.borrowBuffer(minBufferSize)
                 try {
                     while (isActive && isRecording) {

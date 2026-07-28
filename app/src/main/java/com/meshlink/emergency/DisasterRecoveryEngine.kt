@@ -14,13 +14,13 @@ import javax.inject.Singleton
 class DisasterRecoveryEngine @Inject constructor(
     private val emergencyManager: EmergencyManager,
     private val routingEngine: RoutingEngine
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "DisasterRecoveryEngine"
     }
 
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private var isRecovering = false
+private var isRecovering = false
 
     /**
      * Called when the network experiences a sudden massive partition or when rebooting 
@@ -30,7 +30,7 @@ class DisasterRecoveryEngine @Inject constructor(
         if (isRecovering) return
         isRecovering = true
         
-        scope.launch {
+        applicationScope.launch {
             MeshLogger.w(TAG, "Triggering Mass Reconnect Sequence...")
             
             // 1. Enter emergency high-power mode temporarily to blast discovery packets

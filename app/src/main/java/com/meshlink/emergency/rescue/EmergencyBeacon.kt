@@ -21,13 +21,13 @@ import javax.inject.Singleton
 class EmergencyBeacon @Inject constructor(
     private val meshRouter: Router,
     private val batteryAwareNetworking: BatteryAwareNetworking
-) {
+,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "EmergencyBeacon"
     }
 
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private var isBeaconActive = false
+private var isBeaconActive = false
 
     /**
      * Starts a continuous SOS beacon. Automatically adjusts interval based on battery.
@@ -38,7 +38,7 @@ class EmergencyBeacon @Inject constructor(
         
         MeshLogger.w(TAG, "🚨 EMERGENCY BEACON ACTIVATED 🚨")
 
-        scope.launch {
+        applicationScope.launch {
             while (isBeaconActive) {
                 // Determine interval based on battery to ensure the beacon lasts as long as possible
                 val interval = when (batteryAwareNetworking.powerState.value) {

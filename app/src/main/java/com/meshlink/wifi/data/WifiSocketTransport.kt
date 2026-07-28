@@ -21,15 +21,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Singleton
-class WifiSocketTransport @Inject constructor() {
+class WifiSocketTransport @Inject constructor(@com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
     companion object {
         private const val TAG = "WifiSocketTransport"
         private const val PORT = 8888
         private const val TIMEOUT_MS = 10000
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var serverSocket: ServerSocket? = null
+private var serverSocket: ServerSocket? = null
     private var activeSocket: Socket? = null
     private var writer: PrintWriter? = null
     private var reader: BufferedReader? = null
@@ -40,7 +39,7 @@ class WifiSocketTransport @Inject constructor() {
 
     fun startServer() {
         if (serverSocket != null) return
-        scope.launch {
+        applicationScope.launch {
             try {
                 serverSocket = ServerSocket(PORT)
                 MeshLogger.d(TAG, "ServerSocket started on port $PORT, waiting for client...")
@@ -66,7 +65,7 @@ class WifiSocketTransport @Inject constructor() {
     }
 
     fun connectAsClient(hostAddress: String) {
-        scope.launch {
+        applicationScope.launch {
             try {
                 MeshLogger.d(TAG, "Connecting to Group Owner at $hostAddress:$PORT...")
                 val socket = Socket()
@@ -92,7 +91,7 @@ class WifiSocketTransport @Inject constructor() {
             reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
             
             listenJob?.cancel()
-            listenJob = scope.launch {
+            listenJob = applicationScope.launch {
                 try {
                     while (isActive) {
                         val line = reader?.readLine() ?: break

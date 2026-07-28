@@ -16,7 +16,11 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
+<<<<<<< HEAD
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+=======
 
+>>>>>>> main
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.service.MeshRelayService
 import com.meshlink.ui.components.hasRequiredPermissions
@@ -38,9 +42,14 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var meshRepository: MeshRepository
+<<<<<<< HEAD
+    
+    private val pendingIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
+=======
 
 
     private val pendingIntents = kotlinx.coroutines.channels.Channel<Intent>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+>>>>>>> main
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -54,9 +63,14 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
+<<<<<<< HEAD
+        // ✅ Init Firebase Crashlytics
+        FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
+=======
         lifecycleScope.launch(Dispatchers.IO) {
             checkAndStartMesh()
         }
+>>>>>>> main
 
         requestNotificationPermissionIfNeeded()
 
@@ -85,7 +99,10 @@ class MainActivity : ComponentActivity() {
                         val address = newIntent.getStringExtra("address")
                         val name = newIntent.getStringExtra("name")
                         if (address != null && name != null) {
+<<<<<<< HEAD
+=======
 
+>>>>>>> main
                             navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
                                 launchSingleTop = true
                             }
@@ -97,7 +114,10 @@ class MainActivity : ComponentActivity() {
                     val address = intent.getStringExtra("address")
                     val name = intent.getStringExtra("name")
                     if (address != null && name != null) {
+<<<<<<< HEAD
+=======
 
+>>>>>>> main
                         navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
                             launchSingleTop = true
                         }

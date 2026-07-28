@@ -11,7 +11,10 @@ import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import com.meshlink.common.logger.MeshLogger
+<<<<<<< HEAD
+=======
 import com.meshlink.domain.repository.SettingsRepository
+>>>>>>> main
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,10 +30,15 @@ import kotlinx.coroutines.flow.asStateFlow
 
 @Singleton
 class WifiDirectManager @Inject constructor(
+<<<<<<< HEAD
+    @ApplicationContext private val context: Context
+) {
+=======
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository
 ,
     @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
+>>>>>>> main
     companion object {
         private const val TAG = "WifiDirectManager"
     }

@@ -234,7 +234,19 @@ class BleRepositoryImpl @Inject constructor(
         encrypted: Boolean,
         packetId: String?
     ): Boolean {
-        return meshMessagingManager.dispatchTextMessage(targetPeerId, payload, localPeerId, encrypted, packetId)
+        // Build packet and route it
+        val packet = com.meshlink.domain.model.MeshPacket(
+            packetId = packetId ?: java.util.UUID.randomUUID().toString(),
+            senderId = localPeerId,
+            targetId = targetPeerId,
+            payload = payload,
+            type = com.meshlink.domain.model.PacketType.TEXT,
+            encrypted = encrypted
+        )
+        kotlinx.coroutines.runBlocking {
+            meshMessagingManager.dispatchSinglePacket(targetPeerId, packet)
+        }
+        return true
     }
 
     override suspend fun routeTextMessage(
@@ -245,7 +257,15 @@ class BleRepositoryImpl @Inject constructor(
         packetId: String?
     ): com.meshlink.domain.model.MeshResult<Unit> {
         return try {
-            val success = meshMessagingManager.dispatchTextMessage(targetPeerId, payload, localPeerId, encrypted, packetId)
+            val packet = com.meshlink.domain.model.MeshPacket(
+                packetId = packetId ?: java.util.UUID.randomUUID().toString(),
+                senderId = localPeerId,
+                targetId = targetPeerId,
+                payload = payload,
+                type = com.meshlink.domain.model.PacketType.TEXT,
+                encrypted = encrypted
+            )
+            val success = meshMessagingManager.dispatchSinglePacket(targetPeerId, packet)
             if (success) {
                 com.meshlink.domain.model.MeshResult.Success(Unit)
             } else {

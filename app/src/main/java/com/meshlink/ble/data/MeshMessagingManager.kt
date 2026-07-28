@@ -272,13 +272,17 @@ class MeshMessagingManager @Inject constructor(
                         put("text", msg.text)
                         put("senderName", user.name)
                     }.toString()
-                    val reqEnc = userRepository.isEncryptionEnabled.first()
-                    val result = encryptAndWrapPayload(wrappedPayload, msg.chatId, reqEnc, msg.messageId)
-                    if (result == null) return@forEach
-                    val (payload, isEncrypted) = result
-                    // FIX ISSUE 1: Pass original messageId as packetId so retries
-                    // produce the same packet and receiver deduplicates them
-                    if (dispatchTextMessage(msg.chatId, payload, localPeerId, isEncrypted, msg.messageId)) {
+                    
+                    val packet = MeshPacket(
+                        packetId = msg.messageId,
+                        senderId = localPeerId,
+                        targetId = msg.chatId,
+                        payload = wrappedPayload,
+                        type = PacketType.TEXT,
+                        encrypted = false
+                    )
+                    
+                    if (dispatchSinglePacket(msg.chatId, packet)) {
                         chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
                     }
                 }
@@ -305,17 +309,13 @@ class MeshMessagingManager @Inject constructor(
                         put("timestamp", msg.timestamp)
                         put("senderName", "Me")
                     }.toString()
-                    val reqEnc = userRepository.isEncryptionEnabled.first()
-                    val result = encryptAndWrapPayload(payloadJson, msg.chatId, reqEnc, msg.messageId)
-                    if (result == null) return@forEach
-                    val (encPayload, isEnc) = result
                     val packet = MeshPacket(
                         packetId = msg.messageId, // Use original messageId
                         senderId = routingCoordinator.networkId(msg.senderId),
                         targetId = msg.chatId,
-                        payload = encPayload,
+                        payload = payloadJson,
                         type = PacketType.LOCATION,
-                        encrypted = isEnc
+                        encrypted = false
                     )
                     if (dispatchSinglePacket(msg.chatId, packet)) {
                         chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
@@ -358,25 +358,6 @@ class MeshMessagingManager @Inject constructor(
 
     private fun hasDeliveryPath(targetPeerIdOrAddress: String): Boolean = routingCoordinator.hasDeliveryPath(targetPeerIdOrAddress)
 
-    /**
-     * FIX ISSUE 1 & 2: Dispatch text via mesh.
-     * - Auto-connects to all scanned peers for relay
-     * - Accepts packetId so retries use the same ID
-     * - Only sends when delivery path exists
-     */
-    fun dispatchTextMessage(
-        targetPeerId: String,
-        payload: String,
-        localPeerId: String,
-        encrypted: Boolean,
-        packetId: String?
-    ): Boolean {
-        connectToPeer(targetPeerId)
-        connectToAllScannedDevices()
-        meshRouter.sendPayload(targetPeerId, payload, localPeerId, encrypted, packetId)
-        return true
-    }
-
     fun dispatchMediaPackets(targetPeerId: String, packets: List<MeshPacket>): Boolean {
         connectToPeer(targetPeerId)
         connectToAllScannedDevices()
@@ -386,10 +367,32 @@ class MeshMessagingManager @Inject constructor(
         return true
     }
 
-    fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): Boolean {
+    suspend fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): Boolean {
         connectToPeer(targetPeerId)
         connectToAllScannedDevices()
-        meshRouter.sendMediaPacket(packet)
+        
+        var packetToSend = packet
+        if (!packetToSend.encrypted && targetPeerId != "BROADCAST") {
+            val requirement = com.meshlink.security.policy.PacketEncryptionPolicy.getRequirement(packetToSend.type)
+            val shouldEncrypt = when (requirement) {
+                com.meshlink.security.policy.EncryptionRequirement.REQUIRED -> true
+                com.meshlink.security.policy.EncryptionRequirement.OPTIONAL -> userRepository.isEncryptionEnabled.first()
+                com.meshlink.security.policy.EncryptionRequirement.NONE -> false
+            }
+
+            if (shouldEncrypt) {
+                val result = encryptAndWrapPayload(packetToSend.payload, targetPeerId, true, packetToSend.packetId)
+                if (result != null) {
+                    val (encPayload, isEnc) = result
+                    packetToSend = packetToSend.copy(payload = encPayload, encrypted = isEnc)
+                } else {
+                    MeshLogger.e(TAG, "Centralized encryption failed for packet type: ${packetToSend.type}")
+                    return false
+                }
+            }
+        }
+
+        meshRouter.routeMediaPacket(packetToSend)
         return true
     }
 
@@ -426,7 +429,7 @@ class MeshMessagingManager @Inject constructor(
     /**
      * Handle incoming KEY_EXCHANGE: store the peer's ECDH public key.
      */
-    private fun handleKeyExchange(packet: MeshPacket) {
+    private suspend fun handleKeyExchange(packet: MeshPacket) {
         try {
             val parts = packet.payload.split("|")
             val isV3 = parts.isNotEmpty() && parts[0] == "v3"
@@ -846,7 +849,7 @@ class MeshMessagingManager @Inject constructor(
         MeshLogger.d(TAG, "[DIAG-Stage3/4]   MISMATCH? localMeshId('$localPeerId') == targetPeerId('$targetPeerId'): ${localPeerId == targetPeerId}")
         // ─────────────────────────────────────────────────────────────────────────
 
-        // FIX ISSUE 2: Connect to target AND all scanned devices for mesh relay
+        // Connect to target AND all scanned devices for mesh relay
         connectToPeer(targetMeshId)
         connectToAllScannedDevices()
 
@@ -858,13 +861,15 @@ class MeshMessagingManager @Inject constructor(
             put("senderName", user.name)
         }.toString()
 
-        // Encrypt the payload
-        val reqEnc = userRepository.isEncryptionEnabled.first()
-        val result = encryptAndWrapPayload(wrappedPayload, targetPeerId, reqEnc, messageId)
-        if (result == null) return
-        val (payload, isEncrypted) = result
-        // FIX ISSUE 1: Pass messageId as packetId so retries use the same ID
-        if (dispatchTextMessage(targetPeerId, payload, localPeerId, isEncrypted, messageId)) {
+        val packet = MeshPacket(
+            packetId = messageId,
+            senderId = localPeerId,
+            targetId = targetPeerId,
+            payload = wrappedPayload,
+            type = PacketType.TEXT,
+            encrypted = false
+        )
+        if (dispatchSinglePacket(targetPeerId, packet)) {
             chatDao.updateMessageStatus(messageId, DeliveryStatus.SENT)
         }
     }
@@ -1170,20 +1175,14 @@ class MeshMessagingManager @Inject constructor(
             put("senderName", user.name)
         }.toString()
 
-        // Encrypt GPS coordinates
-        val reqEnc = userRepository.isEncryptionEnabled.first()
         val generatedMessageId = java.util.UUID.randomUUID().toString()
-        val result = encryptAndWrapPayload(payloadJson, targetPeerId, reqEnc, generatedMessageId)
-        if (result == null) return
-        val (encPayload, isEnc) = result
-
         val packet = MeshPacket(
             packetId = generatedMessageId,
             senderId = localPeerId,
             targetId = targetPeerId,
-            payload = encPayload,
+            payload = payloadJson,
             type = PacketType.LOCATION,
-            encrypted = isEnc
+            encrypted = false
         )
         val locationDispatched = dispatchSinglePacket(targetPeerId, packet)
 

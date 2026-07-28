@@ -196,14 +196,12 @@ internal class MeshRouter @Inject constructor(
         val enforceEncryption = enforceEncryptionState.value
         val isDirectDelivery = isForMe && packet.hopCount == 0
         
-        val requiresEncryption = if (packet.type in setOf(PacketType.MEDIA_META, PacketType.MEDIA_CHUNK, PacketType.MEDIA_ACK, PacketType.MEDIA_NACK)) {
-            !isDirectDelivery
-        } else {
-            packet.type != PacketType.KEY_EXCHANGE && packet.type != PacketType.SOS
-        }
+        val encryptionRequirement = com.meshlink.security.policy.PacketEncryptionPolicy.getRequirement(packet.type, isDirectDelivery)
+        val requiresEncryption = encryptionRequirement == com.meshlink.security.policy.EncryptionRequirement.REQUIRED ||
+                (encryptionRequirement == com.meshlink.security.policy.EncryptionRequirement.OPTIONAL && enforceEncryption)
 
-        if (enforceEncryption && !packet.encrypted && requiresEncryption) {
-            MeshLogger.w(TAG, "Dropped unencrypted packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} due to Strict Encryption policy")
+        if (!packet.encrypted && requiresEncryption) {
+            MeshLogger.w(TAG, "Dropped unencrypted packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} due to Encryption policy")
             return
         }
 

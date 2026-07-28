@@ -14,7 +14,6 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
-import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.service.MeshRelayService
@@ -35,8 +34,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var meshRepository: MeshRepository
-
-    private lateinit var firebaseAnalytics: FirebaseAnalytics
     
     private val pendingIntents = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
 
@@ -51,12 +48,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ✅ Init Firebase
-        firebaseAnalytics = FirebaseAnalytics.getInstance(this)
+        // ✅ Init Firebase Crashlytics
         FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
-
-        // ✅ Log app open
-        firebaseAnalytics.logEvent(FirebaseAnalytics.Event.APP_OPEN, null)
 
         requestNotificationPermissionIfNeeded()
 
@@ -70,10 +63,6 @@ class MainActivity : ComponentActivity() {
                         val address = newIntent.getStringExtra("address")
                         val name = newIntent.getStringExtra("name")
                         if (address != null && name != null) {
-                            firebaseAnalytics.logEvent(
-                                "chat_opened",
-                                bundleOf("device_name" to name)
-                            )
                             navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
                                 launchSingleTop = true
                             }
@@ -85,10 +74,6 @@ class MainActivity : ComponentActivity() {
                     val address = intent.getStringExtra("address")
                     val name = intent.getStringExtra("name")
                     if (address != null && name != null) {
-                        firebaseAnalytics.logEvent(
-                            "chat_opened",
-                            bundleOf("device_name" to name)
-                        )
                         navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
                             launchSingleTop = true
                         }
@@ -128,7 +113,6 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     meshRepository.autoStartMesh()
-                    firebaseAnalytics.logEvent("mesh_started", null)
                 } catch (e: Exception) {
                     FirebaseCrashlytics.getInstance().recordException(e)
                 }
@@ -147,8 +131,6 @@ class MainActivity : ComponentActivity() {
             } else {
                 startService(intent)
             }
-
-            firebaseAnalytics.logEvent("relay_service_started", null)
 
         } catch (e: Exception) {
             FirebaseCrashlytics.getInstance().recordException(e)

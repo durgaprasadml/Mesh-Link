@@ -10,7 +10,7 @@
 - **Seed**: A 32-byte Cryptographically Secure Pseudo-Random Number Generator (CSPRNG) array, encrypted at rest via the Android Keystore.
 - **Salt**: A 16-byte CSPRNG array.
 - **Derivation Algorithm**: `PBKDF2WithHmacSHA256`
-- **Iterations**: `100,000` (Defined in `SecurityConfig.PBKDF2_ITERATIONS`)
+- **Iterations**: `100,000` (Defined in `SecurityConstants.PBKDF2_ITERATIONS`)
 - **Output Length**: 256 bits
 
 ## Stability Verification

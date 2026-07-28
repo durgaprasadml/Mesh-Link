@@ -127,7 +127,7 @@ class DatabaseSecurityManager @Inject constructor(
         var seedChars: CharArray? = null
         var passphraseBytes: ByteArray? = null
         var finalPassphraseBytes: ByteArray? = null
-        val spec = PBEKeySpec(Base64.encodeToString(seed, Base64.NO_WRAP).toCharArray(), salt, com.meshlink.config.SecurityConfig.PBKDF2_ITERATIONS, SecurityConstants.PBKDF2_KEY_LENGTH_BITS)
+        val spec = PBEKeySpec(Base64.encodeToString(seed, Base64.NO_WRAP).toCharArray(), salt, SecurityConstants.PBKDF2_ITERATIONS, SecurityConstants.PBKDF2_KEY_LENGTH_BITS)
 
         try {
             seedChars = Base64.encodeToString(seed, Base64.NO_WRAP).toCharArray()

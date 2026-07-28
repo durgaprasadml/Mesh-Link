@@ -204,8 +204,17 @@ class RekeyManager @Inject constructor(
                     // BEFORE we rotate the keys. This ensures the reply is encrypted with currentKv.
                     cryptoManager.deriveEphemeralSharedKey(peerId, ephemeralPubBase64, ephemeralKeyPair.private)
 
-                    // Securely destroy our ephemeral private key
-                    java.util.Arrays.fill(ephemeralKeyPair.private.encoded ?: ByteArray(0), 0.toByte())
+                    // Attempt to securely destroy our ephemeral private key.
+                    // Note: Standard Android JCA providers often throw DestroyFailedException here.
+                    try {
+                        if (!ephemeralKeyPair.private.isDestroyed) {
+                            ephemeralKeyPair.private.destroy()
+                        }
+                    } catch (e: javax.security.auth.DestroyFailedException) {
+                        MeshLogger.d(TAG, "JVM Limitation: Secure erasure of ephemeral private key not supported by provider.")
+                    } catch (e: UnsupportedOperationException) {
+                        MeshLogger.d(TAG, "JVM Limitation: Secure erasure of ephemeral private key not supported by provider.")
+                    }
 
                     session.previousKeyVersion = session.keyVersion
                     session.keyVersion = nextKv
@@ -223,9 +232,15 @@ class RekeyManager @Inject constructor(
     private fun destroyPendingRekey(peerId: String) {
         val pending = pendingRekeys.remove(peerId)
         if (pending != null) {
-            val encoded = pending.myEphemeralPrivateKey.encoded
-            if (encoded != null) {
-                java.util.Arrays.fill(encoded, 0.toByte())
+            // Attempt to securely destroy the ephemeral private key.
+            try {
+                if (!pending.myEphemeralPrivateKey.isDestroyed) {
+                    pending.myEphemeralPrivateKey.destroy()
+                }
+            } catch (e: javax.security.auth.DestroyFailedException) {
+                MeshLogger.d(TAG, "JVM Limitation: Secure erasure of ephemeral private key not supported by provider.")
+            } catch (e: UnsupportedOperationException) {
+                MeshLogger.d(TAG, "JVM Limitation: Secure erasure of ephemeral private key not supported by provider.")
             }
         }
     }

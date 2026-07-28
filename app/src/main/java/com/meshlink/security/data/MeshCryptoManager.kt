@@ -29,6 +29,14 @@ import javax.inject.Singleton
 
 /**
  * End-to-End encryption engine for the Mesh Link network.
+ *
+ * JVM Memory Security Notice:
+ * Standard JCA providers on the JVM and Android typically do not support true memory
+ * erasure for software-backed `PrivateKey` objects. The `Destroyable.destroy()` method 
+ * often throws `DestroyFailedException` or `UnsupportedOperationException`.
+ * As a result, software keys remain in memory until garbage collected. Where intermediate
+ * byte arrays (like getEncoded() or decoded bytes) are used, they are securely wiped with 
+ * Arrays.fill(), but this does NOT clear the original key from the JVM heap.
  */
 @Singleton
 class MeshCryptoManager @Inject constructor(
@@ -156,6 +164,8 @@ class MeshCryptoManager @Inject constructor(
                 .putString(SecurityConstants.SELF_PRIVATE_KEY_KEY, privBase64)
                 .apply()
 
+            // Note: This only clears the intermediate byte array copy.
+            // The original PrivateKey object (kp.private) remains in memory until garbage collected.
             java.util.Arrays.fill(encoded, 0.toByte())
             pubBase64
         } catch (e: Exception) {
@@ -175,6 +185,8 @@ class MeshCryptoManager @Inject constructor(
             val privBytes = Base64.decode(privBase64, Base64.NO_WRAP)
             val keyFactory = KeyFactory.getInstance(SecurityConstants.EC_ALGORITHM)
             val privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privBytes))
+            // Clear the intermediate buffer containing the decoded bytes.
+            // Note: The resulting privateKey object in memory cannot be deterministically erased.
             java.util.Arrays.fill(privBytes, 0.toByte())
             return privateKey
         }

@@ -80,7 +80,8 @@ class VoiceTransport @Inject constructor(
         
         scope.launch {
             try {
-                val decrypted = cryptoManager.decryptOrPassthrough(packet.payload, packet.senderId)
+                // Payload is already decrypted by the routing layer
+                val decrypted = packet.payload
                 
                 when (packet.type) {
                     PacketType.VOICE_SIGNAL -> {
@@ -99,7 +100,7 @@ class VoiceTransport @Inject constructor(
                     else -> {}
                 }
             } catch (e: Exception) {
-                MeshLogger.e(TAG, "Failed to decrypt voice packet: ${e.message}")
+                MeshLogger.e(TAG, "Failed to parse voice packet: ${e.message}")
             }
         }
     }

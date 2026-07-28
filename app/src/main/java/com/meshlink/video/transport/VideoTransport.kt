@@ -77,7 +77,8 @@ class VideoTransport @Inject constructor(
         
         scope.launch {
             try {
-                val decrypted = cryptoManager.decryptOrPassthrough(packet.payload, packet.senderId)
+                // Payload is already decrypted by the routing layer
+                val decrypted = packet.payload
                 
                 when (packet.type) {
                     PacketType.VIDEO_SIGNAL -> {
@@ -96,7 +97,7 @@ class VideoTransport @Inject constructor(
                     else -> {}
                 }
             } catch (e: Exception) {
-                MeshLogger.e(TAG, "Failed to decrypt video packet: ${e.message}")
+                MeshLogger.e(TAG, "Failed to parse video packet: ${e.message}")
             }
         }
     }

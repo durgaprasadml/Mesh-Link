@@ -1222,12 +1222,8 @@ class MeshMessagingManager @Inject constructor(
             return
         }
 
-        // Decrypt GPS payload
-        val rawPayload = if (packet.encrypted) {
-            cryptoManager.decryptOrPassthrough(packet.payload, packet.senderId)
-        } else {
-            packet.payload
-        }
+        // Decrypt GPS payload - already decrypted in packet routing layer
+        val rawPayload = packet.payload
 
         val json = try { JSONObject(rawPayload) } catch (_: Exception) { return }
         val lat = json.optDouble("lat", 0.0)

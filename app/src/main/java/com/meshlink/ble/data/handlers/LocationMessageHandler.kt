@@ -53,7 +53,7 @@ class LocationMessageHandler @Inject constructor(
         
         val initialStatus = when (result) {
             is com.meshlink.domain.model.DispatchResult.Queued -> DeliveryStatus.QUEUED
-            else -> DeliveryStatus.FAILED
+            else -> DeliveryStatus.WAITING_FOR_ROUTE
         }
 
         val message = MessageEntity(

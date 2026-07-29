@@ -59,7 +59,8 @@ class MeshMessagingManager @Inject constructor(
     private val voiceMessageHandler: VoiceMessageHandler,
     private val locationMessageHandler: LocationMessageHandler,
     private val broadcastHandler: BroadcastHandler,
-    private val ackManager: AckManager
+    private val ackManager: AckManager,
+    private val retryCoordinator: com.meshlink.common.recovery.RetryCoordinator
 ) : MessageProcessor, PacketDispatcher by corePacketDispatcher {
 
     enum class MeshStartupState { STOPPED, STARTING, RUNNING }
@@ -74,6 +75,7 @@ class MeshMessagingManager @Inject constructor(
         setupTransferManager()
         
         keyExchangeHandler.onKeyExchangeComplete = {
+            retryCoordinator.triggerEvent("key_exchange_complete")
             retryPendingMessages()
         }
     }
@@ -177,7 +179,7 @@ class MeshMessagingManager @Inject constructor(
                             is com.meshlink.domain.model.DispatchResult.QueueFull,
                             is com.meshlink.domain.model.DispatchResult.Rejected,
                             is com.meshlink.domain.model.DispatchResult.Error -> {
-                                chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.FAILED)
+                                chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.WAITING_FOR_ROUTE)
                             }
                         }
                     }
@@ -219,7 +221,7 @@ class MeshMessagingManager @Inject constructor(
                             is com.meshlink.domain.model.DispatchResult.QueueFull,
                             is com.meshlink.domain.model.DispatchResult.Rejected,
                             is com.meshlink.domain.model.DispatchResult.Error -> {
-                                chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.FAILED)
+                                chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.WAITING_FOR_ROUTE)
                             }
                         }
                     }
@@ -416,6 +418,7 @@ class MeshMessagingManager @Inject constructor(
                     if (reqEnc) {
                         if (cryptoManager.hasPeerKey(peerId)) {
                             connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
+                            retryCoordinator.triggerEvent("session_ready")
                             retryPendingMessages()
                         } else {
                             val currentState = connectionManager.peerStates[address]

@@ -345,12 +345,12 @@ fun MessageBubble(
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(bottom = MeshTheme.spacing.extraSmall)
                         )
-                        if (message.status == DeliveryStatus.FAILED) {
+                        if (message.status == DeliveryStatus.PERMANENT_FAILURE) {
                             Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Retry message", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Error, contentDescription = "Permanent failure", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
                                 Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-                                Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                Text("Permanent failure", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
@@ -377,21 +377,23 @@ fun MessageBubble(
                     if (isMe) {
                         Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                         val statusIcon = when (message.status) {
-                            DeliveryStatus.QUEUED -> Icons.Default.AccessTime
-                            DeliveryStatus.SENT -> Icons.Default.Check
-                            DeliveryStatus.RELAYED -> Icons.Default.DoneAll
-                            DeliveryStatus.DELIVERED -> Icons.Default.DoneAll
-                            DeliveryStatus.SEEN -> Icons.Default.DoneAll
-                            DeliveryStatus.FAILED -> Icons.Default.ErrorOutline
+                            DeliveryStatus.QUEUED -> Icons.Default.Schedule
+                            DeliveryStatus.RETRYING -> Icons.Default.Autorenew
+                            DeliveryStatus.WAITING_FOR_ROUTE -> Icons.Default.Search
+                            DeliveryStatus.PENDING, DeliveryStatus.SENDING, DeliveryStatus.SENT, DeliveryStatus.WAITING_FOR_ACK -> Icons.Default.CloudUpload
+                            DeliveryStatus.RELAYED, DeliveryStatus.DELIVERED, DeliveryStatus.SEEN -> Icons.Default.DoneAll
+                            DeliveryStatus.EXPIRED -> Icons.Default.Schedule
+                            DeliveryStatus.CANCELLED -> Icons.Default.Error
+                            DeliveryStatus.PERMANENT_FAILURE, DeliveryStatus.FAILED -> Icons.Default.Error
                         }
                         val iconTint = when (message.status) {
                             DeliveryStatus.SEEN -> MaterialTheme.colorScheme.primary
-                            DeliveryStatus.FAILED -> MaterialTheme.colorScheme.error
+                            DeliveryStatus.PERMANENT_FAILURE, DeliveryStatus.FAILED -> MaterialTheme.colorScheme.error
                             else -> textColor.copy(alpha = 0.7f)
                         }
                         Icon(
                             imageVector = statusIcon,
-                            contentDescription = null, // Handled by outer semantics
+                            contentDescription = "Status: ${message.status}",
                             modifier = Modifier.size(MeshTheme.spacing.medium),
                             tint = iconTint
                         )
@@ -405,16 +407,18 @@ fun MessageBubble(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val statusIcon = when (message.status) {
-                        DeliveryStatus.QUEUED -> Icons.Default.AccessTime
-                        DeliveryStatus.SENT -> Icons.Default.Check
-                        DeliveryStatus.RELAYED -> Icons.Default.DoneAll
-                        DeliveryStatus.DELIVERED -> Icons.Default.DoneAll
-                        DeliveryStatus.SEEN -> Icons.Default.DoneAll
-                        DeliveryStatus.FAILED -> Icons.Default.ErrorOutline
+                        DeliveryStatus.QUEUED -> Icons.Default.Schedule
+                        DeliveryStatus.RETRYING -> Icons.Default.Autorenew
+                        DeliveryStatus.WAITING_FOR_ROUTE -> Icons.Default.Search
+                        DeliveryStatus.PENDING, DeliveryStatus.SENDING, DeliveryStatus.SENT, DeliveryStatus.WAITING_FOR_ACK -> Icons.Default.CloudUpload
+                        DeliveryStatus.RELAYED, DeliveryStatus.DELIVERED, DeliveryStatus.SEEN -> Icons.Default.DoneAll
+                        DeliveryStatus.EXPIRED -> Icons.Default.Schedule
+                        DeliveryStatus.CANCELLED -> Icons.Default.Error
+                        DeliveryStatus.PERMANENT_FAILURE, DeliveryStatus.FAILED -> Icons.Default.Error
                     }
                     val iconTint = when (message.status) {
                         DeliveryStatus.SEEN -> MaterialTheme.colorScheme.primary
-                        DeliveryStatus.FAILED -> MaterialTheme.colorScheme.error
+                        DeliveryStatus.PERMANENT_FAILURE, DeliveryStatus.FAILED -> MaterialTheme.colorScheme.error
                         else -> MaterialTheme.colorScheme.error
                     }
                     Icon(

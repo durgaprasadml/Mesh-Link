@@ -56,7 +56,7 @@ class TextMessageHandler @Inject constructor(
             is com.meshlink.domain.model.DispatchResult.QueueFull,
             is com.meshlink.domain.model.DispatchResult.Rejected,
             is com.meshlink.domain.model.DispatchResult.Error -> {
-                chatDao.updateMessageStatus(messageId, DeliveryStatus.FAILED)
+                chatDao.updateMessageStatus(messageId, DeliveryStatus.WAITING_FOR_ROUTE)
             }
         }
     }

@@ -13,39 +13,45 @@ class IntelligentRetryEngine @Inject constructor(
 ) {
 
     /**
-     * Calculates the next retry delay dynamically based on network state and AI learning.
-     * @param attempt The current retry attempt (0-indexed).
+     * Calculates the next retry delay dynamically based on network state and retry schedule.
+     * @param attempt The current retry attempt (1-indexed or 0-indexed).
      * @return Delay in milliseconds.
      */
     fun calculateRetryDelay(attempt: Int): Long {
-        val globalRetrySuccess = 0.5f
-        
-        // Base delay is 2 seconds, but scaled inverse to historical success
-        var baseDelay = (2000L * (1.0f + (1.0f - globalRetrySuccess)) * (2.0.pow(attempt.toDouble()))).toLong()
-        
-        // If congested, dramatically increase the backoff
+        val baseDelay = when {
+            attempt <= 1 -> 0L
+            attempt == 2 -> 2_000L
+            attempt == 3 -> 5_000L
+            attempt == 4 -> 10_000L
+            attempt == 5 -> 20_000L
+            attempt == 6 -> 40_000L
+            attempt == 7 -> 60_000L
+            else -> 300_000L // 5 minutes
+        }
+
+        if (baseDelay == 0L) return 0L
+
+        var scaledDelay = baseDelay
         if (congestionMonitor.isCongested()) {
-            baseDelay *= 3 
+            scaledDelay *= 2
         }
-
-        // If battery is critical, stretch retries to save wakeups
         if (batteryAwareNetworking.powerState.value == PowerState.CRITICAL) {
-            baseDelay *= 2
+            scaledDelay *= 2
         }
 
-        // Add 0-30% jitter to prevent thundering herd
-        val jitter = (Random.nextFloat() * 0.3 * baseDelay).toLong()
-        
-        // Max delay 2 minutes
-        return Math.min(120_000L, baseDelay + jitter)
+        // Add 0-30% randomized jitter
+        val jitter = (Random.nextFloat() * 0.3f * scaledDelay).toLong()
+        return minOf(300_000L, scaledDelay + jitter)
     }
     
     /**
-     * Determines if we should even attempt to retry a packet right now.
+     * Determines if we should attempt to retry a packet right now.
      */
     fun shouldRetryNow(): Boolean {
+        if (batteryAwareNetworking.powerState.value == PowerState.CRITICAL && congestionMonitor.isCongested()) {
+            return false
+        }
         if (congestionMonitor.congestionLevel.value == CongestionLevel.CRITICAL) {
-            // Drop retries completely if the network is critically overloaded
             return false
         }
         return true

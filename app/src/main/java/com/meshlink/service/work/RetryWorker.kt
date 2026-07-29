@@ -29,9 +29,17 @@ class RetryWorker @AssistedInject constructor(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         MeshLogger.d(TAG, "Starting periodic retry worker...")
         try {
-            val queuedMessages = chatDao.getMessagesByStatus(DeliveryStatus.QUEUED)
-            val failedMessages = chatDao.getMessagesByStatus(DeliveryStatus.FAILED)
-            val pendingMessages = queuedMessages + failedMessages
+            val nonTerminalStatuses = listOf(
+                DeliveryStatus.QUEUED,
+                DeliveryStatus.RETRYING,
+                DeliveryStatus.WAITING_FOR_ROUTE,
+                DeliveryStatus.WAITING_FOR_ACK,
+                DeliveryStatus.SENDING,
+                DeliveryStatus.PENDING
+            )
+            val pendingMessages = nonTerminalStatuses.flatMap { status ->
+                chatDao.getMessagesByStatus(status)
+            }.distinctBy { it.messageId }
             
             if (pendingMessages.isEmpty()) {
                 MeshLogger.d(TAG, "No pending messages to retry.")

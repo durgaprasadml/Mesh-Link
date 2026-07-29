@@ -214,11 +214,11 @@ class ChatDetailViewModel @Inject constructor(
     fun retryTransfer(messageId: String) {
         viewModelScope.launch {
             val msg = getMessageUseCase(messageId) ?: return@launch
-            if (msg.status == com.meshlink.domain.model.DeliveryStatus.FAILED) {
+            if (msg.status == com.meshlink.domain.model.DeliveryStatus.PERMANENT_FAILURE || msg.status == com.meshlink.domain.model.DeliveryStatus.FAILED) {
                 if (msg.messageType == com.meshlink.domain.model.MessageType.TEXT) {
                     meshRepository.sendMessage(rawPeerIdOrAddress.ifBlank { address }, msg)
                 } else if (msg.mediaPath != null) {
-                    // Resume upload from the beginning (manual retry)
+                    // Resume upload from the beginning (manual retry for permanent failures)
                     val uri = Uri.parse(msg.mediaPath)
                     if (msg.messageType == com.meshlink.domain.model.MessageType.IMAGE) {
                         meshRepository.sendImage(rawPeerIdOrAddress.ifBlank { address }, uri, name)

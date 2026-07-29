@@ -39,21 +39,19 @@ class DeliveryTracker @Inject constructor(
     private suspend fun handlePacketEvent(event: PacketStatusEvent) {
         when (event) {
             is PacketQueued -> {
-                // Already in QUEUED state in DB. We can explicitly set it just in case.
                 stateMachine.transitionToQueued(event.packetId)
             }
             is PacketTransmissionStarted -> {
-                // In-memory transport state change, no persistent change required here, 
-                // but we could if we wanted to show 'Sending...'
+                stateMachine.transitionToSending(event.packetId)
             }
             is PacketTransmitted -> {
-                stateMachine.transitionToSent(event.packetId)
+                stateMachine.transitionToWaitingForAck(event.packetId)
                 startDeliveryTimeout(event.packetId)
             }
             is PacketFailed -> {
                 cancelTimeout(event.packetId)
-                stateMachine.transitionToFailed(event.packetId)
-                MeshLogger.e(TAG, "Packet ${event.packetId} failed: ${event.cause?.message}")
+                stateMachine.transitionToWaitingForRoute(event.packetId)
+                MeshLogger.w(TAG, "Packet ${event.packetId} transmission failed: ${event.cause?.message}. Transitioned to WAITING_FOR_ROUTE")
             }
         }
     }
@@ -62,8 +60,8 @@ class DeliveryTracker @Inject constructor(
         cancelTimeout(packetId)
         timeoutJobs[packetId] = applicationScope.launch {
             delay(DELIVERY_TIMEOUT_MS)
-            MeshLogger.w(TAG, "Delivery timeout for packet $packetId")
-            stateMachine.transitionToFailed(packetId)
+            MeshLogger.w(TAG, "Delivery ACK timeout for packet $packetId - transitioning to RETRYING")
+            stateMachine.transitionToRetrying(packetId)
             timeoutJobs.remove(packetId)
         }
     }

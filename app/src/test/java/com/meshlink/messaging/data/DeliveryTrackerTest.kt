@@ -50,33 +50,33 @@ class DeliveryTrackerTest {
     }
 
     @Test
-    fun `PacketTransmitted event transitions message state to SENT and starts timeout`() = testScope.runTest {
+    fun `PacketTransmitted event transitions message state to WAITING_FOR_ACK and starts timeout`() = testScope.runTest {
         packetEventsFlow.emit(PacketTransmitted("pkt_1"))
         testScheduler.advanceUntilIdle()
 
-        coVerify { stateMachine.transitionToSent("pkt_1") }
+        coVerify { stateMachine.transitionToWaitingForAck("pkt_1") }
 
         // Fast forward time by 30 seconds (DELIVERY_TIMEOUT_MS)
         testScheduler.advanceTimeBy(DeliveryTracker.DELIVERY_TIMEOUT_MS + 100)
 
-        coVerify { stateMachine.transitionToFailed("pkt_1") }
+        coVerify { stateMachine.transitionToRetrying("pkt_1") }
     }
 
     @Test
-    fun `PacketFailed event cancels timeout and transitions message state to FAILED`() = testScope.runTest {
+    fun `PacketFailed event cancels timeout and transitions message state to WAITING_FOR_ROUTE`() = testScope.runTest {
         packetEventsFlow.emit(PacketTransmitted("pkt_1"))
         testScheduler.advanceUntilIdle()
 
         packetEventsFlow.emit(PacketFailed("pkt_1", Exception("Network error")))
         testScheduler.advanceUntilIdle()
 
-        coVerify { stateMachine.transitionToFailed("pkt_1") }
+        coVerify { stateMachine.transitionToWaitingForRoute("pkt_1") }
 
         // Fast forward time past timeout to verify timeout job was cancelled
         testScheduler.advanceTimeBy(DeliveryTracker.DELIVERY_TIMEOUT_MS + 100)
 
-        // transitionToFailed should only be called once from PacketFailed, not from timeout
-        coVerify(exactly = 1) { stateMachine.transitionToFailed("pkt_1") }
+        // transitionToRetrying should not be called from timeout because it was cancelled
+        coVerify(exactly = 0) { stateMachine.transitionToRetrying("pkt_1") }
     }
 
     @Test
@@ -92,7 +92,7 @@ class DeliveryTrackerTest {
         // Fast forward time past timeout to verify timeout job was cancelled
         testScheduler.advanceTimeBy(DeliveryTracker.DELIVERY_TIMEOUT_MS + 100)
 
-        coVerify(exactly = 0) { stateMachine.transitionToFailed("pkt_1") }
+        coVerify(exactly = 0) { stateMachine.transitionToRetrying("pkt_1") }
     }
 
     @Test
@@ -108,6 +108,6 @@ class DeliveryTrackerTest {
         // Fast forward time past timeout
         testScheduler.advanceTimeBy(DeliveryTracker.DELIVERY_TIMEOUT_MS + 100)
 
-        coVerify(exactly = 0) { stateMachine.transitionToFailed("pkt_1") }
+        coVerify(exactly = 0) { stateMachine.transitionToRetrying("pkt_1") }
     }
 }

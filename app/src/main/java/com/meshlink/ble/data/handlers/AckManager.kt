@@ -16,14 +16,17 @@ class AckManager @Inject constructor(
     private val userRepository: UserRepository,
     private val chatDao: ChatDao,
     private val packetDispatcher: PacketDispatcher,
-    private val deliveryTracker: DeliveryTracker
+    private val deliveryTracker: DeliveryTracker,
+    private val retryCoordinator: com.meshlink.common.recovery.RetryCoordinator
 ) {
     companion object {
         const val MAX_BATCH_SIZE = 10
     }
 
     suspend fun handleDeliveryAck(packet: MeshPacket) {
-        deliveryTracker.onAckReceived(packet.payload)
+        val packetId = packet.payload
+        retryCoordinator.cancelRetryForPacket(packetId)
+        deliveryTracker.onAckReceived(packetId)
     }
 
     suspend fun handleReadReceipt(packet: MeshPacket) {
@@ -34,6 +37,7 @@ class AckManager @Inject constructor(
         ids.forEach { id ->
             val cleanId = id.trim()
             if (cleanId.isNotBlank()) {
+                retryCoordinator.cancelRetryForPacket(cleanId)
                 deliveryTracker.onReadReceiptReceived(cleanId)
             }
         }

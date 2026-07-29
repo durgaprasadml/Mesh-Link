@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,7 +64,13 @@ fun MessageBubble(
     val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
     val haptic = LocalHapticFeedback.current
 
-    val baseBubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+    val isSos = message.messageType == MessageType.SOS
+    val isLocation = message.messageType == MessageType.LOCATION
+    val baseBubbleColor = when {
+        isSos || isLocation -> Color.Transparent
+        isMe -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
     val selectedColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
 
     val bgColor by animateColorAsState(
@@ -72,7 +79,9 @@ fun MessageBubble(
     )
 
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    val shape = if (isMe) {
+    val shape = if (isSos || isLocation) {
+        RoundedCornerShape(20.dp)
+    } else if (isMe) {
         RoundedCornerShape(topStart = MeshTheme.spacing.large, topEnd = MeshTheme.spacing.small, bottomStart = MeshTheme.spacing.large, bottomEnd = MeshTheme.spacing.large)
     } else {
         RoundedCornerShape(topStart = MeshTheme.spacing.small, topEnd = MeshTheme.spacing.large, bottomStart = MeshTheme.spacing.large, bottomEnd = MeshTheme.spacing.large)
@@ -124,8 +133,12 @@ fun MessageBubble(
             modifier = Modifier
                 .clip(shape)
                 .background(bgColor)
-                .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
-                .widthIn(max = 300.dp, min = 80.dp)
+                .then(
+                    if (!isSos && !isLocation) {
+                        Modifier.padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
+                    } else Modifier
+                )
+                .widthIn(max = if (isSos || isLocation) 340.dp else 300.dp, min = if (isSos || isLocation) 280.dp else 80.dp)
                 .animateContentSize()
         ) {
             when (message.messageType) {
@@ -146,7 +159,6 @@ fun MessageBubble(
                             contentScale = ContentScale.Crop
                         )
                     } else if (!message.thumbnailBase64.isNullOrEmpty()) {
-                        // Decode base64 to bitmap efficiently on background thread
                         val imageBitmapState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
                         androidx.compose.runtime.LaunchedEffect(message.thumbnailBase64) {
                             if (!message.thumbnailBase64.isNullOrEmpty()) {
@@ -165,7 +177,7 @@ fun MessageBubble(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 120.dp, max = 260.dp)
+                                .height(180.dp)
                                 .clip(RoundedCornerShape(MeshTheme.spacing.medium))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                         ) {
@@ -175,11 +187,10 @@ fun MessageBubble(
                                     contentDescription = "Image thumbnail",
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop,
-                                    alpha = 0.5f // Dim thumbnail while loading
+                                    alpha = 0.5f
                                 )
                             }
                             
-                            // Overlay progress or retry
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
@@ -218,74 +229,82 @@ fun MessageBubble(
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
-                                Icon(Icons.Default.Image, contentDescription = "Image message", modifier = Modifier.size(36.dp))
-                                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
-                                Text(if (message.isFromMe) "Sending image..." else "Receiving image...", style = MaterialTheme.typography.labelSmall)
-                                if (message.status == DeliveryStatus.FAILED) {
-                                    Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
+                            if (message.status == DeliveryStatus.FAILED) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     IconButton(
                                         onClick = { onRetryMedia(message.messageId) },
                                         modifier = Modifier.background(MaterialTheme.colorScheme.error, CircleShape).size(36.dp)
                                     ) {
                                         Icon(Icons.Default.Refresh, contentDescription = "Retry image transfer", tint = MaterialTheme.colorScheme.onPrimary)
                                     }
-                                } else if (transferProgress != null && transferProgress >= 0f) {
                                     Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
-                                    LinearProgressIndicator(
-                                        progress = { transferProgress },
-                                        modifier = Modifier.fillMaxWidth().height(MeshTheme.spacing.small).clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                                 }
+                            } else {
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(28.dp)
+                                )
                             }
                         }
                     }
                 }
                 MessageType.VOICE -> {
-                    val mediaPath = message.mediaPath
-                    val fileExists = mediaPath != null && File(mediaPath).exists()
-                    val isThisPlaying = currentlyPlaying == mediaPath
-                    val durationText = message.mediaDurationMs?.let { "${it / 1000}s" } ?: ""
+                    val fileExists = remember(message.mediaPath) {
+                        message.mediaPath != null && File(message.mediaPath).exists()
+                    }
+                    val isThisPlaying = currentlyPlaying == message.messageId
+                    val durationMs = message.mediaDurationMs ?: 0L
+                    val durationText = remember(durationMs) {
+                        val seconds = (durationMs / 1000) % 60
+                        val minutes = (durationMs / (1000 * 60)) % 60
+                        String.format(Locale.getDefault(), "%d:%02d", minutes, seconds)
+                    }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = MeshTheme.spacing.small)
+                        modifier = Modifier.padding(MeshTheme.spacing.small)
                     ) {
                         IconButton(
                             onClick = {
-                                if (fileExists && mediaPath != null) {
-                                    if (isThisPlaying) onStopPlayback() else onPlayVoice(mediaPath)
+                                if (isThisPlaying) {
+                                    onStopPlayback()
+                                } else if (fileExists && message.mediaPath != null) {
+                                    onPlayVoice(message.mediaPath)
                                 }
                             },
                             enabled = fileExists && !isSelectionMode,
-                            modifier = Modifier.size(MeshTheme.spacing.extraHuge).background(MaterialTheme.colorScheme.surface.copy(alpha=0.5f), CircleShape)
+                            modifier = Modifier
+                                .background(textColor.copy(alpha = 0.15f), CircleShape)
+                                .size(MeshTheme.spacing.huge)
                         ) {
                             Icon(
                                 imageVector = if (isThisPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                contentDescription = if (isThisPlaying) "Stop voice note" else "Play voice note",
-                                tint = if (fileExists) textColor else textColor.copy(alpha = 0.3f)
+                                contentDescription = if (isThisPlaying) "Stop voice message" else "Play voice message",
+                                tint = textColor
                             )
                         }
 
-                        Column(modifier = Modifier.weight(1f).padding(start = MeshTheme.spacing.medium)) {
+                        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
+
+                        Column(modifier = Modifier.weight(1f)) {
                             if (message.status == DeliveryStatus.FAILED) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRetryMedia(message.messageId) }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Failed to send, tap to retry", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
-                                    Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-                                    Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                                }
-                            } else if (transferProgress != null && transferProgress >= 0f && message.status == DeliveryStatus.QUEUED) {
                                 Text(
-                                    text = if (message.isFromMe) "Sending..." else "Receiving...",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = textColor.copy(alpha = 0.7f)
+                                    text = "Failed to download voice note",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
                                 )
-                                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                                Text(
+                                    text = "Tap to retry",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.clickable { onRetryMedia(message.messageId) }
+                                )
+                            } else if (transferProgress != null && transferProgress < 1.0f) {
                                 LinearProgressIndicator(
                                     progress = { transferProgress },
                                     modifier = Modifier.fillMaxWidth().height(MeshTheme.spacing.small).clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = textColor,
                                     trackColor = textColor.copy(alpha = 0.3f)
                                 )
                             } else {
@@ -306,77 +325,16 @@ fun MessageBubble(
                     }
                 }
                 MessageType.LOCATION -> {
-                    Column(
-                        modifier = Modifier
-                            .clickable(enabled = !isSelectionMode) {
-                                val lat = message.latitude
-                                val lng = message.longitude
-                                if (lat != null && lng != null) {
-                                    onLocationClick(lat, lng)
-                                }
-                            }
-                    ) {
-                        // Mini map placeholder
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
-                                .clip(RoundedCornerShape(MeshTheme.spacing.medium))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Map,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                            )
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Location message",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(32.dp).offset(y = (-8).dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
-                        if (message.latitude != null && message.longitude != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(MeshTheme.spacing.mediumSmall))
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha=0.3f))
-                                    .padding(MeshTheme.spacing.mediumSmall)
-                            ) {
-                                Column {
-                                    Text("Lat: ${String.format(Locale.US, "%.6f", message.latitude)}", color = textColor, style = MaterialTheme.typography.bodySmall)
-                                    Text("Lng: ${String.format(Locale.US, "%.6f", message.longitude)}", color = textColor, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                        if (message.batteryPercent != null && message.batteryPercent >= 0) {
-                            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                            Text("🔋 ${message.batteryPercent}% Battery", color = textColor.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
+                    LocationMessageCard(
+                        message = message,
+                        onLocationClick = onLocationClick
+                    )
                 }
                 MessageType.SOS -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(MeshTheme.spacing.medium))
-                            .background(MaterialTheme.colorScheme.error)
-                            .padding(MeshTheme.spacing.medium)
-                    ) {
-                        Text("🚨 SOS EMERGENCY", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
-                        if (message.latitude != null && message.longitude != null) {
-                            Text("📍 Lat: ${String.format(Locale.US, "%.6f", message.latitude)}", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.bodySmall)
-                            Text("📍 Lng: ${String.format(Locale.US, "%.6f", message.longitude)}", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (message.batteryPercent != null && message.batteryPercent >= 0) {
-                            Text("🔋 Battery: ${message.batteryPercent}%", color = MaterialTheme.colorScheme.onError.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
+                    SosEmergencyCard(
+                        message = message,
+                        onLocationClick = onLocationClick
+                    )
                 }
 
                 MessageType.TEXT -> {
@@ -399,24 +357,53 @@ fun MessageBubble(
                 }
             }
 
-            val formattedTime = androidx.compose.runtime.remember(message.timestamp) {
-                formatTime(message.timestamp)
-            }
+            if (!isSos) {
+                val formattedTime = androidx.compose.runtime.remember(message.timestamp) {
+                    formatTime(message.timestamp)
+                }
 
-            // Timestamp + status row
-            Row(
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(top = MeshTheme.spacing.extraSmall),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = formattedTime,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = textColor.copy(alpha = 0.7f)
-                )
-                if (isMe) {
-                    Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+                // Timestamp + status row
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(top = MeshTheme.spacing.extraSmall),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = formattedTime,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = textColor.copy(alpha = 0.7f)
+                    )
+                    if (isMe) {
+                        Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+                        val statusIcon = when (message.status) {
+                            DeliveryStatus.QUEUED -> Icons.Default.AccessTime
+                            DeliveryStatus.SENT -> Icons.Default.Check
+                            DeliveryStatus.RELAYED -> Icons.Default.DoneAll
+                            DeliveryStatus.DELIVERED -> Icons.Default.DoneAll
+                            DeliveryStatus.SEEN -> Icons.Default.DoneAll
+                            DeliveryStatus.FAILED -> Icons.Default.ErrorOutline
+                        }
+                        val iconTint = when (message.status) {
+                            DeliveryStatus.SEEN -> MaterialTheme.colorScheme.primary
+                            DeliveryStatus.FAILED -> MaterialTheme.colorScheme.error
+                            else -> textColor.copy(alpha = 0.7f)
+                        }
+                        Icon(
+                            imageVector = statusIcon,
+                            contentDescription = null, // Handled by outer semantics
+                            modifier = Modifier.size(MeshTheme.spacing.medium),
+                            tint = iconTint
+                        )
+                    }
+                }
+            } else if (isMe) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(top = MeshTheme.spacing.extraSmall, end = MeshTheme.spacing.small),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     val statusIcon = when (message.status) {
                         DeliveryStatus.QUEUED -> Icons.Default.AccessTime
                         DeliveryStatus.SENT -> Icons.Default.Check
@@ -428,11 +415,11 @@ fun MessageBubble(
                     val iconTint = when (message.status) {
                         DeliveryStatus.SEEN -> MaterialTheme.colorScheme.primary
                         DeliveryStatus.FAILED -> MaterialTheme.colorScheme.error
-                        else -> textColor.copy(alpha = 0.7f)
+                        else -> MaterialTheme.colorScheme.error
                     }
                     Icon(
                         imageVector = statusIcon,
-                        contentDescription = null, // Handled by outer semantics
+                        contentDescription = "Status: ${message.status}",
                         modifier = Modifier.size(MeshTheme.spacing.medium),
                         tint = iconTint
                     )

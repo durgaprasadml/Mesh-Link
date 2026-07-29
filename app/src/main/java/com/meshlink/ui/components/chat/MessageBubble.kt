@@ -100,10 +100,10 @@ fun MessageBubble(
         append(" at ${formatTime(message.timestamp)}. ")
         if (isMe) {
             val statusStr = when (message.status) {
-                DeliveryStatus.QUEUED -> "sending"
+                DeliveryStatus.QUEUED, DeliveryStatus.PENDING, DeliveryStatus.SENDING, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.WAITING_FOR_ACK -> "sending"
                 DeliveryStatus.SENT -> "sent"
                 DeliveryStatus.DELIVERED, DeliveryStatus.RELAYED, DeliveryStatus.SEEN -> "delivered"
-                DeliveryStatus.FAILED -> "failed"
+                DeliveryStatus.FAILED, DeliveryStatus.EXPIRED, DeliveryStatus.CANCELLED, DeliveryStatus.PERMANENT_FAILURE -> "failed"
             }
             append("Status: $statusStr. ")
         }

@@ -2,6 +2,7 @@ package com.meshlink.common.recovery
 
 import android.content.Context
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.data.mapper.toDomain
 import com.meshlink.database.data.local.ChatDao
 import com.meshlink.database.data.local.DeliveryStatus
 import com.meshlink.database.data.local.RelayDao
@@ -22,7 +23,7 @@ import kotlinx.coroutines.launch
 @Singleton
 class RetryCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val meshRepository: MeshRepository,
+    private val meshRepositoryProvider: javax.inject.Provider<MeshRepository>,
     private val meshRouter: Router,
     private val chatDao: ChatDao,
     private val relayDao: RelayDao,
@@ -163,8 +164,8 @@ class RetryCoordinator @Inject constructor(
                 MeshLogger.d(TAG, "Attempting delivery attempt $attempt for message $messageId to ${msg.chatId}")
                 stateMachine.transitionToSending(messageId)
                 
-                val domainMsg = com.meshlink.data.mapper.toDomain(msg)
-                meshRepository.sendMessage(msg.chatId, domainMsg)
+                val domainMsg = msg.toDomain()
+                meshRepositoryProvider.get().sendMessage(msg.chatId, domainMsg)
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Retry attempt $attempt failed for message $messageId: ${e.message}")
                 stateMachine.transitionToWaitingForRoute(messageId)

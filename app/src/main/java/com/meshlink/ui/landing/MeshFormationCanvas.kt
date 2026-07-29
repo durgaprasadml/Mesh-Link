@@ -7,8 +7,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -17,14 +15,13 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Procedural GPU-optimized DrawScope Canvas rendering the 9-phase mesh animation storyboard.
+ * Procedural GPU-optimized DrawScope Canvas rendering the 6-phase starlight constellation experience.
  * Guarantees zero allocation in the draw loop for maximum 60/120 FPS performance.
  */
 @Composable
 fun MeshFormationCanvas(
     nodes: List<AnimatedMeshNode>,
     connectionAnimator: MeshConnectionAnimator,
-    ambientDust: List<AmbientDustParticle>,
     dataPackets: List<DataPacket>,
     overallProgress: Float,
     timeMs: Long,
@@ -37,119 +34,82 @@ fun MeshFormationCanvas(
 
         if (canvasWidth <= 0f || canvasHeight <= 0f) return@Canvas
 
-        // 1. Draw Ambient Background & Light Beams (Phase 1 Silence & Atmosphere)
-        drawBackgroundAtmosphere(canvasWidth, canvasHeight, timeMs)
+        // 1. Draw Deep Space Background Atmosphere & Subtle Starlight Shimmer
+        drawDeepSpaceAtmosphere(canvasWidth, canvasHeight, timeMs)
 
-        // 2. Draw Ambient Dust Particle Swarm
-        drawAmbientDust(ambientDust, canvasWidth, canvasHeight, timeMs)
+        // 2. Draw Wave Ripple Effects
+        drawConstellationRipples(connectionAnimator.rippleWave, canvasWidth, canvasHeight)
 
-        // 3. Draw Radar Scanning Waves (Phase 3 Scanning)
-        if (overallProgress in AnimationConstants.PHASE_2_DISCOVERY_END..AnimationConstants.PHASE_5_SELF_HEALING_END) {
-            drawRadarWaves(nodes, timeMs)
-        }
+        // 3. Draw Single-Color Starlight Connections & Constellation Letter Strokes
+        drawConstellationConnections(connectionAnimator.links, overallProgress)
 
-        // 4. Draw Mesh Connection Links & Pulses (Phase 4 Connection & Phase 5 Self-Healing)
-        drawMeshConnections(connectionAnimator.links, overallProgress)
+        // 4. Draw White Energy Packets & Fading Light Trails
+        drawEnergyPackets(dataPackets, nodes)
 
-        // 5. Draw Discovery Sparks & Data Packet Trails (Phase 6 Packet Routing)
-        drawParticlesAndPackets(connectionAnimator.sparkPool, dataPackets, nodes)
-
-        // 6. Draw Mesh Nodes & Halo Rings (Phase 2 Discovery & Phase 6 Stabilization)
-        drawMeshNodes(nodes, overallProgress, isWelcomeMode)
+        // 5. Draw Night Sky Star Nodes (Independent Twinkling & Seed Node Halos)
+        drawStarfieldNodes(nodes, overallProgress, isWelcomeMode)
     }
 }
 
-private fun DrawScope.drawBackgroundAtmosphere(width: Float, height: Float, timeMs: Long) {
+private fun DrawScope.drawDeepSpaceAtmosphere(width: Float, height: Float, timeMs: Long) {
     val timeSec = timeMs / 1000f
 
-    // Deep radial gradient
+    // Deep space radial background
     val centerOffset = Offset(
-        width * (0.50f + sin(timeSec * 0.2f) * 0.05f),
-        height * (0.45f + cos(timeSec * 0.15f) * 0.05f)
+        width * (0.50f + sin(timeSec * 0.15f) * 0.03f),
+        height * (0.45f + cos(timeSec * 0.12f) * 0.03f)
     )
 
     val backgroundBrush = Brush.radialGradient(
         colors = listOf(
-            AnimationConstants.DeepNavy,
-            AnimationConstants.CharcoalBlack,
-            Color(0xFF070912)
+            AnimationConstants.SpaceDarkCharcoal,
+            AnimationConstants.DeepSpaceNavy,
+            Color(0xFF030408)
         ),
         center = centerOffset,
-        radius = width.coerceAtLeast(height) * 0.85f
+        radius = width.coerceAtLeast(height) * 0.90f
     )
 
     drawRect(brush = backgroundBrush)
 
-    // Dynamic light beam overlay
-    val beamOffset = sin(timeSec * 0.3f) * width * 0.2f
-    val beamBrush = Brush.linearGradient(
+    // Subtle starlight haze
+    val hazeOffset = sin(timeSec * 0.25f) * width * 0.15f
+    val hazeBrush = Brush.linearGradient(
         colors = listOf(
             Color.Transparent,
-            AnimationConstants.ElectricBlue.copy(alpha = 0.06f),
-            AnimationConstants.Cyan.copy(alpha = 0.04f),
+            AnimationConstants.SubtleStarlightBlue.copy(alpha = 0.04f),
+            AnimationConstants.StarlightSilver.copy(alpha = 0.02f),
             Color.Transparent
         ),
-        start = Offset(beamOffset, 0f),
-        end = Offset(width * 0.7f + beamOffset, height)
+        start = Offset(hazeOffset, 0f),
+        end = Offset(width * 0.8f + hazeOffset, height)
     )
 
-    drawRect(brush = beamBrush)
+    drawRect(brush = hazeBrush)
 }
 
-private fun DrawScope.drawAmbientDust(
-    dustParticles: List<AmbientDustParticle>,
+private fun DrawScope.drawConstellationRipples(
+    rippleWave: ConstellationRippleWave,
     width: Float,
-    height: Float,
-    timeMs: Long
+    height: Float
 ) {
-    val timeSec = timeMs / 1000f
+    if (!rippleWave.isActive || rippleWave.alpha <= 0.01f) return
 
-    dustParticles.forEach { particle ->
-        val x = (width * particle.xRatio + sin(timeSec * 0.5f + particle.xRatio * 10f) * 15f) % width
-        val y = (height * particle.yRatio + cos(timeSec * 0.4f + particle.yRatio * 10f) * 15f) % height
-        val alpha = (particle.baseAlpha * (0.6f + sin(timeSec * 1.5f + particle.xRatio * 20f) * 0.4f)).coerceIn(0f, 1f)
+    val center = Offset(width * rippleWave.centerX, height * rippleWave.centerY)
+    val maxRadius = width.coerceAtLeast(height) * rippleWave.radius
 
-        drawCircle(
-            color = AnimationConstants.SoftWhite.copy(alpha = alpha),
-            radius = particle.sizeDp.dp.toPx(),
-            center = Offset(x, y)
-        )
-    }
+    drawCircle(
+        color = AnimationConstants.StarlightWhite.copy(alpha = rippleWave.alpha * 0.25f),
+        radius = maxRadius,
+        center = center,
+        style = Stroke(width = 1.5f.dp.toPx())
+    )
 }
 
-private fun DrawScope.drawRadarWaves(
-    nodes: List<AnimatedMeshNode>,
-    timeMs: Long
-) {
-    val timeSec = timeMs / 1000f
-    val radarNodes = nodes.filter { it.id % 4 == 0 && it.alpha > 0.5f }
-
-    radarNodes.forEach { node ->
-        val pulseTime = (timeSec * 1.2f + node.id) % 2.0f
-        if (pulseTime < 1.0f) {
-            val radius = node.radiusDp.dp.toPx() + pulseTime * 140f
-            val alpha = ((1.0f - pulseTime) * 0.35f * node.alpha).coerceIn(0f, 1f)
-
-            drawCircle(
-                color = AnimationConstants.Cyan.copy(alpha = alpha),
-                radius = radius,
-                center = Offset(node.currentX, node.currentY),
-                style = Stroke(width = 1.8f)
-            )
-        }
-    }
-}
-
-private fun DrawScope.drawMeshConnections(
+private fun DrawScope.drawConstellationConnections(
     links: List<MeshConnectionLink>,
     overallProgress: Float
 ) {
-    val logoFade = if (overallProgress > AnimationConstants.PHASE_8_LOGO_EMERGENCE_END) {
-        (1.0f - ((overallProgress - AnimationConstants.PHASE_8_LOGO_EMERGENCE_END) / 0.04f)).coerceIn(0.2f, 1f)
-    } else {
-        1.0f
-    }
-
     links.forEach { link ->
         if (link.alpha > 0.02f && link.growthProgress > 0.02f) {
             val n1 = link.nodeA
@@ -158,108 +118,83 @@ private fun DrawScope.drawMeshConnections(
             val start = Offset(n1.currentX, n1.currentY)
             val fullEnd = Offset(n2.currentX, n2.currentY)
 
-            // Calculate growing line tip
             val currentEnd = Offset(
                 start.x + (fullEnd.x - start.x) * link.growthProgress,
                 start.y + (fullEnd.y - start.y) * link.growthProgress
             )
 
-            val baseColor = when (link.type) {
-                ConnectionType.DISCOVERY -> AnimationConstants.ConnectionDiscovery
-                ConnectionType.CONNECTED -> AnimationConstants.ConnectionConnected
-                ConnectionType.RELAY -> AnimationConstants.ConnectionRelay
-                ConnectionType.BROADCAST -> AnimationConstants.ConnectionBroadcast
-                ConnectionType.INACTIVE -> AnimationConstants.ConnectionInactive
+            val baseColor = if (link.isConstellationStroke) {
+                AnimationConstants.ConnectionConstellation
+            } else {
+                AnimationConstants.StarlightSilver
             }
 
-            val alpha = (link.alpha * logoFade).coerceIn(0f, 1f)
-            val strokeWidth = if (n1.isUserNode || n2.isUserNode) 2.5f.dp.toPx() else 1.5f.dp.toPx()
+            // Energy pulse boost when white packet travels on this line
+            val activeBoost = link.energyPulseBrightness
 
-            // Outer soft glow line
+            val lineAlpha = ((link.alpha * (if (link.isConstellationStroke) 0.85f else 0.40f) + activeBoost * 0.5f)).coerceIn(0f, 1f)
+            val strokeWidth = if (link.isConstellationStroke) 2.0f.dp.toPx() else 1.2f.dp.toPx()
+
+            // Outer starlight glow line
             drawLine(
-                color = baseColor.copy(alpha = alpha * 0.35f),
+                color = baseColor.copy(alpha = lineAlpha * 0.4f),
                 start = start,
                 end = currentEnd,
-                strokeWidth = strokeWidth * 2.8f,
+                strokeWidth = strokeWidth * 2.5f,
                 cap = StrokeCap.Round
             )
 
             // Inner core connection line
             drawLine(
-                color = baseColor.copy(alpha = alpha),
+                color = baseColor.copy(alpha = lineAlpha),
                 start = start,
                 end = currentEnd,
                 strokeWidth = strokeWidth,
                 cap = StrokeCap.Round
             )
-
-            // Traveling link pulse dot
-            if (link.pulseProgress > 0f && link.growthProgress >= 0.95f) {
-                val pulseX = start.x + (fullEnd.x - start.x) * link.pulseProgress
-                val pulseY = start.y + (fullEnd.y - start.y) * link.pulseProgress
-
-                drawCircle(
-                    color = AnimationConstants.Cyan.copy(alpha = alpha * 0.8f),
-                    radius = 2.5f.dp.toPx(),
-                    center = Offset(pulseX, pulseY)
-                )
-            }
         }
     }
 }
 
-private fun DrawScope.drawParticlesAndPackets(
-    sparks: List<DiscoverySpark>,
+private fun DrawScope.drawEnergyPackets(
     packets: List<DataPacket>,
     nodes: List<AnimatedMeshNode>
 ) {
-    // 1. Discovery Sparks
-    sparks.forEach { spark ->
-        if (spark.active && spark.life > 0f) {
-            drawCircle(
-                color = spark.color.copy(alpha = spark.life),
-                radius = spark.size,
-                center = Offset(spark.x, spark.y)
-            )
-        }
-    }
-
-    // 2. Data Packets (Phase 6 Packet Routing)
     packets.forEach { packet ->
         if (packet.isActive) {
             val fromNode = nodes.getOrNull(packet.fromNodeId)
             val toNode = nodes.getOrNull(packet.toNodeId)
 
-            if (fromNode != null && toNode != null && fromNode.alpha > 0.3f && toNode.alpha > 0.3f) {
+            if (fromNode != null && toNode != null && fromNode.isDiscovered && toNode.isDiscovered) {
                 val px = fromNode.currentX + (toNode.currentX - fromNode.currentX) * packet.progress
                 val py = fromNode.currentY + (toNode.currentY - fromNode.currentY) * packet.progress
 
                 packet.currentX = px
                 packet.currentY = py
 
-                // Packet trail
-                val trailX = fromNode.currentX + (toNode.currentX - fromNode.currentX) * (packet.progress - 0.06f).coerceAtLeast(0f)
-                val trailY = fromNode.currentY + (toNode.currentY - fromNode.currentY) * (packet.progress - 0.06f).coerceAtLeast(0f)
+                // Fading white packet trail
+                val trailX = fromNode.currentX + (toNode.currentX - fromNode.currentX) * (packet.progress - 0.08f).coerceAtLeast(0f)
+                val trailY = fromNode.currentY + (toNode.currentY - fromNode.currentY) * (packet.progress - 0.08f).coerceAtLeast(0f)
 
                 drawLine(
-                    color = packet.color.copy(alpha = 0.3f),
+                    color = AnimationConstants.StarlightWhite.copy(alpha = 0.45f),
                     start = Offset(trailX, trailY),
                     end = Offset(px, py),
-                    strokeWidth = packet.sizeDp.dp.toPx() * 0.8f,
+                    strokeWidth = packet.sizeDp.dp.toPx() * 1.2f,
                     cap = StrokeCap.Round
                 )
 
-                // Packet core
+                // Packet core star particle
                 drawCircle(
-                    color = packet.color,
+                    color = AnimationConstants.StarlightWhite,
                     radius = packet.sizeDp.dp.toPx(),
                     center = Offset(px, py)
                 )
 
-                // Glowing aura around packet
+                // Subtle white aura glow
                 drawCircle(
-                    color = packet.color.copy(alpha = 0.4f),
-                    radius = packet.sizeDp.dp.toPx() * 2.2f,
+                    color = AnimationConstants.StarlightWhiteGlow,
+                    radius = packet.sizeDp.dp.toPx() * 2.5f,
                     center = Offset(px, py)
                 )
             }
@@ -267,71 +202,65 @@ private fun DrawScope.drawParticlesAndPackets(
     }
 }
 
-private fun DrawScope.drawMeshNodes(
+private fun DrawScope.drawStarfieldNodes(
     nodes: List<AnimatedMeshNode>,
     overallProgress: Float,
     isWelcomeMode: Boolean
 ) {
-    nodes.forEach { node ->
-        // Appearance alpha fade based on node delay threshold
-        val nodeAlpha = if (overallProgress >= node.appearDelay) {
-            ((overallProgress - node.appearDelay) / 0.12f).coerceIn(0f, 1f)
-        } else {
-            0f
+    nodes.forEach { star ->
+        val center = Offset(star.currentX, star.currentY)
+
+        // Independent twinkling brightness & pulse
+        val brightness = (star.currentBrightness + star.pulseIntensity).coerceIn(0.08f, 1.00f)
+        val radius = star.radiusDp.dp.toPx() * (0.85f + brightness * 0.30f)
+
+        // Render User Node avatar ring container in Welcome mode
+        if (star.isUserNode && isWelcomeMode) {
+            // Outer seed node glowing halo rings
+            val haloRadius = radius * 1.8f
+            drawCircle(
+                color = AnimationConstants.StarlightWhiteGlow.copy(alpha = 0.5f),
+                radius = haloRadius,
+                center = center
+            )
+            drawCircle(
+                color = AnimationConstants.StarlightSilver.copy(alpha = 0.3f),
+                radius = haloRadius * 1.4f,
+                center = center,
+                style = Stroke(width = 1.5f)
+            )
+            return@forEach
         }
-        node.alpha = nodeAlpha
 
-        if (nodeAlpha > 0.01f) {
-            val center = Offset(node.currentX, node.currentY)
-            val baseRadius = node.radiusDp.dp.toPx() * (1f + node.breathingOffset)
+        // Standard Star Nodes in Universe
+        val starAlpha = if (star.isDiscovered) {
+            (brightness * 1.0f).coerceIn(0.40f, 1.00f)
+        } else {
+            (brightness * 0.45f).coerceIn(0.08f, 0.55f)
+        }
 
-            // Skip rendering central node inner graphics if Welcome mode avatar container is handling it
-            if (node.isUserNode && isWelcomeMode) {
-                // Outer user aura rings
-                for (ring in 1..3) {
-                    val ringRadius = baseRadius + ring * 18f
-                    val ringAlpha = (0.35f / ring) * nodeAlpha
-                    drawCircle(
-                        color = AnimationConstants.ElectricBlue.copy(alpha = ringAlpha),
-                        radius = ringRadius,
-                        center = center,
-                        style = Stroke(width = 2f)
-                    )
-                }
-                return@forEach
-            }
-
-            // Outer Radial Glow Halo
+        // Outer Starlight Halo for Discovered / Seed Stars
+        if (star.isDiscovered || star.id == 0 || star.isMigrating) {
             drawCircle(
-                color = node.glowColor.copy(alpha = 0.25f * nodeAlpha),
-                radius = baseRadius * 2.6f,
+                color = AnimationConstants.StarlightSilverGlow.copy(alpha = 0.30f * starAlpha),
+                radius = radius * 2.8f,
                 center = center
             )
+        }
 
-            // Halo Rings
-            for (r in 1..node.haloRingCount) {
-                val ringRadius = baseRadius * (1.3f + r * 0.45f)
-                val ringAlpha = (0.28f / r) * nodeAlpha
-                drawCircle(
-                    color = node.glowColor.copy(alpha = ringAlpha),
-                    radius = ringRadius,
-                    center = center,
-                    style = Stroke(width = 1.2f)
-                )
-            }
+        // Solid Star Core
+        drawCircle(
+            color = AnimationConstants.StarlightWhite.copy(alpha = starAlpha),
+            radius = radius,
+            center = center
+        )
 
-            // Solid Core Node
+        // Subtle Inner Starlight Sparkle
+        if (star.id % 3 == 0) {
             drawCircle(
-                color = node.glowColor.copy(alpha = nodeAlpha),
-                radius = baseRadius,
-                center = center
-            )
-
-            // Inner Highlight Spot
-            drawCircle(
-                color = AnimationConstants.SoftWhite.copy(alpha = 0.85f * nodeAlpha),
-                radius = baseRadius * 0.35f,
-                center = Offset(center.x - baseRadius * 0.25f, center.y - baseRadius * 0.25f)
+                color = Color.White.copy(alpha = (starAlpha * 0.9f).coerceIn(0f, 1f)),
+                radius = radius * 0.4f,
+                center = Offset(center.x - radius * 0.2f, center.y - radius * 0.2f)
             )
         }
     }

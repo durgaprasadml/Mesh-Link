@@ -7,43 +7,43 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
 /**
- * Mutable state object representing a single node in the animated mesh network.
- * Pre-allocated to avoid garbage collection pressure during frame rendering.
+ * Pre-allocated star node object representing a star in the constellation universe.
+ * Encapsulates independent twinkling parameters, wave discovery progress,
+ * and procedural migration targets for constellation text formation.
  */
 class AnimatedMeshNode(
     val id: Int,
-    val xRatio: Float,
-    val yRatio: Float,
-    val targetXRatio: Float = xRatio,
-    val targetYRatio: Float = yRatio,
-    val radiusDp: Float,
-    val glowColor: Color,
-    val pulsePhase: Float,
-    val pulseSpeed: Float,
-    val floatNoiseOffsetX: Float,
-    val floatNoiseOffsetY: Float,
-    val appearDelay: Float,
-    val haloRingCount: Int = 2,
+    val startXRatio: Float,
+    val startYRatio: Float,
+    var targetXRatio: Float = startXRatio,
+    var targetYRatio: Float = startYRatio,
+    var radiusDp: Float = 2.5f,
+    val glowColor: Color = AnimationConstants.StarlightSilver,
+    val pulsePhase: Float = 0f,
+    val pulseSpeed: Float = 1.0f,
+    val twinklePhase: Float = 0f,
+    val twinkleSpeed: Float = 1.0f,
+    val baseBrightness: Float = 0.4f,
+    val isMigrating: Boolean = false,
+    val migrationOrder: Float = 0f,
     val isUserNode: Boolean = false
 ) {
-    // Computed screen pixel coordinates (updated during layout/physics tick)
+    // Computed pixel coordinates on screen
     var currentX by mutableFloatStateOf(0f)
     var currentY by mutableFloatStateOf(0f)
 
-    // Dynamic animation parameters
-    var alpha by mutableFloatStateOf(0f)
-    var scale by mutableFloatStateOf(1f)
-    var breathingOffset by mutableFloatStateOf(0f)
-    var radarWaveProgress by mutableFloatStateOf(0f)
-    var isRadarActive by mutableStateOf(false)
-    var brightness by mutableFloatStateOf(1f)
+    // Dynamic animation states
+    var alpha by mutableFloatStateOf(0.3f)
+    var currentBrightness by mutableFloatStateOf(baseBrightness)
+    var isDiscovered by mutableStateOf(false)
+    var discoveryProgress by mutableFloatStateOf(0f)
+    var pulseIntensity by mutableFloatStateOf(0f)
 
     fun reset() {
-        alpha = 0f
-        scale = 1f
-        breathingOffset = 0f
-        radarWaveProgress = 0f
-        isRadarActive = false
-        brightness = 1f
+        alpha = 0.3f
+        currentBrightness = baseBrightness
+        isDiscovered = false
+        discoveryProgress = 0f
+        pulseIntensity = 0f
     }
 }

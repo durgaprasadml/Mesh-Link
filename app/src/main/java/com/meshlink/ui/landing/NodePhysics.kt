@@ -1,158 +1,109 @@
 package com.meshlink.ui.landing
 
-import androidx.compose.ui.graphics.Color
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * Organic graph generator and physics simulation manager.
- * Generates procedural node positions, handles harmonic floating noise,
- * and interpolates node positions towards logo targets in Phase 8.
+ * Starfield physics generator and constellation migration manager.
+ * Generates 140 independent star nodes, handles organic floating noise and night-sky twinkling,
+ * and interpolates star migration into procedural constellation text points ("WELCOME TO MESH LINK").
  */
 object NodePhysics {
 
     fun generateNodes(isWelcomeMode: Boolean): List<AnimatedMeshNode> {
         val nodes = mutableListOf<AnimatedMeshNode>()
 
-        // Logo target anchors (normalized x,y 0.0..1.0)
-        val logoAnchors = listOf(
-            Pair(0.50f, 0.42f), // 0: Center / User Node
-            Pair(0.50f, 0.28f), // 1: Top
-            Pair(0.64f, 0.35f), // 2: Top Right
-            Pair(0.64f, 0.51f), // 3: Bottom Right
-            Pair(0.50f, 0.58f), // 4: Bottom
-            Pair(0.36f, 0.51f), // 5: Bottom Left
-            Pair(0.36f, 0.35f), // 6: Top Left
-            Pair(0.74f, 0.26f), // 7: Satellite Top Right
-            Pair(0.76f, 0.60f), // 8: Satellite Bottom Right
-            Pair(0.24f, 0.60f), // 9: Satellite Bottom Left
-            Pair(0.26f, 0.26f), // 10: Satellite Top Left
-            Pair(0.50f, 0.16f), // 11: High North
-            Pair(0.50f, 0.70f)  // 12: Low South
-        )
+        // 1. Generate procedural constellation layout points (35-40 stroke anchor points)
+        val constellationLayout = ConstellationTextLayout.generateLayout()
+        val textPoints = constellationLayout.points
 
-        // Seeded random for unique graph layout each launch
-        val seed = System.currentTimeMillis()
+        val seed = 42L
         val random = Random(seed)
 
-        // Node 0: Central User Node (or central hub)
+        val totalStars = AnimationConstants.TOTAL_STAR_COUNT // 140 stars
+
+        // Node 0: Seed Star / User Avatar Node
         nodes.add(
             AnimatedMeshNode(
                 id = 0,
-                xRatio = 0.50f,
-                yRatio = 0.44f,
-                targetXRatio = logoAnchors[0].first,
-                targetYRatio = logoAnchors[0].second,
-                radiusDp = if (isWelcomeMode) AnimationConstants.USER_NODE_RADIUS_DP else 14f,
-                glowColor = AnimationConstants.ElectricBlue,
+                startXRatio = 0.50f,
+                startYRatio = 0.44f,
+                targetXRatio = 0.50f,
+                targetYRatio = 0.44f,
+                radiusDp = if (isWelcomeMode) AnimationConstants.USER_AVATAR_STAR_RADIUS_DP else AnimationConstants.SEED_STAR_RADIUS_DP,
+                glowColor = AnimationConstants.StarlightWhite,
                 pulsePhase = 0f,
                 pulseSpeed = 1.2f,
-                floatNoiseOffsetX = 0f,
-                floatNoiseOffsetY = 0f,
-                appearDelay = 0.05f,
-                haloRingCount = 3,
+                twinklePhase = 0f,
+                twinkleSpeed = 0.5f,
+                baseBrightness = 0.95f,
+                isMigrating = false,
+                migrationOrder = 0f,
                 isUserNode = isWelcomeMode
             )
         )
 
-        // Generate surrounding regular nodes
-        val colors = listOf(
-            AnimationConstants.Cyan,
-            AnimationConstants.ElectricBlue,
-            AnimationConstants.Teal,
-            AnimationConstants.PurpleAccent
-        )
+        // 2. Map procedural text points to 20-30% of star nodes (migrating stars)
+        textPoints.forEachIndexed { idx, point ->
+            val nodeId = idx + 1
+            // Scatter starting floating position across night sky
+            val startX = (0.10f + random.nextFloat() * 0.80f).coerceIn(0.08f, 0.92f)
+            val startY = (0.12f + random.nextFloat() * 0.76f).coerceIn(0.10f, 0.90f)
 
-        val totalRegularNodes = AnimationConstants.REGULAR_NODE_COUNT
-        for (i in 1 until totalRegularNodes) {
-            val anchor = logoAnchors.getOrElse(i) {
-                val angle = (i.toFloat() / totalRegularNodes) * 2f * Math.PI.toFloat()
-                val rad = 0.25f + random.nextFloat() * 0.20f
-                Pair(
-                    (0.50f + cos(angle.toDouble()).toFloat() * rad).coerceIn(0.12f, 0.88f),
-                    (0.44f + sin(angle.toDouble()).toFloat() * rad).coerceIn(0.15f, 0.78f)
+            // Letter emergence order (W -> WE -> WEL -> WELCOME -> WELCOME TO -> MESH LINK)
+            val order = (point.letterIndex.toFloat() / 16f)
+
+            nodes.add(
+                AnimatedMeshNode(
+                    id = nodeId,
+                    startXRatio = startX,
+                    startYRatio = startY,
+                    targetXRatio = point.xRatio,
+                    targetYRatio = point.yRatio,
+                    radiusDp = 2.2f + random.nextFloat() * 1.5f,
+                    glowColor = AnimationConstants.StarlightSilver,
+                    pulsePhase = random.nextFloat() * 2f * Math.PI.toFloat(),
+                    pulseSpeed = 0.8f + random.nextFloat() * 0.8f,
+                    twinklePhase = random.nextFloat() * 2f * Math.PI.toFloat(),
+                    twinkleSpeed = 0.6f + random.nextFloat() * 1.4f,
+                    baseBrightness = 0.35f + random.nextFloat() * 0.45f,
+                    isMigrating = true,
+                    migrationOrder = order,
+                    isUserNode = false
                 )
-            }
+            )
+        }
 
-            // Procedural offset for floating start position
-            val startX = (anchor.first + (random.nextFloat() - 0.5f) * 0.18f).coerceIn(0.10f, 0.90f)
-            val startY = (anchor.second + (random.nextFloat() - 0.5f) * 0.18f).coerceIn(0.12f, 0.82f)
-
-            val delay = 0.08f + (i.toFloat() / totalRegularNodes) * 0.32f
-            val radius = AnimationConstants.MIN_NODE_RADIUS_DP + random.nextFloat() * (AnimationConstants.MAX_NODE_RADIUS_DP - AnimationConstants.MIN_NODE_RADIUS_DP)
+        // 3. Generate remaining 70-80% background starfield nodes (stationary / floating stars)
+        val currentMigratingCount = nodes.size
+        for (i in currentMigratingCount until totalStars) {
+            val starX = (random.nextFloat()).coerceIn(0.02f, 0.98f)
+            val starY = (random.nextFloat()).coerceIn(0.02f, 0.98f)
+            val radius = AnimationConstants.MIN_STAR_RADIUS_DP + random.nextFloat() * (AnimationConstants.MAX_STAR_RADIUS_DP - AnimationConstants.MIN_STAR_RADIUS_DP)
 
             nodes.add(
                 AnimatedMeshNode(
                     id = i,
-                    xRatio = startX,
-                    yRatio = startY,
-                    targetXRatio = anchor.first,
-                    targetYRatio = anchor.second,
+                    startXRatio = starX,
+                    startYRatio = starY,
+                    targetXRatio = starX,
+                    targetYRatio = starY,
                     radiusDp = radius,
-                    glowColor = colors[i % colors.size],
+                    glowColor = AnimationConstants.StarlightSilver,
                     pulsePhase = random.nextFloat() * 2f * Math.PI.toFloat(),
-                    pulseSpeed = 0.8f + random.nextFloat() * 0.8f,
-                    floatNoiseOffsetX = random.nextFloat() * 100f,
-                    floatNoiseOffsetY = random.nextFloat() * 100f,
-                    appearDelay = delay,
-                    haloRingCount = if (i % 3 == 0) 2 else 1,
+                    pulseSpeed = 0.5f + random.nextFloat() * 1.0f,
+                    twinklePhase = random.nextFloat() * 2f * Math.PI.toFloat(),
+                    twinkleSpeed = 0.4f + random.nextFloat() * 1.8f,
+                    baseBrightness = 0.15f + random.nextFloat() * 0.55f,
+                    isMigrating = false,
+                    migrationOrder = 1.0f,
                     isUserNode = false
                 )
             )
         }
 
         return nodes
-    }
-
-    fun generateAmbientDust(): List<AmbientDustParticle> {
-        val random = Random(42)
-        val particles = mutableListOf<AmbientDustParticle>()
-        for (i in 0 until AnimationConstants.AMBIENT_DUST_PARTICLE_COUNT) {
-            particles.add(
-                AmbientDustParticle(
-                    xRatio = random.nextFloat(),
-                    yRatio = random.nextFloat(),
-                    sizeDp = 1.2f + random.nextFloat() * 2.8f,
-                    speedX = (random.nextFloat() - 0.5f) * 0.03f,
-                    speedY = (random.nextFloat() - 0.5f) * 0.03f,
-                    baseAlpha = 0.15f + random.nextFloat() * 0.45f
-                )
-            )
-        }
-        return particles
-    }
-
-    fun generateDataPackets(nodes: List<AnimatedMeshNode>): List<DataPacket> {
-        val packets = mutableListOf<DataPacket>()
-        val random = Random(123)
-        val colors = listOf(
-            AnimationConstants.Cyan,
-            AnimationConstants.ElectricBlue,
-            AnimationConstants.Teal,
-            AnimationConstants.PurpleAccent
-        )
-
-        for (i in 0 until AnimationConstants.PACKET_COUNT) {
-            val fromIndex = random.nextInt(nodes.size)
-            var toIndex = random.nextInt(nodes.size)
-            if (toIndex == fromIndex) {
-                toIndex = (fromIndex + 1) % nodes.size
-            }
-
-            packets.add(
-                DataPacket(
-                    id = i,
-                    fromNodeId = fromIndex,
-                    toNodeId = toIndex,
-                    speed = 0.4f + random.nextFloat() * 0.6f,
-                    color = colors[i % colors.size],
-                    sizeDp = 2.5f + random.nextFloat() * 2.5f,
-                    delayProgress = 0.35f + (i.toFloat() / AnimationConstants.PACKET_COUNT) * 0.30f
-                )
-            )
-        }
-        return packets
     }
 
     fun updatePositions(
@@ -163,41 +114,68 @@ object NodePhysics {
         overallProgress: Float,
         reduceMotion: Boolean
     ) {
-        val logoProgress = if (overallProgress > AnimationConstants.PHASE_8_LOGO_EMERGENCE_END - 0.15f) {
-            ((overallProgress - (AnimationConstants.PHASE_8_LOGO_EMERGENCE_END - 0.15f)) / 0.15f).coerceIn(0f, 1f)
+        val timeSec = timeMs / 1000f
+
+        // Constellation Migration progress (Phase 4: 0.50f -> 0.72f)
+        val globalMigrationProgress = if (overallProgress >= AnimationConstants.PHASE_3_WAVE_PROPAGATION_END) {
+            ((overallProgress - AnimationConstants.PHASE_3_WAVE_PROPAGATION_END) / (AnimationConstants.PHASE_4_CONSTELLATION_MIGRATION_END - AnimationConstants.PHASE_3_WAVE_PROPAGATION_END)).coerceIn(0f, 1f)
         } else {
             0f
         }
 
-        val timeSec = timeMs / 1000f
+        nodes.forEach { star ->
+            // Independent star twinkling
+            val twinkleOffset = sin(timeSec * star.twinkleSpeed + star.twinklePhase).toFloat() * 0.22f
+            star.currentBrightness = (star.baseBrightness + twinkleOffset).coerceIn(0.10f, 1.00f)
 
-        nodes.forEach { node ->
-            val baseX = width * node.xRatio
-            val baseY = height * node.yRatio
-            val targetX = width * node.targetXRatio
-            val targetY = height * node.targetYRatio
+            val baseX = width * star.startXRatio
+            val baseY = height * star.startYRatio
+            val targetX = width * star.targetXRatio
+            val targetY = height * star.targetYRatio
 
             if (reduceMotion) {
-                node.currentX = lerp(baseX, targetX, logoProgress)
-                node.currentY = lerp(baseY, targetY, logoProgress)
+                if (star.isMigrating) {
+                    star.currentX = lerp(baseX, targetX, globalMigrationProgress)
+                    star.currentY = lerp(baseY, targetY, globalMigrationProgress)
+                } else {
+                    star.currentX = baseX
+                    star.currentY = baseY
+                }
             } else {
-                // Procedural floating noise
-                val driftX = sin(timeSec * node.pulseSpeed + node.floatNoiseOffsetX).toFloat() * 12f
-                val driftY = cos(timeSec * 0.8f * node.pulseSpeed + node.floatNoiseOffsetY).toFloat() * 12f
+                // Organic floating noise drift for starfield stars
+                val driftX = sin(timeSec * star.pulseSpeed + star.twinklePhase).toFloat() * 8f
+                val driftY = cos(timeSec * 0.7f * star.pulseSpeed + star.twinklePhase * 1.5f).toFloat() * 8f
 
-                val floatedX = baseX + driftX
-                val floatedY = baseY + driftY
+                val floatedStartX = baseX + driftX
+                val floatedStartY = baseY + driftY
 
-                node.currentX = lerp(floatedX, targetX, logoProgress)
-                node.currentY = lerp(floatedY, targetY, logoProgress)
+                if (star.isMigrating) {
+                    // Staggered migration per letter (W -> WE -> WEL ...)
+                    val starMigrationProgress = if (globalMigrationProgress > star.migrationOrder * 0.5f) {
+                        ((globalMigrationProgress - star.migrationOrder * 0.5f) / 0.50f).coerceIn(0f, 1f)
+                    } else {
+                        0f
+                    }
+
+                    val easedProgress = smoothStep(starMigrationProgress)
+                    star.currentX = lerp(floatedStartX, targetX + driftX * 0.2f, easedProgress)
+                    star.currentY = lerp(floatedStartY, targetY + driftY * 0.2f, easedProgress)
+                } else {
+                    star.currentX = floatedStartX
+                    star.currentY = floatedStartY
+                }
             }
 
-            // Breathing scale & pulse
-            node.breathingOffset = sin(timeSec * 2.5f + node.pulsePhase).toFloat() * 0.15f
+            // Pulse factor
+            star.pulseIntensity = (sin(timeSec * 3f + star.pulsePhase).toFloat() * 0.15f).coerceIn(-0.2f, 0.2f)
         }
     }
 
     private fun lerp(start: Float, stop: Float, fraction: Float): Float {
         return start + (stop - start) * fraction
+    }
+
+    private fun smoothStep(t: Float): Float {
+        return t * t * (3 - 2 * t)
     }
 }

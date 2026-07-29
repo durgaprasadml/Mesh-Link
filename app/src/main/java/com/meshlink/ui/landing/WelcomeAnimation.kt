@@ -27,7 +27,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -40,8 +39,9 @@ import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
 /**
- * Glassmorphic Welcome Overlay for First-Time Users (Phase 7 User Joins).
- * Displays user's selected profile picture, "Welcome, <DisplayName>", and "Welcome to Mesh Link".
+ * Glassmorphic Welcome Overlay for First-Time Users (First-Time Seed Node Flow).
+ * Displays user's selected profile picture as the initial glowing seed star,
+ * surrounding network waves spreading outward, and the welcome message card.
  */
 @Composable
 fun WelcomeAnimation(
@@ -65,9 +65,9 @@ fun WelcomeAnimation(
         contentAlignment = Alignment.Center
     ) {
         AnimatedVisibility(
-            visible = visible && progress in 0.55f..0.96f,
-            enter = fadeIn(tween(400)) + scaleIn(tween(500)),
-            exit = fadeOut(tween(300)) + scaleOut(tween(300))
+            visible = visible && progress in 0.20f..0.85f,
+            enter = fadeIn(tween(500)) + scaleIn(tween(500)),
+            exit = fadeOut(tween(400)) + scaleOut(tween(400))
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -75,12 +75,12 @@ fun WelcomeAnimation(
                     .scale(scaleFactor)
                     .padding(horizontal = MeshTheme.spacing.large)
             ) {
-                // Central User Profile Avatar with Glowing Ring Container
+                // Central Seed Star User Profile Avatar
                 Box(
-                    modifier = Modifier.size(110.dp),
+                    modifier = Modifier.size(105.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Outer glowing halo
+                    // Outer starlight halo
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -88,23 +88,23 @@ fun WelcomeAnimation(
                             .background(
                                 Brush.radialGradient(
                                     colors = listOf(
-                                        AnimationConstants.ElectricBlue.copy(alpha = 0.5f),
-                                        AnimationConstants.Cyan.copy(alpha = 0.2f),
+                                        AnimationConstants.StarlightWhiteGlow.copy(alpha = 0.5f),
+                                        AnimationConstants.StarlightSilverGlow.copy(alpha = 0.2f),
                                         Color.Transparent
                                     )
                                 )
                             )
                     )
 
-                    // Avatar border ring
+                    // Starlight border ring
                     Box(
                         modifier = Modifier
-                            .size(96.dp)
+                            .size(90.dp)
                             .clip(CircleShape)
                             .border(
-                                width = 3.dp,
+                                width = 2.5.dp,
                                 brush = Brush.linearGradient(
-                                    listOf(AnimationConstants.Cyan, AnimationConstants.ElectricBlue)
+                                    listOf(AnimationConstants.StarlightWhite, AnimationConstants.StarlightSilver)
                                 ),
                                 shape = CircleShape
                             ),
@@ -113,39 +113,39 @@ fun WelcomeAnimation(
                         UserAvatarImage(
                             avatarUri = avatarUri,
                             displayName = displayName,
-                            size = 90.dp
+                            size = 84.dp
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.large))
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
 
-                // Glassmorphic Welcome Text Card
+                // Glassmorphic Welcome Card
                 Surface(
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(20.dp),
                     color = AnimationConstants.DimBackground,
-                    tonalElevation = 8.dp,
-                    shadowElevation = 12.dp,
+                    tonalElevation = 6.dp,
+                    shadowElevation = 10.dp,
                     modifier = Modifier
                         .border(
                             width = 1.dp,
                             brush = Brush.linearGradient(
                                 listOf(
-                                    AnimationConstants.SoftWhite.copy(alpha = 0.25f),
-                                    AnimationConstants.ElectricBlue.copy(alpha = 0.15f)
+                                    AnimationConstants.StarlightSilver.copy(alpha = 0.3f),
+                                    AnimationConstants.StarlightWhite.copy(alpha = 0.1f)
                                 )
                             ),
-                            shape = RoundedCornerShape(24.dp)
+                            shape = RoundedCornerShape(20.dp)
                         )
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp)
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp)
                     ) {
                         Text(
                             text = "Welcome,",
                             style = MaterialTheme.typography.titleMedium,
-                            color = AnimationConstants.Cyan,
+                            color = AnimationConstants.StarlightSilver,
                             letterSpacing = 1.2.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -154,17 +154,17 @@ fun WelcomeAnimation(
 
                         Text(
                             text = displayName.ifBlank { "Explorer" },
-                            style = MaterialTheme.typography.headlineLarge,
-                            color = AnimationConstants.SoftWhite,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = AnimationConstants.StarlightWhite,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = "Welcome to Mesh Link",
-                            style = MaterialTheme.typography.bodyLarge,
+                            text = "You are now part of Mesh Link",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = AnimationConstants.SoftWhiteTransparent,
                             textAlign = TextAlign.Center
                         )

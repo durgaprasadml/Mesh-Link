@@ -8,10 +8,10 @@ import org.junit.Test
 class LandingPhysicsTest {
 
     @Test
-    fun testGenerateNodesCountAndUserNode() {
+    fun testGenerateStarNodesAndUserSeedNode() {
         val nodes = NodePhysics.generateNodes(isWelcomeMode = true)
-        
-        assertEquals(AnimationConstants.REGULAR_NODE_COUNT, nodes.size)
+
+        assertEquals(AnimationConstants.TOTAL_STAR_COUNT, nodes.size)
         val userNode = nodes.firstOrNull { it.isUserNode }
         assertNotNull(userNode)
         assertTrue(userNode!!.isUserNode)
@@ -19,22 +19,25 @@ class LandingPhysicsTest {
     }
 
     @Test
-    fun testGenerateAmbientDustParticles() {
-        val dust = NodePhysics.generateAmbientDust()
-        assertEquals(AnimationConstants.AMBIENT_DUST_PARTICLE_COUNT, dust.size)
+    fun testConstellationTextLayoutPointsAndEdges() {
+        val layout = ConstellationTextLayout.generateLayout()
+        assertTrue(layout.points.isNotEmpty())
+        assertTrue(layout.edges.isNotEmpty())
     }
 
     @Test
-    fun testBuildConnections() {
+    fun testBuildWaveConnectionsAndConstellationStrokes() {
         val nodes = NodePhysics.generateNodes(isWelcomeMode = false)
         val connectionAnimator = MeshConnectionAnimator()
         connectionAnimator.buildConnections(nodes)
 
         assertTrue(connectionAnimator.links.isNotEmpty())
+        val constellationStrokes = connectionAnimator.links.filter { it.isConstellationStroke }
+        assertTrue(constellationStrokes.isNotEmpty())
     }
 
     @Test
-    fun testNodePhysicsPositionUpdate() {
+    fun testIndependentStarTwinklingAndMigrationPositionUpdate() {
         val nodes = NodePhysics.generateNodes(isWelcomeMode = false)
         val initialX = nodes[1].currentX
         val initialY = nodes[1].currentY
@@ -44,10 +47,11 @@ class LandingPhysicsTest {
             width = 1000f,
             height = 2000f,
             timeMs = 1000L,
-            overallProgress = 0.5f,
+            overallProgress = 0.6f,
             reduceMotion = false
         )
 
         assertTrue(nodes[1].currentX != initialX || nodes[1].currentY != initialY)
+        assertTrue(nodes[1].currentBrightness > 0f)
     }
 }

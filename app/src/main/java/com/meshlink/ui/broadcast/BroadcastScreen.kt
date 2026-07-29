@@ -243,11 +243,19 @@ private fun BroadcastBubble(msg: Message) {
                 .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
         ) {
             if (!isMe) {
-                Text(
-                    text = senderName,
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelSmall
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    com.meshlink.ui.components.UserAvatarImage(
+                        avatarUri = null,
+                        displayName = senderName,
+                        size = 24.dp
+                    )
+                    Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+                    Text(
+                        text = senderName,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
             }
             Text(text = msg.text, color = textColor, style = MaterialTheme.typography.bodyMedium)

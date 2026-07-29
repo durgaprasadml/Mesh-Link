@@ -133,29 +133,11 @@ fun MeshDeviceCard(
             ) {
                 // Avatar with Connection Dot
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (device.isConnected) MaterialTheme.colorScheme.primaryContainer 
-                                else MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val initials = displayName.split(" ")
-                            .mapNotNull { it.firstOrNull()?.toString() }
-                            .take(2)
-                            .joinToString("")
-                            .uppercase()
-
-                        Text(
-                            text = initials.ifBlank { "N" },
-                            color = if (device.isConnected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                        com.meshlink.ui.components.UserAvatarImage(
+                            avatarUri = device.avatarUri,
+                            displayName = displayName,
+                            size = 52.dp
                         )
-                    }
 
                     if (device.isConnected) {
                         Box(

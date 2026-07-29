@@ -14,5 +14,6 @@ data class BleDevice(
     val capabilities: Byte = 0,
     val isConnected: Boolean = false,
     val distanceMeters: Double? = null,
-    val distanceConfidence: String? = null
+    val distanceConfidence: String? = null,
+    val avatarUri: String? = null
 )

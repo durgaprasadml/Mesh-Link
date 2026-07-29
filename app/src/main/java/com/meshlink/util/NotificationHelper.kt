@@ -31,7 +31,13 @@ object NotificationHelper {
         currentChatId = chatId
     }
 
-    fun showMessageNotification(context: Context, senderId: String, senderName: String, message: String) {
+    fun showMessageNotification(
+        context: Context,
+        senderId: String,
+        senderName: String,
+        message: String,
+        avatarUri: String? = null
+    ) {
         if (isAppInForeground) {
             if (currentChatId == senderId) {
                 // User Currently Viewing The Same Chat: Do NOT show notification.
@@ -69,15 +75,33 @@ object NotificationHelper {
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(senderName)
             .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .build()
 
-        notificationManager.notify(senderId.hashCode(), notification)
+        // Optional Avatar Bitmap LargeIcon
+        val resId = com.meshlink.ui.profile.AvatarAssets.getAvatarResId(avatarUri)
+        if (resId != null) {
+            try {
+                val drawable = androidx.core.content.ContextCompat.getDrawable(context, resId)
+                if (drawable != null) {
+                    val bitmap = android.graphics.Bitmap.createBitmap(
+                        drawable.intrinsicWidth.coerceAtLeast(1),
+                        drawable.intrinsicHeight.coerceAtLeast(1),
+                        android.graphics.Bitmap.Config.ARGB_8888
+                    )
+                    val canvas = android.graphics.Canvas(bitmap)
+                    drawable.setBounds(0, 0, canvas.width, canvas.height)
+                    drawable.draw(canvas)
+                    builder.setLargeIcon(bitmap)
+                }
+            } catch (_: Exception) {}
+        }
+
+        notificationManager.notify(senderId.hashCode(), builder.build())
     }
 }

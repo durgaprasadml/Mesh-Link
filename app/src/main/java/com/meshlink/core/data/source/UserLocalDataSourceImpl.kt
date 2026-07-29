@@ -69,6 +69,10 @@ class UserLocalDataSourceImpl @Inject constructor(
         return userDao.getLocalUser()
     }
 
+    override fun observeLocalUser(): Flow<UserEntity?> {
+        return userDao.observeLocalUser()
+    }
+
     override suspend fun clearLocalData() {
         dataStore.edit { preferences ->
             preferences.clear()

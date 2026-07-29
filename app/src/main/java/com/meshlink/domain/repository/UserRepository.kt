@@ -14,21 +14,23 @@ import kotlinx.coroutines.flow.Flow
 interface UserRepository {
 
     suspend fun getLocalUser(): User?
+    val localUser: Flow<User?>
     suspend fun updateUserName(name: String)
     suspend fun updateProfile(name: String, aboutMe: String?, avatarUri: String?)
     
     val hasProfile: Flow<Boolean>
 
-    @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name)"))
-    suspend fun createProfile(name: String): Result<Unit>
+    @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name, avatarUri)"))
+    suspend fun createProfile(name: String, avatarUri: String? = null): Result<Unit>
 
     /**
      * Creates a new local user profile.
      *
      * @param name The user's name.
+     * @param avatarUri The optional profile image URI or avatar string.
      * @return [MeshResult.Success] on success, [MeshResult.Error] on IO failure.
      */
-    suspend fun setupProfile(name: String): MeshResult<Unit>
+    suspend fun setupProfile(name: String, avatarUri: String? = null): MeshResult<Unit>
     
     val isEncryptionEnabled: Flow<Boolean>
     suspend fun setEncryptionEnabled(enabled: Boolean)

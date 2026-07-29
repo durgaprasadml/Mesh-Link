@@ -9,11 +9,12 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class ProfileUiState(
-    val isLoading: Boolean = true,
+    val isLoading: Boolean = false,
     val user: User? = null,
     val isSaving: Boolean = false,
     val saveError: String? = null
@@ -28,14 +29,14 @@ class ProfileViewModel @Inject constructor(
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
     init {
-        loadUserProfile()
+        observeUserProfile()
     }
 
-    private fun loadUserProfile() {
+    private fun observeUserProfile() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            val user = userRepository.getLocalUser()
-            _uiState.update { it.copy(isLoading = false, user = user) }
+            userRepository.localUser.collectLatest { user ->
+                _uiState.update { it.copy(user = user) }
+            }
         }
     }
 
@@ -44,9 +45,7 @@ class ProfileViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true, saveError = null) }
             try {
                 userRepository.updateProfile(name, aboutMe, avatarUri)
-                // Reload to get updated user
-                val user = userRepository.getLocalUser()
-                _uiState.update { it.copy(isSaving = false, user = user) }
+                _uiState.update { it.copy(isSaving = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSaving = false, saveError = e.message ?: "Failed to save profile") }
             }

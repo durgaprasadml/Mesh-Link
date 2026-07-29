@@ -16,6 +16,9 @@ interface UserDao {
     @Query("SELECT * FROM users LIMIT 1")
     suspend fun getLocalUser(): UserEntity?
 
+    @Query("SELECT * FROM users LIMIT 1")
+    fun observeLocalUser(): kotlinx.coroutines.flow.Flow<UserEntity?>
+
     @Query("DELETE FROM users")
     suspend fun clearUsers()
 }

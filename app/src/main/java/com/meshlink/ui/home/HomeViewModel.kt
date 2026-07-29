@@ -9,10 +9,8 @@ import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -30,36 +28,24 @@ class HomeViewModel @Inject constructor(
     chatDao: ChatDao
 ) : ViewModel() {
 
-    private val _user = MutableStateFlow<User?>(null)
-    val user: StateFlow<User?> = _user.asStateFlow()
+    val user: StateFlow<User?> = userRepository.localUser
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val uiState: StateFlow<HomeUiState> = combine(
-        _user,
+        user,
         meshRepository.scannedDevices,
         chatDao.getAllChats()
-    ) { user, scannedDevices, chats ->
+    ) { localUser, scannedDevices, chats ->
         HomeUiState(
-            user = user,
+            user = localUser,
             nearbyDevices = scannedDevices.values.toList().sortedByDescending { it.rssi },
             unreadChatsCount = chats.sumOf { it.unreadCount }
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
 
-    init {
-        loadUser()
-    }
-
     fun updateUserName(name: String) {
         viewModelScope.launch {
             userRepository.updateUserName(name)
-            loadUser()
         }
     }
-
-    fun loadUser() {
-        viewModelScope.launch {
-            _user.value = userRepository.getLocalUser()
-        }
-    }
-
 }

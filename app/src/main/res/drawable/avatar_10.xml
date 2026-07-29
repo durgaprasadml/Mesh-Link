@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#E9C46A"
+        android:pathData="M48,0A48,48 0 1,1 48,96A48,48 0 1,1 48,0Z" />
+    
+    <!-- Body / Clothes -->
+    <path
+        android:fillColor="#240046"
+        android:pathData="M24,96 C24,76 34,68 48,68 C62,68 72,76 72,96 Z" />
+    <!-- Head / Neck -->
+    <path
+        android:fillColor="#DBA374"
+        android:pathData="M32,34 C32,24 64,24 64,34 C64,56 56,66 48,66 C40,66 32,56 32,34 Z" />
+    <!-- Hair (Afro) -->
+    <path
+        android:fillColor="#A9A9A9"
+        android:pathData="M26,30 C20,18 76,18 70,30 C76,38 72,44 68,44 L28,44 C24,44 20,38 26,30 Z" />
+    <!-- Eyes -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M40,42A2.5,2.5 0 1,1 45,42A2.5,2.5 0 1,1 40,42Z M51,42A2.5,2.5 0 1,1 56,42A2.5,2.5 0 1,1 51,42Z" />
+    <!-- Eyebrows -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M39,37 L46,37 L46,38.5 L39,38.5 Z M50,37 L57,37 L57,38.5 L50,38.5 Z" />
+    <!-- Smile -->
+    <path
+        android:fillColor="#C94A4A"
+        android:pathData="M43,53 C43,57 53,57 53,53 Z" />
+</vector>

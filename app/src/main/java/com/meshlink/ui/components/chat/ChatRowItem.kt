@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.meshlink.domain.model.Chat
+import androidx.compose.ui.unit.dp
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.MeshIdNormalizer
 import java.text.SimpleDateFormat
@@ -71,21 +72,12 @@ fun ChatRowItem(
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Avatar Box
-        Box(
-            modifier = Modifier
-                .size(MeshTheme.spacing.extraGiant - MeshTheme.spacing.mediumSmall) // 56dp standard avatar
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = displayInitial,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Medium
-            )
-        }
+        // Avatar
+        com.meshlink.ui.components.UserAvatarImage(
+            avatarUri = chat.avatarUri,
+            displayName = displayName,
+            size = 52.dp
+        )
 
         Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
 

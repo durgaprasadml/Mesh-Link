@@ -161,21 +161,11 @@ fun ChatDetailScreen(
                         Text("${uiState.selectedMessageIds.size} selected")
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(MeshTheme.spacing.extraHuge - MeshTheme.spacing.mediumSmall)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                val initial = viewModel.name.firstOrNull()?.uppercase() ?: "?"
-                                Text(
-                                    text = initial,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            com.meshlink.ui.components.UserAvatarImage(
+                                avatarUri = null,
+                                displayName = viewModel.name,
+                                size = 36.dp
+                            )
                             Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
                             Column {
                                 Text(

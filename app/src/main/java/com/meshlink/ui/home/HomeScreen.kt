@@ -116,22 +116,17 @@ fun HomeScreen(
                     // Profile Avatar (Click to navigate to Settings)
                     Box(
                         modifier = Modifier
-                            .size(MeshTheme.spacing.huge + MeshTheme.spacing.mediumSmall)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
                             .clickable(role = Role.Button, onClick = onNavigateToSettings)
                             .semantics(mergeDescendants = true) {
                                 role = Role.Button
                                 contentDescription = "Profile and Settings"
-                            },
-                        contentAlignment = Alignment.Center
+                            }
                     ) {
-                        val initial = uiState.user?.name?.firstOrNull()?.uppercase() ?: "U"
-                        Text(
-                            text = initial,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                        com.meshlink.ui.components.UserAvatarImage(
+                            avatarUri = uiState.user?.avatarUri,
+                            displayName = uiState.user?.name ?: "User",
+                            size = 40.dp
                         )
                     }
                 }

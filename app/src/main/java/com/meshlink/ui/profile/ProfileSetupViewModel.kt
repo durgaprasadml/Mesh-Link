@@ -2,6 +2,7 @@ package com.meshlink.ui.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.meshlink.domain.model.MeshResult
 import com.meshlink.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -38,11 +39,18 @@ class ProfileSetupViewModel @Inject constructor(
             initialValue = null
         )
 
+    private val _selectedAvatarUri = MutableStateFlow<String?>(null)
+    val selectedAvatarUri: StateFlow<String?> = _selectedAvatarUri.asStateFlow()
+
     private val _uiState = MutableStateFlow<ProfileSetupUiState>(ProfileSetupUiState.Idle)
     val uiState: StateFlow<ProfileSetupUiState> = _uiState.asStateFlow()
 
     private val _uiEvent = MutableSharedFlow<ProfileSetupEvent>(replay = 0)
     val uiEvent = _uiEvent.asSharedFlow()
+
+    fun setAvatarUri(uri: String?) {
+        _selectedAvatarUri.value = uri
+    }
 
     fun resetState() {
         _uiState.value = ProfileSetupUiState.Idle
@@ -56,13 +64,17 @@ class ProfileSetupViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _uiState.value = ProfileSetupUiState.Loading
-            val result = userRepository.createProfile(trimmedName)
-            if (result.isSuccess) {
-                _uiState.value = ProfileSetupUiState.Idle
-                _uiEvent.emit(ProfileSetupEvent.SetupSuccess)
-            } else {
-                _uiState.value = ProfileSetupUiState.Idle
-                _uiEvent.emit(ProfileSetupEvent.Error(result.exceptionOrNull()?.message ?: "Failed to create profile"))
+            val avatar = _selectedAvatarUri.value
+            val result = userRepository.setupProfile(trimmedName, avatar)
+            when (result) {
+                is MeshResult.Success -> {
+                    _uiState.value = ProfileSetupUiState.Idle
+                    _uiEvent.emit(ProfileSetupEvent.SetupSuccess)
+                }
+                is MeshResult.Error -> {
+                    _uiState.value = ProfileSetupUiState.Idle
+                    _uiEvent.emit(ProfileSetupEvent.Error(result.error.message ?: "Failed to create profile"))
+                }
             }
         }
     }

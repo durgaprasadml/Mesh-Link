@@ -34,7 +34,7 @@ class ProfileViewModelTest {
     @Test
     fun `init loads user profile into uiState`() = runTest(testDispatcher) {
         val user = User(meshId = "u_100", name = "Alice", aboutMe = "Developer")
-        coEvery { userRepository.getLocalUser() } returns user
+        every { userRepository.localUser } returns kotlinx.coroutines.flow.flowOf(user)
 
         viewModel = ProfileViewModel(userRepository)
         testScheduler.advanceUntilIdle()
@@ -48,7 +48,11 @@ class ProfileViewModelTest {
         val initialUser = User(meshId = "u_100", name = "Alice")
         val updatedUser = User(meshId = "u_100", name = "Alice Wonder", aboutMe = "Architect")
 
-        coEvery { userRepository.getLocalUser() } returnsMany listOf(initialUser, updatedUser)
+        val userFlow = kotlinx.coroutines.flow.MutableStateFlow<User?>(initialUser)
+        every { userRepository.localUser } returns userFlow
+        coEvery { userRepository.updateProfile(any(), any(), any()) } answers {
+            userFlow.value = updatedUser
+        }
 
         viewModel = ProfileViewModel(userRepository)
         testScheduler.advanceUntilIdle()
@@ -65,7 +69,7 @@ class ProfileViewModelTest {
     @Test
     fun `saveProfile handles failure and emits saveError`() = runTest(testDispatcher) {
         val initialUser = User(meshId = "u_100", name = "Alice")
-        coEvery { userRepository.getLocalUser() } returns initialUser
+        every { userRepository.localUser } returns kotlinx.coroutines.flow.flowOf(initialUser)
         coEvery { userRepository.updateProfile(any(), any(), any()) } throws RuntimeException("Database write failed")
 
         viewModel = ProfileViewModel(userRepository)
@@ -80,6 +84,7 @@ class ProfileViewModelTest {
 
     @Test
     fun `dismissError clears saveError state`() = runTest(testDispatcher) {
+        every { userRepository.localUser } returns kotlinx.coroutines.flow.flowOf(null)
         coEvery { userRepository.updateProfile(any(), any(), any()) } throws RuntimeException("Error")
         viewModel = ProfileViewModel(userRepository)
         testScheduler.advanceUntilIdle()

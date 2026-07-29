@@ -6,19 +6,23 @@ import com.meshlink.domain.model.User
 import com.meshlink.database.data.local.UserEntity
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 class UserRepositoryImpl @Inject constructor(
     private val localDataSource: UserLocalDataSource
 ) : UserRepository {
 
     override val hasProfile: Flow<Boolean> = localDataSource.hasProfile
+
+    override val localUser: Flow<User?> = localDataSource.observeLocalUser().map { entity ->
+        entity?.let { User(meshId = it.meshId, name = it.name, avatarUri = it.avatarUri, aboutMe = it.aboutMe) }
+    }
     
-    @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name)"))
-    override suspend fun createProfile(name: String): Result<Unit> {
+    @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name, avatarUri)"))
+    override suspend fun createProfile(name: String, avatarUri: String?): Result<Unit> {
         return try {
-            // Generate a random meshId and save local user
             val meshId = java.util.UUID.randomUUID().toString()
-            val user = UserEntity(meshId = meshId, name = name)
+            val user = UserEntity(meshId = meshId, name = name, avatarUri = avatarUri)
             localDataSource.insertUser(user)
             localDataSource.setProfileCreated(true)
             Result.success(Unit)
@@ -27,10 +31,10 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun setupProfile(name: String): com.meshlink.domain.model.MeshResult<Unit> {
+    override suspend fun setupProfile(name: String, avatarUri: String?): com.meshlink.domain.model.MeshResult<Unit> {
         return try {
             val meshId = java.util.UUID.randomUUID().toString()
-            val user = UserEntity(meshId = meshId, name = name)
+            val user = UserEntity(meshId = meshId, name = name, avatarUri = avatarUri)
             localDataSource.insertUser(user)
             localDataSource.setProfileCreated(true)
             com.meshlink.domain.model.MeshResult.Success(Unit)

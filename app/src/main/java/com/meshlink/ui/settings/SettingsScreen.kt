@@ -230,20 +230,11 @@ fun SettingsHome(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = userName.take(1).uppercase(),
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                                com.meshlink.ui.components.UserAvatarImage(
+                                    avatarUri = uiState.user?.avatarUri,
+                                    displayName = userName,
+                                    size = 64.dp
+                                )
                                 Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {

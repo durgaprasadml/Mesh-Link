@@ -39,7 +39,7 @@ class HomeViewModelTest {
     @Test
     fun `loadUser sets user state correctly`() = runTest {
         val userEntity = User("mesh_1", "John", "123")
-        coEvery { userRepository.getLocalUser() } returns userEntity
+        every { userRepository.localUser } returns flowOf(userEntity)
         every { meshRepository.scannedDevices } returns MutableStateFlow(emptyMap())
         every { chatDao.getAllChats() } returns flowOf(emptyList())
 
@@ -61,7 +61,7 @@ class HomeViewModelTest {
         val device = BleDevice("mesh_id", "TestDevice", "00:11:22", -50, 1000L)
         val chatEntity = ChatEntity("chat_1", "Chat 1", "msg_1", 1000L, unreadCount = 2)
         
-        coEvery { userRepository.getLocalUser() } returns userEntity
+        every { userRepository.localUser } returns flowOf(userEntity)
         val devicesFlow = MutableStateFlow(mapOf("00:11:22" to device))
         every { meshRepository.scannedDevices } returns devicesFlow
         every { chatDao.getAllChats() } returns flowOf(listOf(chatEntity))

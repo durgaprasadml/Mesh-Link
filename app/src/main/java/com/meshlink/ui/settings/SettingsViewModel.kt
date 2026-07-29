@@ -98,16 +98,8 @@ class SettingsViewModel @Inject constructor(
     private val _uiEvent = MutableSharedFlow<SettingsEvent>(replay = 0)
     val uiEvent = _uiEvent.asSharedFlow()
 
-    private val _user = MutableStateFlow<User?>(null)
-
-    init {
-        viewModelScope.launch {
-            _user.value = userRepository.getLocalUser()
-        }
-    }
-
     private val combinedState: Flow<SettingsUiState> = combine(
-        _user,
+        userRepository.localUser,
         combine(
             userRepository.isEncryptionEnabled,
             userRepository.isOnlineVisible,
@@ -218,7 +210,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 userRepository.updateUserName(name)
-                _user.value = userRepository.getLocalUser()
                 _uiEvent.emit(SettingsEvent.SuccessMessage("Profile updated"))
             } catch (e: Exception) {
                 _uiEvent.emit(SettingsEvent.Error("Failed to update profile"))

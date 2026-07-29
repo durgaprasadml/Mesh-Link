@@ -23,8 +23,14 @@ android {
         }
 
         ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+            abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
         }
+    }
+
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+        arg("room.incremental", "true")
+        arg("room.expandProjection", "true")
     }
 
     buildFeatures {
@@ -58,6 +64,10 @@ android {
     buildTypes {
         getByName("debug") {
             buildConfigField("Boolean", "LOGGING_ENABLED", "true")
+            // Disable PNG crunching in debug builds to speed up the build process
+            isCrunchPngs = false
+            // Speed up builds by avoiding split APKs in debug
+            extra["alwaysUpdateBuildId"] = false
         }
         create("benchmark") {
             initWith(getByName("release"))
@@ -96,6 +106,10 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        freeCompilerArgs += listOf(
+            "-P",
+            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true"
+        )
     }
     
     testOptions {
@@ -205,7 +219,6 @@ dependencies {
     
     // Hilt Testing
     testImplementation(libs.hilt.android.testing)
-    kspTest(libs.hilt.compiler)
     androidTestImplementation(libs.hilt.android.testing)
     kspAndroidTest(libs.hilt.compiler)
 

@@ -1,32 +1,40 @@
 package com.meshlink.ui.nearby
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.automirrored.outlined.BluetoothSearching
-import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.meshlink.ui.components.EmptyState
+import com.meshlink.ui.components.AnimatedErrorDialog
 import com.meshlink.ui.components.PermissionHandler
-import com.meshlink.ui.components.LoadingOverlay
 import com.meshlink.ui.components.nearby.MeshDeviceCard
+import com.meshlink.ui.components.nearby.MeshNetworkStatsBar
+import com.meshlink.ui.components.nearby.MeshScanningEmptyState
 import com.meshlink.ui.components.nearby.MeshTopologyCanvas
 import com.meshlink.ui.designsystem.theme.MeshTheme
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,16 +53,24 @@ fun NearbyDevicesScreen(
         var searchQuery by remember { mutableStateOf("") }
         var isSearchActive by remember { mutableStateOf(false) }
         var connectingToAddress by remember { mutableStateOf<String?>(null) }
+        var selectedDeviceAddress by remember { mutableStateOf<String?>(null) }
+
+        val haptic = LocalHapticFeedback.current
+        val listState = rememberLazyListState()
+        val coroutineScope = rememberCoroutineScope()
 
         val filteredDevices = remember(searchQuery, uiState.devices) {
             if (searchQuery.isBlank()) {
                 uiState.devices
             } else {
-                uiState.devices.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                uiState.devices.filter { 
+                    it.name.contains(searchQuery, ignoreCase = true) || 
+                    it.address.contains(searchQuery, ignoreCase = true)
+                }
             }
         }
 
-        com.meshlink.ui.components.AnimatedErrorDialog(
+        AnimatedErrorDialog(
             visible = uiState.errorMessage != null,
             title = "Discovery Error",
             message = uiState.errorMessage ?: "",
@@ -67,22 +83,32 @@ fun NearbyDevicesScreen(
         )
 
         Scaffold(
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
                     title = { 
-                        Text(
-                            text = "Mesh Network",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column {
+                            Text(
+                                text = "Nearby Mesh Network",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (uiState.isScanning) "Continuously discovering peers via BLE..." else "Mesh Active",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier.semantics { contentDescription = "Navigate back" }
+                        ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack, 
-                                contentDescription = "Back",
+                                contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onBackground
                             )
                         }
@@ -98,22 +124,44 @@ fun NearbyDevicesScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // Interactive Mesh Visualization Header
+                // Interactive Topology Visualization Canvas Header
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(0.35f)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                        .weight(0.38f)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
                     contentAlignment = Alignment.Center
                 ) {
                     MeshTopologyCanvas(
-                        devices = uiState.devices, // Always show all devices in the canvas, regardless of search filter
+                        devices = uiState.devices,
+                        selectedAddress = selectedDeviceAddress,
+                        onNodeSelected = { device ->
+                            selectedDeviceAddress = if (selectedDeviceAddress == device.address) null else device.address
+                            // Scroll list to selected device if present
+                            val index = filteredDevices.indexOfFirst { it.address == device.address }
+                            if (index >= 0) {
+                                coroutineScope.launch {
+                                    listState.animateScrollToItem(index)
+                                }
+                            }
+                        },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
 
+                // Live Network Statistics Bar
+                MeshNetworkStatsBar(
+                    devices = uiState.devices,
+                    isScanning = uiState.isScanning
+                )
+
                 // Search and Filter Bar
-                Box(modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)) {
+                Box(
+                    modifier = Modifier.padding(
+                        horizontal = MeshTheme.spacing.mediumLarge, 
+                        vertical = MeshTheme.spacing.small
+                    )
+                ) {
                     SearchBar(
                         inputField = {
                             SearchBarDefaults.InputField(
@@ -122,19 +170,19 @@ fun NearbyDevicesScreen(
                                 onSearch = { isSearchActive = false },
                                 expanded = isSearchActive,
                                 onExpandedChange = { isSearchActive = it },
-                                placeholder = { Text("Search mesh peers") },
-                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                                placeholder = { Text("Search mesh peers by name...") },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search icon") },
                                 trailingIcon = {
                                     Row {
                                         if (searchQuery.isNotEmpty()) {
                                             IconButton(onClick = { searchQuery = "" }) {
-                                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                                Icon(Icons.Default.Clear, contentDescription = "Clear search query")
                                             }
                                         }
                                         var showSortMenu by remember { mutableStateOf(false) }
                                         Box {
                                             IconButton(onClick = { showSortMenu = true }) {
-                                                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
+                                                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort devices")
                                             }
                                             DropdownMenu(
                                                 expanded = showSortMenu,
@@ -177,38 +225,38 @@ fun NearbyDevicesScreen(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         )
                     ) {
-                        // Realtime results handled below
+                        // Real-time results handled below in list
                     }
                 }
 
-                // Error State, Empty State, or Device List
-                if (uiState.errorMessage != null) {
-                    EmptyState(
-                        icon = Icons.Outlined.ErrorOutline,
-                        title = "Discovery Error",
-                        description = uiState.errorMessage!!,
-                        modifier = Modifier.weight(0.65f)
-                    )
-                } else if (filteredDevices.isEmpty()) {
-                    EmptyState(
-                        icon = Icons.AutoMirrored.Outlined.BluetoothSearching,
-                        title = if (searchQuery.isBlank()) "No nearby devices" else "No matching peers",
-                        description = if (searchQuery.isBlank()) "Looking for active Mesh Link nodes via BLE and Wi-Fi Direct..." else "Adjust your search terms.",
-                        modifier = Modifier.weight(0.65f)
+                // Device List or Empty State
+                if (filteredDevices.isEmpty()) {
+                    MeshScanningEmptyState(
+                        title = if (searchQuery.isBlank()) "Scanning for Mesh Nodes" else "No matching peers",
+                        description = if (searchQuery.isBlank()) "Looking for active Mesh Link devices over BLE..." else "Try searching with a different device name or MAC address.",
+                        modifier = Modifier.weight(0.62f)
                     )
                 } else {
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(0.65f)
+                            .weight(0.62f)
                             .padding(horizontal = MeshTheme.spacing.mediumLarge),
                         verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                     ) {
-                        items(filteredDevices, key = { it.address }, contentType = { "device_item" }) { device ->
+                        items(
+                            items = filteredDevices, 
+                            key = { it.address }, 
+                            contentType = { "device_item" }
+                        ) { device ->
                             MeshDeviceCard(
                                 device = device, 
                                 isConnecting = connectingToAddress == device.address,
+                                isSelected = selectedDeviceAddress == device.address,
                                 onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    selectedDeviceAddress = device.address
                                     connectingToAddress = device.address
                                     viewModel.connectToDevice(device) {
                                         onNavigateToChat(

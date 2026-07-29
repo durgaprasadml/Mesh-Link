@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.LocalPhone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,14 +31,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.meshlink.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.designsystem.theme.MeshTheme
@@ -146,7 +150,7 @@ fun SosScreen(
                     onCall = {
                         try {
                             val intent = Intent(Intent.ACTION_DIAL).apply {
-                                data = Uri.parse("tel:911")
+                                data = Uri.parse("tel:112")
                             }
                             context.startActivity(intent)
                         } catch (e: Exception) {
@@ -623,8 +627,20 @@ fun QuickActions(
         Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
         
         Row(horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)) {
-            ActionChip(icon = Icons.Default.Call, label = "Call 911", modifier = Modifier.weight(1f), isDanger = true, onClick = onCall)
-            ActionChip(icon = Icons.Default.ShareLocation, label = "Share Live", modifier = Modifier.weight(1f), onClick = onShare)
+            ActionChip(
+                icon = Icons.Rounded.LocalPhone, 
+                label = stringResource(R.string.call_emergency_112), 
+                contentDescription = stringResource(R.string.call_emergency_112_content_description),
+                modifier = Modifier.weight(1f), 
+                isDanger = true, 
+                onClick = onCall
+            )
+            ActionChip(
+                icon = Icons.Default.ShareLocation, 
+                label = "Share Live", 
+                modifier = Modifier.weight(1f), 
+                onClick = onShare
+            )
         }
         Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
         Row(horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)) {
@@ -652,6 +668,7 @@ fun ActionChip(
     icon: ImageVector, 
     label: String, 
     modifier: Modifier = Modifier, 
+    contentDescription: String? = null,
     isDanger: Boolean = false,
     isActive: Boolean = false,
     onClick: () -> Unit
@@ -667,10 +684,18 @@ fun ActionChip(
     val borderColor = if (isDanger) MeshTheme.colors.danger.copy(alpha = 0.5f) 
         else if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) 
         else MaterialTheme.colorScheme.outline
+
+    val chipContentDescription = contentDescription ?: label
         
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(MeshTheme.spacing.extraGiant - MeshTheme.spacing.mediumSmall),
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .height(MeshTheme.spacing.extraGiant - MeshTheme.spacing.mediumSmall)
+            .semantics {
+                this.contentDescription = chipContentDescription
+                this.role = Role.Button
+            },
         shape = MeshTheme.shapes.medium,
         colors = ButtonDefaults.outlinedButtonColors(
             contentColor = contentColor,
@@ -678,9 +703,18 @@ fun ActionChip(
         ),
         border = BorderStroke(1.dp, borderColor)
     ) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(MeshTheme.spacing.large))
+        Icon(
+            imageVector = icon, 
+            contentDescription = null, 
+            modifier = Modifier.size(MeshTheme.spacing.large)
+        )
         Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Text(
+            text = label, 
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

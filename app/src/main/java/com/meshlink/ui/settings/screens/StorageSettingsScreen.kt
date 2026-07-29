@@ -4,18 +4,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.components.settings.StorageCategory
 import com.meshlink.ui.components.settings.StorageUsageBar
 import com.meshlink.ui.designsystem.theme.MeshTheme
-
 import com.meshlink.ui.settings.SettingsUiState
 import com.meshlink.ui.settings.SettingsViewModel
 
@@ -26,6 +23,8 @@ fun StorageSettingsScreen(
     viewModel: SettingsViewModel,
     onBack: () -> Unit
 ) {
+    var showClearDialog by remember { mutableStateOf(false) }
+
     val totalStorage = 2L * 1024 * 1024 * 1024 // 2 GB mock
     val storageCategories = listOf(
         StorageCategory("Database (Chats)", 250 * 1024 * 1024L, MaterialTheme.colorScheme.primary),
@@ -42,7 +41,7 @@ fun StorageSettingsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                title = { Text("Storage & Data") },
+                title = { Text("Storage & Data", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -55,15 +54,15 @@ fun StorageSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
         ) {
             item {
-                Text("Usage Overview", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Storage Usage Overview", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = MeshTheme.shapes.large
                 ) {
                     Column(modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
                         StorageUsageBar(
-                            categories = storageCategories.dropLast(1), // Exclude free space from bar segments
+                            categories = storageCategories.dropLast(1),
                             totalBytes = 1000 * 1024 * 1024L
                         )
                     }
@@ -71,38 +70,87 @@ fun StorageSettingsScreen(
             }
 
             item {
-                Text("Manage Storage", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Manage Cache & Storage", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = MeshTheme.shapes.large
                 ) {
                     Column {
                         SettingsItemRow(
                             title = "Clear Media Cache",
-                            subtitle = "Frees up space without deleting chats.",
+                            subtitle = "Frees up 500 MB without deleting message history",
                             icon = Icons.Default.Image,
-                            onClick = { /* TODO: viewModel.clearMediaCache() */ }
+                            onClick = { showClearDialog = true }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
-                            title = "Optimize Database",
-                            subtitle = "Reindexes messages to save space.",
+                            title = "Optimize Database Size",
+                            subtitle = "Reindex message database & compact WAL log (250 MB current)",
                             icon = Icons.Default.Storage,
-                            onClick = { /* TODO: viewModel.optimizeDatabase() */ }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Delete All Data",
-                            subtitle = "Erase all chats and settings.",
-                            icon = Icons.Default.DeleteOutline,
-                            iconTint = MaterialTheme.colorScheme.error,
-                            textColor = MaterialTheme.colorScheme.error,
-                            onClick = { /* TODO: Implement destructive action dialog */ }
+                            onClick = { viewModel.optimizeDatabase() }
                         )
                     }
                 }
             }
+
+            item {
+                Text("Backup & Export", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
+                ) {
+                    Column {
+                        SettingsItemRow(
+                            title = "Export Messages",
+                            subtitle = "Save encrypted HTML/JSON chat archive to local storage",
+                            icon = Icons.Default.FileUpload,
+                            onClick = { viewModel.showToast("Exporting encrypted chat archive...") }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Create Local Backup",
+                            subtitle = "Generate secure passphrase-encrypted local backup",
+                            icon = Icons.Default.Backup,
+                            onClick = { viewModel.backupMessages() }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Restore Backup",
+                            subtitle = "Import messages from a previous backup file",
+                            icon = Icons.Default.Restore,
+                            onClick = { viewModel.restoreMessages() }
+                        )
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
+    }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            icon = { Icon(Icons.Default.CleaningServices, contentDescription = null) },
+            title = { Text("Clear Media Cache?") },
+            text = { Text("This will remove temporary media files (images, audio clips). Cached media will re-download when viewed again.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearDialog = false
+                        viewModel.clearMediaCache()
+                    }
+                ) {
+                    Text("Clear Cache")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

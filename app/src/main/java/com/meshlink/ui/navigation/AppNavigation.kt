@@ -48,7 +48,13 @@ import com.meshlink.ui.sos.SosScreen
 import com.meshlink.util.NotificationHelper
 
 
+import com.meshlink.ui.landing.LandingScreen
+
+
 sealed class Screen(val route: String) {
+    object Landing : Screen("landing/{isWelcome}") {
+        fun createRoute(isWelcome: Boolean = false) = "landing/$isWelcome"
+    }
     object Home : Screen("home")
     object ChatsList : Screen("chats")
     object Nearby : Screen("nearby")
@@ -112,7 +118,7 @@ fun AppNavigation(
             NavHost(
                 modifier = Modifier.padding(paddingValues),
                 navController = navController,
-                startDestination = if (hasProfile == true) Screen.Home.route else Screen.ProfileSetup.route,
+                startDestination = if (hasProfile == true) Screen.Landing.createRoute(isWelcome = false) else Screen.ProfileSetup.route,
                 enterTransition = {
                     if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
                         fadeIn(tween(210, delayMillis = 90))
@@ -143,11 +149,29 @@ fun AppNavigation(
                 }
             ) {
                 
+                composable(
+                    route = Screen.Landing.route,
+                    arguments = listOf(
+                        navArgument("isWelcome") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        }
+                    )
+                ) {
+                    LandingScreen(
+                        onAnimationComplete = {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Landing.route) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+                
                 composable(Screen.ProfileSetup.route) {
                     ProfileSetupScreen(
                         onSetupSuccess = {
-                            navController.navigate(Screen.Home.route) {
-                                popUpTo(0)
+                            navController.navigate(Screen.Landing.createRoute(isWelcome = true)) {
+                                popUpTo(Screen.ProfileSetup.route) { inclusive = true }
                             }
                         }
                     )

@@ -32,11 +32,14 @@ class AckManagerTest {
         userRepository = mockk(relaxed = true)
         deliveryTracker = mockk(relaxed = true)
 
+        val retryCoordinator: com.meshlink.common.recovery.RetryCoordinator = mockk(relaxed = true)
+
         ackManager = AckManager(
             packetDispatcher = packetDispatcher,
             chatDao = chatDao,
             userRepository = userRepository,
-            deliveryTracker = deliveryTracker
+            deliveryTracker = deliveryTracker,
+            retryCoordinator = retryCoordinator
         )
     }
 

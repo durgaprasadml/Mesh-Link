@@ -44,9 +44,11 @@ class AutomaticRetryEngineTest {
         intelligentRetryEngine = IntelligentRetryEngine(congestionMonitor, batteryAwareNetworking)
         stateMachine = MessageStateMachine(chatDao)
 
+        val meshRepositoryProvider: javax.inject.Provider<MeshRepository> = javax.inject.Provider { meshRepository }
+
         retryCoordinator = RetryCoordinator(
             context = mockk(relaxed = true),
-            meshRepository = meshRepository,
+            meshRepositoryProvider = meshRepositoryProvider,
             meshRouter = meshRouter,
             chatDao = chatDao,
             relayDao = relayDao,

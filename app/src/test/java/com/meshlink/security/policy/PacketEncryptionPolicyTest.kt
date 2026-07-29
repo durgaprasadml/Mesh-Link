@@ -153,11 +153,70 @@ class PacketEncryptionPolicyTest {
         }
     }
 
-    private fun createPacket(type: PacketType, encrypted: Boolean): MeshPacket {
+    @Test
+    fun `test public broadcast text messages are accepted unencrypted`() {
+        val broadcastPacket = createPacket(PacketType.TEXT, encrypted = false, targetId = "BROADCAST")
+        assertTrue(
+            "Unencrypted broadcast text packet should be valid in strict mode",
+            PacketEncryptionPolicy.validatePacketEncryption(
+                broadcastPacket,
+                strictMode = true,
+                hasSecureSession = true
+            )
+        )
+
+        val canonicalBroadcastPacket = createPacket(PacketType.TEXT, encrypted = false, targetId = "broadcast")
+        assertTrue(
+            "Canonicalized broadcast text packet should be valid",
+            PacketEncryptionPolicy.validatePacketEncryption(
+                canonicalBroadcastPacket,
+                strictMode = true,
+                hasSecureSession = false
+            )
+        )
+    }
+
+    @Test
+    fun `test unicast text messages still require encryption`() {
+        val unicastPacket = createPacket(PacketType.TEXT, encrypted = false, targetId = "user-456")
+        assertFalse(
+            "Unencrypted unicast text packet must be rejected",
+            PacketEncryptionPolicy.validatePacketEncryption(
+                unicastPacket,
+                strictMode = false,
+                hasSecureSession = false
+            )
+        )
+    }
+
+    @Test
+    fun `test non-text broadcast messages still require encryption if policy requires`() {
+        val mediaBroadcast = createPacket(PacketType.MEDIA_META, encrypted = false, targetId = "BROADCAST")
+        assertFalse(
+            "Unencrypted media broadcast must be rejected",
+            PacketEncryptionPolicy.validatePacketEncryption(
+                mediaBroadcast,
+                strictMode = false,
+                hasSecureSession = false
+            )
+        )
+
+        val voiceBroadcast = createPacket(PacketType.VOICE_FRAME, encrypted = false, targetId = "BROADCAST")
+        assertFalse(
+            "Unencrypted voice broadcast must be rejected",
+            PacketEncryptionPolicy.validatePacketEncryption(
+                voiceBroadcast,
+                strictMode = false,
+                hasSecureSession = false
+            )
+        )
+    }
+
+    private fun createPacket(type: PacketType, encrypted: Boolean, targetId: String = "target123"): MeshPacket {
         return MeshPacket(
             packetId = UUID.randomUUID().toString(),
             senderId = "sender123",
-            targetId = "target123",
+            targetId = targetId,
             payload = "test payload",
             type = type,
             encrypted = encrypted

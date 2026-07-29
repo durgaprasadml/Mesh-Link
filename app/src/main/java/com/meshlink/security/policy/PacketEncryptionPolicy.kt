@@ -58,6 +58,10 @@ object PacketEncryptionPolicy {
         // (decryption failure will be handled elsewhere).
         if (packet.encrypted) return true
 
+        val isPublicBroadcast = packet.type == PacketType.TEXT &&
+            packet.targetId.equals("BROADCAST", ignoreCase = true)
+        if (isPublicBroadcast) return true
+
         return when (getRequirement(packet.type)) {
             EncryptionRequirement.REQUIRED -> {
                 // Must always be encrypted. Plaintext is rejected.

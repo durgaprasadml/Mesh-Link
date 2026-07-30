@@ -3,11 +3,12 @@ package com.meshlink.ui.nearby
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.meshlink.domain.model.BleDevice
+import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.model.TransportType
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
-
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -18,11 +19,25 @@ import kotlinx.coroutines.launch
 
 enum class SortOption { RSSI, NAME, STATUS }
 
+data class ActivePacketEvent(
+    val id: String = UUID.randomUUID().toString(),
+    val senderId: String,
+    val targetId: String,
+    val packetType: PacketType
+)
+
+data class TrafficState(
+    val packetCount: Int = 0,
+    val latestPacketEvent: ActivePacketEvent? = null
+)
+
 data class NearbyUiState(
     val devices: List<BleDevice> = emptyList(),
     val sortOption: SortOption = SortOption.RSSI,
     val isScanning: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val packetCount: Int = 0,
+    val latestPacketEvent: ActivePacketEvent? = null
 )
 
 @HiltViewModel
@@ -34,13 +49,30 @@ class NearbyViewModel @Inject constructor(
     private val _sortOption = MutableStateFlow(SortOption.RSSI)
     private val _isScanning = MutableStateFlow(false)
     private val _errorMessage = MutableStateFlow<String?>(null)
+    private val _trafficState = MutableStateFlow(TrafficState())
+
+    init {
+        viewModelScope.launch {
+            meshRepository.incomingMeshPayloads.collect { (senderId, meshPacket) ->
+                _trafficState.value = TrafficState(
+                    packetCount = _trafficState.value.packetCount + 1,
+                    latestPacketEvent = ActivePacketEvent(
+                        senderId = senderId,
+                        targetId = meshPacket.targetId,
+                        packetType = meshPacket.type
+                    )
+                )
+            }
+        }
+    }
 
     val uiState: StateFlow<NearbyUiState> = combine(
         meshRepository.scannedDevices,
         _sortOption,
         _isScanning,
-        _errorMessage
-    ) { bleMap, sortOption, isScanning, errorMessage ->
+        _errorMessage,
+        _trafficState
+    ) { bleMap: Map<String, BleDevice>, sortOption: SortOption, isScanning: Boolean, errorMessage: String?, traffic: TrafficState ->
         
         val mergedDevices = mutableMapOf<String, BleDevice>()
         
@@ -58,7 +90,9 @@ class NearbyViewModel @Inject constructor(
             devices = sortedList, 
             sortOption = sortOption,
             isScanning = isScanning,
-            errorMessage = errorMessage
+            errorMessage = errorMessage,
+            packetCount = traffic.packetCount,
+            latestPacketEvent = traffic.latestPacketEvent
         )
     }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NearbyUiState())
@@ -93,7 +127,6 @@ class NearbyViewModel @Inject constructor(
     
     fun connectToDevice(device: BleDevice, onConnected: () -> Unit) {
         viewModelScope.launch {
-
             if (device.transport == TransportType.BLE) {
                 meshRepository.connectToPeer(device.address)
             }

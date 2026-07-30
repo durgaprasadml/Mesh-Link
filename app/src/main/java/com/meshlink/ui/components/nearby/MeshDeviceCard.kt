@@ -1,23 +1,19 @@
 package com.meshlink.ui.components.nearby
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.SignalCellular4Bar
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.SignalCellularOff
 import androidx.compose.material.icons.filled.Speed
@@ -37,7 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.meshlink.domain.model.BleDevice
-import com.meshlink.domain.model.TransportType
+import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.MeshIdNormalizer
 
@@ -62,12 +58,13 @@ fun MeshDeviceCard(
         label = "CardPressScale"
     )
 
+    val neonGreen = Color(0xFF00E676)
     val isStrongSignal = device.rssi > -70
     val isWeakSignal = device.rssi < -85
     val (signalText, signalColor) = when {
-        isStrongSignal -> "Excellent" to Color(0xFF4CAF50)
+        isStrongSignal -> "Excellent" to neonGreen
         isWeakSignal -> "Weak" to Color(0xFFFF9800)
-        else -> "Good" to MaterialTheme.colorScheme.primary
+        else -> "Good" to Color(0xFF00B0FF)
     }
 
     val distanceText = remember(device.distanceMeters, device.distanceConfidence) {
@@ -93,9 +90,9 @@ fun MeshDeviceCard(
     }
 
     val containerBorderColor = if (isSelected) {
-        MaterialTheme.colorScheme.primary
+        neonGreen
     } else {
-        Color.Transparent
+        Color.White.copy(alpha = 0.08f)
     }
 
     Card(
@@ -109,7 +106,7 @@ fun MeshDeviceCard(
                 scaleX = scale
                 scaleY = scale
             }
-            .border(width = if (isSelected) 2.dp else 0.dp, color = containerBorderColor, shape = RoundedCornerShape(20.dp))
+            .border(width = if (isSelected) 1.5.dp else 1.dp, color = containerBorderColor, shape = RoundedCornerShape(20.dp))
             .animateContentSize()
             .semantics {
                 role = Role.Button
@@ -117,11 +114,7 @@ fun MeshDeviceCard(
             },
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
+            containerColor = if (isSelected) Color(0xFF1C2820) else Color(0xFF141414)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp),
         interactionSource = interactionSource
@@ -133,19 +126,19 @@ fun MeshDeviceCard(
             ) {
                 // Avatar with Connection Dot
                 Box(contentAlignment = Alignment.BottomEnd) {
-                        com.meshlink.ui.components.UserAvatarImage(
-                            avatarUri = device.avatarUri,
-                            displayName = displayName,
-                            size = 52.dp
-                        )
+                    UserAvatarImage(
+                        avatarUri = device.avatarUri,
+                        displayName = displayName,
+                        size = 50.dp
+                    )
 
                     if (device.isConnected) {
                         Box(
                             modifier = Modifier
                                 .size(14.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF4CAF50))
-                                .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                                .background(neonGreen)
+                                .border(2.dp, Color(0xFF141414), CircleShape)
                         )
                     }
                 }
@@ -157,16 +150,16 @@ fun MeshDeviceCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = displayName,
-                            color = MaterialTheme.colorScheme.onBackground,
+                            color = Color.White,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         if (isRelayCapable) {
-                            Spacer(modifier = Modifier.width(MeshTheme.spacing.extraSmall))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Icon(
                                 imageVector = Icons.Default.Hub,
                                 contentDescription = "Relay Node",
-                                tint = MaterialTheme.colorScheme.secondary,
+                                tint = Color(0xFF00FF88),
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -176,7 +169,7 @@ fun MeshDeviceCard(
 
                     Text(
                         text = distanceText,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Color.White.copy(alpha = 0.6f),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -204,7 +197,7 @@ fun MeshDeviceCard(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                        color = Color.White.copy(alpha = 0.08f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Row(
@@ -215,13 +208,13 @@ fun MeshDeviceCard(
                             Icon(
                                 imageVector = Icons.Default.Bluetooth,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                tint = Color.White.copy(alpha = 0.8f),
                                 modifier = Modifier.size(12.dp)
                             )
                             Text(
                                 text = "BLE",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = Color.White.copy(alpha = 0.8f),
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -232,7 +225,7 @@ fun MeshDeviceCard(
             // Expanded Details Section
             if (expanded) {
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
-                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
 
                 Column(verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small)) {
@@ -283,12 +276,16 @@ fun MeshDeviceCard(
                         .fillMaxWidth()
                         .height(48.dp),
                     shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = neonGreen,
+                        contentColor = Color.Black
+                    ),
                     enabled = !isConnecting
                 ) {
                     if (isConnecting) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = Color.Black,
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
@@ -319,19 +316,19 @@ private fun DetailChip(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = Color(0xFF00E676),
             modifier = Modifier.size(16.dp)
         )
         Text(
             text = "$label: ",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color.White.copy(alpha = 0.5f)
         )
         Text(
             text = value,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = Color.White
         )
     }
 }

@@ -33,7 +33,7 @@ android {
         arg("room.expandProjection", "true")
         arg("dagger.fastInit", "true")
         arg("dagger.hilt.android.internal.disableAndroidSuperclassValidation", "true")
-        arg("dagger.experimentalDaggerErrorMessages", "true")
+        arg("dagger.experimentalDaggerErrorMessages", "ENABLED")
     }
 
     buildFeatures {
@@ -178,8 +178,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material3.windowsizeclass)
-    // material-icons-extended disabled to remove ~10k classes from KSP symbol indexing classpath
-    // implementation(libs.androidx.compose.material.icons.extended)
+    // material-icons-extended is required for InsertPhoto, CameraAlt, and other icons used in the UI
+    implementation(libs.androidx.compose.material.icons.extended)
 
     // Navigation
     implementation(libs.androidx.navigation.compose)

@@ -31,8 +31,9 @@ android {
         arg("room.schemaLocation", "$projectDir/schemas")
         arg("room.incremental", "true")
         arg("room.expandProjection", "true")
-        arg("dagger.fastInit", "enabled")
+        arg("dagger.fastInit", "true")
         arg("dagger.hilt.android.internal.disableAndroidSuperclassValidation", "true")
+        arg("dagger.experimentalDaggerErrorMessages", "true")
     }
 
     buildFeatures {
@@ -68,8 +69,11 @@ android {
             buildConfigField("Boolean", "LOGGING_ENABLED", "true")
             // Disable PNG crunching in debug builds to speed up the build process
             isCrunchPngs = false
-            // Speed up builds by avoiding split APKs in debug
-            extra["alwaysUpdateBuildId"] = false
+            // Debug-only ABI filter for Apple Silicon M-series ARM64 target
+            ndk {
+                abiFilters.clear()
+                abiFilters.add("arm64-v8a")
+            }
         }
         create("benchmark") {
             initWith(getByName("release"))
@@ -109,9 +113,11 @@ android {
     kotlinOptions {
         jvmTarget = "17"
         freeCompilerArgs += listOf(
-            "-Xbackend-threads=4",
+            "-Xbackend-threads=0",
             "-P",
-            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true"
+            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true",
+            "-P",
+            "plugin:androidx.compose.compiler.plugins.kotlin:stabilityConfigurationPath=$projectDir/stability_config.conf"
         )
     }
 
@@ -172,7 +178,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material3.windowsizeclass)
-    implementation(libs.androidx.compose.material.icons.extended)
+    // material-icons-extended disabled to remove ~10k classes from KSP symbol indexing classpath
+    // implementation(libs.androidx.compose.material.icons.extended)
 
     // Navigation
     implementation(libs.androidx.navigation.compose)

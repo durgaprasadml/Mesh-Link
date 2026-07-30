@@ -4,7 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.Hub
@@ -42,12 +41,17 @@ fun MeshNetworkStatsBar(
         if (devices.isEmpty()) null else (-avgRssi * 0.35).toInt().coerceIn(8, 120)
     }
 
-    val (healthText, healthColor) = remember(devices, isScanning, avgRssi) {
+    val semanticColors = MeshTheme.colors
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val outlineColor = MaterialTheme.colorScheme.outline
+
+    val (healthText, healthColor) = remember(devices, isScanning, avgRssi, primaryColor, secondaryColor, outlineColor) {
         when {
-            devices.isEmpty() -> if (isScanning) "Scanning" to Color(0xFF00B0FF) else "Idle" to Color(0xFF9E9E9E)
-            avgRssi > -75 -> "Optimal" to Color(0xFF00E676)
-            avgRssi > -85 -> "Good" to Color(0xFF00B0FF)
-            else -> "Fair" to Color(0xFFFF9800)
+            devices.isEmpty() -> if (isScanning) "Scanning" to secondaryColor else "Idle" to outlineColor
+            avgRssi > -75 -> "Optimal" to semanticColors.signalStrong
+            avgRssi > -85 -> "Good" to semanticColors.signalMedium
+            else -> "Fair" to semanticColors.signalWeak
         }
     }
 
@@ -55,9 +59,9 @@ fun MeshNetworkStatsBar(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.extraSmall),
-        color = Color(0xFF141414).copy(alpha = 0.85f),
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 2.dp
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MeshTheme.shapes.large,
+        tonalElevation = MeshTheme.elevation.level1
     ) {
         Row(
             modifier = Modifier
@@ -75,7 +79,7 @@ fun MeshNetworkStatsBar(
                 valueColor = healthColor
             )
 
-            VerticalDivider(modifier = Modifier.height(20.dp), color = Color.White.copy(alpha = 0.15f))
+            VerticalDivider(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
             // Nearby Devices
             StatBadge(
@@ -84,17 +88,17 @@ fun MeshNetworkStatsBar(
                 value = "$totalNearby"
             )
 
-            VerticalDivider(modifier = Modifier.height(20.dp), color = Color.White.copy(alpha = 0.15f))
+            VerticalDivider(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
             // Connected
             StatBadge(
                 icon = Icons.Default.BluetoothConnected,
                 label = "Connected",
                 value = "$connectedCount",
-                valueColor = if (connectedCount > 0) Color(0xFF00E676) else Color.White.copy(alpha = 0.6f)
+                valueColor = if (connectedCount > 0) primaryColor else MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            VerticalDivider(modifier = Modifier.height(20.dp), color = Color.White.copy(alpha = 0.15f))
+            VerticalDivider(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
             // Relay Nodes
             StatBadge(
@@ -103,18 +107,18 @@ fun MeshNetworkStatsBar(
                 value = "$relayCount"
             )
 
-            VerticalDivider(modifier = Modifier.height(20.dp), color = Color.White.copy(alpha = 0.15f))
+            VerticalDivider(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
             // Packet Counter
             StatBadge(
                 icon = Icons.Default.SwapHoriz,
                 label = "Packets",
                 value = "$packetCount",
-                valueColor = if (packetCount > 0) Color(0xFF00FF88) else Color.White.copy(alpha = 0.6f)
+                valueColor = if (packetCount > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             if (avgLatencyMs != null) {
-                VerticalDivider(modifier = Modifier.height(20.dp), color = Color.White.copy(alpha = 0.15f))
+                VerticalDivider(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 
                 // Latency
                 StatBadge(
@@ -133,7 +137,7 @@ private fun StatBadge(
     icon: ImageVector,
     label: String,
     value: String,
-    valueColor: Color = Color.White
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -142,13 +146,13 @@ private fun StatBadge(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF00E676),
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(16.dp)
         )
         Text(
             text = "$label:",
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.6f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         
         AnimatedContent(

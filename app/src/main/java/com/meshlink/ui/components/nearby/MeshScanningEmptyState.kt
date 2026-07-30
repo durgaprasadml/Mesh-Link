@@ -10,7 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -47,7 +46,7 @@ fun MeshScanningEmptyState(
         label = "Pulse2"
     )
 
-    val neonGreen = Color(0xFF00E676)
+    val primaryColor = MaterialTheme.colorScheme.primary
 
     Column(
         modifier = modifier
@@ -66,21 +65,21 @@ fun MeshScanningEmptyState(
                 
                 // Outer Pulse Ring 1
                 drawCircle(
-                    color = neonGreen.copy(alpha = (1f - pulse1).coerceIn(0f, 0.5f)),
+                    color = primaryColor.copy(alpha = (1f - pulse1).coerceIn(0f, 0.5f)),
                     radius = maxRadius * pulse1,
                     style = Stroke(width = 2.5f)
                 )
 
                 // Outer Pulse Ring 2
                 drawCircle(
-                    color = neonGreen.copy(alpha = (1f - pulse2).coerceIn(0f, 0.5f)),
+                    color = primaryColor.copy(alpha = (1f - pulse2).coerceIn(0f, 0.5f)),
                     radius = maxRadius * pulse2,
                     style = Stroke(width = 2.5f)
                 )
 
                 // Core Hub
                 drawCircle(
-                    color = neonGreen.copy(alpha = 0.12f),
+                    color = primaryColor.copy(alpha = 0.12f),
                     radius = maxRadius * 0.35f
                 )
             }
@@ -88,7 +87,7 @@ fun MeshScanningEmptyState(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.BluetoothSearching,
                 contentDescription = null,
-                tint = neonGreen,
+                tint = primaryColor,
                 modifier = Modifier.size(44.dp)
             )
         }
@@ -99,7 +98,7 @@ fun MeshScanningEmptyState(
             text = title,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center
         )
 
@@ -108,7 +107,7 @@ fun MeshScanningEmptyState(
         Text(
             text = description,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = MeshTheme.spacing.large)
         )

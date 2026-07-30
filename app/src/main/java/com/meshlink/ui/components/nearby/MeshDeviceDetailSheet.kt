@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Bluetooth
@@ -50,12 +49,13 @@ fun MeshDeviceDetailSheet(
                 MeshIdNormalizer.canonicalize(device.meshId.ifBlank { device.address })
             }
 
+            val semanticColors = MeshTheme.colors
             val isStrongSignal = device.rssi > -70
             val isWeakSignal = device.rssi < -85
             val (signalText, signalColor) = when {
-                isStrongSignal -> "Excellent" to Color(0xFF00E676)
-                isWeakSignal -> "Weak" to Color(0xFFFF9800)
-                else -> "Good" to Color(0xFF00B0FF)
+                isStrongSignal -> "Excellent" to semanticColors.signalStrong
+                isWeakSignal -> "Weak" to semanticColors.signalWeak
+                else -> "Good" to semanticColors.signalMedium
             }
 
             val isRelay = remember(device.capabilities, device.isConnected, device.rssi) {
@@ -76,12 +76,12 @@ fun MeshDeviceDetailSheet(
                     .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
                     .border(
                         width = 1.dp,
-                        color = Color(0xFF00E676).copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(24.dp)
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                        shape = MeshTheme.shapes.extraLarge
                     ),
-                color = Color(0xFF141414).copy(alpha = 0.95f),
-                shape = RoundedCornerShape(24.dp),
-                tonalElevation = 8.dp
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MeshTheme.shapes.extraLarge,
+                tonalElevation = MeshTheme.elevation.level3
             ) {
                 Column(
                     modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)
@@ -105,18 +105,18 @@ fun MeshDeviceDetailSheet(
                                     text = displayName,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 if (isRelay) {
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Surface(
-                                        color = Color(0xFF00FF88).copy(alpha = 0.15f),
+                                        color = MaterialTheme.colorScheme.tertiaryContainer,
                                         shape = CircleShape
                                     ) {
                                         Text(
                                             text = "RELAY",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF00FF88),
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                         )
@@ -126,7 +126,7 @@ fun MeshDeviceDetailSheet(
                             Text(
                                 text = "Mesh ID: ${canonicalId.take(14)}...",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
@@ -134,13 +134,13 @@ fun MeshDeviceDetailSheet(
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Close detail card",
-                                tint = Color.White.copy(alpha = 0.7f)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
 
                     // Grid Metrics
@@ -157,7 +157,7 @@ fun MeshDeviceDetailSheet(
 
                         MetricBox(
                             icon = Icons.Default.BatteryFull,
-                            iconTint = Color(0xFF4CAF50),
+                            iconTint = MaterialTheme.colorScheme.primary,
                             label = "Battery Level",
                             value = "$simulatedBattery%"
                         )
@@ -171,14 +171,14 @@ fun MeshDeviceDetailSheet(
                     ) {
                         MetricBox(
                             icon = Icons.Default.Bluetooth,
-                            iconTint = Color(0xFF2196F3),
+                            iconTint = MaterialTheme.colorScheme.secondary,
                             label = "Connection",
                             value = if (device.isConnected) "BLE Connected" else "Discovered"
                         )
 
                         MetricBox(
                             icon = Icons.Default.Speed,
-                            iconTint = Color(0xFFAB47BC),
+                            iconTint = MaterialTheme.colorScheme.tertiary,
                             label = "Est. Latency",
                             value = "~$estimatedLatency ms"
                         )
@@ -192,14 +192,14 @@ fun MeshDeviceDetailSheet(
                     ) {
                         MetricBox(
                             icon = Icons.Default.Schedule,
-                            iconTint = Color(0xFFFFB74D),
+                            iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                             label = "Last Seen",
                             value = "Just now"
                         )
 
                         MetricBox(
                             icon = Icons.Default.Lock,
-                            iconTint = Color(0xFF00E676),
+                            iconTint = MaterialTheme.colorScheme.primary,
                             label = "Security",
                             value = "E2E Encrypted"
                         )
@@ -213,17 +213,17 @@ fun MeshDeviceDetailSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = MeshTheme.shapes.large,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF00E676),
-                            contentColor = Color.Black
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         enabled = !isConnecting
                     ) {
                         if (isConnecting) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
-                                color = Color.Black,
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -271,13 +271,13 @@ private fun MetricBox(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.5f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 text = value,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }

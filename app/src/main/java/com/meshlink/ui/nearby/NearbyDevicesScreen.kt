@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,7 +19,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
@@ -89,7 +89,7 @@ fun NearbyDevicesScreen(
         )
 
         Scaffold(
-            containerColor = Color(0xFF0B0B0B),
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
                     title = { 
@@ -97,13 +97,13 @@ fun NearbyDevicesScreen(
                             Text(
                                 text = "Nearby Mesh Network",
                                 style = MaterialTheme.typography.titleLarge,
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onBackground,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = if (uiState.isScanning) "Continuously discovering peers via BLE..." else "Mesh Active",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF00E676)
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     },
@@ -115,12 +115,12 @@ fun NearbyDevicesScreen(
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack, 
                                 contentDescription = null,
-                                tint = Color.White
+                                tint = MaterialTheme.colorScheme.onBackground
                             )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFF0B0B0B)
+                        containerColor = MaterialTheme.colorScheme.background
                     )
                 )
             }
@@ -131,29 +131,43 @@ fun NearbyDevicesScreen(
                     .padding(paddingValues)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Interactive Topology Visualization Canvas Header
-                    Box(
+                    // M3 Container Card housing the Topology Canvas
+                    ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(0.42f)
-                            .background(Color(0xFF0B0B0B)),
-                        contentAlignment = Alignment.Center
+                            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                shape = MeshTheme.shapes.extraLarge
+                            ),
+                        shape = MeshTheme.shapes.extraLarge,
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = MeshTheme.elevation.level2)
                     ) {
-                        MeshTopologyCanvas(
-                            devices = uiState.devices,
-                            selectedAddress = selectedDeviceAddress,
-                            latestPacketEvent = uiState.latestPacketEvent,
-                            onNodeSelected = { device ->
-                                selectedDeviceAddress = if (selectedDeviceAddress == device.address) null else device.address
-                                val index = filteredDevices.indexOfFirst { it.address == device.address }
-                                if (index >= 0) {
-                                    coroutineScope.launch {
-                                        listState.animateScrollToItem(index)
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            MeshTopologyCanvas(
+                                devices = uiState.devices,
+                                selectedAddress = selectedDeviceAddress,
+                                latestPacketEvent = uiState.latestPacketEvent,
+                                onNodeSelected = { device ->
+                                    selectedDeviceAddress = if (selectedDeviceAddress == device.address) null else device.address
+                                    val index = filteredDevices.indexOfFirst { it.address == device.address }
+                                    if (index >= 0) {
+                                        coroutineScope.launch {
+                                            listState.animateScrollToItem(index)
+                                        }
                                     }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
 
                     // Live Network Statistics Bar
@@ -178,19 +192,38 @@ fun NearbyDevicesScreen(
                                     onSearch = { isSearchActive = false },
                                     expanded = isSearchActive,
                                     onExpandedChange = { isSearchActive = it },
-                                    placeholder = { Text("Search mesh peers by name...", color = Color.White.copy(alpha = 0.5f)) },
-                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search icon", tint = Color.White.copy(alpha = 0.7f)) },
+                                    placeholder = { 
+                                        Text(
+                                            "Search mesh peers by name...", 
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        ) 
+                                    },
+                                    leadingIcon = { 
+                                        Icon(
+                                            Icons.Default.Search, 
+                                            contentDescription = "Search icon", 
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        ) 
+                                    },
                                     trailingIcon = {
                                         Row {
                                             if (searchQuery.isNotEmpty()) {
                                                 IconButton(onClick = { searchQuery = "" }) {
-                                                    Icon(Icons.Default.Clear, contentDescription = "Clear search query", tint = Color.White.copy(alpha = 0.7f))
+                                                    Icon(
+                                                        Icons.Default.Clear, 
+                                                        contentDescription = "Clear search query", 
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
                                                 }
                                             }
                                             var showSortMenu by remember { mutableStateOf(false) }
                                             Box {
                                                 IconButton(onClick = { showSortMenu = true }) {
-                                                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort devices", tint = Color.White.copy(alpha = 0.7f))
+                                                    Icon(
+                                                        Icons.AutoMirrored.Filled.Sort, 
+                                                        contentDescription = "Sort devices", 
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
                                                 }
                                                 DropdownMenu(
                                                     expanded = showSortMenu,
@@ -230,7 +263,7 @@ fun NearbyDevicesScreen(
                             onExpandedChange = { isSearchActive = it },
                             modifier = Modifier.fillMaxWidth(),
                             colors = SearchBarDefaults.colors(
-                                containerColor = Color(0xFF161616)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         ) {
                             // Real-time search results handled in list

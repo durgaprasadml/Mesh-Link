@@ -33,35 +33,30 @@ object AnimationConstants {
     // Node 5: Bottom-Left (162°)
     val OUTER_NODE_ANGLES_DEG = floatArrayOf(-126f, -54f, 18f, 90f, 162f)
 
-    // Node radii in dp
+    // Node radii in dp (All 6 nodes are visually identical)
     const val NODE_RADIUS_DP = 7.0f
-    const val CENTER_NODE_RADIUS_DP = 8.5f
+    const val CENTER_NODE_RADIUS_DP = 7.0f
     const val NODE_GLOW_RADIUS_DP = 22.0f
 
     // Line widths in dp
     const val BEAM_CORE_WIDTH_DP = 2.0f
     const val BEAM_GLOW_WIDTH_DP = 6.0f
 
-    // ── Discovery Sequence Timings (ms) ──────────────────────────────────────
-    const val START_PAUSE_MS = 300L
-    const val STAGE_DISCOVERY_DURATION_MS = 350L // Per node discovery stage
-    const val LOGO_HOLD_MS = 900L               // Unified breathing hold
-    const val WELCOME_TEXT_HOLD_MS = 1000L        // First-time welcome text hold
-    const val CENTER_ZOOM_DURATION_MS = 1200L     // Camera zoom into center node
+    // ── Accelerating Discovery Sequence Timings (ms) ─────────────────────────
+    const val START_PAUSE_MS = 100L
+    val NODE_STAGE_DURATIONS_MS = longArrayOf(180L, 170L, 160L, 150L, 140L, 140L)
+    const val DISCOVERY_TOTAL_MS = 940L          // 180 + 170 + 160 + 150 + 140 + 140
+    const val LOGO_HOLD_MS = 400L                // Unified breathing hold
+    const val WELCOME_TEXT_HOLD_MS = 600L        // First-time welcome text hold
+    const val CENTER_ZOOM_DURATION_MS = 780L    // Camera zoom into center node
 
-    // Standard total duration for returning users (~3.45s)
+    // Standard total duration for returning users (~2.22s)
     const val STARTUP_ANIMATION_DURATION_MS =
-        START_PAUSE_MS + (STAGE_DISCOVERY_DURATION_MS * 6) + LOGO_HOLD_MS + CENTER_ZOOM_DURATION_MS
+        START_PAUSE_MS + DISCOVERY_TOTAL_MS + LOGO_HOLD_MS + CENTER_ZOOM_DURATION_MS
 
-    // Total duration for first-time users (~4.45s)
+    // Total duration for first-time users (~2.82s)
     const val WELCOME_ANIMATION_DURATION_MS =
         STARTUP_ANIMATION_DURATION_MS + WELCOME_TEXT_HOLD_MS
-
-    // Normalized progress phase boundaries (0.0f -> 1.0f)
-    const val PROGRESS_PAUSE_END = 0.08f
-    const val PROGRESS_DISCOVERY_START = 0.08f
-    const val PROGRESS_DISCOVERY_END = 0.62f
-    const val PROGRESS_HOLD_END = 0.80f
 }
 
 /**

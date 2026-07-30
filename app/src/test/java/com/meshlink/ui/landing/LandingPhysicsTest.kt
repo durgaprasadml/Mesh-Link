@@ -1,7 +1,6 @@
 package com.meshlink.ui.landing
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,7 +28,10 @@ class LandingPhysicsTest {
         assertEquals(0, centerNode.id)
         assertEquals(5, outerNodes.size)
 
-        // 3. Verify screen position computation for center and outer nodes
+        // 3. Verify Center Node radius matches outer nodes (identical 6 nodes)
+        assertEquals(AnimationConstants.NODE_RADIUS_DP, AnimationConstants.CENTER_NODE_RADIUS_DP, 0.001f)
+
+        // 4. Verify screen position computation for center and outer nodes
         val outPosCenter = FloatArray(2)
         centerNode.computePosition(centerX = 500f, centerY = 1000f, logoRadius = 200f, outPos = outPosCenter)
         assertEquals(500f, outPosCenter[0], 0.001f)
@@ -70,11 +72,13 @@ class LandingPhysicsTest {
 
     @Test
     fun testTimingSequenceBoundaries() {
-        assertTrue(AnimationConstants.STARTUP_ANIMATION_DURATION_MS > 3000L)
+        // Accelerating startup duration ~2.22s
+        assertTrue(AnimationConstants.STARTUP_ANIMATION_DURATION_MS in 2000L..2500L)
         assertTrue(AnimationConstants.WELCOME_ANIMATION_DURATION_MS > AnimationConstants.STARTUP_ANIMATION_DURATION_MS)
 
-        assertTrue(AnimationConstants.PROGRESS_DISCOVERY_START < AnimationConstants.PROGRESS_DISCOVERY_END)
-        assertTrue(AnimationConstants.PROGRESS_DISCOVERY_END < AnimationConstants.PROGRESS_HOLD_END)
+        // Verify accelerating stage durations
+        assertEquals(6, AnimationConstants.NODE_STAGE_DURATIONS_MS.size)
+        assertEquals(940L, AnimationConstants.DISCOVERY_TOTAL_MS)
     }
 
     @Test
@@ -86,4 +90,3 @@ class LandingPhysicsTest {
         assertTrue(node1.twinklePhase != node2.twinklePhase)
     }
 }
-

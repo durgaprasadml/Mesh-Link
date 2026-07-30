@@ -1,7 +1,7 @@
 package com.meshlink.ui.landing
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,12 +26,12 @@ import kotlinx.coroutines.launch
 /**
  * Minimal, Cinematic Mesh Link Landing Experience.
  *
- * Recreates the official 6-node Mesh Link logo procedurally:
- *   1. Starts with faint distant stars (~15% opacity) in deep space.
- *   2. Wireless discovery light beams travel to discover nodes step-by-step.
- *   3. Final 6-node logo pulses softly in unison (~900ms hold).
- *   4. First-time users see an elegant "Welcome to Mesh Link" text overlay.
- *   5. Smooth cinematic camera zoom enters Node 0 (center), transitioning cleanly into Home.
+ * Implements the continuous landing transition:
+ *   1. Accelerating 6-node discovery with heavy connection line overlaps & travelling pulses.
+ *   2. Logo completion breathing hold (400ms).
+ *   3. 3D Depth Camera zoom through center node (780ms) with tiny glow bloom.
+ *   4. Phase-based navigation trigger at 68% zoom progress, allowing Landing Screen to fade
+ *      dissolve into Home Screen cleanly without pauses or black frames.
  */
 @Composable
 fun LandingScreen(
@@ -52,9 +52,14 @@ fun LandingScreen(
     val progressAnimatable = remember { Animatable(0f) }
     var timeMs by remember { mutableLongStateOf(0L) }
 
-    // Haptic feedback milestone flags
+    // Haptic feedback & navigation phase flags
     var hapticLogoComplete by remember { mutableStateOf(false) }
     var hapticZoomIgnition by remember { mutableStateOf(false) }
+    var navigationTriggered by remember { mutableStateOf(false) }
+
+    val discoveryEndTimeMs = AnimationConstants.START_PAUSE_MS + AnimationConstants.DISCOVERY_TOTAL_MS // 1040ms
+    val zoomStartTimeMs = discoveryEndTimeMs + AnimationConstants.LOGO_HOLD_MS + (if (isWelcome) AnimationConstants.WELCOME_TEXT_HOLD_MS else 0L)
+    val navTriggerTimeMs = zoomStartTimeMs + (AnimationConstants.CENTER_ZOOM_DURATION_MS * 0.68f).toLong()
 
     // Master Animation Clock
     LaunchedEffect(uiState.isCompleted) {
@@ -70,7 +75,7 @@ fun LandingScreen(
                 targetValue = 1.0f,
                 animationSpec = tween(
                     durationMillis = totalDurationMs.toInt(),
-                    easing = FastOutSlowInEasing
+                    easing = LinearEasing
                 )
             )
         }
@@ -79,32 +84,38 @@ fun LandingScreen(
             withFrameNanos { frameNanos ->
                 val elapsedMs = (frameNanos - startTime) / 1_000_000L
                 timeMs = elapsedMs
-                val progress = progressAnimatable.value
 
                 // Haptic feedback at key story moments
-                if (progress >= AnimationConstants.PROGRESS_DISCOVERY_END && !hapticLogoComplete) {
+                if (elapsedMs >= discoveryEndTimeMs && !hapticLogoComplete) {
                     hapticLogoComplete = true
                     try {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     } catch (_: Exception) {}
                 }
-                if (progress >= AnimationConstants.PROGRESS_HOLD_END && !hapticZoomIgnition) {
+                if (elapsedMs >= zoomStartTimeMs && !hapticZoomIgnition) {
                     hapticZoomIgnition = true
                     try {
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                     } catch (_: Exception) {}
                 }
+
+                // Trigger navigation phase during final 32% of camera zoom
+                if (elapsedMs >= navTriggerTimeMs && !navigationTriggered) {
+                    navigationTriggered = true
+                    onAnimationComplete()
+                }
             }
         }
 
         animJob.join()
-        onAnimationComplete()
+        if (!navigationTriggered) {
+            navigationTriggered = true
+            onAnimationComplete()
+        }
     }
 
-    val progress = progressAnimatable.value
-
-    // Welcome text is visible during logo hold phase if first-time user
-    val showWelcomeText = isWelcome && progress in AnimationConstants.PROGRESS_DISCOVERY_END..AnimationConstants.PROGRESS_HOLD_END
+    // Welcome text visible during welcome hold phase for first-time users
+    val showWelcomeText = isWelcome && timeMs in discoveryEndTimeMs..(discoveryEndTimeMs + AnimationConstants.WELCOME_TEXT_HOLD_MS)
 
     Box(
         modifier = Modifier
@@ -114,19 +125,17 @@ fun LandingScreen(
                 viewModel.onSkipClicked()
             }
     ) {
-        // Procedural 6-Node Canvas
+        // Procedural 6-Node Canvas (Beams, traveling light pulses, 6 identical star nodes)
         MeshFormationCanvas(
-            overallProgress = progress,
             timeMs = timeMs,
             isWelcomeMode = isWelcome,
             modifier = Modifier.fillMaxSize()
         )
 
-        // First-time user welcome overlay
+        // First-time user welcome overlay text
         WelcomeAnimation(
             displayName = uiState.userName,
             visible = showWelcomeText
         )
     }
 }
-

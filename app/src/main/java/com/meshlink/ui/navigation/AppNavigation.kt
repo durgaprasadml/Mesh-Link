@@ -120,7 +120,9 @@ fun AppNavigation(
                 navController = navController,
                 startDestination = if (hasProfile == true) Screen.Landing.createRoute(isWelcome = false) else Screen.ProfileSetup.route,
                 enterTransition = {
-                    if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                    if (initialState.destination.route?.startsWith("landing") == true && targetState.destination.route == Screen.Home.route) {
+                        androidx.compose.animation.EnterTransition.None
+                    } else if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
                         fadeIn(tween(210, delayMillis = 90))
                     } else {
                         slideInHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeIn(tween(300))
@@ -156,7 +158,14 @@ fun AppNavigation(
                             type = NavType.BoolType
                             defaultValue = false
                         }
-                    )
+                    ),
+                    exitTransition = {
+                        if (targetState.destination.route == Screen.Home.route) {
+                            fadeOut(tween(450, easing = androidx.compose.animation.core.LinearEasing))
+                        } else {
+                            fadeOut(tween(300))
+                        }
+                    }
                 ) {
                     LandingScreen(
                         onAnimationComplete = {

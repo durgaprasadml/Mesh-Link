@@ -26,9 +26,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 
 
+import com.meshlink.transport.HybridTransport
+
 @Singleton
 internal class MeshRouter @Inject constructor(
-    private val hybridTransport: com.meshlink.wifi.api.HybridTransport,
+    private val hybridTransport: HybridTransport,
 
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,

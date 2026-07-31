@@ -4,7 +4,7 @@ import com.meshlink.di.ApplicationScope
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.model.RouteType
 import com.meshlink.domain.repository.SettingsRepository
-import com.meshlink.wifi.api.HybridTransport
+import com.meshlink.transport.HybridTransport
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope

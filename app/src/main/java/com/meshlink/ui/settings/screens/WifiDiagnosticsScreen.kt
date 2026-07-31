@@ -25,8 +25,9 @@ import androidx.lifecycle.viewModelScope
 import com.meshlink.domain.model.RouteEntry
 import com.meshlink.routing.api.Router
 import com.meshlink.ui.designsystem.theme.MeshTheme
-import com.meshlink.wifi.api.HybridMode
-import com.meshlink.wifi.api.HybridTransport
+import com.meshlink.transport.HybridMode
+import com.meshlink.transport.HybridTransport
+import com.meshlink.transport.HybridTransportMetrics
 import com.meshlink.wifi.data.WifiDirectManager
 import com.meshlink.wifi.data.WifiSocketTransport
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -45,6 +46,7 @@ data class DiagnosticsUiState(
     val groupOwnerIp: String = "N/A",
     val localIp: String = "N/A",
     val hybridMode: HybridMode = HybridMode.BLE_ONLY,
+    val metrics: HybridTransportMetrics = HybridTransportMetrics(),
     val blePeerCount: Int = 0,
     val wifiPeerCount: Int = 0,
     val connectedWifiPeers: List<String> = emptyList(),
@@ -74,8 +76,9 @@ class WifiDiagnosticsViewModel @Inject constructor(
         p2pInfoFlow,
         wifiDirectManager.localIpAddress,
         hybridTransport.activeMode,
+        hybridTransport.metrics,
         wifiSocketTransport.connectedPeersFlow
-    ) { p2pList, localIp, mode, wifiPeers ->
+    ) { p2pList, localIp, mode, metrics, wifiPeers ->
         val isP2p = p2pList[0] as Boolean
         val isDisc = p2pList[1] as Boolean
         val connState = p2pList[2] as com.meshlink.wifi.data.WifiP2pConnectionState
@@ -90,6 +93,7 @@ class WifiDiagnosticsViewModel @Inject constructor(
             groupOwnerIp = goIp ?: "N/A",
             localIp = localIp ?: "N/A",
             hybridMode = mode,
+            metrics = metrics,
             blePeerCount = (hybridTransport.connectedPeers - wifiPeers).size,
             wifiPeerCount = wifiPeers.size,
             connectedWifiPeers = wifiPeers.toList(),
@@ -168,6 +172,25 @@ fun WifiDiagnosticsScreen(
                     }
                     Box(modifier = Modifier.weight(1f)) {
                         MetricCard(title = "Wi-Fi Direct Peers", value = "${uiState.wifiPeerCount}", icon = Icons.Default.Wifi)
+                    }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(4.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Transport Performance & Failover Metrics", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        DiagnosticRow(label = "BLE Packets Sent", value = "${uiState.metrics.totalPacketsSentBle}")
+                        DiagnosticRow(label = "Wi-Fi Direct Packets Sent", value = "${uiState.metrics.totalPacketsSentWifi}")
+                        DiagnosticRow(label = "Automatic Upgrades", value = "${uiState.metrics.upgradeCount}")
+                        DiagnosticRow(label = "Automatic Downgrades", value = "${uiState.metrics.downgradeCount}")
+                        DiagnosticRow(label = "Wi-Fi Fallbacks to BLE", value = "${uiState.metrics.fallbackCount}")
+                        DiagnosticRow(label = "Total Packet Retries", value = "${uiState.metrics.retryCount}")
+                        DiagnosticRow(label = "Cumulative Throughput", value = "${uiState.metrics.throughputBps} bytes")
                     }
                 }
             }

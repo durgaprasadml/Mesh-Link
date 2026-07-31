@@ -1,8 +1,8 @@
 package com.meshlink.di
 
-import com.meshlink.wifi.api.HybridTransport
+import com.meshlink.transport.HybridTransport
+import com.meshlink.transport.HybridTransportManager
 import com.meshlink.wifi.api.WifiTransport
-import com.meshlink.wifi.data.HybridTransportManager
 import com.meshlink.wifi.data.WifiTransportImpl
 import dagger.Binds
 import dagger.Module

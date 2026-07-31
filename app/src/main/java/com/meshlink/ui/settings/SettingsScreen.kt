@@ -31,7 +31,7 @@ import com.meshlink.ui.settings.screens.*
 import kotlinx.coroutines.flow.collectLatest
 
 enum class SettingsDestination {
-    HOME, PROFILE, NETWORK, MESSAGING, EMERGENCY, STORAGE, APPEARANCE, NOTIFICATIONS, PRIVACY, DEVELOPER, ABOUT
+    HOME, PROFILE, NETWORK, MESSAGING, EMERGENCY, STORAGE, APPEARANCE, NOTIFICATIONS, PRIVACY, DEVELOPER, WIFI_DIAGNOSTICS, ABOUT
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,7 +122,11 @@ fun SettingsScreen(
                     SettingsDestination.DEVELOPER -> DeveloperSettingsScreen(
                         uiState = uiState,
                         viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME }
+                        onBack = { currentDestination = SettingsDestination.HOME },
+                        onNavigateToWifiDiagnostics = { currentDestination = SettingsDestination.WIFI_DIAGNOSTICS }
+                    )
+                    SettingsDestination.WIFI_DIAGNOSTICS -> WifiDiagnosticsScreen(
+                        onBack = { currentDestination = SettingsDestination.DEVELOPER }
                     )
                     SettingsDestination.ABOUT -> AboutSettingsScreen(
                         uiState = uiState,

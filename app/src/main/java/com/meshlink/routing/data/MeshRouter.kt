@@ -28,7 +28,7 @@ import kotlinx.coroutines.flow.stateIn
 
 @Singleton
 internal class MeshRouter @Inject constructor(
-    private val bleTransport: BleTransport,
+    private val hybridTransport: com.meshlink.wifi.api.HybridTransport,
 
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,
@@ -88,12 +88,12 @@ internal class MeshRouter @Inject constructor(
     internal fun observeIncoming() {
         if (incomingJob?.isActive == true) return
         incomingJob = applicationScope.launch {
-            bleTransport.incomingPackets.collect { (sender, packet) ->
+            hybridTransport.incomingPackets.collect { (sender, packet) ->
 
                 try {
                     handleIncomingPacket(sender, packet)
                 } catch (e: Exception) {
-                    MeshLogger.e(TAG, "Error handling BLE packet from $sender: ${e.message}")
+                    MeshLogger.e(TAG, "Error handling packet from $sender: ${e.message}")
                 }
             }
         }
@@ -122,7 +122,7 @@ internal class MeshRouter @Inject constructor(
         val cachedPackets = relayDao.getAllRelayPackets()
         if (cachedPackets.isEmpty()) return
 
-        val connectedNodes = bleTransport.connectedPeers
+        val connectedNodes = hybridTransport.connectedPeers
         if (connectedNodes.isEmpty()) {
             return
         }
@@ -169,9 +169,9 @@ internal class MeshRouter @Inject constructor(
             val nextHop = routingEngine.getNextHopForForwarding(packet, connectedNodes, "")
             
             if (nextHop != null) {
-                bleTransport.broadcast(packet, includeAddress = nextHop)
+                hybridTransport.broadcastPacket(packet, includeAddress = nextHop)
             } else {
-                bleTransport.broadcast(packet)
+                hybridTransport.broadcastPacket(packet)
             }
             
             relayDao.deletePacket(entity.packetId)
@@ -455,10 +455,8 @@ internal class MeshRouter @Inject constructor(
                 }
 
                 val json = MeshPacketParser.toJson(packet)
-                val connectedNodes = bleTransport.connectedPeers
+                val connectedNodes = hybridTransport.connectedPeers
                 val nextHop = routingEngine.getNextHopForForwarding(packet, connectedNodes, excludeHop = "")
-
-
 
                 try {
                     // Emit transmission started event
@@ -470,9 +468,9 @@ internal class MeshRouter @Inject constructor(
                     val preferredTransport = routingEngine.transportManager.selectTransportForPayload(packet.targetId, packet.type)
 
                     if (nextHop != null) {
-                        bleTransport.broadcast(packet, includeAddress = nextHop)
+                        hybridTransport.broadcastPacket(packet, includeAddress = nextHop)
                     } else {
-                        bleTransport.broadcast(packet)
+                        hybridTransport.broadcastPacket(packet)
                     }
                     
                     // Emit transmitted event if originating locally

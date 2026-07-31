@@ -52,7 +52,12 @@ class MeshRelayService : Service() {
 
     @Inject
     lateinit var meshRepository: MeshRepository
-    
+
+    @Inject
+    lateinit var wifiDirectBroadcastReceiver: com.meshlink.wifi.data.WifiDirectBroadcastReceiver
+
+    @Inject
+    lateinit var wifiDirectManager: com.meshlink.wifi.data.WifiDirectManager
 
     private var serviceJob: Job? = null
     private var restartOnDestroy = true
@@ -83,8 +88,9 @@ class MeshRelayService : Service() {
         
         val filter = android.content.IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
         registerReceiver(bluetoothStateReceiver, filter)
+        wifiDirectBroadcastReceiver.register(this)
         
-        MeshLogger.d(TAG, "MeshRelayService created")
+        MeshLogger.d(TAG, "MeshRelayService created and receivers registered")
     }
 
     @android.annotation.SuppressLint("NewApi")
@@ -150,7 +156,8 @@ class MeshRelayService : Service() {
         serviceJob = serviceScope.launch {
             try {
                 meshRepository.autoStartMesh()
-                MeshLogger.d(TAG, "Mesh relay started in background")
+                wifiDirectManager.discoverPeers()
+                MeshLogger.d(TAG, "Mesh relay and Wi-Fi Direct discovery started in background")
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Failed to start mesh relay: ${e.message}")
             }
@@ -250,6 +257,7 @@ class MeshRelayService : Service() {
         meshRepository.stopMesh()
         try {
             unregisterReceiver(bluetoothStateReceiver)
+            wifiDirectBroadcastReceiver.unregister(this)
         } catch (e: Exception) {
             // Ignored
         }

@@ -1,7 +1,9 @@
 package com.meshlink.domain.model
 
 enum class RouteType {
-    BLE
+    BLE,
+    WIFI_DIRECT,
+    HYBRID
 }
 
 data class RouteMetrics(

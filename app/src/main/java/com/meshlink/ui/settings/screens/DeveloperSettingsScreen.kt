@@ -20,7 +20,8 @@ import com.meshlink.ui.settings.SettingsViewModel
 fun DeveloperSettingsScreen(
     uiState: SettingsUiState,
     viewModel: SettingsViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToWifiDiagnostics: (() -> Unit)? = null
 ) {
     var transportLogs by remember { mutableStateOf(uiState.transportLogsEnabled) }
     var developerMode by remember { mutableStateOf(uiState.developerMode) }
@@ -81,6 +82,13 @@ fun DeveloperSettingsScreen(
                     shape = MeshTheme.shapes.large
                 ) {
                     Column {
+                        SettingsItemRow(
+                            title = "Wi-Fi Direct & Network Diagnostics",
+                            subtitle = "Inspect P2P state, Group Owner, sockets & IP routes",
+                            icon = Icons.Default.Wifi,
+                            onClick = { onNavigateToWifiDiagnostics?.invoke() }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
                             title = "Mesh Node Diagnostics",
                             subtitle = "Interactive node topology graph & hop latency",

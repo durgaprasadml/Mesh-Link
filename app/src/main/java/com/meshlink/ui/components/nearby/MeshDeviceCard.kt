@@ -214,6 +214,12 @@ fun MeshDeviceCard(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
+                    val (transportIcon, transportLabel) = when (device.transport) {
+                        com.meshlink.domain.model.TransportType.WIFI_DIRECT -> androidx.compose.material.icons.Icons.Default.Wifi to "Wi-Fi Direct"
+                        com.meshlink.domain.model.TransportType.HYBRID -> androidx.compose.material.icons.Icons.Default.Hub to "Hybrid Active"
+                        else -> Icons.Default.Bluetooth to "BLE"
+                    }
+
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
                         shape = MeshTheme.shapes.small
@@ -224,13 +230,13 @@ fun MeshDeviceCard(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Bluetooth,
+                                imageVector = transportIcon,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(12.dp)
                             )
                             Text(
-                                text = "BLE",
+                                text = transportLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.Bold

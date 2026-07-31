@@ -1,23 +1,20 @@
 package com.meshlink.routing.engine
 
-
+import com.meshlink.di.ApplicationScope
 import com.meshlink.domain.model.PacketType
+import com.meshlink.domain.model.RouteType
 import com.meshlink.domain.repository.SettingsRepository
+import com.meshlink.wifi.api.HybridTransport
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import com.meshlink.di.ApplicationScope
-import com.meshlink.domain.model.RouteType
 
 @Singleton
 class IntelligentTransportManager @Inject constructor(
     private val routeOptimizer: RouteOptimizer,
     private val settingsRepository: SettingsRepository,
+    private val hybridTransport: HybridTransport,
     @ApplicationScope private val applicationScope: CoroutineScope
 ) {
     private var currentPreferredTransport: String = "AUTOMATIC"
@@ -31,18 +28,17 @@ class IntelligentTransportManager @Inject constructor(
     }
 
     /**
-     * Given a target and the payload type, determines whether this should go over
-     * BLE, Wi-Fi Direct, or Hybrid.
+     * Given a target, payload type, and payload size, determines whether this should go over
+     * BLE, Wi-Fi Direct, or Hybrid using HybridTransport decision logic.
      */
     fun selectTransportForPayload(destinationId: String, packetType: PacketType, payloadSizeBytes: Long = 1024L): RouteType {
-        // BLE is the only supported transport
-        return RouteType.BLE
+        return hybridTransport.getSelectedRouteType(destinationId, packetType, payloadSizeBytes)
     }
-    
-    private fun isHighBandwidthRequired(packetType: PacketType): Boolean {
+
+    fun isHighBandwidthRequired(packetType: PacketType): Boolean {
         return when (packetType) {
-            PacketType.VIDEO_FRAME, 
-            PacketType.VOICE_FRAME, 
+            PacketType.VIDEO_FRAME,
+            PacketType.VOICE_FRAME,
             PacketType.MEDIA_CHUNK,
             PacketType.MEDIA_META,
             PacketType.MEDIA_ACK,

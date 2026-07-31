@@ -1,32 +1,69 @@
 package com.meshlink.wifi.data
 
+import com.meshlink.common.logger.MeshLogger
+import com.meshlink.di.ApplicationScope
+import com.meshlink.domain.model.MeshError
 import com.meshlink.domain.model.MeshPacket
-import com.meshlink.domain.transport.Transport
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import com.meshlink.domain.model.MeshResult
+import com.meshlink.wifi.api.WifiTransport
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import com.meshlink.di.ApplicationScope
 
 @Singleton
 internal class WifiTransportImpl @Inject constructor(
     private val wifiSocketTransport: WifiSocketTransport,
+    private val wifiDirectManager: WifiDirectManager,
     @ApplicationScope private val applicationScope: CoroutineScope
-) : Transport {
+) : WifiTransport {
 
-    private val _incomingPackets = MutableSharedFlow<Pair<String, MeshPacket>>(extraBufferCapacity = 100)
+    companion object {
+        private const val TAG = "WifiTransportImpl"
+    }
+
+    private val _incomingPackets = MutableSharedFlow<Pair<String, MeshPacket>>(extraBufferCapacity = 200)
     override val incomingPackets: SharedFlow<Pair<String, MeshPacket>> = _incomingPackets.asSharedFlow()
 
+    override val isP2pEnabled: Boolean
+        get() = wifiDirectManager.isP2pEnabled.value
+
+    override val isConnected: Boolean
+        get() = wifiSocketTransport.isConnected()
+
     override val connectedPeers: Set<String>
-        get() = if (wifiSocketTransport.isConnected()) setOf("WIFI_PEER") else emptySet() // Hardcoded for socket representation
+        get() = wifiSocketTransport.connectedPeers
 
     init {
-        wifiSocketTransport.onPacketReceived = { packet ->
+        // Wire incoming socket packets to flow
+        wifiSocketTransport.onPacketReceived = { senderAddress, packet ->
             applicationScope.launch {
-                _incomingPackets.emit("WIFI_PEER" to packet)
+                MeshLogger.d(TAG, "Wi-Fi packet received from $senderAddress: type=${packet.type}, id=${packet.packetId}")
+                _incomingPackets.emit(senderAddress to packet)
+            }
+        }
+
+        // Handle Wi-Fi connection info state -> auto start/connect sockets
+        applicationScope.launch {
+            wifiDirectManager.connectionInfo.collect { info ->
+                if (info != null && info.groupFormed) {
+                    if (info.isGroupOwner) {
+                        MeshLogger.d(TAG, "Device is Group Owner. Starting socket server...")
+                        wifiSocketTransport.startServer()
+                    } else {
+                        val goIp = info.groupOwnerAddress?.hostAddress
+                        if (!goIp.isNullOrBlank()) {
+                            MeshLogger.d(TAG, "Device is Client. Connecting to GO at $goIp...")
+                            wifiSocketTransport.connectAsClient(goIp)
+                        }
+                    }
+                } else {
+                    MeshLogger.d(TAG, "Group dissolved. Stopping socket server and closing connections.")
+                    wifiSocketTransport.stopServer()
+                }
             }
         }
     }
@@ -36,46 +73,49 @@ internal class WifiTransportImpl @Inject constructor(
         wifiSocketTransport.sendPacket(packet)
     }
 
-    override suspend fun sendPacket(packet: MeshPacket): com.meshlink.domain.model.MeshResult<Unit> {
+    override suspend fun sendPacket(packet: MeshPacket): MeshResult<Unit> {
         return try {
-            wifiSocketTransport.sendPacket(packet)
-            com.meshlink.domain.model.MeshResult.Success(Unit)
+            val success = wifiSocketTransport.sendPacket(packet)
+            if (success) {
+                MeshResult.Success(Unit)
+            } else {
+                MeshResult.Error(MeshError.TransportError("Failed to send Wi-Fi packet to ${packet.targetId}"))
+            }
         } catch (e: Exception) {
-            com.meshlink.domain.model.MeshResult.Error(
-                com.meshlink.domain.model.MeshError.TransportError("Failed to send Wi-Fi packet", cause = e)
+            MeshResult.Error(
+                MeshError.TransportError("Failed to send Wi-Fi packet", cause = e)
             )
         }
     }
 
     @Deprecated("Use broadcastPacket instead", ReplaceWith("broadcastPacket(packet, excludeAddress, includeAddress)"))
     override suspend fun broadcast(packet: MeshPacket, excludeAddress: String?, includeAddress: String?) {
-        // Wi-Fi socket is typically point-to-point in this implementation
-        wifiSocketTransport.sendPacket(packet)
+        wifiSocketTransport.broadcastPacket(packet, excludeAddress, includeAddress)
     }
 
-    override suspend fun broadcastPacket(packet: MeshPacket, excludeAddress: String?, includeAddress: String?): com.meshlink.domain.model.MeshResult<Unit> {
+    override suspend fun broadcastPacket(packet: MeshPacket, excludeAddress: String?, includeAddress: String?): MeshResult<Unit> {
         return try {
-            wifiSocketTransport.sendPacket(packet)
-            com.meshlink.domain.model.MeshResult.Success(Unit)
+            wifiSocketTransport.broadcastPacket(packet, excludeAddress, includeAddress)
+            MeshResult.Success(Unit)
         } catch (e: Exception) {
-            com.meshlink.domain.model.MeshResult.Error(
-                com.meshlink.domain.model.MeshError.TransportError("Failed to broadcast Wi-Fi packet", cause = e)
+            MeshResult.Error(
+                MeshError.TransportError("Failed to broadcast Wi-Fi packet", cause = e)
             )
         }
     }
 
     @Deprecated("Use connectToPeer instead", ReplaceWith("connectToPeer(peerId)"))
     override suspend fun connect(peerId: String) {
-        wifiSocketTransport.connectAsClient(peerId)
+        wifiDirectManager.connect(peerId)
     }
 
-    override suspend fun connectToPeer(peerId: String): com.meshlink.domain.model.MeshResult<Unit> {
+    override suspend fun connectToPeer(peerId: String): MeshResult<Unit> {
         return try {
-            wifiSocketTransport.connectAsClient(peerId)
-            com.meshlink.domain.model.MeshResult.Success(Unit)
+            wifiDirectManager.connect(peerId)
+            MeshResult.Success(Unit)
         } catch (e: Exception) {
-            com.meshlink.domain.model.MeshResult.Error(
-                com.meshlink.domain.model.MeshError.TransportError("Failed to connect via Wi-Fi", deviceAddress = peerId, cause = e)
+            MeshResult.Error(
+                MeshError.TransportError("Failed to connect via Wi-Fi Direct", deviceAddress = peerId, cause = e)
             )
         }
     }

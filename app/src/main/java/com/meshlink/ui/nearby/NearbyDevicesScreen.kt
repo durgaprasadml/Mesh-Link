@@ -34,6 +34,8 @@ import com.meshlink.ui.components.nearby.MeshDeviceDetailSheet
 import com.meshlink.ui.components.nearby.MeshNetworkStatsBar
 import com.meshlink.ui.components.nearby.MeshScanningEmptyState
 import com.meshlink.ui.components.nearby.MeshTopologyCanvas
+import com.meshlink.ui.components.MeshScreen
+import com.meshlink.ui.components.TwoPaneLayout
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.MeshIdNormalizer
 import kotlinx.coroutines.launch
@@ -88,7 +90,7 @@ fun NearbyDevicesScreen(
             }
         )
 
-        Scaffold(
+        MeshScreen(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
@@ -128,14 +130,13 @@ fun NearbyDevicesScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // M3 Container Card housing the Topology Canvas
                     ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(0.42f)
+                            .heightIn(min = 180.dp, max = 280.dp)
                             .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
                             .border(
                                 width = 1.dp,
@@ -275,14 +276,14 @@ fun NearbyDevicesScreen(
                         MeshScanningEmptyState(
                             title = if (searchQuery.isBlank()) "Scanning for Mesh Nodes" else "No matching peers",
                             description = if (searchQuery.isBlank()) "Looking for active Mesh Link devices over BLE..." else "Try searching with a different device name or MAC address.",
-                            modifier = Modifier.weight(0.58f)
+                            modifier = Modifier.weight(1f)
                         )
                     } else {
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(0.58f)
+                                .weight(1f)
                                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
                             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                         ) {
@@ -331,6 +332,7 @@ fun NearbyDevicesScreen(
                     isConnecting = connectingToAddress == selectedDeviceAddress,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
                         .padding(bottom = 16.dp)
                 )
             }

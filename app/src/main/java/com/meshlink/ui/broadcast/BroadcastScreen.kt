@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.meshlink.domain.model.Message
 import com.meshlink.ui.components.EmptyState
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -55,7 +56,7 @@ fun BroadcastScreen(
         }
     }
 
-    Scaffold(
+    MeshScreen(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
@@ -80,6 +81,7 @@ fun BroadcastScreen(
                         .fillMaxWidth()
                         .padding(MeshTheme.spacing.medium)
                         .navigationBarsPadding()
+                        .imePadding()
                 ) {
                     // Info pill
                     Row(

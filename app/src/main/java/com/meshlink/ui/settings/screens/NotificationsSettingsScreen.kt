@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.settings.SettingsUiState
@@ -30,15 +31,15 @@ fun NotificationsSettingsScreen(
     var selectedPriority by remember { mutableStateOf(uiState.notificationPriority) }
     var showSoundDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Settings")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                title = { Text("Notifications & Alerts", fontWeight = FontWeight.Bold) },
+                title = { Text("Notifications") },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -46,8 +47,8 @@ fun NotificationsSettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
+            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
         ) {
             // General Notifications
@@ -181,8 +182,6 @@ fun NotificationsSettingsScreen(
                     }
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 

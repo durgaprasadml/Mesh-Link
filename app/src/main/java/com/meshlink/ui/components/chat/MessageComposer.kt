@@ -118,7 +118,8 @@ fun MessageComposer(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.small)
-                    .navigationBarsPadding(),
+                    .navigationBarsPadding()
+                    .imePadding(),
                 verticalAlignment = Alignment.Bottom
             ) {
                 IconButton(

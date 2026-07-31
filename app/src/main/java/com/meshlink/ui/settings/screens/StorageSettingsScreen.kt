@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.components.settings.StorageCategory
 import com.meshlink.ui.components.settings.StorageUsageBar
@@ -33,7 +34,7 @@ fun StorageSettingsScreen(
         StorageCategory("Free Space", totalStorage - 870 * 1024 * 1024L, MaterialTheme.colorScheme.surfaceVariant)
     )
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
@@ -49,8 +50,8 @@ fun StorageSettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
+            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
         ) {
             item {
@@ -125,8 +126,6 @@ fun StorageSettingsScreen(
                     }
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 

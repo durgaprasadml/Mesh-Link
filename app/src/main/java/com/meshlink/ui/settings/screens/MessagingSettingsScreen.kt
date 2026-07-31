@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.settings.SettingsUiState
@@ -30,15 +31,15 @@ fun MessagingSettingsScreen(
     var selectedQuality by remember { mutableStateOf(uiState.mediaQuality) }
     var selectedRetention by remember { mutableStateOf(uiState.messageRetention) }
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Settings")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                title = { Text("Messaging & Media", fontWeight = FontWeight.Bold) },
+                title = { Text("Messaging & Media") },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -46,8 +47,8 @@ fun MessagingSettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
+            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
         ) {
             // Media Transmission
@@ -161,8 +162,6 @@ fun MessagingSettingsScreen(
                     }
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 

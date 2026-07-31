@@ -50,6 +50,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.meshlink.ui.components.MeshScreen
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
@@ -71,7 +72,7 @@ fun SosScreen(
         onPrimaryClick = { viewModel.dismissError() }
     )
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 title = {
@@ -298,90 +299,105 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.semantics {
-            contentDescription = if (isPressed) "Holding to activate. $countdownValue seconds remaining." else "Hold for 3 seconds to send emergency SOS."
-            role = Role.Button
-        }
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = if (isPressed) "Holding to activate. $countdownValue seconds remaining." else "Hold for 3 seconds to send emergency SOS."
+                role = Role.Button
+            }
     ) {
-        Box(
+        BoxWithConstraints(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.size(240.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = MeshTheme.spacing.small)
         ) {
-            // Background breathing glow when not pressed
-            if (!isPressed) {
-                Box(
-                    modifier = Modifier
-                        .size(180.dp)
-                        .scale(breathingScale)
-                        .clip(CircleShape)
-                        .background(MeshTheme.colors.danger.copy(alpha = 0.15f))
-                )
-                Box(
-                    modifier = Modifier
-                        .size(150.dp)
-                        .scale(breathingScale * 1.05f)
-                        .clip(CircleShape)
-                        .background(MeshTheme.colors.danger.copy(alpha = 0.25f))
-                )
-            }
+            val outerSize = minOf(maxWidth, 240.dp)
+            val glowSize1 = outerSize * (180f / 240f)
+            val glowSize2 = outerSize * (150f / 240f)
+            val ringSize = outerSize * (190f / 240f)
+            val buttonSize = outerSize * (160f / 240f)
 
-            // Progress Ring
-            if (isPressed) {
-                CircularProgressIndicator(
-                    progress = { progress.value },
-                    modifier = Modifier.size(190.dp),
-                    color = MeshTheme.colors.danger,
-                    strokeWidth = MeshTheme.spacing.mediumSmall,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeCap = StrokeCap.Round
-                )
-            }
-
-            // Main Touchable Button
             Box(
-                modifier = Modifier
-                    .size(160.dp)
-                    .scale(buttonScale)
-                    .clip(CircleShape)
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                MeshTheme.colors.danger.copy(alpha = 0.8f),
-                                MeshTheme.colors.danger
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(outerSize)
+            ) {
+                // Background breathing glow when not pressed
+                if (!isPressed) {
+                    Box(
+                        modifier = Modifier
+                            .size(glowSize1)
+                            .scale(breathingScale)
+                            .clip(CircleShape)
+                            .background(MeshTheme.colors.danger.copy(alpha = 0.15f))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(glowSize2)
+                            .scale(breathingScale * 1.05f)
+                            .clip(CircleShape)
+                            .background(MeshTheme.colors.danger.copy(alpha = 0.25f))
+                    )
+                }
+
+                // Progress Ring
+                if (isPressed) {
+                    CircularProgressIndicator(
+                        progress = { progress.value },
+                        modifier = Modifier.size(ringSize),
+                        color = MeshTheme.colors.danger,
+                        strokeWidth = MeshTheme.spacing.mediumSmall,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        strokeCap = StrokeCap.Round
+                    )
+                }
+
+                // Main Touchable Button
+                Box(
+                    modifier = Modifier
+                        .size(buttonSize)
+                        .scale(buttonScale)
+                        .clip(CircleShape)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    MeshTheme.colors.danger.copy(alpha = 0.8f),
+                                    MeshTheme.colors.danger
+                                )
                             )
                         )
-                    )
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = {
-                                isPressed = true
-                                tryAwaitRelease()
-                                isPressed = false
-                            }
-                        )
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (isPressed) {
-                    Text(
-                        text = "$countdownValue",
-                        style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Black),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.Warning,
-                            contentDescription = "Responder Location",
-                            modifier = Modifier.size(MeshTheme.spacing.giant),
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
-                        Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onPress = {
+                                    isPressed = true
+                                    tryAwaitRelease()
+                                    isPressed = false
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isPressed) {
                         Text(
-                            text = "SOS",
-                            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                            text = "$countdownValue",
+                            style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Black),
                             color = MaterialTheme.colorScheme.onPrimary
                         )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = "Responder Location",
+                                modifier = Modifier.size(MeshTheme.spacing.giant),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                            Text(
+                                text = "SOS",
+                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
                     }
                 }
             }
@@ -692,8 +708,7 @@ fun ActionChip(
     OutlinedButton(
         onClick = onClick,
         modifier = modifier
-            .heightIn(min = 48.dp)
-            .height(MeshTheme.spacing.extraGiant - MeshTheme.spacing.mediumSmall)
+            .defaultMinSize(minHeight = 48.dp)
             .semantics {
                 this.contentDescription = chipContentDescription
                 this.role = Role.Button

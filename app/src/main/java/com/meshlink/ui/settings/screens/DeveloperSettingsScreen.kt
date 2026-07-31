@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.settings.SettingsUiState
@@ -26,15 +27,15 @@ fun DeveloperSettingsScreen(
     var transportLogs by remember { mutableStateOf(uiState.transportLogsEnabled) }
     var developerMode by remember { mutableStateOf(uiState.developerMode) }
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Settings")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                title = { Text("Developer & Diagnostics", fontWeight = FontWeight.Bold) },
+                title = { Text("Developer Options") },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -42,8 +43,8 @@ fun DeveloperSettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
+            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
         ) {
             // Diagnostics Banner
@@ -172,8 +173,6 @@ fun DeveloperSettingsScreen(
                     }
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 }

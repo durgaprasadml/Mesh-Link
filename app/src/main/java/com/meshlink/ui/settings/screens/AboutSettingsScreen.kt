@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.settings.SettingsUiState
@@ -28,15 +29,15 @@ fun AboutSettingsScreen(
 ) {
     var showLicensesDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Settings")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                title = { Text("About Mesh Link", fontWeight = FontWeight.Bold) },
+                title = { Text("About Mesh Link") },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -44,8 +45,8 @@ fun AboutSettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
+            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
         ) {
             // App Banner Header
@@ -162,8 +163,6 @@ fun AboutSettingsScreen(
                     }
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 

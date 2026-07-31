@@ -27,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.domain.model.Chat
 import com.meshlink.ui.components.EmptyState
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -54,7 +55,7 @@ fun ChatsListScreen(
         }
     }
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Messages", fontWeight = FontWeight.Bold) },
@@ -67,9 +68,7 @@ fun ChatsListScreen(
         }
     ) { paddingValues ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+            modifier = Modifier.fillMaxSize()
         ) {
             // Search Bar
             Box(modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import com.meshlink.ui.components.MeshScreen
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -55,11 +56,11 @@ fun SettingsScreen(
         }
     }
 
-    Scaffold(
+    MeshScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
+        Box(modifier = Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = currentDestination,
                 transitionSpec = {
@@ -139,7 +140,7 @@ fun SettingsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsHome(
     userName: String,
@@ -151,7 +152,7 @@ fun SettingsHome(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
-    Scaffold(
+    MeshScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
@@ -182,8 +183,8 @@ fun SettingsHome(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
+            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumLarge)
         ) {
             // Search Bar Filter
@@ -265,7 +266,10 @@ fun SettingsHome(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small)) {
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small),
+                                        verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.extraSmall)
+                                    ) {
                                         AssistChip(
                                             onClick = { },
                                             label = { Text("Mesh Node Active", style = MaterialTheme.typography.labelSmall) },
@@ -393,8 +397,6 @@ fun SettingsHome(
                     }
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 }

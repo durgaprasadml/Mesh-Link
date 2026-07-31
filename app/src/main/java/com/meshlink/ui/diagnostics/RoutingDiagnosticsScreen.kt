@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.meshlink.domain.model.RouteEntry
 import com.meshlink.domain.model.RouteState
+import com.meshlink.ui.components.MeshScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,7 +31,7 @@ fun RoutingDiagnosticsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Routing Diagnostics", fontWeight = FontWeight.Bold) },
@@ -45,70 +46,69 @@ fun RoutingDiagnosticsScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Network Health Header
-            HealthHeaderCard(health = uiState.networkHealth, meshSize = uiState.meshSize)
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Stat Cards Grid
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                MetricCard(title = "RREQ Active", value = uiState.activeDiscoveryCount.toString(), modifier = Modifier.weight(1f))
-                MetricCard(title = "Pending Queue", value = uiState.pendingQueueSize.toString(), modifier = Modifier.weight(1f))
-                MetricCard(title = "Store & Forward", value = uiState.storeForwardCount.toString(), modifier = Modifier.weight(1f))
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                HealthHeaderCard(health = uiState.networkHealth, meshSize = uiState.meshSize)
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                MetricCard(title = "Duplicate Cache", value = uiState.duplicateCacheSize.toString(), modifier = Modifier.weight(1f))
-                MetricCard(title = "Route Repairs", value = uiState.routeRepairCount.toString(), modifier = Modifier.weight(1f))
-                MetricCard(title = "Mesh Size", value = "${uiState.meshSize} Nodes", modifier = Modifier.weight(1f))
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricCard(title = "RREQ Active", value = uiState.activeDiscoveryCount.toString(), modifier = Modifier.weight(1f))
+                    MetricCard(title = "Pending Queue", value = uiState.pendingQueueSize.toString(), modifier = Modifier.weight(1f))
+                    MetricCard(title = "Store & Forward", value = uiState.storeForwardCount.toString(), modifier = Modifier.weight(1f))
+                }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricCard(title = "Duplicate Cache", value = uiState.duplicateCacheSize.toString(), modifier = Modifier.weight(1f))
+                    MetricCard(title = "Route Repairs", value = uiState.routeRepairCount.toString(), modifier = Modifier.weight(1f))
+                    MetricCard(title = "Mesh Size", value = "${uiState.meshSize} Nodes", modifier = Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
-            Text(
-                text = "Live Route Table (${uiState.routes.size} entries)",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
+            item {
+                Text(
+                    text = "Live Route Table (${uiState.routes.size} entries)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
             if (uiState.routes.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No active routes in cache",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No active routes in cache",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(uiState.routes) { route ->
-                        RouteRowItem(route = route)
-                    }
+                items(uiState.routes) { route ->
+                    RouteRowItem(route = route)
                 }
             }
         }

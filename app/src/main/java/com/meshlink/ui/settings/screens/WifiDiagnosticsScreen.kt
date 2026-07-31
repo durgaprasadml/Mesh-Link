@@ -24,6 +24,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.meshlink.domain.model.RouteEntry
 import com.meshlink.routing.api.Router
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.transport.HybridMode
 import com.meshlink.transport.HybridTransport
@@ -123,10 +124,10 @@ fun WifiDiagnosticsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
-                title = { Text("Network & Wi-Fi Diagnostics", fontWeight = FontWeight.Bold) },
+                title = { Text("Wi-Fi & Hybrid Diagnostics") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -145,6 +146,7 @@ fun WifiDiagnosticsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
+            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
         ) {
             item {

@@ -24,6 +24,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.meshlink.transfer.TransferMetrics
 import com.meshlink.transfer.TransferState
 import com.meshlink.transfer.TransportType
+import com.meshlink.ui.components.MeshScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +34,7 @@ fun MediaDiagnosticsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Media Transfer Diagnostics", fontWeight = FontWeight.Bold) },
@@ -48,127 +49,125 @@ fun MediaDiagnosticsScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Overall Subsystem Health Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                // Overall Subsystem Health Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Column {
-                        Text(
-                            text = "Media Subsystem Engine",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Transport Mode: ${uiState.activeModeName} | Window: ${uiState.currentSlidingWindowSize} chunks",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                        )
-                    }
-                    Surface(
-                        color = Color(0xFF2E7D32),
-                        shape = RoundedCornerShape(16.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "PRODUCTION READY",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
+                        Column {
+                            Text(
+                                text = "Media Subsystem Engine",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Transport Mode: ${uiState.activeModeName} | Window: ${uiState.currentSlidingWindowSize} chunks",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                        Surface(
+                            color = Color(0xFF2E7D32),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text(
+                                text = "PRODUCTION READY",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
                     }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricCard(title = "Active Queue", value = uiState.activeTransfers.size.toString(), modifier = Modifier.weight(1f))
+                    MetricCard(title = "Completed", value = uiState.completedTransfersCount.toString(), modifier = Modifier.weight(1f))
+                    MetricCard(title = "Failed", value = uiState.failedTransfersCount.toString(), modifier = Modifier.weight(1f))
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Metrics Grid Row 1
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                MetricCard(title = "Active Queue", value = uiState.activeTransfers.size.toString(), modifier = Modifier.weight(1f))
-                MetricCard(title = "Completed", value = uiState.completedTransfersCount.toString(), modifier = Modifier.weight(1f))
-                MetricCard(title = "Failed", value = uiState.failedTransfersCount.toString(), modifier = Modifier.weight(1f))
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Metrics Grid Row 2
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            item {
                 val speedKb = uiState.averageSpeedBytesPerSec / 1024f
-                MetricCard(title = "Avg Speed", value = "${String.format("%.1f", speedKb)} KB/s", modifier = Modifier.weight(1f))
-                MetricCard(title = "Retries", value = uiState.totalRetries.toString(), modifier = Modifier.weight(1f))
-                MetricCard(title = "CRC32 Errors", value = uiState.totalCrc32Errors.toString(), modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricCard(title = "Avg Speed", value = "${String.format("%.1f", speedKb)} KB/s", modifier = Modifier.weight(1f))
+                    MetricCard(title = "Retries", value = uiState.totalRetries.toString(), modifier = Modifier.weight(1f))
+                    MetricCard(title = "CRC32 Errors", value = uiState.totalCrc32Errors.toString(), modifier = Modifier.weight(1f))
+                }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Metrics Grid Row 3
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            item {
                 val compPercent = ((1f - uiState.averageCompressionRatio) * 100f).coerceAtLeast(0f)
-                MetricCard(title = "Saved via Comp", value = "${String.format("%.0f", compPercent)}%", modifier = Modifier.weight(1f))
-                MetricCard(title = "BLE Transfers", value = uiState.bleTransfersCount.toString(), modifier = Modifier.weight(1f))
-                MetricCard(title = "Wi-Fi Transfers", value = uiState.wifiTransfersCount.toString(), modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricCard(title = "Saved via Comp", value = "${String.format("%.0f", compPercent)}%", modifier = Modifier.weight(1f))
+                    MetricCard(title = "BLE Transfers", value = uiState.bleTransfersCount.toString(), modifier = Modifier.weight(1f))
+                    MetricCard(title = "Wi-Fi Transfers", value = uiState.wifiTransfersCount.toString(), modifier = Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "Live Active Transfers (${uiState.activeTransfers.size})",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
+            item {
+                Text(
+                    text = "Live Active Transfers (${uiState.activeTransfers.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
             if (uiState.activeTransfers.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No active media transfers in progress",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(uiState.activeTransfers, key = { it.transferId }) { item ->
-                        TransferRowItem(
-                            metrics = item,
-                            onPause = { viewModel.pauseTransfer(item.transferId) },
-                            onResume = { viewModel.resumeTransfer(item.transferId) },
-                            onCancel = { viewModel.cancelTransfer(item.transferId) }
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No active media transfers in progress",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            } else {
+                items(uiState.activeTransfers, key = { it.transferId }) { item ->
+                    TransferRowItem(
+                        metrics = item,
+                        onPause = { viewModel.pauseTransfer(item.transferId) },
+                        onResume = { viewModel.resumeTransfer(item.transferId) },
+                        onCancel = { viewModel.cancelTransfer(item.transferId) }
+                    )
                 }
             }
         }

@@ -8,14 +8,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -51,6 +44,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.components.AnimatedErrorDialog
 import com.meshlink.ui.components.LoadingOverlay
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.UserAvatar
 import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.ui.designsystem.theme.MeshTheme
@@ -128,7 +122,7 @@ fun ProfileScreen(
         onPrimaryClick = { viewModel.dismissError() }
     )
 
-    Scaffold(
+    MeshScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Edit Profile") },
@@ -158,14 +152,13 @@ fun ProfileScreen(
         }
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier = Modifier.fillMaxSize()
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
+                    .imePadding()
                     .padding(MeshTheme.spacing.mediumLarge),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {

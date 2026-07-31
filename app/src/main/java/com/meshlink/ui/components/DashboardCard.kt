@@ -28,7 +28,7 @@ fun DashboardCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.width(160.dp),
+        modifier = modifier.fillMaxWidth(),
         shape = MeshTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = MeshTheme.elevation.level2)

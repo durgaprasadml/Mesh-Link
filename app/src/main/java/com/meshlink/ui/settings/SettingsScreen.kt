@@ -230,9 +230,12 @@ fun SettingsHome(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                com.meshlink.ui.components.UserAvatarImage(
-                                    avatarUri = uiState.user?.avatarUri,
-                                    displayName = userName,
+                                com.meshlink.ui.components.UserAvatar(
+                                    identity = com.meshlink.domain.model.UserIdentity.create(
+                                        userId = uiState.user?.meshId ?: "",
+                                        displayName = userName,
+                                        avatarUri = uiState.user?.avatarUri
+                                    ),
                                     size = 64.dp
                                 )
                                 Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))

@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import com.meshlink.domain.model.UserIdentity
+import com.meshlink.domain.repository.UserRepository
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -43,6 +45,7 @@ data class ChatDetailUiState(
 class ChatDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val meshRepository: MeshRepository,
+    private val userRepository: UserRepository,
     private val getChatMessagesUseCase: com.meshlink.domain.usecase.messaging.GetChatMessagesUseCase,
     private val deleteMessagesUseCase: com.meshlink.domain.usecase.messaging.DeleteMessagesUseCase,
     private val deleteChatUseCase: com.meshlink.domain.usecase.messaging.DeleteChatUseCase,
@@ -67,6 +70,15 @@ class ChatDetailViewModel @Inject constructor(
     } catch (_: Exception) {
         savedStateHandle.get<String>("name") ?: "Unknown"
     }
+
+    val peerIdentity: StateFlow<UserIdentity> = userRepository.observeIdentity(
+        userId = address.ifBlank { rawPeerIdOrAddress },
+        fallbackDisplayName = name
+    ).stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = UserIdentity.create(address.ifBlank { rawPeerIdOrAddress }, name)
+    )
 
     val messages: StateFlow<List<Message>> = if (address.isNotBlank()) {
         getChatMessagesUseCase(address)

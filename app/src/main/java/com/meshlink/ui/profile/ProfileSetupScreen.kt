@@ -57,6 +57,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.meshlink.ui.components.UserAvatar
 import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import kotlinx.coroutines.flow.collectLatest
@@ -190,9 +191,12 @@ fun ProfileSetupScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    UserAvatarImage(
-                        avatarUri = selectedAvatarUri,
-                        displayName = displayName,
+                    UserAvatar(
+                        identity = com.meshlink.domain.model.UserIdentity.create(
+                            userId = "preview",
+                            displayName = displayName,
+                            avatarUri = selectedAvatarUri
+                        ),
                         size = 130.dp,
                         contentDescriptionText = "Profile Picture Preview"
                     )

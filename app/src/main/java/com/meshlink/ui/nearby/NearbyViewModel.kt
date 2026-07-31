@@ -17,6 +17,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import com.meshlink.domain.model.UserIdentity
+import com.meshlink.ui.profile.AvatarAssets
+
 enum class SortOption { RSSI, NAME, STATUS }
 
 data class ActivePacketEvent(
@@ -66,24 +69,41 @@ class NearbyViewModel @Inject constructor(
         }
     }
 
-    val uiState: StateFlow<NearbyUiState> = combine(
+    private val devicesWithIdentity = combine(
         meshRepository.scannedDevices,
+        userRepository.peerIdentities,
+        userRepository.localIdentity
+    ) { bleMap, peers, local ->
+        bleMap.values.map { device ->
+            val peerIdentity = peers[device.meshId] ?: peers[device.address] ?: (if (local?.userId == device.meshId) local else null)
+            if (peerIdentity != null) {
+                val avatarUriStr = when {
+                    peerIdentity.galleryImageUri != null -> peerIdentity.galleryImageUri
+                    peerIdentity.cameraImageUri != null -> peerIdentity.cameraImageUri
+                    peerIdentity.selectedAvatarId != null -> AvatarAssets.buildAvatarUri(peerIdentity.selectedAvatarId)
+                    else -> device.avatarUri
+                }
+                device.copy(
+                    name = if (device.name.isBlank() || device.name == "Nearby Node") peerIdentity.displayName else device.name,
+                    avatarUri = avatarUriStr
+                )
+            } else {
+                device
+            }
+        }
+    }
+
+    val uiState: StateFlow<NearbyUiState> = combine(
+        devicesWithIdentity,
         _sortOption,
         _isScanning,
         _errorMessage,
         _trafficState
-    ) { bleMap: Map<String, BleDevice>, sortOption: SortOption, isScanning: Boolean, errorMessage: String?, traffic: TrafficState ->
-        
-        val mergedDevices = mutableMapOf<String, BleDevice>()
-        
-        bleMap.values.forEach { device ->
-            mergedDevices[device.address] = device
-        }
-
+    ) { devices, sortOption, isScanning, errorMessage, traffic ->
         val sortedList = when (sortOption) {
-            SortOption.RSSI -> mergedDevices.values.toList().sortedByDescending { it.rssi }
-            SortOption.NAME -> mergedDevices.values.toList().sortedBy { it.name.ifBlank { "~" } }
-            SortOption.STATUS -> mergedDevices.values.toList().sortedByDescending { it.isConnected }
+            SortOption.RSSI -> devices.sortedByDescending { it.rssi }
+            SortOption.NAME -> devices.sortedBy { it.name.ifBlank { "~" } }
+            SortOption.STATUS -> devices.sortedByDescending { it.isConnected }
         }
         
         NearbyUiState(

@@ -42,6 +42,7 @@ fun ChatDetailScreen(
     viewModel: ChatDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val peerIdentity by viewModel.peerIdentity.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var inputText by remember { mutableStateOf("") }
@@ -161,15 +162,14 @@ fun ChatDetailScreen(
                         Text("${uiState.selectedMessageIds.size} selected")
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            com.meshlink.ui.components.UserAvatarImage(
-                                avatarUri = null,
-                                displayName = viewModel.name,
+                            com.meshlink.ui.components.UserAvatar(
+                                identity = peerIdentity,
                                 size = 36.dp
                             )
                             Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
                             Column {
                                 Text(
-                                    text = viewModel.name,
+                                    text = peerIdentity.displayName.ifBlank { viewModel.name },
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )

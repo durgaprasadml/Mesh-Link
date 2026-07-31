@@ -51,6 +51,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.components.AnimatedErrorDialog
 import com.meshlink.ui.components.LoadingOverlay
+import com.meshlink.ui.components.UserAvatar
 import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import kotlinx.coroutines.launch
@@ -181,9 +182,12 @@ fun ProfileScreen(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        UserAvatarImage(
-                            avatarUri = avatarUriString,
-                            displayName = name,
+                        UserAvatar(
+                            identity = com.meshlink.domain.model.UserIdentity.create(
+                                userId = uiState.user?.meshId ?: "",
+                                displayName = name,
+                                avatarUri = avatarUriString
+                            ),
                             size = 120.dp,
                             contentDescriptionText = "Profile Picture"
                         )

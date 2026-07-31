@@ -123,9 +123,8 @@ fun HomeScreen(
                                 contentDescription = "Profile and Settings"
                             }
                     ) {
-                        com.meshlink.ui.components.UserAvatarImage(
-                            avatarUri = uiState.user?.avatarUri,
-                            displayName = uiState.user?.name ?: "User",
+                        com.meshlink.ui.components.UserAvatar(
+                            identity = uiState.userIdentity,
                             size = 40.dp
                         )
                     }

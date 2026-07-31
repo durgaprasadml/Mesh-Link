@@ -5,19 +5,73 @@ import com.meshlink.domain.repository.UserRepository
 import com.meshlink.domain.model.User
 import com.meshlink.database.data.local.UserEntity
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import com.meshlink.domain.model.UserIdentity
 
+@Singleton
 class UserRepositoryImpl @Inject constructor(
     private val localDataSource: UserLocalDataSource
 ) : UserRepository {
 
-    override val hasProfile: Flow<Boolean> = localDataSource.hasProfile
+    private val _peerIdentities = MutableStateFlow<Map<String, UserIdentity>>(emptyMap())
+    override val peerIdentities: StateFlow<Map<String, UserIdentity>> = _peerIdentities.asStateFlow()
 
     override val localUser: Flow<User?> = localDataSource.observeLocalUser().map { entity ->
         entity?.let { User(meshId = it.meshId, name = it.name, avatarUri = it.avatarUri, aboutMe = it.aboutMe) }
     }
-    
+
+    override val localIdentity: Flow<UserIdentity?> = localUser.map { user ->
+        user?.let { UserIdentity.create(userId = it.meshId, displayName = it.name, avatarUri = it.avatarUri) }
+    }
+
+    override fun observeIdentity(
+        userId: String,
+        fallbackDisplayName: String?,
+        fallbackAvatarUri: String?
+    ): Flow<UserIdentity> {
+        return combine(localIdentity, peerIdentities) { local, peers ->
+            if (local != null && local.userId == userId) {
+                local
+            } else if (peers.containsKey(userId)) {
+                peers.getValue(userId)
+            } else {
+                UserIdentity.create(
+                    userId = userId,
+                    displayName = fallbackDisplayName ?: userId,
+                    avatarUri = fallbackAvatarUri
+                )
+            }
+        }
+    }
+
+    override fun updatePeerIdentity(
+        userId: String,
+        displayName: String?,
+        avatarUri: String?,
+        lastUpdated: Long
+    ) {
+        if (userId.isBlank()) return
+        val currentMap = _peerIdentities.value
+        val existing = currentMap[userId]
+        if (existing == null || lastUpdated >= existing.lastUpdated) {
+            val updatedIdentity = UserIdentity.create(
+                userId = userId,
+                displayName = displayName ?: existing?.displayName ?: userId,
+                avatarUri = avatarUri ?: existing?.selectedAvatarId ?: existing?.galleryImageUri ?: existing?.cameraImageUri,
+                lastUpdated = lastUpdated
+            )
+            _peerIdentities.value = currentMap + (userId to updatedIdentity)
+        }
+    }
+
+    override val hasProfile: Flow<Boolean> = localDataSource.hasProfile
+
     @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name, avatarUri)"))
     override suspend fun createProfile(name: String, avatarUri: String?): Result<Unit> {
         return try {
@@ -80,3 +134,4 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
 }
+

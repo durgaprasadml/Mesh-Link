@@ -126,8 +126,24 @@ fun MeshDeviceCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar with Connection Dot
-                Box(contentAlignment = Alignment.BottomEnd) {
+                // Avatar with Connection Dot and Smooth Discovery Animation
+                var isDiscovered by remember { mutableStateOf(false) }
+                LaunchedEffect(device.address) {
+                    isDiscovered = true
+                }
+                val avatarScale by animateFloatAsState(
+                    targetValue = if (isDiscovered) 1f else 0.8f,
+                    animationSpec = spring(stiffness = 300f, dampingRatio = 0.75f),
+                    label = "DeviceAvatarScale"
+                )
+
+                Box(
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = avatarScale
+                        scaleY = avatarScale
+                    },
+                    contentAlignment = Alignment.BottomEnd
+                ) {
                     UserAvatarImage(
                         avatarUri = device.avatarUri,
                         displayName = displayName,

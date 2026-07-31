@@ -39,6 +39,7 @@ fun BroadcastScreen(
     var messageText by remember { mutableStateOf("") }
     val maxChars = 500
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val peerIdentities by viewModel.peerIdentities.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     // Auto-scroll to bottom only when user is already at bottom
@@ -187,7 +188,7 @@ fun BroadcastScreen(
                             visible = true,
                             enter = fadeIn() + slideInVertically { it / 2 }
                         ) {
-                            BroadcastBubble(msg)
+                            BroadcastBubble(msg, peerIdentities)
                         }
                     }
                 }
@@ -197,7 +198,7 @@ fun BroadcastScreen(
 }
 
 @Composable
-private fun BroadcastBubble(msg: Message) {
+private fun BroadcastBubble(msg: Message, peerIdentities: Map<String, com.meshlink.domain.model.UserIdentity>) {
     val isMe = msg.isFromMe
     val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
@@ -243,15 +244,15 @@ private fun BroadcastBubble(msg: Message) {
                 .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
         ) {
             if (!isMe) {
+                val senderIdentity = peerIdentities[msg.senderId] ?: com.meshlink.domain.model.UserIdentity.create(msg.senderId, senderName)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    com.meshlink.ui.components.UserAvatarImage(
-                        avatarUri = null,
-                        displayName = senderName,
+                    com.meshlink.ui.components.UserAvatar(
+                        identity = senderIdentity,
                         size = 24.dp
                     )
                     Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
                     Text(
-                        text = senderName,
+                        text = senderIdentity.displayName.ifBlank { senderName },
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.labelSmall
                     )

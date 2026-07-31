@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import com.meshlink.domain.model.UserIdentity
+import com.meshlink.domain.repository.UserRepository
+
 data class BroadcastUiState(
     val messages: List<Message> = emptyList()
 )
@@ -20,8 +23,11 @@ data class BroadcastUiState(
 @HiltViewModel
 class BroadcastViewModel @Inject constructor(
     private val meshRepository: MeshRepository,
-    private val getBroadcastMessagesUseCase: GetBroadcastMessagesUseCase
+    private val getBroadcastMessagesUseCase: GetBroadcastMessagesUseCase,
+    val userRepository: UserRepository
 ) : ViewModel() {
+
+    val peerIdentities: StateFlow<Map<String, UserIdentity>> = userRepository.peerIdentities
 
     fun sendBroadcast(message: String) {
         viewModelScope.launch {

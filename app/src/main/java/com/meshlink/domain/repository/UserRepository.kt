@@ -40,4 +40,10 @@ interface UserRepository {
     
     val meshMode: Flow<String>
     suspend fun setMeshMode(mode: String)
+
+    val localIdentity: Flow<com.meshlink.domain.model.UserIdentity?>
+    val peerIdentities: kotlinx.coroutines.flow.StateFlow<Map<String, com.meshlink.domain.model.UserIdentity>>
+    fun observeIdentity(userId: String, fallbackDisplayName: String? = null, fallbackAvatarUri: String? = null): Flow<com.meshlink.domain.model.UserIdentity>
+    fun updatePeerIdentity(userId: String, displayName: String?, avatarUri: String?, lastUpdated: Long = System.currentTimeMillis())
 }
+

@@ -56,87 +56,86 @@ fun SettingsScreen(
         }
     }
 
-    MeshScreen(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            AnimatedContent(
-                targetState = currentDestination,
-                transitionSpec = {
-                    if (targetState != SettingsDestination.HOME) {
-                        slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn() togetherWith
-                                slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) + fadeOut()
-                    } else {
-                        slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300)) + fadeIn() togetherWith
-                                slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut()
-                    }
-                },
-                label = "SettingsNav"
-            ) { dest ->
-                when (dest) {
-                    SettingsDestination.HOME -> SettingsHome(
-                        userName = userName,
-                        nodeId = nodeId,
-                        uiState = uiState,
-                        onNavigate = { currentDestination = it },
-                        onBack = onBack
-                    )
-                    SettingsDestination.PROFILE -> com.meshlink.ui.profile.ProfileScreen(
-                        onNavigateBack = { currentDestination = SettingsDestination.HOME }
-                    )
-                    SettingsDestination.NETWORK -> NetworkSettingsScreen(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME }
-                    )
-                    SettingsDestination.MESSAGING -> MessagingSettingsScreen(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME }
-                    )
-                    SettingsDestination.EMERGENCY -> EmergencySettingsScreen(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME }
-                    )
-                    SettingsDestination.STORAGE -> StorageSettingsScreen(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME }
-                    )
-                    SettingsDestination.APPEARANCE -> AppearanceSettingsScreen(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME }
-                    )
-                    SettingsDestination.NOTIFICATIONS -> NotificationsSettingsScreen(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME }
-                    )
-                    SettingsDestination.PRIVACY -> PrivacySettingsScreen(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME }
-                    )
-                    SettingsDestination.DEVELOPER -> DeveloperSettingsScreen(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME },
-                        onNavigateToWifiDiagnostics = { currentDestination = SettingsDestination.WIFI_DIAGNOSTICS }
-                    )
-                    SettingsDestination.WIFI_DIAGNOSTICS -> WifiDiagnosticsScreen(
-                        onBack = { currentDestination = SettingsDestination.DEVELOPER }
-                    )
-                    SettingsDestination.ABOUT -> AboutSettingsScreen(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        onBack = { currentDestination = SettingsDestination.HOME }
-                    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = currentDestination,
+            transitionSpec = {
+                if (targetState != SettingsDestination.HOME) {
+                    slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) + fadeOut()
+                } else {
+                    slideInHorizontally(initialOffsetX = { -it }, animationSpec = tween(300)) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) + fadeOut()
                 }
+            },
+            label = "SettingsNav"
+        ) { dest ->
+            when (dest) {
+                SettingsDestination.HOME -> SettingsHome(
+                    userName = userName,
+                    nodeId = nodeId,
+                    uiState = uiState,
+                    onNavigate = { currentDestination = it },
+                    onBack = onBack
+                )
+                SettingsDestination.PROFILE -> com.meshlink.ui.profile.ProfileScreen(
+                    onNavigateBack = { currentDestination = SettingsDestination.HOME }
+                )
+                SettingsDestination.NETWORK -> NetworkSettingsScreen(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onBack = { currentDestination = SettingsDestination.HOME }
+                )
+                SettingsDestination.MESSAGING -> MessagingSettingsScreen(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onBack = { currentDestination = SettingsDestination.HOME }
+                )
+                SettingsDestination.EMERGENCY -> EmergencySettingsScreen(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onBack = { currentDestination = SettingsDestination.HOME }
+                )
+                SettingsDestination.STORAGE -> StorageSettingsScreen(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onBack = { currentDestination = SettingsDestination.HOME }
+                )
+                SettingsDestination.APPEARANCE -> AppearanceSettingsScreen(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onBack = { currentDestination = SettingsDestination.HOME }
+                )
+                SettingsDestination.NOTIFICATIONS -> NotificationsSettingsScreen(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onBack = { currentDestination = SettingsDestination.HOME }
+                )
+                SettingsDestination.PRIVACY -> PrivacySettingsScreen(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onBack = { currentDestination = SettingsDestination.HOME }
+                )
+                SettingsDestination.DEVELOPER -> DeveloperSettingsScreen(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onBack = { currentDestination = SettingsDestination.HOME },
+                    onNavigateToWifiDiagnostics = { currentDestination = SettingsDestination.WIFI_DIAGNOSTICS }
+                )
+                SettingsDestination.WIFI_DIAGNOSTICS -> WifiDiagnosticsScreen(
+                    onBack = { currentDestination = SettingsDestination.DEVELOPER }
+                )
+                SettingsDestination.ABOUT -> AboutSettingsScreen(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onBack = { currentDestination = SettingsDestination.HOME }
+                )
             }
         }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
@@ -155,16 +154,9 @@ fun SettingsHome(
     MeshScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier.minimumInteractiveComponentSize()
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Navigate back to Main Screen")
-                    }
-                },
-                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Settings",
+                onBackClick = onBack,
                 actions = {
                     IconButton(
                         onClick = { isSearchActive = !isSearchActive },
@@ -176,7 +168,7 @@ fun SettingsHome(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                containerColor = MaterialTheme.colorScheme.background
             )
         }
     ) { paddingValues ->

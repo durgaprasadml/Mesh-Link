@@ -34,14 +34,10 @@ fun AppearanceSettingsScreen(
 ) {
     MeshScreen(
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                title = { Text("Appearance") },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Appearance",
+                onBackClick = onBack,
+                containerColor = MaterialTheme.colorScheme.background
             )
         }
     ) { paddingValues ->

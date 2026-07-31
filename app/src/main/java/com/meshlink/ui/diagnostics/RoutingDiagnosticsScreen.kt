@@ -33,16 +33,10 @@ fun RoutingDiagnosticsScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                title = { Text("Routing Diagnostics", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Routing Diagnostics",
+                onBackClick = onBackClick,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         }
     ) { innerPadding ->

@@ -74,22 +74,11 @@ fun SosScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "EMERGENCY SOS",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MeshTheme.colors.danger
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "EMERGENCY SOS",
+                onBackClick = onBack,
+                titleColor = MeshTheme.colors.danger,
+                containerColor = MaterialTheme.colorScheme.surface
             )
         },
         containerColor = MaterialTheme.colorScheme.surface

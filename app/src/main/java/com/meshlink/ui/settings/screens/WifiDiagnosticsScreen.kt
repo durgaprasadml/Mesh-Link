@@ -126,13 +126,9 @@ fun WifiDiagnosticsScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                title = { Text("Wi-Fi & Hybrid Diagnostics") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Wi-Fi & Hybrid Diagnostics",
+                onBackClick = onBack,
                 actions = {
                     IconButton(onClick = { viewModel.triggerPeerDiscovery() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh Discovery")

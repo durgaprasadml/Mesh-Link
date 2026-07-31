@@ -36,16 +36,10 @@ fun MediaDiagnosticsScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                title = { Text("Media Transfer Diagnostics", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Media Transfer Diagnostics",
+                onBackClick = onBackClick,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         }
     ) { innerPadding ->

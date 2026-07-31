@@ -31,14 +31,10 @@ fun AboutSettingsScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                title = { Text("About Mesh Link") },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "About Mesh Link",
+                onBackClick = onBack,
+                containerColor = MaterialTheme.colorScheme.background
             )
         }
     ) { paddingValues ->

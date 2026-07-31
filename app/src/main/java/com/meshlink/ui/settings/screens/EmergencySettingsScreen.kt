@@ -32,14 +32,10 @@ fun EmergencySettingsScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                title = { Text("Emergency SOS Settings") },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Emergency SOS Settings",
+                onBackClick = onBack,
+                containerColor = MaterialTheme.colorScheme.background
             )
         }
     ) { paddingValues ->

@@ -29,14 +29,10 @@ fun PrivacySettingsScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                title = { Text("Privacy & Security") },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Privacy & Security",
+                onBackClick = onBack,
+                containerColor = MaterialTheme.colorScheme.background
             )
         }
     ) { paddingValues ->

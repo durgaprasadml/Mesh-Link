@@ -26,14 +26,10 @@ fun NetworkSettingsScreen(
 ) {
     MeshScreen(
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                title = { Text("Network & Transport") },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Network & Transport",
+                onBackClick = onBack,
+                containerColor = MaterialTheme.colorScheme.background
             )
         }
     ) { paddingValues ->

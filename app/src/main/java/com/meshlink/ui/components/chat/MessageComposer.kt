@@ -77,8 +77,7 @@ fun MessageComposer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)
-                    .navigationBarsPadding(),
+                    .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -118,7 +117,6 @@ fun MessageComposer(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.small)
-                    .navigationBarsPadding()
                     .imePadding(),
                 verticalAlignment = Alignment.Bottom
             ) {

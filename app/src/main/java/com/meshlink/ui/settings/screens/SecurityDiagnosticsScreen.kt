@@ -51,19 +51,15 @@ fun SecurityDiagnosticsScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                title = { Text("Security Diagnostics", fontWeight = FontWeight.Bold) },
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Security Diagnostics",
+                onBackClick = onBack,
                 actions = {
                     IconButton(onClick = { refreshDiagnostics() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                containerColor = MaterialTheme.colorScheme.background
             )
         }
     ) { paddingValues ->

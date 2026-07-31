@@ -123,7 +123,8 @@ fun NearbyDevicesScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background
-                    )
+                    ),
+                    windowInsets = WindowInsets(0.dp)
                 )
             }
         ) { paddingValues ->
@@ -332,7 +333,6 @@ fun NearbyDevicesScreen(
                     isConnecting = connectingToAddress == selectedDeviceAddress,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
                         .padding(bottom = 16.dp)
                 )
             }

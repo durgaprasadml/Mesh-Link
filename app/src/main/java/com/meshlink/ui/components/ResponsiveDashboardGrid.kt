@@ -1,49 +1,65 @@
 package com.meshlink.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.meshlink.ui.designsystem.theme.LayoutConstants
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
 /**
- * Responsive grid layout for dashboard cards.
- * Automatically computes columns based on screen breakpoint:
- * - COMPACT: 2-3 columns with equal width distribution or row wrap
- * - MEDIUM: 3 columns
- * - EXPANDED: 3-4 columns
+ * Standardized Responsive Dashboard Layout for Mesh Link.
+ * Rules:
+ * - COMPACT (<600dp): Single horizontal row (LazyRow) so dashboard cards fit on 1 line without vertical clipping.
+ * - MEDIUM (600-840dp): 3-column equal-width grid.
+ * - EXPANDED (840dp+): 3-4 column grid.
  */
 @Composable
 fun ResponsiveDashboardGrid(
     items: List<@Composable (Modifier) -> Unit>,
     modifier: Modifier = Modifier,
-    spacing: Dp = MeshTheme.spacing.medium
+    spacing: Dp = LayoutConstants.CardSpacing
 ) {
     val breakpoint = rememberWindowBreakpoint()
-    val columns = when (breakpoint) {
-        WindowBreakpoint.COMPACT -> 2
-        WindowBreakpoint.MEDIUM -> 3
-        WindowBreakpoint.EXPANDED -> 4
-    }
 
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(spacing)
-    ) {
-        val chunkedItems = items.chunked(columns)
-        chunkedItems.forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
+    when (breakpoint) {
+        WindowBreakpoint.COMPACT -> {
+            // Horizontal LazyRow for Compact screens to preserve 1-row vertical viewport height
+            LazyRow(
+                modifier = modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = LayoutConstants.ScreenHorizontalPadding),
                 horizontalArrangement = Arrangement.spacedBy(spacing)
             ) {
-                rowItems.forEach { itemComposable ->
-                    itemComposable(Modifier.weight(1f))
+                itemsIndexed(items) { index, itemComposable ->
+                    itemComposable(Modifier.width(180.dp))
                 }
-                // Fill empty slots in row if items count is less than column count
-                val emptySlots = columns - rowItems.size
-                repeat(emptySlots) {
-                    Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+        WindowBreakpoint.MEDIUM, WindowBreakpoint.EXPANDED -> {
+            val columns = if (breakpoint == WindowBreakpoint.MEDIUM) 3 else 4
+            Column(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = LayoutConstants.ScreenHorizontalPadding),
+                verticalArrangement = Arrangement.spacedBy(spacing)
+            ) {
+                val chunkedItems = items.chunked(columns)
+                chunkedItems.forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(spacing)
+                    ) {
+                        rowItems.forEach { itemComposable ->
+                            itemComposable(Modifier.weight(1f))
+                        }
+                        val emptySlots = columns - rowItems.size
+                        repeat(emptySlots) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }

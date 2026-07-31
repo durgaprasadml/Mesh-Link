@@ -57,13 +57,9 @@ fun ChatsListScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                title = { Text("Messages", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Messages",
+                onBackClick = onBack
             )
         }
     ) { paddingValues ->

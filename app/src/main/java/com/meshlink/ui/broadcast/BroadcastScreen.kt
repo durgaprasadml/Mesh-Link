@@ -71,7 +71,8 @@ fun BroadcastScreen(
                         Text("All nearby devices", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                windowInsets = WindowInsets(0.dp)
             )
         },
         bottomBar = {
@@ -80,7 +81,6 @@ fun BroadcastScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(MeshTheme.spacing.medium)
-                        .navigationBarsPadding()
                         .imePadding()
                 ) {
                     // Info pill

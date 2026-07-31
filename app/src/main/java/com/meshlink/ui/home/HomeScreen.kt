@@ -41,6 +41,7 @@ import com.meshlink.ui.components.EmptyState
 import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.ResponsiveDashboardGrid
 import com.meshlink.ui.components.chat.ChatRowItem
+import com.meshlink.ui.designsystem.theme.LayoutConstants
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
 enum class ConnectionState {
@@ -92,7 +93,7 @@ fun HomeScreen(
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = MeshTheme.spacing.giant)
+            contentPadding = PaddingValues(bottom = LayoutConstants.SectionSpacing)
         ) {
             // Header Section: Connection Status + User Avatar + Search Bar
             item {
@@ -100,7 +101,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)
+                        .padding(horizontal = LayoutConstants.ScreenHorizontalPadding, vertical = MeshTheme.spacing.medium)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -125,7 +126,7 @@ fun HomeScreen(
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
+                    Spacer(modifier = Modifier.height(LayoutConstants.HeaderSpacing))
                     
                     SearchBar(
                         inputField = {
@@ -159,13 +160,14 @@ fun HomeScreen(
             // Dashboard Grid Section
             if (!isSearchActive && searchQuery.isBlank()) {
                 item {
-                    Column(modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge)) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
                         Text(
                             text = "Dashboard",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(horizontal = LayoutConstants.ScreenHorizontalPadding)
                         )
                         Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
                         
@@ -218,7 +220,7 @@ fun HomeScreen(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
+                    modifier = Modifier.padding(horizontal = LayoutConstants.ScreenHorizontalPadding, vertical = MeshTheme.spacing.small)
                 )
             }
 

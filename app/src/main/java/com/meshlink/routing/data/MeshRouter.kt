@@ -292,7 +292,7 @@ internal class MeshRouter @Inject constructor(
 
 
         val forwardedJson = MeshPacketParser.toJson(relayPacket)
-        val connectedNodes = bleTransport.connectedPeers
+        val connectedNodes = hybridTransport.connectedPeers
         val hasPeersToForward = connectedNodes.any { it != immediateSenderAddress }
 
         // Congestion Check

@@ -603,6 +603,8 @@ fun ResponderCard(device: BleDevice) {
         ) {
             val icon = when (device.transport) {
                 TransportType.BLE -> Icons.Default.Bluetooth
+                TransportType.WIFI_DIRECT -> Icons.Default.WifiTethering
+                TransportType.HYBRID -> Icons.Default.Hub
             }
             Icon(icon, contentDescription = "Responder transport method", tint = MeshTheme.colors.success)
             Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))

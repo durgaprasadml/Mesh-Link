@@ -215,8 +215,8 @@ fun MeshDeviceCard(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     val (transportIcon, transportLabel) = when (device.transport) {
-                        com.meshlink.domain.model.TransportType.WIFI_DIRECT -> androidx.compose.material.icons.Icons.Default.Wifi to "Wi-Fi Direct"
-                        com.meshlink.domain.model.TransportType.HYBRID -> androidx.compose.material.icons.Icons.Default.Hub to "Hybrid Active"
+                        com.meshlink.domain.model.TransportType.WIFI_DIRECT -> Icons.Default.WifiTethering to "Wi-Fi Direct"
+                        com.meshlink.domain.model.TransportType.HYBRID -> Icons.Default.Hub to "Hybrid Active"
                         else -> Icons.Default.Bluetooth to "BLE"
                     }
 

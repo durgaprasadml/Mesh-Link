@@ -60,16 +60,28 @@ class WifiDiagnosticsViewModel @Inject constructor(
     val router: Router
 ) : ViewModel() {
 
-    val uiState: StateFlow<DiagnosticsUiState> = combine(
+    private val p2pInfoFlow = combine(
         wifiDirectManager.isP2pEnabled,
         wifiDirectManager.isDiscovering,
         wifiDirectManager.connectionState,
         wifiDirectManager.isGroupOwner,
-        wifiDirectManager.groupOwnerAddress,
+        wifiDirectManager.groupOwnerAddress
+    ) { isP2p, isDisc, connState, isGo, goIp ->
+        listOf(isP2p, isDisc, connState, isGo, goIp)
+    }
+
+    val uiState: StateFlow<DiagnosticsUiState> = combine(
+        p2pInfoFlow,
         wifiDirectManager.localIpAddress,
         hybridTransport.activeMode,
         wifiSocketTransport.connectedPeersFlow
-    ) { isP2p, isDisc, connState, isGo, goIp, localIp, mode, wifiPeers ->
+    ) { p2pList, localIp, mode, wifiPeers ->
+        val isP2p = p2pList[0] as Boolean
+        val isDisc = p2pList[1] as Boolean
+        val connState = p2pList[2] as com.meshlink.wifi.data.WifiP2pConnectionState
+        val isGo = p2pList[3] as Boolean
+        val goIp = p2pList[4] as String?
+
         DiagnosticsUiState(
             isP2pEnabled = isP2p,
             isDiscovering = isDisc,
@@ -78,7 +90,7 @@ class WifiDiagnosticsViewModel @Inject constructor(
             groupOwnerIp = goIp ?: "N/A",
             localIp = localIp ?: "N/A",
             hybridMode = mode,
-            blePeerCount = hybridTransport.connectedPeers.size - wifiPeers.size,
+            blePeerCount = (hybridTransport.connectedPeers - wifiPeers).size,
             wifiPeerCount = wifiPeers.size,
             connectedWifiPeers = wifiPeers.toList(),
             activeRoutes = router.routeTable.values.toList(),

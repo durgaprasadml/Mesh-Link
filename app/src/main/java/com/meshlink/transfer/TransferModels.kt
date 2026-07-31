@@ -15,11 +15,11 @@ enum class TransferState {
 }
 
 enum class TransferPriority(val value: Int) {
-    CRITICAL(5), // SOS
-    HIGH(4),     // Voice Notes
-    MEDIUM(3),   // Images / Documents
-    LOW(2),      // Videos
-    BACKGROUND(1) // Sync
+    CRITICAL(5),  // SOS / Emergency Media
+    HIGH(4),      // Voice Notes
+    MEDIUM(3),    // Images / Documents
+    LOW(2),       // Video Files
+    BACKGROUND(1) // Sync / Backup
 }
 
 enum class TransferDirection {
@@ -49,10 +49,19 @@ data class TransferSession(
     var bytesTransferred: Long = 0L,
     var chunksTransferred: Int = 0,
     var sha256Checksum: String? = null,
-    var startTimeMs: Long = 0L,
+    var startTimeMs: Long = System.currentTimeMillis(),
     var endTimeMs: Long = 0L,
+    var lastUpdatedMs: Long = System.currentTimeMillis(),
     var retries: Int = 0,
-    var filePath: String? = null // Null until assembled, or points to source file for outgoing
+    var crc32Errors: Int = 0,
+    var resumeCount: Int = 0,
+    var packetLossRate: Float = 0f,
+    var averageRttMs: Long = 100L,
+    var slidingWindowSize: Int = 4,
+    var lastConfirmedChunkIndex: Int = -1,
+    var compressionType: String = "NONE",
+    var compressedSize: Long = totalBytes,
+    var filePath: String? = null // Points to source file for outgoing or local target file when incoming completed
 ) {
     fun getProgress(): Float {
         if (totalChunks <= 0) return 0f
@@ -64,4 +73,7 @@ data class TransferSession(
         if (elapsed <= 0) return 0f
         return (bytesTransferred.toFloat() / (elapsed / 1000f))
     }
+
+    val compressionRatio: Float
+        get() = if (totalBytes > 0) compressedSize.toFloat() / totalBytes.toFloat() else 1.0f
 }

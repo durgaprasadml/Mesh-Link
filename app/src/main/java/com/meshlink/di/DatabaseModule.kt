@@ -187,6 +187,8 @@ object DatabaseModule {
     @Singleton
     fun provideAuditLogDao(db: MeshDatabase): com.meshlink.database.data.local.AuditLogDao = db.auditLogDao
 
-
-
+    @Provides
+    @Singleton
+    fun provideTransferDao(db: MeshDatabase): com.meshlink.database.data.local.TransferDao = db.transferDao
 }
+

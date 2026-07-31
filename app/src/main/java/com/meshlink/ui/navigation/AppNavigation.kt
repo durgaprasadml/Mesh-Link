@@ -46,10 +46,8 @@ import com.meshlink.ui.settings.SettingsScreen
 import com.meshlink.ui.broadcast.BroadcastScreen
 import com.meshlink.ui.sos.SosScreen
 import com.meshlink.util.NotificationHelper
-
-
 import com.meshlink.ui.landing.LandingScreen
-
+import com.meshlink.ui.diagnostics.MediaDiagnosticsScreen
 
 sealed class Screen(val route: String) {
     object Landing : Screen("landing/{isWelcome}") {
@@ -67,6 +65,7 @@ sealed class Screen(val route: String) {
     object Sos : Screen("sos")
     object Broadcast : Screen("broadcast")
     object Diagnostics : Screen("diagnostics")
+    object MediaDiagnostics : Screen("media_diagnostics")
 }
 
 @Composable
@@ -253,6 +252,12 @@ fun AppNavigation(
 
                 composable(Screen.Diagnostics.route) {
                     com.meshlink.ui.diagnostics.RoutingDiagnosticsScreen(
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.MediaDiagnostics.route) {
+                    MediaDiagnosticsScreen(
                         onBackClick = { navController.popBackStack() }
                     )
                 }

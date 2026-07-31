@@ -5,45 +5,31 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object MeshDatabaseMigrations {
     val MIGRATION_1_2 = object : Migration(1, 2) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            // Version 2 schema update
-        }
+        override fun migrate(db: SupportSQLiteDatabase) {}
     }
 
     val MIGRATION_2_3 = object : Migration(2, 3) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            // Version 3 schema update
-        }
+        override fun migrate(db: SupportSQLiteDatabase) {}
     }
 
     val MIGRATION_3_4 = object : Migration(3, 4) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            // Version 4 schema update
-        }
+        override fun migrate(db: SupportSQLiteDatabase) {}
     }
 
     val MIGRATION_4_5 = object : Migration(4, 5) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            // Version 5 schema update
-        }
+        override fun migrate(db: SupportSQLiteDatabase) {}
     }
 
     val MIGRATION_5_6 = object : Migration(5, 6) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            // Version 6 schema update
-        }
+        override fun migrate(db: SupportSQLiteDatabase) {}
     }
 
     val MIGRATION_6_7 = object : Migration(6, 7) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            // Version 7 schema update
-        }
+        override fun migrate(db: SupportSQLiteDatabase) {}
     }
 
     val MIGRATION_7_8 = object : Migration(7, 8) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            // Version 8 schema update
-        }
+        override fun migrate(db: SupportSQLiteDatabase) {}
     }
 
     val MIGRATION_8_9 = object : Migration(8, 9) {
@@ -66,11 +52,42 @@ object MeshDatabaseMigrations {
 
     val MIGRATION_10_11 = object : Migration(10, 11) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            // SQLite doesn't support dropping columns easily, so we recreate the table.
             db.execSQL("CREATE TABLE users_new (meshId TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, avatarUri TEXT, aboutMe TEXT)")
             db.execSQL("INSERT INTO users_new (meshId, name, avatarUri, aboutMe) SELECT meshId, name, avatarUri, aboutMe FROM users")
             db.execSQL("DROP TABLE users")
             db.execSQL("ALTER TABLE users_new RENAME TO users")
+        }
+    }
+
+    val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS transfers (
+                    transferId TEXT NOT NULL PRIMARY KEY,
+                    senderId TEXT NOT NULL,
+                    targetId TEXT NOT NULL,
+                    fileName TEXT NOT NULL,
+                    mimeType TEXT NOT NULL,
+                    totalBytes INTEGER NOT NULL,
+                    totalChunks INTEGER NOT NULL,
+                    chunksTransferred INTEGER NOT NULL,
+                    bytesTransferred INTEGER NOT NULL,
+                    direction TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    priority TEXT NOT NULL,
+                    transportUsed TEXT NOT NULL,
+                    sha256Checksum TEXT,
+                    startTimeMs INTEGER NOT NULL,
+                    endTimeMs INTEGER NOT NULL,
+                    lastUpdatedMs INTEGER NOT NULL,
+                    retries INTEGER NOT NULL,
+                    filePath TEXT,
+                    compressionType TEXT NOT NULL,
+                    compressedSize INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
         }
     }
 
@@ -84,6 +101,7 @@ object MeshDatabaseMigrations {
         MIGRATION_7_8,
         MIGRATION_8_9,
         MIGRATION_9_10,
-        MIGRATION_10_11
+        MIGRATION_10_11,
+        MIGRATION_11_12
     )
 }

@@ -152,7 +152,9 @@ fun ProfileScreen(
         }
     ) { padding ->
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
         ) {
             Column(
                 modifier = Modifier

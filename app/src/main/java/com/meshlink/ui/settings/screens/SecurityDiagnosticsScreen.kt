@@ -66,6 +66,7 @@ fun SecurityDiagnosticsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(paddingValues)
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
             contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)

@@ -155,7 +155,6 @@ fun ChatDetailScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = {
@@ -230,8 +229,7 @@ fun ChatDetailScreen(
                             }
                         }
                     }
-                },
-                windowInsets = WindowInsets(0.dp)
+                }
             )
         },
         bottomBar = {

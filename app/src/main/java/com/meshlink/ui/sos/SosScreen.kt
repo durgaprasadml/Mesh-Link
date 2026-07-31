@@ -295,98 +295,85 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
                 role = Role.Button
             }
     ) {
-        BoxWithConstraints(
+        Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = MeshTheme.spacing.small)
+            modifier = Modifier.size(240.dp)
         ) {
-            val outerSize = minOf(maxWidth, 240.dp)
-            val glowSize1 = outerSize * (180f / 240f)
-            val glowSize2 = outerSize * (150f / 240f)
-            val ringSize = outerSize * (190f / 240f)
-            val buttonSize = outerSize * (160f / 240f)
-
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.size(outerSize)
-            ) {
-                // Background breathing glow when not pressed
-                if (!isPressed) {
-                    Box(
-                        modifier = Modifier
-                            .size(glowSize1)
-                            .scale(breathingScale)
-                            .clip(CircleShape)
-                            .background(MeshTheme.colors.danger.copy(alpha = 0.15f))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(glowSize2)
-                            .scale(breathingScale * 1.05f)
-                            .clip(CircleShape)
-                            .background(MeshTheme.colors.danger.copy(alpha = 0.25f))
-                    )
-                }
-
-                // Progress Ring
-                if (isPressed) {
-                    CircularProgressIndicator(
-                        progress = { progress.value },
-                        modifier = Modifier.size(ringSize),
-                        color = MeshTheme.colors.danger,
-                        strokeWidth = MeshTheme.spacing.mediumSmall,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                        strokeCap = StrokeCap.Round
-                    )
-                }
-
-                // Main Touchable Button
+            // Background breathing glow when not pressed
+            if (!isPressed) {
                 Box(
                     modifier = Modifier
-                        .size(buttonSize)
-                        .scale(buttonScale)
+                        .size(180.dp)
+                        .scale(breathingScale)
                         .clip(CircleShape)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    MeshTheme.colors.danger.copy(alpha = 0.8f),
-                                    MeshTheme.colors.danger
-                                )
+                        .background(MeshTheme.colors.danger.copy(alpha = 0.15f))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(150.dp)
+                        .scale(breathingScale * 1.05f)
+                        .clip(CircleShape)
+                        .background(MeshTheme.colors.danger.copy(alpha = 0.25f))
+                )
+            }
+
+            // Progress Ring
+            if (isPressed) {
+                CircularProgressIndicator(
+                    progress = { progress.value },
+                    modifier = Modifier.size(190.dp),
+                    color = MeshTheme.colors.danger,
+                    strokeWidth = MeshTheme.spacing.mediumSmall,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    strokeCap = StrokeCap.Round
+                )
+            }
+
+            // Main Touchable Button
+            Box(
+                modifier = Modifier
+                    .size(160.dp)
+                    .scale(buttonScale)
+                    .clip(CircleShape)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                MeshTheme.colors.danger.copy(alpha = 0.8f),
+                                MeshTheme.colors.danger
                             )
                         )
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    isPressed = true
-                                    tryAwaitRelease()
-                                    isPressed = false
-                                }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isPressed) {
+                    )
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = {
+                                isPressed = true
+                                tryAwaitRelease()
+                                isPressed = false
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                if (isPressed) {
+                    Text(
+                        text = "$countdownValue",
+                        style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Black),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = "Responder Location",
+                            modifier = Modifier.size(MeshTheme.spacing.giant),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                         Text(
-                            text = "$countdownValue",
-                            style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Black),
+                            text = "SOS",
+                            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onPrimary
                         )
-                    } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Default.Warning,
-                                contentDescription = "Responder Location",
-                                modifier = Modifier.size(MeshTheme.spacing.giant),
-                                tint = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                            Text(
-                                text = "SOS",
-                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
                     }
                 }
             }

@@ -123,21 +123,21 @@ fun NearbyDevicesScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background
-                    ),
-                    windowInsets = WindowInsets(0.dp)
+                    )
                 )
             }
         ) { paddingValues ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(paddingValues)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // M3 Container Card housing the Topology Canvas
                     ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 180.dp, max = 280.dp)
+                            .weight(0.42f)
                             .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
                             .border(
                                 width = 1.dp,
@@ -277,14 +277,14 @@ fun NearbyDevicesScreen(
                         MeshScanningEmptyState(
                             title = if (searchQuery.isBlank()) "Scanning for Mesh Nodes" else "No matching peers",
                             description = if (searchQuery.isBlank()) "Looking for active Mesh Link devices over BLE..." else "Try searching with a different device name or MAC address.",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(0.58f)
                         )
                     } else {
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f)
+                                .weight(0.58f)
                                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
                             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                         ) {

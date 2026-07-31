@@ -34,7 +34,7 @@ fun ResponsiveDashboardGrid(
                 horizontalArrangement = Arrangement.spacedBy(spacing)
             ) {
                 itemsIndexed(items) { index, itemComposable ->
-                    itemComposable(Modifier.width(180.dp))
+                    itemComposable(Modifier.width(160.dp))
                 }
             }
         }

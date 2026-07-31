@@ -92,7 +92,9 @@ fun HomeScreen(
         }
     ) { paddingValues ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
             contentPadding = PaddingValues(bottom = LayoutConstants.SectionSpacing)
         ) {
             // Header Section: Connection Status + User Avatar + Search Bar

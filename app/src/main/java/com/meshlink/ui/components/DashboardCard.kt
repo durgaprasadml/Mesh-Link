@@ -21,14 +21,14 @@ fun DashboardCard(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier.width(160.dp),
     iconContainerColor: Color = MaterialTheme.colorScheme.primaryContainer,
     iconTintColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
     badgeCount: Int = 0
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier,
         shape = MeshTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = MeshTheme.elevation.level2)

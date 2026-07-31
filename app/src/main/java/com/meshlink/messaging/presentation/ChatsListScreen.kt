@@ -64,7 +64,9 @@ fun ChatsListScreen(
         }
     ) { paddingValues ->
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
         ) {
             // Search Bar
             Box(modifier = Modifier.padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)) {

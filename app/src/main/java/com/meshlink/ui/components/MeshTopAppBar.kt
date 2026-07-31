@@ -25,7 +25,7 @@ fun MeshTopAppBar(
     actions: @Composable RowScope.() -> Unit = {},
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
     containerColor: Color = MaterialTheme.colorScheme.surface,
-    windowInsets: WindowInsets = WindowInsets(0.dp)
+    windowInsets: WindowInsets = TopAppBarDefaults.windowInsets
 ) {
     TopAppBar(
         title = {

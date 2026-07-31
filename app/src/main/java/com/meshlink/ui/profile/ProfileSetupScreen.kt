@@ -155,6 +155,7 @@ fun ProfileSetupScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .imePadding()
                 .padding(MeshTheme.spacing.large),

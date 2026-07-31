@@ -43,6 +43,7 @@ fun RoutingDiagnosticsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(innerPadding)
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)

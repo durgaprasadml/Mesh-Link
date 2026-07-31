@@ -46,7 +46,6 @@ fun AnalyticsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = { Text("📊 Mesh Analytics") },

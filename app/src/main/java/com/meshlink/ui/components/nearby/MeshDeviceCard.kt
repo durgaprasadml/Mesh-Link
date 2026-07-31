@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.SignalCellularOff
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment

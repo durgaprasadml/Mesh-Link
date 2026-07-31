@@ -48,7 +48,6 @@ class IncomingPacketDispatcher @Inject constructor(
         if (packet.targetId != "BROADCAST") {
             val myMeshId = userRepository.getLocalUser()?.meshId
             val myNetworkId = if (myMeshId != null) MeshIdNormalizer.canonicalize(myMeshId) else null
-            val targetsMe = myNetworkId != null && packet.targetId == myNetworkId
 
             if (myMeshId != null && packet.targetId != MeshIdNormalizer.canonicalize(myMeshId)) {
                 MeshLogger.d(TAG, "Routing packet to ${MeshIdNormalizer.canonicalize(packet.targetId)}")
@@ -58,46 +57,62 @@ class IncomingPacketDispatcher @Inject constructor(
 
         var processedPacket = packet
 
-        // 1. Always attempt decryption if the packet claims to be encrypted, regardless of type
-        if (packet.encrypted) {
+        // 1. Attempt decryption if packet is marked as encrypted or payload matches encrypted headers
+        if (packet.encrypted || packet.payload.startsWith("bcast_v") || packet.payload.startsWith("v2|")) {
             var finalPayload = packet.payload
-            var validAad: ByteArray? = null
-            var usePreviousKey = false
 
-            if (finalPayload.startsWith("v2|")) {
+            if (finalPayload.startsWith("bcast_v")) {
+                val parts = finalPayload.split("|", limit = 2)
+                if (parts.size == 2) {
+                    val versionStr = parts[0].removePrefix("bcast_v")
+                    val version = versionStr.toIntOrNull() ?: 1
+                    val ciphertext = parts[1]
+                    val decrypted = cryptoManager.decryptBroadcast(ciphertext, version)
+                    if (decrypted == null) {
+                        MeshLogger.w(TAG, "Dropping broadcast packet: Failed broadcast key decryption (v$version)")
+                        return
+                    }
+                    processedPacket = packet.copy(payload = decrypted, encrypted = false)
+                }
+            } else if (finalPayload.startsWith("v2|")) {
                 val unwrapped = sessionManager.validateAndUnwrap(packet.senderId, finalPayload)
                 if (unwrapped == null) {
-                    MeshLogger.w(TAG, "Dropping packet: session validation failed")
+                    MeshLogger.w(TAG, "Dropping packet: Session validation or AAD header check failed")
                     return
                 }
-                validAad = unwrapped.first
+                val validAad = unwrapped.first
                 finalPayload = unwrapped.second
                 val packetKv = unwrapped.third
                 val session = sessionManager.getSession(packet.senderId)
-                if (session != null && packetKv == session.previousKeyVersion) {
-                    usePreviousKey = true
-                }
-            }
+                val usePreviousKey = session != null && packetKv == session.previousKeyVersion
 
-            val decrypted = cryptoManager.decryptOrPassthrough(finalPayload, packet.senderId, validAad, usePreviousKey)
-            if (decrypted == finalPayload && !finalPayload.startsWith("{")) {
-                MeshLogger.w(TAG, "Dropping packet: Failed to decrypt payload.")
-                return
+                val decrypted = cryptoManager.decryptOrPassthrough(finalPayload, packet.senderId, validAad, usePreviousKey)
+                if (decrypted == finalPayload && !finalPayload.startsWith("{")) {
+                    MeshLogger.w(TAG, "Dropping packet: Failed to decrypt session payload.")
+                    return
+                }
+                trustManager.increaseTrustScore(packet.senderId, 1)
+                processedPacket = packet.copy(payload = decrypted, encrypted = false)
+            } else if (packet.encrypted) {
+                val decrypted = cryptoManager.decryptOrPassthrough(finalPayload, packet.senderId)
+                if (decrypted == finalPayload && !finalPayload.startsWith("{")) {
+                    MeshLogger.w(TAG, "Dropping packet: Failed to decrypt raw payload.")
+                    return
+                }
+                processedPacket = packet.copy(payload = decrypted, encrypted = false)
             }
-            trustManager.increaseTrustScore(packet.senderId, 1)
-            processedPacket = packet.copy(payload = decrypted)
         }
 
-        // 2. Validate encryption policy centrally AFTER decryption phase
+        // 2. Validate central encryption policy AFTER decryption
         val hasSecureSession = sessionManager.getSession(processedPacket.senderId) != null
         val strictMode = settingsRepository.advancedEncryptionEnforcement.first()
-        
+
         if (!PacketEncryptionPolicy.validatePacketEncryption(processedPacket, strictMode, hasSecureSession)) {
-            MeshLogger.w(TAG, "Dropping packet ${processedPacket.packetId}: fails central Encryption policy")
+            MeshLogger.w(TAG, "Dropping packet ${processedPacket.packetId}: fails central encryption policy")
             return
         }
 
-        // 3. Dispatch using exhaustive when (compiler enforces all branches)
+        // 3. Dispatch to appropriate handler
         try {
             when (processedPacket.type) {
                 PacketType.KEY_EXCHANGE -> {
@@ -131,7 +146,6 @@ class IncomingPacketDispatcher @Inject constructor(
                 PacketType.READ_RECEIPT -> {
                     ackManager.handleReadReceipt(processedPacket)
                 }
-
                 PacketType.SESSION_REKEY -> {
                     rekeyManager.handleRekeyPacket(
                         processedPacket.senderId,
@@ -156,5 +170,4 @@ class IncomingPacketDispatcher @Inject constructor(
             MeshLogger.e(TAG, "Error handling packet: ${e.message}")
         }
     }
-
 }

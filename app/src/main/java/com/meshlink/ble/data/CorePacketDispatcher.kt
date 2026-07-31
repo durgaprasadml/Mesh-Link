@@ -2,6 +2,7 @@ package com.meshlink.ble.data
 
 import com.meshlink.ble.api.PacketDispatcher
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.domain.model.DispatchResult
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.routing.api.Router
@@ -25,12 +26,12 @@ class CorePacketDispatcher @Inject constructor(
 ) : PacketDispatcher {
     private val TAG = "CorePacketDispatcher"
 
-    override suspend fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): com.meshlink.domain.model.DispatchResult {
+    override suspend fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): DispatchResult {
         connectToPeer(targetPeerId)
         connectToAllScannedDevices()
-        
+
         var packetToSend = packet
-        if (!packetToSend.encrypted && targetPeerId != "BROADCAST") {
+        if (!packetToSend.encrypted) {
             val requirement = PacketEncryptionPolicy.getRequirement(packetToSend.type)
             val shouldEncrypt = when (requirement) {
                 EncryptionRequirement.REQUIRED -> true
@@ -39,13 +40,26 @@ class CorePacketDispatcher @Inject constructor(
             }
 
             if (shouldEncrypt) {
-                val result = encryptAndWrapPayload(packetToSend.payload, targetPeerId, true, packetToSend.packetId)
-                if (result != null) {
-                    val (encPayload, isEnc) = result
-                    packetToSend = packetToSend.copy(payload = encPayload, encrypted = isEnc)
+                if (targetPeerId == "BROADCAST") {
+                    try {
+                        val (bcastCiphertext, version) = cryptoManager.encryptBroadcast(packetToSend.payload)
+                        packetToSend = packetToSend.copy(
+                            payload = "bcast_v$version|$bcastCiphertext",
+                            encrypted = true
+                        )
+                    } catch (e: Exception) {
+                        MeshLogger.e(TAG, "Broadcast encryption failed: ${e.message}")
+                        return DispatchResult.Error(Exception("Broadcast encryption failed"))
+                    }
                 } else {
-                    MeshLogger.e(TAG, "Centralized encryption failed for packet type: ${packetToSend.type}")
-                    return com.meshlink.domain.model.DispatchResult.Error(Exception("Encryption failed"))
+                    val result = encryptAndWrapPayload(packetToSend.payload, targetPeerId, true, packetToSend.packetId)
+                    if (result != null) {
+                        val (encPayload, isEnc) = result
+                        packetToSend = packetToSend.copy(payload = encPayload, encrypted = isEnc)
+                    } else {
+                        MeshLogger.e(TAG, "Encryption failed for packet type: ${packetToSend.type} to $targetPeerId")
+                        return DispatchResult.Error(Exception("Encryption failed"))
+                    }
                 }
             }
         }
@@ -54,7 +68,7 @@ class CorePacketDispatcher @Inject constructor(
     }
 
     private fun connectToDevice(address: String) {
-        if (com.meshlink.ble.data.BleConstants.isBluetoothAddress(address)) {
+        if (BleConstants.isBluetoothAddress(address)) {
             connectionManager.connectToDevice(address)
         } else {
             val resolved = routingCoordinator.resolvePeerAddress(address)
@@ -100,19 +114,18 @@ class CorePacketDispatcher @Inject constructor(
         requireEncryption: Boolean,
         messageId: String
     ): Pair<String, Boolean>? {
-        var finalPlaintext = plaintext
         var aadBytes: ByteArray? = null
         var aadPrefix = ""
 
         if (requireEncryption) {
-            val aadResult = sessionManager.generateAad(targetPeerId)
+            val aadResult = sessionManager.generateAad(targetPeerId, messageId)
             if (aadResult != null) {
                 aadBytes = aadResult.first
                 aadPrefix = aadResult.second
             }
         }
 
-        val result = cryptoManager.encryptOrPassthrough(finalPlaintext, targetPeerId, requireEncryption, messageId, 0, aadBytes)
+        val result = cryptoManager.encryptOrPassthrough(plaintext, targetPeerId, requireEncryption, messageId, 0, aadBytes)
             ?: return null
 
         val (ciphertext, isEncrypted) = result

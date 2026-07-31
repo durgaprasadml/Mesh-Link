@@ -1,46 +1,52 @@
 package com.meshlink.security.data
 
 import com.meshlink.common.logger.MeshLogger
-import com.meshlink.domain.model.PeerSecureSession
 import com.meshlink.di.DefaultDispatcher
+import com.meshlink.domain.model.PeerSecureSession
+import com.meshlink.domain.model.SessionState
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.security.MessageDigest
+
 @Singleton
 class SessionManager @Inject constructor(
     private val cryptoManager: MeshCryptoManager,
-    private val trustManager: com.meshlink.security.data.TrustManager,
-    private val securityMonitor: com.meshlink.security.data.MeshSecurityMonitor,
+    private val trustManager: TrustManager,
+    private val securityMonitor: MeshSecurityMonitor,
     @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
-    private val maintenanceScheduler: com.meshlink.common.maintenance.MaintenanceScheduler
-,
-    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
+    private val maintenanceScheduler: com.meshlink.common.maintenance.MaintenanceScheduler,
+    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope
+) {
     private val activeSessions = ConcurrentHashMap<String, PeerSecureSession>()
-private val TAG = "SessionManager"
+    private val TAG = "SessionManager"
 
     init {
-        maintenanceScheduler.schedule("SessionCleanup", 5 * 60 * 1000L) {
+        maintenanceScheduler.schedule("SessionCleanup", 60 * 1000L) {
             val now = System.currentTimeMillis()
-            val expiredPeers = activeSessions.entries.filter { it.value.expirationTime < now }.map { it.key }
-            
-            expiredPeers.forEach { peerId ->
-                MeshLogger.w(TAG, "Session expired for peer $peerId. Removing.")
-                removeSession(peerId)
+            activeSessions.values.forEach { session ->
+                if (session.state != SessionState.DESTROYED) {
+                    if (now > session.expirationTime) {
+                        session.state = SessionState.EXPIRED
+                        MeshLogger.w(TAG, "Session EXPIRED for peer ${session.peerId}.")
+                        removeSession(session.peerId)
+                    } else if (now > session.expirationTime - 5 * 60 * 1000L && session.state == SessionState.ACTIVE) {
+                        session.state = SessionState.EXPIRING
+                    }
+                }
             }
         }
     }
 
     fun getSession(peerId: String): PeerSecureSession? {
         val existing = activeSessions[peerId]
-        if (existing != null) return existing
+        if (existing != null && existing.state != SessionState.DESTROYED && existing.state != SessionState.EXPIRED) {
+            return existing
+        }
         if (cryptoManager.hasPeerKey(peerId)) {
             val fingerprint = cryptoManager.getPeerSigningKey(peerId)?.let { cryptoManager.getDeviceFingerprint(it) } ?: "ESTABLISHED"
             val localFingerprint = cryptoManager.getLocalFingerprint()
@@ -57,10 +63,11 @@ private val TAG = "SessionManager"
                 sessionStart = System.currentTimeMillis(),
                 sessionVersion = 2,
                 verified = true,
-                lastActivity = System.currentTimeMillis()
+                lastActivity = System.currentTimeMillis(),
+                state = SessionState.ACTIVE
             )
             activeSessions[peerId] = restored
-            MeshLogger.d(TAG, "Auto-restored session for peer $peerId from persisted keys")
+            MeshLogger.d(TAG, "Auto-restored session for peer $peerId in ACTIVE state")
             return restored
         }
         return null
@@ -89,60 +96,78 @@ private val TAG = "SessionManager"
             sessionVersion = sessionVersion,
             cryptoVersion = cryptoVersion,
             verified = verified,
-            lastActivity = now
+            lastActivity = now,
+            state = SessionState.ACTIVE
         )
         activeSessions[peerId] = session
+        MeshLogger.d(TAG, "Created new ACTIVE session $derivedSessionId for peer $peerId")
         return session
     }
 
+    fun setSessionState(peerId: String, state: SessionState) {
+        val session = activeSessions[peerId]
+        if (session != null) {
+            session.state = state
+            MeshLogger.d(TAG, "Updated session state for $peerId -> $state")
+        }
+    }
+
     fun removeSession(peerId: String) {
+        val session = activeSessions[peerId]
+        if (session != null) {
+            session.state = SessionState.DESTROYED
+        }
         activeSessions.remove(peerId)
         cryptoManager.removeSharedKey(peerId)
+        MeshLogger.d(TAG, "Session DESTROYED & removed for peer $peerId")
     }
 
     fun getAllSessionPeers(): Set<String> = activeSessions.keys
+
+    fun getActiveSessionsCount(): Int = activeSessions.values.count { it.state == SessionState.ACTIVE || it.state == SessionState.REKEYING }
+
+    fun getAllSessions(): List<PeerSecureSession> = activeSessions.values.toList()
 
     fun terminateAllSessions() {
         val peers = activeSessions.keys.toList()
         peers.forEach { removeSession(it) }
     }
 
-
-
     /**
-     * Generates AAD containing sessionId, sequenceNumber, timestamp.
-     * Returns Pair(AAD_Bytes, "v2|Base64(AAD)|")
+     * Generates AAD header containing sid, seq, ts, kv, and pid (packetId).
      */
-    fun generateAad(peerId: String): Pair<ByteArray, String>? {
+    fun generateAad(peerId: String, packetId: String = java.util.UUID.randomUUID().toString()): Pair<ByteArray, String>? {
         val trustLevel = trustManager.getTrustLevel(peerId)
-        if (trustLevel == com.meshlink.security.data.TrustLevel.BLOCKED || trustLevel == com.meshlink.security.data.TrustLevel.REVOKED) {
+        if (trustLevel == TrustLevel.BLOCKED || trustLevel == TrustLevel.REVOKED) {
             MeshLogger.w(TAG, "Cannot generate AAD: Peer $peerId is BLOCKED or REVOKED (Level: $trustLevel)")
+            securityMonitor.reportEvent(peerId, SecurityEvent.BlockedPeer(peerId))
             return null
         }
 
-        val session = activeSessions[peerId] ?: return null
+        val session = getSession(peerId) ?: return null
         val now = System.currentTimeMillis()
         session.updateActivity(now)
 
         val seq = session.packetCounter.incrementAndGet()
         session.totalEncryptedPackets.incrementAndGet()
-        
+
         val aadJson = JSONObject().apply {
             put("sid", session.sessionId)
             put("seq", seq)
             put("ts", now)
             put("kv", session.keyVersion)
+            put("pid", packetId)
         }
         val aadString = aadJson.toString()
         val aadBytes = aadString.toByteArray(Charsets.UTF_8)
         val aadBase64 = android.util.Base64.encodeToString(aadBytes, android.util.Base64.NO_WRAP)
-        
+
         return Pair(aadBytes, "v2|$aadBase64|")
     }
 
     /**
-     * Parses the wrapped payload, validates AAD (timestamp, seq, sessionId, keyVersion).
-     * Returns a Triple of (AAD bytes, Ciphertext string, keyVersion) if valid, or null if invalid.
+     * Parses the wrapped payload and validates header metadata.
+     * Enforces replay protection, timestamp bounds, and session state.
      */
     fun validateAndUnwrap(peerId: String, payload: String): Triple<ByteArray, String, Int>? {
         if (!payload.startsWith("v2|")) return null
@@ -155,18 +180,19 @@ private val TAG = "SessionManager"
 
         val aadBytes = android.util.Base64.decode(aadBase64, android.util.Base64.NO_WRAP)
         val aadString = String(aadBytes, Charsets.UTF_8)
-        
+
         try {
             val json = JSONObject(aadString)
             val sid = json.getString("sid")
             val seq = json.getLong("seq")
             val ts = json.getLong("ts")
-
-            val kv = json.optInt("kv", 1) // default to 1 for backward compatibility
+            val pid = json.optString("pid", null)
+            val kv = json.optInt("kv", 1)
 
             val session = activeSessions[peerId]
-            if (session == null || session.sessionId != sid) {
-                MeshLogger.e(TAG, "Rejecting packet: Unknown or mismatched session")
+            if (session == null || session.sessionId != sid || session.state == SessionState.DESTROYED || session.state == SessionState.EXPIRED) {
+                MeshLogger.e(TAG, "Rejecting packet: Unknown, mismatched, or expired session for $peerId")
+                securityMonitor.reportEvent(peerId, SecurityEvent.SessionHijackAttempt("Session mismatch or expired state"))
                 return null
             }
 
@@ -176,7 +202,6 @@ private val TAG = "SessionManager"
                 if (kv == session.previousKeyVersion && now <= session.rekeyTimestamp + 60_000) {
                     // Allowed during transition window
                 } else if (kv == session.keyVersion + 1 && cryptoManager.hasPeerKey(peerId)) {
-                    // Implicit forward rotation
                     MeshLogger.d(TAG, "Implicit forward rotation to key version $kv for $peerId")
                     session.previousKeyVersion = session.keyVersion
                     session.keyVersion = kv
@@ -184,6 +209,7 @@ private val TAG = "SessionManager"
                     session.rotationReason = "implicit_forward_rotation"
                 } else {
                     MeshLogger.e(TAG, "Rejecting packet: Invalid keyVersion $kv. Current: ${session.keyVersion}, Prev: ${session.previousKeyVersion}")
+                    securityMonitor.reportEvent(peerId, SecurityEvent.DowngradeAttackDetected("Key version mismatch $kv"))
                     return null
                 }
             }
@@ -191,18 +217,19 @@ private val TAG = "SessionManager"
             val tsDiff = Math.abs(now - ts)
             if (tsDiff > 300_000) {
                 MeshLogger.e(TAG, "Rejecting packet: Stale timestamp (diff = $tsDiff ms)")
+                securityMonitor.reportEvent(peerId, SecurityEvent.ReplayAttackDetected("Stale timestamp diff=$tsDiff"))
                 return null
             }
 
-            if (session.isReplay(seq)) {
-                MeshLogger.e(TAG, "Rejecting packet: Replay detected for sequence $seq")
-                securityMonitor.reportEvent(peerId, com.meshlink.security.data.SecurityEvent.ReplayAttackDetected("$seq"))
+            if (session.isReplay(seq, pid)) {
+                MeshLogger.e(TAG, "Rejecting packet: Replay detected for sequence $seq (pid=$pid)")
+                securityMonitor.reportEvent(peerId, SecurityEvent.ReplayAttackDetected("seq=$seq, pid=$pid"))
                 trustManager.decreaseTrustScore(peerId, amount = 10, reason = "Replay Attack Detected")
                 return null
             }
 
-            // Valid! Mark received and update activity.
-            session.markReceived(seq)
+            // Valid packet!
+            session.markReceived(seq, pid)
             session.updateActivity(now)
             session.totalDecryptedPackets.incrementAndGet()
 
@@ -210,6 +237,7 @@ private val TAG = "SessionManager"
 
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Error parsing AAD JSON: ${e.message}")
+            securityMonitor.reportEvent(peerId, SecurityEvent.InvalidSignature("Malformed AAD JSON: ${e.message}"))
             return null
         }
     }

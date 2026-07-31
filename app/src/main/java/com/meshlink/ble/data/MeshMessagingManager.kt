@@ -85,7 +85,7 @@ class MeshMessagingManager @Inject constructor(
             val reqEnc = userRepository.isEncryptionEnabled.first()
             val isDirect = routingCoordinator.isDirectlyConnected(packet.targetId)
             
-            if (reqEnc && !isDirect) {
+            if (reqEnc) {
                 val result = corePacketDispatcher.encryptAndWrapPayload(packet.payload, packet.targetId, true, packet.packetId)
                 if (result != null) {
                     val (encryptedPayload, isEncrypted) = result

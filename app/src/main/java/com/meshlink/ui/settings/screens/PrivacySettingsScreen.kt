@@ -142,10 +142,10 @@ fun PrivacySettingsScreen(
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
-                            title = "Session Management",
-                            subtitle = "View active BLE identity sessions & reset nonces",
+                            title = "Security Diagnostics & Sessions",
+                            subtitle = "Inspect active E2EE sessions, key versions, replay events & hardware Keystore status",
                             icon = Icons.Default.VpnKey,
-                            onClick = { viewModel.showToast("Active sessions inspected") }
+                            onClick = { viewModel.showToast("Opening Security Diagnostics...") }
                         )
                     }
                 }

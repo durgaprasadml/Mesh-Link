@@ -25,7 +25,8 @@ class BroadcastHandler @Inject constructor(
     private val userRepository: UserRepository,
     private val chatDao: ChatDao,
     private val locationProvider: LocationProvider,
-    private val router: Router
+    private val router: Router,
+    private val packetDispatcher: PacketDispatcher
 ) {
     private val TAG = "BroadcastHandler"
 
@@ -55,7 +56,7 @@ class BroadcastHandler @Inject constructor(
             encrypted = false,
             ttl = 15
         )
-        router.routeMediaPacket(packet)
+        packetDispatcher.dispatchSinglePacket("BROADCAST", packet)
     }
 
     suspend fun receiveSosMessage(packet: MeshPacket) {
@@ -104,7 +105,7 @@ class BroadcastHandler @Inject constructor(
             encrypted = false,
             ttl = 15
         )
-        router.routeMediaPacket(packet)
+        packetDispatcher.dispatchSinglePacket("BROADCAST", packet)
 
         val message = MessageEntity(
             messageId = packet.packetId,

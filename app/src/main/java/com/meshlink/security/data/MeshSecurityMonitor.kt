@@ -5,51 +5,87 @@ import com.meshlink.database.data.local.AuditLogDao
 import com.meshlink.database.data.local.AuditLogEntity
 import com.meshlink.di.IoDispatcher
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+
+data class SecurityMonitorState(
+    val totalReplayAttempts: Int = 0,
+    val totalAuthFailures: Int = 0,
+    val totalFailedRekeys: Int = 0,
+    val totalKeyRotations: Int = 0,
+    val totalTamperedPackets: Int = 0,
+    val totalExpiredSessions: Int = 0,
+    val totalUnknownDevices: Int = 0,
+    val totalSignatureFailures: Int = 0
+)
 
 @Singleton
 class MeshSecurityMonitor @Inject constructor(
     private val auditLogDao: AuditLogDao,
-    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
-,
-    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope
+) {
     companion object {
         private const val TAG = "MeshSecurityMonitor"
         private const val MAX_AUDIT_LOG_ENTRIES = 1000
     }
 
-// PeerId -> Recent failures
     private val recentSignatureFailures = ConcurrentHashMap<String, Int>()
     private val recentReplayAttempts = ConcurrentHashMap<String, Int>()
+
+    private val replayCount = AtomicInteger(0)
+    private val authFailureCount = AtomicInteger(0)
+    private val failedRekeyCount = AtomicInteger(0)
+    private val keyRotationCount = AtomicInteger(0)
+    private val tamperedPacketCount = AtomicInteger(0)
+    private val expiredSessionCount = AtomicInteger(0)
+    private val unknownDeviceCount = AtomicInteger(0)
+    private val signatureFailureCount = AtomicInteger(0)
+
+    private val _metricsState = MutableStateFlow(SecurityMonitorState())
+    val metricsState: StateFlow<SecurityMonitorState> = _metricsState.asStateFlow()
 
     fun reportEvent(peerId: String, event: SecurityEvent) {
         applicationScope.launch {
             try {
-                // Log event
                 val eventName = event::class.simpleName ?: "Unknown"
                 MeshLogger.w(TAG, "Security Event [$eventName] for peer $peerId: $event")
 
-                // Keep stats
                 when (event) {
                     is SecurityEvent.InvalidSignature -> {
                         val count = recentSignatureFailures.getOrDefault(peerId, 0) + 1
                         recentSignatureFailures[peerId] = count
+                        signatureFailureCount.incrementAndGet()
+                        authFailureCount.incrementAndGet()
                     }
                     is SecurityEvent.ReplayAttackDetected -> {
                         val count = recentReplayAttempts.getOrDefault(peerId, 0) + 1
                         recentReplayAttempts[peerId] = count
+                        replayCount.incrementAndGet()
+                    }
+                    is SecurityEvent.SessionHijackAttempt -> {
+                        authFailureCount.incrementAndGet()
+                        tamperedPacketCount.incrementAndGet()
+                    }
+                    is SecurityEvent.DowngradeAttackDetected -> {
+                        tamperedPacketCount.incrementAndGet()
+                    }
+                    is SecurityEvent.UnknownPeer -> {
+                        unknownDeviceCount.incrementAndGet()
                     }
                     else -> {}
                 }
 
-                // Create audit log
+                updateMetricsState()
+
                 val detailsJson = JSONObject()
                 when (event) {
                     is SecurityEvent.IdentityChanged -> {
@@ -99,8 +135,7 @@ class MeshSecurityMonitor @Inject constructor(
                 )
 
                 auditLogDao.insertAuditLog(auditEntity)
-                
-                // Enforce log rotation limit
+
                 val count = auditLogDao.getAuditLogCount()
                 if (count > MAX_AUDIT_LOG_ENTRIES) {
                     auditLogDao.deleteOldestLogs(count - MAX_AUDIT_LOG_ENTRIES)
@@ -111,13 +146,36 @@ class MeshSecurityMonitor @Inject constructor(
         }
     }
 
-    fun getSignatureFailureCount(peerId: String): Int {
-        return recentSignatureFailures.getOrDefault(peerId, 0)
+    fun recordKeyRotation() {
+        keyRotationCount.incrementAndGet()
+        updateMetricsState()
     }
 
-    fun getReplayAttemptCount(peerId: String): Int {
-        return recentReplayAttempts.getOrDefault(peerId, 0)
+    fun recordFailedRekey() {
+        failedRekeyCount.incrementAndGet()
+        updateMetricsState()
     }
+
+    fun recordExpiredSession() {
+        expiredSessionCount.incrementAndGet()
+        updateMetricsState()
+    }
+
+    private fun updateMetricsState() {
+        _metricsState.value = SecurityMonitorState(
+            totalReplayAttempts = replayCount.get(),
+            totalAuthFailures = authFailureCount.get(),
+            totalFailedRekeys = failedRekeyCount.get(),
+            totalKeyRotations = keyRotationCount.get(),
+            totalTamperedPackets = tamperedPacketCount.get(),
+            totalExpiredSessions = expiredSessionCount.get(),
+            totalUnknownDevices = unknownDeviceCount.get(),
+            totalSignatureFailures = signatureFailureCount.get()
+        )
+    }
+
+    fun getSignatureFailureCount(peerId: String): Int = recentSignatureFailures.getOrDefault(peerId, 0)
+    fun getReplayAttemptCount(peerId: String): Int = recentReplayAttempts.getOrDefault(peerId, 0)
 
     fun resetStats(peerId: String) {
         recentSignatureFailures.remove(peerId)

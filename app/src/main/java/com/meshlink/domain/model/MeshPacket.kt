@@ -26,7 +26,10 @@ enum class PacketType {
     MAP_SYNC,
     ROUTE_REQUEST,
     ROUTE_REPLY,
-    ROUTE_ERROR
+    ROUTE_ERROR,
+    HEARTBEAT,
+    PARTITION_SYNC_MANIFEST,
+    PARTITION_SYNC_REQUEST
 }
 
 enum class PacketPriority(val level: Int) {

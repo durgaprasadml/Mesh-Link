@@ -8,12 +8,15 @@ plugins {
 
 android {
     namespace = "com.meshlink"
-    compileSdk = 34
+    // API 35 (Android 15) required by Google Play Store for new app submissions from 2026.
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.meshlink"
         minSdk = 26
-        targetSdk = 34
+        // API 35 required by Google Play for all new submissions.
+        // Key Android 15 changes validated: edge-to-edge enforcement, predictive back.
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 

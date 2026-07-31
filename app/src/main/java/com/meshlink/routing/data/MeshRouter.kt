@@ -1,55 +1,60 @@
 package com.meshlink.routing.data
 
-import com.meshlink.common.logger.MeshLogger
-
-import com.meshlink.ble.api.BleTransport
 import androidx.annotation.VisibleForTesting
-import com.meshlink.domain.model.MeshPacket
+import com.meshlink.ble.api.BleTransport
+import com.meshlink.common.logger.MeshLogger
 import com.meshlink.common.util.MeshPacketParser
-import com.meshlink.domain.model.PacketType
 import com.meshlink.database.data.local.RelayDao
 import com.meshlink.database.data.local.RelayPacketEntity
-import com.meshlink.di.IoDispatcher
-import com.meshlink.routing.engine.RoutingEngine
 import com.meshlink.di.ApplicationScope
+import com.meshlink.di.IoDispatcher
+import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.model.RouteType
+import com.meshlink.domain.repository.SettingsRepository
+import com.meshlink.recovery.engine.MeshReliabilityManager
+import com.meshlink.routing.engine.RoutingEngine
 import com.meshlink.security.data.TrustLevel
 import com.meshlink.security.data.TrustManager
-import com.meshlink.domain.repository.SettingsRepository
+import com.meshlink.transport.HybridTransport
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.stateIn
-
-
-import com.meshlink.transport.HybridTransport
 
 @Singleton
 internal class MeshRouter @Inject constructor(
     private val hybridTransport: HybridTransport,
-
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,
     private val routingEngine: RoutingEngine,
+    val reliabilityManager: MeshReliabilityManager,
     private val settingsRepository: SettingsRepository,
     @ApplicationScope private val applicationScope: CoroutineScope
 ) : com.meshlink.routing.api.Router {
 
     companion object {
         private const val TAG = "MeshRouter"
-        private const val RECONNECT_INTERVAL_MS = 10_000L
         private const val MAX_RELAY_PACKETS = 1000
     }
 
     override var localMeshId: String = ""
+        set(value) {
+            field = value
+            if (value.isNotBlank()) {
+                reliabilityManager.start(value) { packet ->
+                    hybridTransport.broadcastPacket(packet)
+                }
+            }
+        }
 
     private val _incomingPayloads = MutableSharedFlow<Pair<String, MeshPacket>>(extraBufferCapacity = 200)
     override val incomingPayloads: SharedFlow<Pair<String, MeshPacket>> = _incomingPayloads.asSharedFlow()
-    
+
     private val _packetEvents = MutableSharedFlow<com.meshlink.routing.api.PacketStatusEvent>(
         extraBufferCapacity = 1000,
         onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
@@ -77,6 +82,8 @@ internal class MeshRouter @Inject constructor(
     private val meshTtlState = settingsRepository.meshTtl
         .stateIn(applicationScope, SharingStarted.Eagerly, 10)
 
+    private val activeConnectedPeers = mutableSetOf<String>()
+
     init {
         observeIncoming()
         startStoreAndForwardLoop()
@@ -91,8 +98,13 @@ internal class MeshRouter @Inject constructor(
         if (incomingJob?.isActive == true) return
         incomingJob = applicationScope.launch {
             hybridTransport.incomingPackets.collect { (sender, packet) ->
-
                 try {
+                    // Update connected peer set for reliability manager facade events
+                    if (!activeConnectedPeers.contains(sender)) {
+                        activeConnectedPeers.add(sender)
+                        reliabilityManager.onPeerConnected(sender)
+                    }
+
                     handleIncomingPacket(sender, packet)
                 } catch (e: Exception) {
                     MeshLogger.e(TAG, "Error handling packet from $sender: ${e.message}")
@@ -125,15 +137,13 @@ internal class MeshRouter @Inject constructor(
         if (cachedPackets.isEmpty()) return
 
         val connectedNodes = hybridTransport.connectedPeers
-        if (connectedNodes.isEmpty()) {
-            return
-        }
+        if (connectedNodes.isEmpty()) return
 
         MeshLogger.d(TAG) { "S&F: attempting delivery of ${cachedPackets.size} cached packets to ${connectedNodes.size} peer(s)" }
 
         cachedPackets.forEach { entity ->
             routingEngine.congestionMonitor.decrementRelay()
-            
+
             if (entity.ttl <= 0) {
                 relayDao.deletePacket(entity.packetId)
                 return@forEach
@@ -164,18 +174,14 @@ internal class MeshRouter @Inject constructor(
             )
 
             routingEngine.markPacketProcessed(packet.packetId)
+            val nextHop = routingEngine.routeOptimizer.getLoadBalancedRoute(packet.targetId, emptySet())?.nextHop
 
-            val json = MeshPacketParser.toJson(packet)
-            
-            // Re-evaluate next hop upon S&F un-queueing
-            val nextHop = routingEngine.getNextHopForForwarding(packet, connectedNodes, "")
-            
-            if (nextHop != null) {
+            if (nextHop != null && connectedNodes.contains(nextHop)) {
                 hybridTransport.broadcastPacket(packet, includeAddress = nextHop)
             } else {
                 hybridTransport.broadcastPacket(packet)
             }
-            
+
             relayDao.deletePacket(entity.packetId)
             MeshLogger.d(TAG) { "S&F: delivered ${com.meshlink.util.MeshIdNormalizer.canonicalize(entity.packetId)}" }
         }
@@ -188,16 +194,23 @@ internal class MeshRouter @Inject constructor(
         packet: MeshPacket
     ) {
         val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)
-        val canonicalLocalId  = com.meshlink.util.MeshIdNormalizer.canonicalize(localMeshId)
+        val canonicalLocalId = com.meshlink.util.MeshIdNormalizer.canonicalize(localMeshId)
         val isBroadcast = packet.targetId == "BROADCAST" || canonicalTargetId == "BROADCAST"
-        val isForMe     = canonicalTargetId.isNotBlank() && canonicalLocalId.isNotBlank() && canonicalTargetId == canonicalLocalId
+        val isForMe = canonicalTargetId.isNotBlank() && canonicalLocalId.isNotBlank() && canonicalTargetId == canonicalLocalId
 
-        // --- Strict Encryption Enforcement ---
+        // Reliability control frames handler via MeshReliabilityManager facade
+        if (reliabilityManager.handleIncomingReliabilityPacket(packet, immediateSenderAddress) { pkt, target ->
+                hybridTransport.broadcastPacket(pkt, includeAddress = target)
+            }) {
+            return
+        }
+
+        // Encryption policy validation
         val enforceEncryption = enforceEncryptionState.value
         val isValid = com.meshlink.security.policy.PacketEncryptionPolicy.validatePacketEncryption(
             packet = packet,
             strictMode = enforceEncryption,
-            hasSecureSession = false // Relaying nodes don't check destination session state; local delivery is fully validated post-decryption in dispatcher.
+            hasSecureSession = false
         )
 
         if (!isValid) {
@@ -211,7 +224,7 @@ internal class MeshRouter @Inject constructor(
             return
         }
 
-        // --- Handle Routing Control Overhead Packets (RREQ, RREP, RERR) ---
+        // Handle Routing Control Overhead Packets (RREQ, RREP, RERR)
         when (packet.type) {
             PacketType.ROUTE_REQUEST -> {
                 applicationScope.launch {
@@ -251,8 +264,7 @@ internal class MeshRouter @Inject constructor(
             else -> {}
         }
 
-        // Strict de-dup — reject if already processed, UNLESS it's a direct message for us
-        // (we want to re-process duplicates for ourselves so we can re-send ACKs if the sender retried)
+        // Strict deduplication
         val isDuplicate = !routingEngine.markPacketProcessed(packet.packetId)
         if (isDuplicate) {
             if (isForMe && packet.type != PacketType.DELIVERY_ACK) {
@@ -263,53 +275,39 @@ internal class MeshRouter @Inject constructor(
             }
         }
 
-        // Dynamic Route Learning - Track this sender's path
+        // Dynamic Route Learning - Track sender's path
         routingEngine.routeManager.updateRoute(
             destinationId = packet.senderId,
             nextHop = immediateSenderAddress,
             hops = packet.hopCount,
-            rssi = -65, // In the future, we could extract RSSI from BLE stack for this packet, but for now just update freshness
+            rssi = -65,
             trustScore = trustManager.getTrustScore(packet.senderId),
             type = RouteType.BLE
         )
+        reliabilityManager.onRouteTableChanged()
 
-        MeshLogger.d(TAG) { "Packet [${packet.type}] from=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)} target=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)} ttl=${packet.ttl} hops=${packet.hopCount}" }
-
-
-
-        // Deliver locally if it's for us or a broadcast
+        // Deliver locally if for us or broadcast
         if (isForMe || isBroadcast) {
-
-            
-            // If it's a delivery ACK, we can record a successful delivery on our route
             if (packet.type == PacketType.DELIVERY_ACK) {
-                // The payload contains the packet ID that was delivered.
-                // We'd need to track latency, but for now we'll just track success.
                 routingEngine.routeManager.recordDeliverySuccess(packet.senderId, immediateSenderAddress, 100L)
             }
-            
+
             val emitted = _incomingPayloads.tryEmit(packet.senderId to packet)
             if (!emitted) {
                 MeshLogger.w(TAG, "incomingPayloads buffer full — packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} dropped")
             }
         }
 
-        // Packets FOR US: do not forward or store
         if (isForMe) return
 
-        // ACK/NACK are ephemeral
         val isAckNack = packet.type == PacketType.MEDIA_ACK || packet.type == PacketType.MEDIA_NACK
-
-        // TTL check
         if (packet.ttl <= 0) return
 
-        // Loop guard
         if (routingEngine.isRoutingLoop(packet, localMeshId)) {
             MeshLogger.d(TAG) { "Loop guard: already visited or TTL expired ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}, dropping" }
             return
         }
 
-        // Check Mesh Relay setting
         val relayEnabled = relayEnabledState.value
         if (!relayEnabled && !isAckNack) {
             MeshLogger.d(TAG) { "Relay disabled in settings, dropping packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}" }
@@ -328,15 +326,11 @@ internal class MeshRouter @Inject constructor(
             visitedPath = if (localMeshId.isNotBlank()) packet.visitedPath + localMeshId else packet.visitedPath
         )
 
-
-
-        val forwardedJson = MeshPacketParser.toJson(relayPacket)
         val connectedNodes = hybridTransport.connectedPeers
         val hasPeersToForward = connectedNodes.any { it != immediateSenderAddress }
 
-        // Congestion Check
         if (routingEngine.congestionMonitor.isCongested() && !routingEngine.qosManager.shouldBypassQueue(packet.type)) {
-            MeshLogger.w(TAG, "Congestion critical: dropping/delaying non-critical packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
+            MeshLogger.w(TAG, "Congestion critical: delaying non-critical packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
             if (!isAckNack) {
                 storeForLater(relayPacket)
             }
@@ -344,50 +338,30 @@ internal class MeshRouter @Inject constructor(
         }
 
         if (hasPeersToForward) {
-            val nextHop = routingEngine.getNextHopForForwarding(relayPacket, connectedNodes, excludeHop = immediateSenderAddress)
-            if (nextHop != null) {
+            val nextHop = routingEngine.routeOptimizer.getLoadBalancedRoute(relayPacket.targetId, excludeHops = setOf(immediateSenderAddress))?.nextHop
+            if (nextHop != null && connectedNodes.contains(nextHop)) {
                 routingEngine.queueOptimizer.enqueue(relayPacket)
-                MeshLogger.d(TAG) { "Directed relay queued ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} via $nextHop" }
+                MeshLogger.d(TAG) { "Directed load-balanced relay queued ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} via $nextHop" }
             } else {
                 if (routingEngine.shouldRelayBroadcast(relayPacket.type)) {
                     routingEngine.congestionMonitor.recordBroadcast()
-                    // Add slight randomized jitter (10-50ms) to prevent collision storms in dense meshes
                     applicationScope.launch {
                         delay(kotlin.random.Random.nextLong(10L, 50L))
                         routingEngine.queueOptimizer.enqueue(relayPacket)
                     }
                     MeshLogger.d(TAG) { "Forwarded broadcast queued with jitter ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} (ttl=${relayPacket.ttl})" }
-                } else {
-                    MeshLogger.d(TAG) { "Dropped broadcast due to battery/congestion heuristics" }
                 }
             }
         } else if (!isAckNack) {
             storeForLater(relayPacket)
         }
     }
-    
+
     private fun storeForLater(packet: MeshPacket) {
         applicationScope.launch {
             try {
                 routingEngine.congestionMonitor.incrementRelay()
-                relayDao.insertPacket(
-                    RelayPacketEntity(
-                        packetId    = packet.packetId,
-                        senderId    = packet.senderId,
-                        targetId    = packet.targetId,
-                        payload     = packet.payload,
-                        type        = packet.type.name,
-                        priority    = packet.priority.name,
-                        broadcastType = packet.broadcastType.name,
-                        ttl         = packet.ttl,
-                        hopCount    = packet.hopCount,
-                        encrypted   = packet.encrypted,
-                        transferId  = packet.transferId,
-                        chunkIndex  = packet.chunkIndex,
-                        totalChunks = packet.totalChunks,
-                        mimeType    = packet.mimeType
-                    )
-                )
+                reliabilityManager.storeAndForwardManager.enqueue(packet)
                 MeshLogger.d(TAG) { "Stored ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} for later delivery" }
             } catch (e: Exception) {
                 routingEngine.congestionMonitor.decrementRelay()
@@ -416,9 +390,6 @@ internal class MeshRouter @Inject constructor(
             ttl = initialTtl
         )
 
-        val serialized = MeshPacketParser.toJson(packet)
-
-        
         routingEngine.markPacketProcessed(packet.packetId)
         routingEngine.queueOptimizer.enqueue(packet)
     }
@@ -444,7 +415,7 @@ internal class MeshRouter @Inject constructor(
 
             val canonicalTarget = com.meshlink.util.MeshIdNormalizer.canonicalize(targetId)
             val isBroadcast = canonicalTarget == "BROADCAST" || targetId == "BROADCAST"
-            val knownRoute = routingEngine.routeManager.getOptimalRoute(targetId)
+            val knownRoute = routingEngine.routeOptimizer.getLoadBalancedRoute(targetId)
 
             if (!isBroadcast && knownRoute == null) {
                 MeshLogger.d(TAG) { "No cached route for $targetId. Initiating RREQ discovery & queuing packet ${packet.packetId}" }
@@ -469,17 +440,14 @@ internal class MeshRouter @Inject constructor(
     override fun sendMediaPacket(packet: MeshPacket) {
         val initialTtl = meshTtlState.value
         val finalPacket = packet.copy(ttl = initialTtl)
-        
         routingEngine.markPacketProcessed(finalPacket.packetId)
         routingEngine.queueOptimizer.enqueue(finalPacket)
     }
 
     override suspend fun routeMediaPacket(packet: MeshPacket): com.meshlink.domain.model.DispatchResult {
         return try {
-
             val initialTtl = meshTtlState.value
             val finalPacket = packet.copy(ttl = initialTtl)
-            
             routingEngine.markPacketProcessed(finalPacket.packetId)
             routingEngine.queueOptimizer.enqueue(finalPacket)
             _packetEvents.emit(com.meshlink.routing.api.PacketQueued(packet.packetId))
@@ -489,8 +457,6 @@ internal class MeshRouter @Inject constructor(
         }
     }
 
-
-
     // ─────────────────── Queue Processor ───────────────────
 
     @VisibleForTesting
@@ -499,43 +465,43 @@ internal class MeshRouter @Inject constructor(
         queueProcessorJob = applicationScope.launch {
             while (isActive) {
                 if (routingEngine.queueOptimizer.size() == 0) {
-                    delay(10) // Idle sleep
+                    delay(10)
                     continue
                 }
 
                 val packet = routingEngine.queueOptimizer.dequeue() ?: continue
 
                 if (!routingEngine.retryEngine.shouldRetryNow() && packet.type != PacketType.SOS) {
-                    // Requeue if critically congested, but allow SOS
                     routingEngine.queueOptimizer.enqueue(packet)
                     delay(500)
                     continue
                 }
 
-                val json = MeshPacketParser.toJson(packet)
                 val connectedNodes = hybridTransport.connectedPeers
-                val nextHop = routingEngine.getNextHopForForwarding(packet, connectedNodes, excludeHop = "")
+                val nextHop = routingEngine.routeOptimizer.getLoadBalancedRoute(packet.targetId, excludeHops = emptySet())?.nextHop
 
+                val startTime = System.currentTimeMillis()
                 try {
-                    // Emit transmission started event
                     if (packet.senderId == localMeshId) {
                         _packetEvents.emit(com.meshlink.routing.api.PacketTransmissionStarted(packet.packetId))
                     }
-                    
-                    // Check Intelligent Transport (Wi-Fi vs BLE)
-                    val preferredTransport = routingEngine.transportManager.selectTransportForPayload(packet.targetId, packet.type)
 
-                    if (nextHop != null) {
+                    val sendResult = if (nextHop != null && connectedNodes.contains(nextHop)) {
                         hybridTransport.broadcastPacket(packet, includeAddress = nextHop)
                     } else {
                         hybridTransport.broadcastPacket(packet)
                     }
-                    
-                    // Emit transmitted event if originating locally
+
+                    val latency = System.currentTimeMillis() - startTime
+                    reliabilityManager.recordPacketTransmission(RouteType.BLE, latency, true)
+
                     if (packet.senderId == localMeshId) {
                         _packetEvents.emit(com.meshlink.routing.api.PacketTransmitted(packet.packetId))
                     }
                 } catch (e: Exception) {
+                    val latency = System.currentTimeMillis() - startTime
+                    reliabilityManager.recordPacketTransmission(RouteType.BLE, latency, false)
+
                     MeshLogger.e(TAG, "Failed to send packet: ${e.message}")
                     if (packet.senderId == localMeshId) {
                         _packetEvents.emit(com.meshlink.routing.api.PacketFailed(packet.packetId, e))
@@ -543,11 +509,10 @@ internal class MeshRouter @Inject constructor(
                     storeForLater(packet)
                 }
 
-                // If congested, add artificial delay (backoff) to pace the network
                 if (routingEngine.congestionMonitor.isCongested()) {
-                    delay(routingEngine.retryEngine.calculateRetryDelay(0))
+                    delay(routingEngine.retryEngine.calculateRetryDelay(1))
                 } else {
-                    delay(5) // Minimal pacing to prevent BLE buffer overflows
+                    delay(5)
                 }
             }
         }

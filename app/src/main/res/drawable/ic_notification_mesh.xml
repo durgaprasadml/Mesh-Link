@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Notification icon for MeshRelayService foreground service.
+    Represents an active Bluetooth/mesh network node.
+    Vector drawable — single color, suitable for notification tray (uses setSmallIcon).
+    Design: mesh node with radiating signal waves — minimal, 24x24dp.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <!-- Center node dot -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,10.5 C13.38,10.5 14.5,11.62 14.5,13 C14.5,14.38 13.38,15.5 12,15.5 C10.62,15.5 9.5,14.38 9.5,13 C9.5,11.62 10.62,10.5 12,10.5Z" />
+    <!-- Inner signal ring -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,7.5 C15.04,7.5 17.5,9.96 17.5,13 C17.5,14.74 16.68,16.29 15.42,17.3 L14,15.88 C14.88,15.19 15.5,14.17 15.5,13 C15.5,10.52 13.48,8.5 12,8.5 L12,7.5Z
+                          M12,7.5 L12,8.5 C10.52,8.5 8.5,10.52 8.5,13 C8.5,14.17 9.12,15.19 10,15.88 L8.58,17.3 C7.32,16.29 6.5,14.74 6.5,13 C6.5,9.96 8.96,7.5 12,7.5Z" />
+    <!-- Outer signal ring -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,4.5 C16.69,4.5 20.5,8.31 20.5,13 C20.5,15.76 19.18,18.2 17.14,19.76 L15.72,18.34 C17.41,17.12 18.5,15.19 18.5,13 C18.5,9.42 15.58,6.5 12,6.5 L12,4.5Z
+                          M12,4.5 L12,6.5 C8.42,6.5 5.5,9.42 5.5,13 C5.5,15.19 6.59,17.12 8.28,18.34 L6.86,19.76 C4.82,18.2 3.5,15.76 3.5,13 C3.5,8.31 7.31,4.5 12,4.5Z" />
+</vector>

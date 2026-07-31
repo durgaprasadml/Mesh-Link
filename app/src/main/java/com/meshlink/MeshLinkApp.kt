@@ -11,7 +11,6 @@ import com.meshlink.common.logger.MeshLogger
 import com.meshlink.common.power.AdaptiveMeshPowerManager
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
-import kotlinx.coroutines.launch
 
 @HiltAndroidApp
 class MeshLinkApp : Application(), Configuration.Provider {
@@ -30,8 +29,6 @@ class MeshLinkApp : Application(), Configuration.Provider {
             .setWorkerFactory(workerFactory)
             .build()
 
-    private val applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-
     override fun onCreate() {
         // Load SQLCipher native library before Hilt injection (super.onCreate)
         try {
@@ -42,12 +39,12 @@ class MeshLinkApp : Application(), Configuration.Provider {
         }
 
         super.onCreate()
-        
-        applicationScope.launch {
-            // Schedule periodic background maintenance off the main thread
-            backgroundTaskScheduler.schedulePeriodicWork()
-        }
-        
+
+        // WorkManager enqueue is synchronous — no coroutine scope needed.
+        // The Hilt-injected @ApplicationScope (CoroutineModule) is the single authoritative
+        // application-lifetime coroutine scope for all injected components.
+        backgroundTaskScheduler.schedulePeriodicWork()
+
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 MeshLogger.d("Lifecycle", "Application moved to FOREGROUND")
@@ -61,3 +58,4 @@ class MeshLinkApp : Application(), Configuration.Provider {
         })
     }
 }
+

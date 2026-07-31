@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
+import com.meshlink.R
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.MainActivity
 import com.meshlink.domain.repository.MeshRepository
@@ -230,7 +231,7 @@ class MeshRelayService : Service() {
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("🔗 Mesh Relay Active")
             .setContentText("Relaying messages across the mesh network")
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setSmallIcon(R.drawable.ic_notification_mesh)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
             .addAction(

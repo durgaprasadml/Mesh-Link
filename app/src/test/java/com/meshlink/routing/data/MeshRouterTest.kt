@@ -69,6 +69,7 @@ class MeshRouterTest {
             relayDao = relayDao,
             trustManager = trustManager,
             routingEngine = routingEngine,
+            reliabilityManager = mockk(relaxed = true),
             settingsRepository = settingsRepository,
             applicationScope = scope
         )

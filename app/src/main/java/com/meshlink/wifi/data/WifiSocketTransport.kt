@@ -270,7 +270,11 @@ class WifiSocketTransport @Inject constructor(
             conn.writer.close()
             conn.reader.close()
             conn.socket.close()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            // Socket teardown exceptions are non-fatal — the OS will reclaim the socket.
+            // Log at WARN so patterns (e.g., repeated double-close) remain visible in diagnostics.
+            MeshLogger.w(TAG, "Exception during socket teardown for peer (ignored): ${e.message}")
+        }
     }
 
     private fun updateConnectedPeersState() {

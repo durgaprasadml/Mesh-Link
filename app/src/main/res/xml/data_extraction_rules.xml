@@ -1,13 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Data extraction rules for Mesh Link (API 31+ — replaces backup_rules.xml for cloud-backup
+    and device-transfer scenarios on Android 12+).
+
+    These files are INTENTIONALLY excluded because they are encrypted with hardware-backed
+    Android Keystore keys. The Keystore master key is device-bound and non-exportable —
+    backed-up copies of these files are unreadable on any other device, causing silent
+    decryption failures in EncryptedSharedPreferences and SQLCipher.
+-->
 <data-extraction-rules>
     <cloud-backup>
+        <!-- Database passphrase config (legacy plaintext) -->
         <exclude domain="sharedpref" path="mesh_db_config.xml" />
+        <!-- Database passphrase config (encrypted) — Keystore-bound, non-transferable -->
         <exclude domain="sharedpref" path="mesh_db_config_enc.xml" />
+        <!-- Peer ECDH public keys — Keystore-wrapped, unreadable on restore to new device -->
         <exclude domain="sharedpref" path="mesh_peer_keys.xml" />
+        <!-- Peer ECDSA signing keys — Keystore-wrapped, unreadable on restore to new device -->
+        <exclude domain="sharedpref" path="mesh_peer_signing_keys.xml" />
+        <!-- Broadcast group symmetric keys — Keystore-wrapped, non-transferable -->
+        <exclude domain="sharedpref" path="mesh_broadcast_keys.xml" />
+        <!-- SQLCipher encrypted database — decryption key is Keystore-bound, unreadable on restore -->
+        <exclude domain="database" path="mesh_db" />
     </cloud-backup>
     <device-transfer>
+        <!-- Database passphrase config (legacy plaintext) -->
         <exclude domain="sharedpref" path="mesh_db_config.xml" />
+        <!-- Database passphrase config (encrypted) — Keystore-bound, non-transferable -->
         <exclude domain="sharedpref" path="mesh_db_config_enc.xml" />
+        <!-- Peer ECDH public keys — Keystore-wrapped, unreadable on restore to new device -->
         <exclude domain="sharedpref" path="mesh_peer_keys.xml" />
+        <!-- Peer ECDSA signing keys — Keystore-wrapped, unreadable on restore to new device -->
+        <exclude domain="sharedpref" path="mesh_peer_signing_keys.xml" />
+        <!-- Broadcast group symmetric keys — Keystore-wrapped, non-transferable -->
+        <exclude domain="sharedpref" path="mesh_broadcast_keys.xml" />
+        <!-- SQLCipher encrypted database — decryption key is Keystore-bound, unreadable on restore -->
+        <exclude domain="database" path="mesh_db" />
     </device-transfer>
 </data-extraction-rules>

@@ -76,7 +76,7 @@ object NotificationHelper {
         )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(com.meshlink.R.drawable.ic_notification_info)
             .setContentTitle(senderName)
             .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

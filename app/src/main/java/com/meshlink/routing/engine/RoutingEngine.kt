@@ -21,7 +21,7 @@ class RoutingEngine @Inject constructor(
     val queueOptimizer: QueueOptimizer,
     val discoveryEngine: RouteDiscoveryEngine,
     val repairManager: RouteRepairManager,
-    private val routeOptimizer: RouteOptimizer,
+    val routeOptimizer: RouteOptimizer,
     private val configManager: RuntimeConfigManager
 ) {
     companion object {

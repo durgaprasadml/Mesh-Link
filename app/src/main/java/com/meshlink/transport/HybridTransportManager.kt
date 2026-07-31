@@ -77,9 +77,10 @@ internal class HybridTransportManager @Inject constructor(
     private val packetTypeCountMap = ConcurrentHashMap<String, AtomicLong>()
     private val recentFailuresWifi = AtomicLong(0)
 
-    // Hysteresis tracking
-    private var candidateMode: HybridMode? = null
-    private var candidateStartTime: Long = 0L
+    // Hysteresis tracking — @Volatile ensures cross-thread visibility without lock overhead.
+    // These fields are written/read from coroutines on Dispatchers.Default (multi-threaded).
+    @Volatile private var candidateMode: HybridMode? = null
+    @Volatile private var candidateStartTime: Long = 0L
 
     init {
         // Parallel listening: Merge incoming BLE stream
@@ -402,9 +403,18 @@ internal class HybridTransportManager @Inject constructor(
         packetSize: Long
     ) {
         if (!success) {
-            // Update packet failure
+            // Track per-transport failure for hysteresis score penalty.
+            // Wi-Fi failures accumulate a penalty that biases the score toward BLE fallback.
+            // Cap at 20 to prevent unbounded penalty on prolonged outages.
+            if (routeType == RouteType.WIFI_DIRECT) {
+                val current = recentFailuresWifi.get()
+                if (current < 20) recentFailuresWifi.incrementAndGet()
+                MeshLogger.w(TAG, "Wi-Fi Direct packet delivery failure (consecutive failures: ${recentFailuresWifi.get()}, latency=${latencyMs}ms)")
+            } else {
+                MeshLogger.w(TAG, "BLE packet delivery failure (latency=${latencyMs}ms)")
+            }
         } else {
-            // Decrement recent Wi-Fi failure penalty on success
+            // Decrement recent Wi-Fi failure penalty on success (gradual recovery)
             if (routeType == RouteType.WIFI_DIRECT && recentFailuresWifi.get() > 0) {
                 recentFailuresWifi.decrementAndGet()
             }

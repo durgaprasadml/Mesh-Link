@@ -85,11 +85,38 @@ class KeyManager @Inject constructor(
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
-        } catch (e: Exception) {
-            MeshLogger.e(TAG, "Failed to create EncryptedSharedPreferences ($prefName), clearing and retrying: ${e.message}")
+        } catch (e: java.security.GeneralSecurityException) {
+            // Keystore entry is corrupted or inaccessible (e.g., after a factory reset or
+            // OS upgrade invalidates the master key). EncryptedSharedPreferences and MasterKey
+            // both throw GeneralSecurityException on cryptographic init failure.
+            // Safe to delete and recreate — the file is unreadable without the Keystore key.
+            MeshLogger.e(TAG, "GeneralSecurityException creating EncryptedSharedPreferences ($prefName): ${e.message}. " +
+                "Deleting corrupted prefs file and retrying once.", e)
             try {
                 context.deleteSharedPreferences(prefName)
-            } catch (_: Exception) {}
+            } catch (deleteEx: Exception) {
+                MeshLogger.e(TAG, "Failed to delete corrupted prefs file ($prefName): ${deleteEx.message}", deleteEx)
+            }
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                prefName,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: java.io.IOException) {
+            // The preferences XML file on disk is corrupted or unreadable.
+            // Safe to delete and recreate — data cannot be recovered from a corrupt file.
+            MeshLogger.e(TAG, "IOException reading EncryptedSharedPreferences ($prefName): ${e.message}. " +
+                "Deleting unreadable prefs file and retrying once.", e)
+            try {
+                context.deleteSharedPreferences(prefName)
+            } catch (deleteEx: Exception) {
+                MeshLogger.e(TAG, "Failed to delete unreadable prefs file ($prefName): ${deleteEx.message}", deleteEx)
+            }
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()

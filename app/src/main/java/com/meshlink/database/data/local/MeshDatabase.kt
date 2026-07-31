@@ -14,7 +14,9 @@ import androidx.room.RoomDatabase
         TransferEntity::class
     ],
     version = 12,
-    exportSchema = false
+    // exportSchema = true is required for Room's MigrationTestHelper and schema regression tests.
+    // Schema JSON files are output to app/schemas/ (configured via room.schemaLocation KSP arg).
+    exportSchema = true
 )
 abstract class MeshDatabase : RoomDatabase() {
     abstract val userDao: UserDao

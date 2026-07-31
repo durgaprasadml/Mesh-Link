@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.meshlink.R
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.transfer.MediaTransferSessionManager
 import com.meshlink.transfer.TransferState
@@ -17,6 +18,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -46,7 +48,9 @@ class MediaTransferService : Service() {
     @Inject
     lateinit var sessionManager: MediaTransferSessionManager
 
-    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    // SupervisorJob ensures that a failure in any single child transfer coroutine
+    // does not cascade and cancel other active transfers in this scope.
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var collectorJob: Job? = null
 
     override fun onCreate() {
@@ -119,7 +123,7 @@ class MediaTransferService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Mesh Link Media Transfer Engine")
             .setContentText(statusText)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setSmallIcon(R.drawable.ic_notification_transfer)
             .setProgress(100, progressPercent, progressPercent == 0)
             .setOngoing(true)
             .setContentIntent(pendingIntent)

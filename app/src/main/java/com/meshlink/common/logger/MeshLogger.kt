@@ -31,7 +31,6 @@ object MeshLogger {
             }
         }
         
-        // Pass to TelemetryStore in Phase 5
         TelemetryStore.record(finalEvent)
     }
 

@@ -18,27 +18,14 @@ object PacketEncryptionPolicy {
         return when (type) {
             PacketType.KEY_EXCHANGE,
             PacketType.SOS,
-            PacketType.BEACON -> EncryptionRequirement.BOOTSTRAP_ONLY
+            PacketType.BEACON,
+            PacketType.ROUTE_REQUEST,
+            PacketType.ROUTE_REPLY,
+            PacketType.ROUTE_ERROR -> EncryptionRequirement.BOOTSTRAP_ONLY
             
             PacketType.SESSION_REKEY -> EncryptionRequirement.OPTIONAL
             
-            PacketType.TEXT,
-            PacketType.LOCATION,
-            PacketType.MEDIA_META,
-            PacketType.MEDIA_CHUNK,
-            PacketType.MEDIA_ACK,
-            PacketType.MEDIA_NACK,
-            PacketType.VOICE_SIGNAL,
-            PacketType.VOICE_FRAME,
-            PacketType.VIDEO_SIGNAL,
-            PacketType.VIDEO_FRAME,
-            PacketType.DELIVERY_ACK,
-            PacketType.READ_RECEIPT,
-            PacketType.INCIDENT_REPORT,
-            PacketType.CHECK_IN,
-            PacketType.FORM_SYNC,
-            PacketType.RESOURCE_SYNC,
-            PacketType.MAP_SYNC -> EncryptionRequirement.REQUIRED
+            else -> EncryptionRequirement.REQUIRED
         }
     }
 

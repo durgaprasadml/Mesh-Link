@@ -66,6 +66,7 @@ sealed class Screen(val route: String) {
     object ProfileSetup : Screen("profile_setup")
     object Sos : Screen("sos")
     object Broadcast : Screen("broadcast")
+    object Diagnostics : Screen("diagnostics")
 }
 
 @Composable
@@ -247,6 +248,12 @@ fun AppNavigation(
                 composable(Screen.Broadcast.route) {
                     BroadcastScreen(
                         onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.Diagnostics.route) {
+                    com.meshlink.ui.diagnostics.RoutingDiagnosticsScreen(
+                        onBackClick = { navController.popBackStack() }
                     )
                 }
             }

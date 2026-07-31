@@ -9,6 +9,10 @@ import com.meshlink.domain.repository.SettingsRepository
 import com.meshlink.wifi.api.WifiTransport
 import com.meshlink.wifi.data.WifiDirectManager
 import com.meshlink.wifi.data.WifiP2pConnectionState
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,14 +24,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.mockito.kotlin.any
-import org.mockito.kotlin.mock
-import org.mockito.kotlin.verify
-import org.mockito.kotlin.whenever
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HybridTransportManagerTest {
@@ -35,10 +34,10 @@ class HybridTransportManagerTest {
     private val testDispatcher = StandardTestDispatcher()
     private val scope = CoroutineScope(testDispatcher)
 
-    private val bleTransport: BleTransport = mock()
-    private val wifiTransport: WifiTransport = mock()
-    private val wifiDirectManager: WifiDirectManager = mock()
-    private val settingsRepository: SettingsRepository = mock()
+    private val bleTransport: BleTransport = mockk(relaxed = true)
+    private val wifiTransport: WifiTransport = mockk(relaxed = true)
+    private val wifiDirectManager: WifiDirectManager = mockk(relaxed = true)
+    private val settingsRepository: SettingsRepository = mockk(relaxed = true)
 
     private lateinit var hybridTransportManager: HybridTransportManager
 
@@ -46,14 +45,14 @@ class HybridTransportManagerTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
 
-        whenever(bleTransport.incomingPackets).thenReturn(flowOf())
-        whenever(wifiTransport.incomingPackets).thenReturn(flowOf())
-        whenever(bleTransport.connectedPeers).thenReturn(setOf("peer_ble_1"))
-        whenever(wifiTransport.connectedPeers).thenReturn(setOf("peer_wifi_1"))
+        every { bleTransport.incomingPackets } returns flowOf()
+        every { wifiTransport.incomingPackets } returns flowOf()
+        every { bleTransport.connectedPeers } returns setOf("peer_ble_1")
+        every { wifiTransport.connectedPeers } returns setOf("peer_wifi_1")
 
-        whenever(wifiDirectManager.connectionState).thenReturn(MutableStateFlow(WifiP2pConnectionState.CONNECTED))
-        whenever(wifiDirectManager.isP2pEnabled).thenReturn(MutableStateFlow(true))
-        whenever(settingsRepository.preferredTransport).thenReturn(flowOf("AUTOMATIC"))
+        every { wifiDirectManager.connectionState } returns MutableStateFlow(WifiP2pConnectionState.CONNECTED)
+        every { wifiDirectManager.isP2pEnabled } returns MutableStateFlow(true)
+        every { settingsRepository.preferredTransport } returns flowOf("AUTOMATIC")
 
         hybridTransportManager = HybridTransportManager(
             bleTransport = bleTransport,
@@ -81,8 +80,8 @@ class HybridTransportManagerTest {
 
     @Test
     fun testMediaPacketPrefersWifiDirectWhenConnected() {
-        whenever(wifiTransport.isConnected).thenReturn(true)
-        whenever(wifiTransport.connectedPeers).thenReturn(setOf("peer_1"))
+        every { wifiTransport.isConnected } returns true
+        every { wifiTransport.connectedPeers } returns setOf("peer_1")
 
         val route = hybridTransportManager.getSelectedRouteType(
             targetId = "peer_1",
@@ -104,8 +103,8 @@ class HybridTransportManagerTest {
 
     @Test
     fun testAutomaticDowngradeFallbackToBleOnWifiFailure() = runTest {
-        whenever(wifiTransport.isConnected).thenReturn(true)
-        whenever(wifiTransport.connectedPeers).thenReturn(setOf("target_peer"))
+        every { wifiTransport.isConnected } returns true
+        every { wifiTransport.connectedPeers } returns setOf("target_peer")
 
         val packet = MeshPacket(
             packetId = "p_1",
@@ -116,15 +115,15 @@ class HybridTransportManagerTest {
         )
 
         // Wi-Fi send fails, BLE succeeds
-        whenever(wifiTransport.sendPacket(any())).thenReturn(MeshResult.Error(com.meshlink.domain.model.MeshError.TransportError("Socket dropped")))
-        whenever(bleTransport.sendPacket(any())).thenReturn(MeshResult.Success(Unit))
+        coEvery { wifiTransport.sendPacket(any()) } returns MeshResult.Error(com.meshlink.domain.model.MeshError.TransportError("Socket dropped"))
+        coEvery { bleTransport.sendPacket(any()) } returns MeshResult.Success(Unit)
 
         val result = hybridTransportManager.sendPacket(packet)
 
         // Verify result succeeds via BLE fallback
         assertTrue(result is MeshResult.Success)
-        verify(wifiTransport).sendPacket(packet)
-        verify(bleTransport).sendPacket(packet)
+        coVerify { wifiTransport.sendPacket(packet) }
+        coVerify { bleTransport.sendPacket(packet) }
 
         val metrics = hybridTransportManager.metrics.value
         assertEquals(1L, metrics.fallbackCount)

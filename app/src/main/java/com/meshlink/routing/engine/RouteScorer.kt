@@ -89,6 +89,18 @@ class RouteScorer @Inject constructor() {
         var totalScore = (linkQualityScore + reliabilityScore + batteryScore + congestionScore + 
                           latencyScore + stabilityScore + trustScore + hopScore).toInt()
 
+        // Transport Boost (Wi-Fi Direct / Hybrid gets small preference due to higher bandwidth)
+        if (entry.routeType == RouteType.WIFI_DIRECT || entry.routeType == RouteType.HYBRID) {
+            totalScore += 5
+        }
+
+        // State Penalty
+        when (entry.state) {
+            com.meshlink.domain.model.RouteState.STALE -> totalScore /= 2
+            com.meshlink.domain.model.RouteState.EXPIRED, com.meshlink.domain.model.RouteState.REMOVED -> totalScore = 0
+            else -> {}
+        }
+
         return max(0, min(100, totalScore))
     }
     

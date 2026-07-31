@@ -19,6 +19,8 @@ class RoutingEngine @Inject constructor(
     val transportManager: IntelligentTransportManager,
     val retryEngine: IntelligentRetryEngine,
     val queueOptimizer: QueueOptimizer,
+    val discoveryEngine: RouteDiscoveryEngine,
+    val repairManager: RouteRepairManager,
     private val routeOptimizer: RouteOptimizer,
     private val configManager: RuntimeConfigManager
 ) {
@@ -62,9 +64,13 @@ class RoutingEngine @Inject constructor(
         private fun evictStale(now: Long, maxAgeMs: Long) {
             cache.entries.removeIf { now - it.value > maxAgeMs }
         }
+
+        fun size(): Int = cache.size
     }
     
     private val duplicateCache = TimeBoundedDuplicateCache()
+
+    fun getDuplicateCacheSize(): Int = duplicateCache.size()
 
     fun start() {
         routeHealthMonitor.start()

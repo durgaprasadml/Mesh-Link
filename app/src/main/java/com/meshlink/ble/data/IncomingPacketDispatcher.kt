@@ -143,15 +143,12 @@ class IncomingPacketDispatcher @Inject constructor(
                 PacketType.VOICE_FRAME -> {
                     voiceTransport.handleIncomingPacket(processedPacket)
                 }
-                PacketType.VIDEO_SIGNAL,
-                PacketType.VIDEO_FRAME,
-                PacketType.BEACON,
-                PacketType.INCIDENT_REPORT,
-                PacketType.CHECK_IN,
-                PacketType.FORM_SYNC,
-                PacketType.RESOURCE_SYNC,
-                PacketType.MAP_SYNC -> {
-                    // Currently no-op or handled elsewhere, but must be explicitly defined
+                PacketType.ROUTE_REQUEST,
+                PacketType.ROUTE_REPLY,
+                PacketType.ROUTE_ERROR -> {
+                    MeshLogger.d(TAG, "Routing control packet ${processedPacket.type} processed by router layer")
+                }
+                else -> {
                     MeshLogger.d(TAG, "Received unhandled packet type: ${processedPacket.type}")
                 }
             }

@@ -22,6 +22,8 @@ class RoutingEngineTest {
     private val transportManager = mockk<IntelligentTransportManager>(relaxed = true)
     private val retryEngine = mockk<IntelligentRetryEngine>(relaxed = true)
     private val queueOptimizer = mockk<QueueOptimizer>(relaxed = true)
+    private val discoveryEngine = mockk<RouteDiscoveryEngine>(relaxed = true)
+    private val repairManager = mockk<RouteRepairManager>(relaxed = true)
     private val routeOptimizer = mockk<RouteOptimizer>(relaxed = true)
     private val configManager = mockk<RuntimeConfigManager>(relaxed = true)
 
@@ -44,6 +46,8 @@ class RoutingEngineTest {
             transportManager = transportManager,
             retryEngine = retryEngine,
             queueOptimizer = queueOptimizer,
+            discoveryEngine = discoveryEngine,
+            repairManager = repairManager,
             routeOptimizer = routeOptimizer,
             configManager = configManager
         )

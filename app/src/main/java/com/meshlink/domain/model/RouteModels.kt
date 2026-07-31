@@ -6,6 +6,13 @@ enum class RouteType {
     HYBRID
 }
 
+enum class RouteState {
+    ACTIVE,
+    STALE,
+    EXPIRED,
+    REMOVED
+}
+
 data class RouteMetrics(
     var rssi: Int = -100, // Normalized to typical BLE range
     var packetLossRate: Float = 0f, // 0.0 to 1.0
@@ -61,6 +68,9 @@ data class RouteEntry(
     val routeType: RouteType = RouteType.BLE,
     val metrics: RouteMetrics = RouteMetrics(),
     var lastSeen: Long = System.currentTimeMillis(),
+    var lastActivity: Long = System.currentTimeMillis(),
+    var sequenceNumber: Long = 0L,
     var score: Int = 0, // 0-100 calculated by RouteScorer
-    var isVerified: Boolean = false // Set to true if a packet has successfully traversed this route
+    var isVerified: Boolean = false, // Set to true if a packet has successfully traversed this route
+    var state: RouteState = RouteState.ACTIVE
 )

@@ -28,7 +28,6 @@ class WifiSocketTransportTest {
     @After
     fun teardown() {
         transport.stopServer()
-        transport.disconnect()
     }
 
     private suspend fun eventually(timeoutMs: Long = 5000L, pollMs: Long = 50L, condition: () -> Boolean) {
@@ -47,8 +46,8 @@ class WifiSocketTransportTest {
         var receivedPacketByServer: MeshPacket? = null
         var receivedPacketByClient: MeshPacket? = null
 
-        serverTransport.onPacketReceived = { receivedPacketByServer = it }
-        clientTransport.onPacketReceived = { receivedPacketByClient = it }
+        serverTransport.onPacketReceived = { _, packet -> receivedPacketByServer = packet }
+        clientTransport.onPacketReceived = { _, packet -> receivedPacketByClient = packet }
 
         // Start Server on 127.0.0.1 (Loopback)
         serverTransport.startServer()
@@ -76,12 +75,12 @@ class WifiSocketTransportTest {
         assertEquals("hello from server", receivedPacketByClient?.payload)
         assertEquals("server_to_client", receivedPacketByClient?.packetId)
 
-        clientTransport.disconnect()
+        clientTransport.stopServer()
         serverTransport.stopServer()
     }
 
     @Test
-    fun `disconnect cleans up streams and socket state`() = runBlocking {
+    fun `stopServer cleans up streams and socket state`() = runBlocking {
         transport.startServer()
         
         val client = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
@@ -89,7 +88,7 @@ class WifiSocketTransportTest {
         eventually { client.isConnected() }
         
         assertTrue(client.isConnected())
-        client.disconnect()
+        client.stopServer()
         eventually { !client.isConnected() }
         
         assertFalse(client.isConnected())
@@ -103,7 +102,7 @@ class WifiSocketTransportTest {
         val clientTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
 
         var receivedPacket: MeshPacket? = null
-        serverTransport.onPacketReceived = { receivedPacket = it }
+        serverTransport.onPacketReceived = { _, packet -> receivedPacket = packet }
 
         serverTransport.startServer()
         clientTransport.connectAsClient("127.0.0.1")
@@ -119,7 +118,7 @@ class WifiSocketTransportTest {
         assertNotNull(receivedPacket)
         assertEquals(massivePayload.length, receivedPacket?.payload?.length)
         
-        clientTransport.disconnect()
+        clientTransport.stopServer()
         serverTransport.stopServer()
     }
 }

@@ -23,7 +23,10 @@ enum class PacketType {
     CHECK_IN,
     FORM_SYNC,
     RESOURCE_SYNC,
-    MAP_SYNC
+    MAP_SYNC,
+    ROUTE_REQUEST,
+    ROUTE_REPLY,
+    ROUTE_ERROR
 }
 
 enum class PacketPriority(val level: Int) {
@@ -59,5 +62,7 @@ data class MeshPacket(
     val encrypted: Boolean = false,
     val ttl: Int = 10,
     val hopCount: Int = 0,
-    val visitedPath: List<String> = emptyList()
+    val visitedPath: List<String> = emptyList(),
+    val sequenceNumber: Long = 0L,
+    val sourceSequenceNumber: Long = 0L
 )

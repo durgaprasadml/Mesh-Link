@@ -92,20 +92,35 @@ class RouteCache @Inject constructor(
     fun evictStaleRoutes(staleThresholdMs: Long): Int {
         val now = System.currentTimeMillis()
         var evictedCount = 0
-        
+        val halfStale = staleThresholdMs / 2
+        val doubleStale = staleThresholdMs * 2
+
         lock.withLock {
             routes.entries.removeIf { (_, destRoutes) ->
+                destRoutes.forEach { route ->
+                    val age = now - route.lastSeen
+                    when {
+                        age > doubleStale -> route.state = com.meshlink.domain.model.RouteState.REMOVED
+                        age > staleThresholdMs -> {
+                            route.state = com.meshlink.domain.model.RouteState.EXPIRED
+                            route.score = 0
+                        }
+                        age > halfStale -> route.state = com.meshlink.domain.model.RouteState.STALE
+                        else -> route.state = com.meshlink.domain.model.RouteState.ACTIVE
+                    }
+                }
+
                 val originalSize = destRoutes.size
-                destRoutes.removeIf { now - it.lastSeen > staleThresholdMs }
+                destRoutes.removeIf { it.state == com.meshlink.domain.model.RouteState.REMOVED }
                 evictedCount += (originalSize - destRoutes.size)
                 destRoutes.isEmpty()
             }
         }
-        
+
         if (evictedCount > 0) {
             _routeCount.update { routes.values.sumOf { it.size } }
         }
-        
+
         return evictedCount
     }
     

@@ -205,14 +205,51 @@ internal class MeshRouter @Inject constructor(
             return
         }
 
-        // --- Trust Validation ---
         val trustLevel = trustManager.getTrustLevel(packet.senderId)
         if (trustLevel == TrustLevel.BLOCKED || trustLevel == TrustLevel.REVOKED) {
             MeshLogger.w(TAG, "Dropped packet from rogue node ${packet.senderId}")
             return
         }
 
-
+        // --- Handle Routing Control Overhead Packets (RREQ, RREP, RERR) ---
+        when (packet.type) {
+            PacketType.ROUTE_REQUEST -> {
+                applicationScope.launch {
+                    routingEngine.discoveryEngine.handleRouteRequest(
+                        immediateSenderAddress,
+                        packet,
+                        localMeshId,
+                        sendPacketAction = { p, target -> hybridTransport.broadcastPacket(p, includeAddress = target) }
+                    )
+                }
+                return
+            }
+            PacketType.ROUTE_REPLY -> {
+                applicationScope.launch {
+                    routingEngine.discoveryEngine.handleRouteReply(
+                        immediateSenderAddress,
+                        packet,
+                        localMeshId,
+                        sendPacketAction = { p, target -> hybridTransport.broadcastPacket(p, includeAddress = target) },
+                        flushPendingAction = { targetId, pendingList ->
+                            pendingList.forEach { queuedPacket ->
+                                routingEngine.queueOptimizer.enqueue(queuedPacket)
+                            }
+                        }
+                    )
+                }
+                return
+            }
+            PacketType.ROUTE_ERROR -> {
+                routingEngine.repairManager.handleRouteError(
+                    immediateSenderAddress,
+                    packet,
+                    localMeshId
+                )
+                return
+            }
+            else -> {}
+        }
 
         // Strict de-dup — reject if already processed, UNLESS it's a direct message for us
         // (we want to re-process duplicates for ourselves so we can re-send ACKs if the sender retried)
@@ -314,8 +351,12 @@ internal class MeshRouter @Inject constructor(
             } else {
                 if (routingEngine.shouldRelayBroadcast(relayPacket.type)) {
                     routingEngine.congestionMonitor.recordBroadcast()
-                    routingEngine.queueOptimizer.enqueue(relayPacket)
-                    MeshLogger.d(TAG) { "Forwarded broadcast queued ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} (ttl=${relayPacket.ttl})" }
+                    // Add slight randomized jitter (10-50ms) to prevent collision storms in dense meshes
+                    applicationScope.launch {
+                        delay(kotlin.random.Random.nextLong(10L, 50L))
+                        routingEngine.queueOptimizer.enqueue(relayPacket)
+                    }
+                    MeshLogger.d(TAG) { "Forwarded broadcast queued with jitter ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} (ttl=${relayPacket.ttl})" }
                 } else {
                     MeshLogger.d(TAG) { "Dropped broadcast due to battery/congestion heuristics" }
                 }
@@ -390,7 +431,6 @@ internal class MeshRouter @Inject constructor(
         packetId: String?
     ): com.meshlink.domain.model.DispatchResult {
         return try {
-
             val initialTtl = meshTtlState.value
             val packet = MeshPacket(
                 packetId = packetId ?: java.util.UUID.randomUUID().toString(),
@@ -401,7 +441,23 @@ internal class MeshRouter @Inject constructor(
                 ttl = initialTtl
             )
             routingEngine.markPacketProcessed(packet.packetId)
-            routingEngine.queueOptimizer.enqueue(packet)
+
+            val canonicalTarget = com.meshlink.util.MeshIdNormalizer.canonicalize(targetId)
+            val isBroadcast = canonicalTarget == "BROADCAST" || targetId == "BROADCAST"
+            val knownRoute = routingEngine.routeManager.getOptimalRoute(targetId)
+
+            if (!isBroadcast && knownRoute == null) {
+                MeshLogger.d(TAG) { "No cached route for $targetId. Initiating RREQ discovery & queuing packet ${packet.packetId}" }
+                routingEngine.discoveryEngine.queueAndDiscover(
+                    targetId = targetId,
+                    packet = packet,
+                    localMeshId = localMeshId,
+                    sendPacketAction = { hybridTransport.broadcastPacket(it) }
+                )
+            } else {
+                routingEngine.queueOptimizer.enqueue(packet)
+            }
+
             _packetEvents.emit(com.meshlink.routing.api.PacketQueued(packet.packetId))
             com.meshlink.domain.model.DispatchResult.Queued
         } catch (e: Exception) {

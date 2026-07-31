@@ -16,6 +16,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -45,8 +46,8 @@ class HybridTransportManagerTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
 
-        every { bleTransport.incomingPackets } returns flowOf()
-        every { wifiTransport.incomingPackets } returns flowOf()
+        every { bleTransport.incomingPackets } returns MutableSharedFlow()
+        every { wifiTransport.incomingPackets } returns MutableSharedFlow()
         every { bleTransport.connectedPeers } returns setOf("peer_ble_1")
         every { wifiTransport.connectedPeers } returns setOf("peer_wifi_1")
 

@@ -31,7 +31,7 @@ class ChatsListViewModelTest {
         val chats = listOf(mockk<Chat>(), mockk<Chat>())
         every { getAllChatsUseCase() } returns flowOf(chats)
 
-        viewModel = ChatsListViewModel(getAllChatsUseCase)
+        viewModel = ChatsListViewModel(getAllChatsUseCase, mockk(relaxed = true))
 
         viewModel.uiState.test {
             val state = awaitItem()

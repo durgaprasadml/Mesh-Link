@@ -30,7 +30,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class MeshRouterTest {
 
-    private val bleTransport = mockk<BleTransport>(relaxed = true)
+    private val hybridTransport = mockk<com.meshlink.transport.HybridTransport>(relaxed = true)
     private val relayDao = mockk<RelayDao>(relaxed = true)
     private val trustManager = mockk<TrustManager>(relaxed = true)
     private val routingEngine = mockk<RoutingEngine>(relaxed = true)
@@ -48,7 +48,7 @@ class MeshRouterTest {
         every { settingsRepository.isMeshRelayEnabled } returns flowOf(true)
         every { settingsRepository.meshMaxHops } returns flowOf(5)
         every { settingsRepository.meshTtl } returns flowOf(10)
-        every { bleTransport.incomingPackets } returns incomingPacketsFlow
+        every { hybridTransport.incomingPackets } returns incomingPacketsFlow
         every { trustManager.getTrustLevel(any()) } returns TrustLevel.TRUSTED
         every { routingEngine.queueOptimizer } returns queueOptimizer
         every { routingEngine.congestionMonitor } returns congestionMonitor
@@ -65,7 +65,7 @@ class MeshRouterTest {
 
     private fun createRouter(scope: CoroutineScope): MeshRouter {
         val router = MeshRouter(
-            bleTransport = bleTransport,
+            hybridTransport = hybridTransport,
             relayDao = relayDao,
             trustManager = trustManager,
             routingEngine = routingEngine,
@@ -176,7 +176,7 @@ class MeshRouterTest {
 
     @Test
     fun `handleIncomingPacket stores packet in RelayDao when no peers available to forward`() = runTest {
-        every { bleTransport.connectedPeers } returns emptySet()
+        every { hybridTransport.connectedPeers } returns emptySet()
         createRouter(backgroundScope)
         testScheduler.runCurrent()
 

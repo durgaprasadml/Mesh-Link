@@ -68,7 +68,7 @@ class ChatDetailViewModelTest {
 
     private fun createViewModel() {
         viewModel = ChatDetailViewModel(
-            savedStateHandle, meshRepository, getChatMessagesUseCase, deleteMessagesUseCase,
+            savedStateHandle, meshRepository, mockk(relaxed = true), getChatMessagesUseCase, deleteMessagesUseCase,
             deleteChatUseCase, markChatAsReadUseCase, getMessageUseCase, voiceRecorder,
             voicePlayer, sendMessageUseCase
         )

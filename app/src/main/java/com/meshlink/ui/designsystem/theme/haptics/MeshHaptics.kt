@@ -7,9 +7,14 @@ import androidx.compose.ui.platform.LocalView
 
 /**
  * Haptic Engine for Mesh Link 2026.
- * Provides distinct tactile sensations for interactive user actions.
+ * Provides distinct tactile sensations for interactive user actions across navigation, messaging, and emergency alerts.
  */
 class MeshHaptics(private val view: android.view.View) {
+
+    fun tap() {
+        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+    }
+
     fun selection() {
         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
     }
@@ -30,6 +35,10 @@ class MeshHaptics(private val view: android.view.View) {
         view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
     }
 
+    fun failure() {
+        view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+    }
+
     fun warning() {
         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
     }
@@ -38,8 +47,40 @@ class MeshHaptics(private val view: android.view.View) {
         view.performHapticFeedback(HapticFeedbackConstants.REJECT)
     }
 
+    fun navigation() {
+        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+    }
+
+    fun emergency() {
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+
     fun sosTrigger() {
         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    fun broadcast() {
+        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+    }
+
+    fun connection() {
+        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+    }
+
+    fun messageSent() {
+        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+    }
+
+    fun messageReceived() {
+        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+    }
+
+    fun heavyClick() {
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    fun selectionClick() {
+        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
     }
 }
 

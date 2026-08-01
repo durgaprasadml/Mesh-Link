@@ -36,7 +36,12 @@ import com.meshlink.ui.designsystem.components.shared.MeshStatusBadge
 import com.meshlink.ui.designsystem.components.shared.ProgressBar
 import com.meshlink.ui.designsystem.components.shared.ProgressRing
 import com.meshlink.ui.designsystem.components.shared.SignalMeter
+import com.meshlink.ui.designsystem.motion.MeshBreathingContainer
+import com.meshlink.ui.designsystem.motion.MeshFloatingContainer
+import com.meshlink.ui.designsystem.motion.MeshGlowEngine
+import com.meshlink.ui.designsystem.motion.MeshSignalPulse
 import com.meshlink.ui.designsystem.theme.MeshTheme
+
 
 /**
  * Interactive Design System Catalog showcasing all 40+ components across Light, Dark, and AMOLED modes.
@@ -93,15 +98,38 @@ fun DesignSystemCatalog(modifier: Modifier = Modifier) {
         Text(text = "INPUTS & SEARCH", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MeshTheme.colors.textSecondary)
         MeshSearchBar(query = "", onQueryChange = {})
 
-        // Avatars & Badges
-        Text(text = "AVATARS & BADGES", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MeshTheme.colors.textSecondary)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MeshAvatar(name = "Alpha Leader", isOnline = true)
-            AvatarGroup(names = listOf("Alpha", "Bravo", "Charlie", "Delta"))
-            MeshChip(label = "BLE MESH", selected = true, onClick = {})
+        // Motion & Animation Framework Section
+        Text(text = "MOTION & ANIMATION ENGINE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MeshTheme.colors.textSecondary)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            MeshBreathingContainer {
+                MeshGlassCard {
+                    Text(text = "Breathing Container", color = MeshTheme.colors.primary, fontSize = 12.sp)
+                }
+            }
+
+            MeshFloatingContainer {
+                MeshGlassCard {
+                    Text(text = "Floating Container", color = MeshTheme.colors.secondary, fontSize = 12.sp)
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            MeshSignalPulse {
+                MeshChip(label = "SIGNAL PULSE", selected = true, onClick = {})
+            }
+            MeshGlowEngine {
+                MeshChip(label = "GLOW ENGINE", selected = true, onClick = {})
+            }
         }
     }
 }
+
 
 @Preview(name = "Catalog Light Mode")
 @Composable

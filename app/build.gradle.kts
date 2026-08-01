@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.serialization)
@@ -31,12 +32,12 @@ android {
     }
 
     ksp {
-        arg("room.schemaLocation", "$projectDir/schemas")
         arg("room.incremental", "true")
         arg("room.expandProjection", "true")
         arg("dagger.fastInit", "true")
         arg("dagger.hilt.android.internal.disableAndroidSuperclassValidation", "true")
-        arg("dagger.experimentalDaggerErrorMessages", "ENABLED")
+        // Skips internal Hilt checks that are slow and usually unnecessary during dev
+        arg("dagger.hilt.disableModulesHaveInstallInCheck", "true")
     }
 
     buildFeatures {
@@ -115,13 +116,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-Xbackend-threads=0",
-            "-P",
-            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true",
-            "-P",
-            "plugin:androidx.compose.compiler.plugins.kotlin:stabilityConfigurationPath=$projectDir/stability_config.conf"
-        )
     }
 
     testOptions {
@@ -134,9 +128,6 @@ android {
         }
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
 
     packaging {
         resources {

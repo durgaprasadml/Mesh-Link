@@ -13,6 +13,7 @@ data class MeshElevation(
     val dialog: Dp = 12.dp,
     val overlay: Dp = 16.dp,
     val glass: Dp = 1.dp,
+    val card: Dp = 2.dp,
     // Legacy levels
     val none: Dp = 0.dp,
     val level1: Dp = 1.dp,

@@ -11,7 +11,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import com.meshlink.ui.designsystem.motion.meshPulse
 import com.meshlink.ui.designsystem.theme.motion.MeshMotion
+
 
 @Immutable
 data class MeshAnimations(
@@ -45,9 +48,17 @@ data class MeshAnimations(
 
 val LocalMeshAnimations = staticCompositionLocalOf { MeshAnimations() }
 
-fun Modifier.meshPressScale(scale: Float = 0.97f): Modifier = this
-fun Modifier.meshPulseEffect(enabled: Boolean = true): Modifier = this
-fun Modifier.meshShimmerEffect(): Modifier = this
+fun Modifier.meshPressScale(scale: Float = 0.97f): Modifier = this.graphicsLayer {
+    scaleX = scale
+    scaleY = scale
+}
+
+fun Modifier.meshPulseEffect(enabled: Boolean = true): Modifier = if (!enabled) this else this.meshPulse()
+
+fun Modifier.meshShimmerEffect(): Modifier = this.graphicsLayer {
+    alpha = 0.85f
+}
 
 @Composable
 fun Modifier.scaleOnPress(targetScale: Float = 0.96f): Modifier = this.meshPressScale(targetScale)
+

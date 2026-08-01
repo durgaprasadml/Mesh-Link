@@ -22,6 +22,7 @@ data class MeshElevationScale(
     val level4: Dp = 12.dp,
     val level5: Dp = 16.dp,
     val glass: Dp = 0.dp,
+    val card: Dp = 2.dp,
     val navigation: Dp = 4.dp
 )
 

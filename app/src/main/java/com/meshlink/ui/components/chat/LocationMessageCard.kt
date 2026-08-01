@@ -364,9 +364,9 @@ private fun StyledMapCanvasPreview(
         label = "pulseAlpha"
     )
 
-    val bgColor = if (isDark) Color(0xFF1E293B) else Color(0xFFE2E8F0)
-    val gridColor = if (isDark) Color(0xFF334155) else Color(0xFFCBD5E1)
-    val roadColor = if (isDark) Color(0xFF475569) else Color(0xFF94A3B8)
+    val bgColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val roadColor = MaterialTheme.colorScheme.outline
     val primaryPinColor = MaterialTheme.colorScheme.primary
 
     Box(

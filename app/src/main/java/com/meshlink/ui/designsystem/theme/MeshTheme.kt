@@ -10,6 +10,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -18,6 +19,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+
+/** Whether glass/frosted surface effects are active for this theme context. */
+val LocalGlassEffects = staticCompositionLocalOf { true }
+
+/** Whether motion/animations are active for this theme context. */
+val LocalReduceMotion = staticCompositionLocalOf { false }
 
 @Composable
 fun MeshTheme(
@@ -56,7 +63,7 @@ fun MeshTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         darkTheme -> {
-            if (amoledDark) MeshDarkColorScheme.copy(background = BackgroundAmoled, surface = BackgroundAmoled)
+            if (amoledDark) MeshAmoledColorScheme.copy(primary = customPrimary)
             else MeshDarkColorScheme.copy(primary = customPrimary)
         }
         else -> MeshLightColorScheme.copy(primary = customPrimary)
@@ -127,7 +134,9 @@ fun MeshTheme(
         LocalMeshElevation provides MeshElevation(),
         LocalMeshShapes provides shapes,
         LocalMeshAnimations provides animations,
-        LocalMeshSemanticColors provides semanticColors
+        LocalMeshSemanticColors provides semanticColors,
+        LocalGlassEffects provides glassEffectsEnabled,
+        LocalReduceMotion provides reduceMotionEnabled
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
@@ -154,4 +163,12 @@ object MeshTheme {
     val animations: MeshAnimations
         @Composable
         get() = LocalMeshAnimations.current
+    /** True when glass/frosted surface effects are enabled in appearance settings. */
+    val glassEffects: Boolean
+        @Composable
+        get() = LocalGlassEffects.current
+    /** True when the user has enabled reduce-motion in appearance settings. */
+    val reduceMotion: Boolean
+        @Composable
+        get() = LocalReduceMotion.current
 }

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,23 +50,22 @@ fun SosEmergencyCard(
     val isDark = isSystemInDarkTheme()
 
     // Color palette carefully crafted for high contrast, emergency theme, & Material 3 compliance
+    val dangerColor: Color = MeshTheme.colors.danger
+    val errorContainer: Color = MaterialTheme.colorScheme.errorContainer
+
     val headerGradient = Brush.horizontalGradient(
-        colors = if (isDark) {
-            listOf(Color(0xFFD32F2F), Color(0xFF8E0000))
-        } else {
-            listOf(Color(0xFFD32F2F), Color(0xFFB71C1C))
-        }
+        colors = listOf(dangerColor, MeshTheme.colors.error)
     )
 
-    val cardBgColor = if (isDark) Color(0xFF2C1616) else Color(0xFFFFF5F5)
-    val bodyBgColor = if (isDark) Color(0xFF1E1E1E) else Color.White
-    val cardBorderColor = if (isDark) Color(0xFFEF5350).copy(alpha = 0.35f) else Color(0xFFD32F2F).copy(alpha = 0.25f)
+    val cardBgColor: Color = errorContainer.copy(alpha = 0.40f)
+    val bodyBgColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh
+    val cardBorderColor: Color = dangerColor.copy(alpha = 0.40f)
 
-    val primaryTextColor = if (isDark) Color(0xFFE6E1E5) else MaterialTheme.colorScheme.onSurface
-    val labelTextColor = if (isDark) Color(0xFFCAC4D0) else MaterialTheme.colorScheme.onSurfaceVariant
-    val iconTintColor = if (isDark) Color(0xFFEF5350) else Color(0xFFC62828)
-    val dividerColor = if (isDark) Color(0xFF362727) else Color(0xFFF0E0E0)
-    val footerBgColor = if (isDark) Color(0xFF8E0000) else Color(0xFFB71C1C)
+    val primaryTextColor: Color = MaterialTheme.colorScheme.onSurface
+    val labelTextColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    val iconTintColor: Color = dangerColor
+    val dividerColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f)
+    val footerBgColor: Color = MeshTheme.colors.error
 
     // Breathing pulse animation for emergency icon
     val infiniteTransition = rememberInfiniteTransition(label = "sosPulseAnimation")

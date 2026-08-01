@@ -134,8 +134,8 @@ fun NearbyDevicesScreen(
                     .padding(paddingValues)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // M3 Container Card housing the Topology Canvas
-                    ElevatedCard(
+                    // Mesh Glass Card housing the Topology Canvas
+                    com.meshlink.ui.components.MeshGlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(0.42f)
@@ -144,17 +144,10 @@ fun NearbyDevicesScreen(
                                 end = MeshSpacing.ScreenPadding,
                                 top = MeshSpacing.ScreenPadding,
                                 bottom = 12.dp
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                shape = MeshTheme.shapes.extraLarge
                             ),
-                        shape = MeshTheme.shapes.extraLarge,
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = MeshSpacing.CardElevation)
+                        cornerRadius = 24.dp,
+                        glowColor = MaterialTheme.colorScheme.primary,
+                        glowRadius = 240f
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),

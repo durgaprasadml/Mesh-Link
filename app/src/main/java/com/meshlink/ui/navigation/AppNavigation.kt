@@ -14,8 +14,10 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -277,16 +279,45 @@ fun AppNavigation(
 
 @Composable
 fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val sosSelected = currentRoute == Screen.Sos.route
+
+    // Standard nav item colors
+    val navItemColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+    )
+
+    // SOS always uses error color tokens — emergency accessibility signal
+    val sosNavColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.onErrorContainer,
+        selectedTextColor = MaterialTheme.colorScheme.error,
+        indicatorColor = MaterialTheme.colorScheme.errorContainer,
+        unselectedIconColor = MaterialTheme.colorScheme.error.copy(alpha = 0.72f),
+        unselectedTextColor = MaterialTheme.colorScheme.error.copy(alpha = 0.72f)
+    )
+
     NavigationBar(
-        modifier = Modifier
-            .defaultMinSize(minHeight = MeshSpacing.BottomNavHeight)
-            .padding(horizontal = MeshSpacing.BottomNavHorizontalPadding)
+        modifier = Modifier.defaultMinSize(minHeight = MeshSpacing.BottomNavHeight),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 0.dp
     ) {
         NavigationBarItem(
             icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-            label = { Text("Home") },
+            label = {
+                Text(
+                    "Home",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (currentRoute == Screen.Home.route) FontWeight.Bold else FontWeight.Medium
+                )
+            },
             selected = currentRoute == Screen.Home.route,
+            colors = navItemColors,
             onClick = {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                 if (currentRoute != Screen.Home.route) {
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Home.route) { saveState = true }
@@ -298,9 +329,17 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
-            label = { Text("Nearby") },
+            label = {
+                Text(
+                    "Nearby",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (currentRoute == Screen.Nearby.route) FontWeight.Bold else FontWeight.Medium
+                )
+            },
             selected = currentRoute == Screen.Nearby.route,
+            colors = navItemColors,
             onClick = {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                 if (currentRoute != Screen.Nearby.route) {
                     navController.navigate(Screen.Nearby.route) {
                         popUpTo(Screen.Home.route) { saveState = true }
@@ -310,12 +349,19 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
                 }
             }
         )
-        
         NavigationBarItem(
             icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
-            label = { Text("SOS") },
-            selected = currentRoute == Screen.Sos.route,
+            label = {
+                Text(
+                    "SOS",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            selected = sosSelected,
+            colors = sosNavColors,
             onClick = {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                 if (currentRoute != Screen.Sos.route) {
                     navController.navigate(Screen.Sos.route) {
                         popUpTo(Screen.Home.route) { saveState = true }
@@ -325,12 +371,19 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
                 }
             }
         )
-
         NavigationBarItem(
             icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-            label = { Text("Settings") },
+            label = {
+                Text(
+                    "Settings",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (currentRoute == Screen.Settings.route) FontWeight.Bold else FontWeight.Medium
+                )
+            },
             selected = currentRoute == Screen.Settings.route,
+            colors = navItemColors,
             onClick = {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                 if (currentRoute != Screen.Settings.route) {
                     navController.navigate(Screen.Settings.route) {
                         popUpTo(Screen.Home.route) { saveState = true }
@@ -345,10 +398,12 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
 
 @Composable
 fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) {
-    NavigationRail {
+    NavigationRail(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer
+    ) {
         NavigationRailItem(
             icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-            label = { Text("Home") },
+            label = { Text("Home", style = MaterialTheme.typography.labelSmall) },
             selected = currentRoute == Screen.Home.route,
             onClick = {
                 if (currentRoute != Screen.Home.route) {
@@ -362,7 +417,7 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
         )
         NavigationRailItem(
             icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
-            label = { Text("Nearby") },
+            label = { Text("Nearby", style = MaterialTheme.typography.labelSmall) },
             selected = currentRoute == Screen.Nearby.route,
             onClick = {
                 if (currentRoute != Screen.Nearby.route) {
@@ -374,11 +429,28 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
                 }
             }
         )
-        
         NavigationRailItem(
-            icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
-            label = { Text("SOS") },
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = "SOS",
+                    tint = if (currentRoute == Screen.Sos.route)
+                        MaterialTheme.colorScheme.onErrorContainer
+                    else
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.72f)
+                )
+            },
+            label = {
+                Text("SOS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            },
             selected = currentRoute == Screen.Sos.route,
+            colors = androidx.compose.material3.NavigationRailItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.onErrorContainer,
+                selectedTextColor = MaterialTheme.colorScheme.error,
+                indicatorColor = MaterialTheme.colorScheme.errorContainer,
+                unselectedIconColor = MaterialTheme.colorScheme.error.copy(alpha = 0.72f),
+                unselectedTextColor = MaterialTheme.colorScheme.error.copy(alpha = 0.72f)
+            ),
             onClick = {
                 if (currentRoute != Screen.Sos.route) {
                     navController.navigate(Screen.Sos.route) {
@@ -389,10 +461,9 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
                 }
             }
         )
-
         NavigationRailItem(
             icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-            label = { Text("Settings") },
+            label = { Text("Settings", style = MaterialTheme.typography.labelSmall) },
             selected = currentRoute == Screen.Settings.route,
             onClick = {
                 if (currentRoute != Screen.Settings.route) {

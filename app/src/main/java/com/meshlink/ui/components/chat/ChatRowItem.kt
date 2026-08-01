@@ -5,7 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.meshlink.ui.designsystem.theme.scaleOnPress
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -38,9 +40,6 @@ fun ChatRowItem(
     val displayName = remember(chat.name, chat.id) {
         chat.name.ifBlank { MeshIdNormalizer.canonicalize(chat.id) }
     }
-    val displayInitial = remember(chat.name) {
-        chat.name.firstOrNull()?.toString()?.uppercase() ?: "?"
-    }
 
     val semanticDescription = buildString {
         append("Chat with $displayName. ")
@@ -55,9 +54,10 @@ fun ChatRowItem(
         }
     }
 
-    Row(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
+            .scaleOnPress(0.98f)
             .clickable(role = Role.Button) {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 onClick()
@@ -65,70 +65,80 @@ fun ChatRowItem(
             .semantics(mergeDescendants = true) {
                 role = Role.Button
                 contentDescription = semanticDescription
-            }
-            .padding(
-                horizontal = MeshTheme.spacing.mediumLarge,
-                vertical = MeshTheme.spacing.medium
-            ),
-        verticalAlignment = Alignment.CenterVertically
+            },
+        shape = MaterialTheme.shapes.medium,
+        color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+        tonalElevation = if (chat.unreadCount > 0) 2.dp else 0.dp
     ) {
-        // Avatar
-        com.meshlink.ui.components.UserAvatarImage(
-            avatarUri = chat.avatarUri,
-            displayName = displayName,
-            size = 52.dp
-        )
-
-        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
-
-        // Name & Last Message
-        Column(
-            modifier = Modifier.weight(1f)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = MeshTheme.spacing.mediumLarge,
+                    vertical = MeshTheme.spacing.medium
+                ),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = displayName,
-                color = MaterialTheme.colorScheme.onBackground,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            // Avatar
+            com.meshlink.ui.components.UserAvatarImage(
+                avatarUri = chat.avatarUri,
+                displayName = displayName,
+                size = 52.dp
             )
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-            Text(
-                text = chat.lastMessage ?: "No messages yet",
-                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
 
-        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
 
-        // Timestamp & Unread Badge
-        Column(
-            horizontalAlignment = Alignment.End
-        ) {
-            Text(
-                text = formattedTime,
-                color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium
-            )
-            if (chat.unreadCount > 0) {
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                Box(
-                    modifier = Modifier
-                        .size(MeshTheme.spacing.extraLarge)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (chat.unreadCount > 99) "99+" else chat.unreadCount.toString(),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+            // Name & Last Message
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = displayName,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (chat.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = chat.lastMessage ?: "No messages yet",
+                    color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
+
+            // Timestamp & Unread Badge
+            Column(
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    text = formattedTime,
+                    color = if (chat.unreadCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                if (chat.unreadCount > 0) {
+                    Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                    Box(
+                        modifier = Modifier
+                            .height(22.dp)
+                            .defaultMinSize(minWidth = 22.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .padding(horizontal = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (chat.unreadCount > 99) "99+" else chat.unreadCount.toString(),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

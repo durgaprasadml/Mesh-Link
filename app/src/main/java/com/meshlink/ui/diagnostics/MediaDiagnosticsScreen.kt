@@ -1,15 +1,12 @@
 package com.meshlink.ui.diagnostics
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -19,13 +16,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.meshlink.transfer.TransferMetrics
 import com.meshlink.transfer.TransferState
 import com.meshlink.transfer.TransportType
 import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.designsystem.theme.MeshSpacing
+import com.meshlink.ui.designsystem.theme.MeshTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +37,7 @@ fun MediaDiagnosticsScreen(
             com.meshlink.ui.components.MeshTopAppBar(
                 title = "Media Transfer Diagnostics",
                 onBackClick = onBackClick,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
             )
         }
     ) { innerPadding ->
@@ -58,7 +55,7 @@ fun MediaDiagnosticsScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -74,20 +71,20 @@ fun MediaDiagnosticsScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Transport Mode: ${uiState.activeModeName} | Window: ${uiState.currentSlidingWindowSize} chunks",
+                                text = "Mode: ${uiState.activeModeName} | Window: ${uiState.currentSlidingWindowSize} chunks",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                             )
                         }
                         Surface(
-                            color = Color(0xFF2E7D32),
+                            color = MeshTheme.colors.success,
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Text(
                                 text = "PRODUCTION READY",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
+                                style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
@@ -179,10 +176,10 @@ fun TransferRowItem(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -191,21 +188,21 @@ fun TransferRowItem(
                 Text(
                     text = "ID: ${metrics.transferId.take(12)}...",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+                    style = MaterialTheme.typography.titleSmall
                 )
 
                 Surface(
                     color = when (metrics.activeTransport) {
-                        TransportType.WIFI_DIRECT -> Color(0xFF1565C0)
-                        TransportType.HYBRID -> Color(0xFF6A1B9A)
-                        else -> Color(0xFF2E7D32)
+                        TransportType.WIFI_DIRECT -> MeshTheme.colors.info
+                        TransportType.HYBRID -> MaterialTheme.colorScheme.secondary
+                        else -> MeshTheme.colors.success
                     },
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
                         text = metrics.activeTransport.name,
                         color = Color.White,
-                        fontSize = 10.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
@@ -223,12 +220,12 @@ fun TransferRowItem(
             ) {
                 Text(
                     text = "Status: ${metrics.status.name} ($progressPercent%)",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = "Speed: ${String.format("%.1f", speedKb)} KB/s",
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -249,28 +246,19 @@ fun TransferRowItem(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.End
             ) {
-                Text(
-                    text = "Chunk: ${metrics.currentChunk}/${metrics.totalChunks} | Retries: ${metrics.retries}",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Row {
-                    if (metrics.status == TransferState.SENDING || metrics.status == TransferState.RECEIVING) {
-                        IconButton(onClick = onPause, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Pause", modifier = Modifier.size(16.dp))
-                        }
-                    } else if (metrics.status == TransferState.PAUSED) {
-                        IconButton(onClick = onResume, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Resume", modifier = Modifier.size(16.dp))
-                        }
+                if (metrics.status == TransferState.SENDING || metrics.status == TransferState.RECEIVING) {
+                    IconButton(onClick = onPause) {
+                        Icon(Icons.Default.Close, contentDescription = "Pause transfer")
                     }
-                    IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Cancel", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                } else if (metrics.status == TransferState.PAUSED) {
+                    IconButton(onClick = onResume) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Resume transfer")
                     }
+                }
+                IconButton(onClick = onCancel) {
+                    Icon(Icons.Default.Close, contentDescription = "Cancel transfer", tint = MeshTheme.colors.danger)
                 }
             }
         }

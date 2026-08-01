@@ -260,7 +260,7 @@ fun SettingsHome(
                                             modifier = Modifier
                                                 .size(10.dp)
                                                 .clip(CircleShape)
-                                                .background(Color(0xFF4CAF50))
+                                                .background(MeshTheme.colors.online)
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
@@ -370,21 +370,34 @@ fun SettingsHome(
 
                 if (filteredItems.isNotEmpty()) {
                     item {
-                        val topSpace = if (idx == 0) 24.dp else 22.dp
+                        val topSpace = if (idx == 0) 24.dp else 18.dp
                         Spacer(modifier = Modifier.height(topSpace))
-                        Text(
-                            text = category.title,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 22.sp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(3.dp)
+                                    .height(16.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = category.title.uppercase(),
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                         ElevatedCard(
                             colors = CardDefaults.elevatedCardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                             ),
                             shape = RoundedCornerShape(MeshSpacing.CardCornerRadius),
-                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = MeshSpacing.CardElevation)
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
                         ) {
                             Column {
                                 filteredItems.forEachIndexed { index, itemData ->

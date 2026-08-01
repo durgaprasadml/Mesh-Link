@@ -61,7 +61,6 @@ fun ProfileScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     var name by remember(uiState.user?.name) { mutableStateOf(uiState.user?.name ?: "") }
     var aboutMe by remember(uiState.user?.aboutMe) { mutableStateOf(uiState.user?.aboutMe ?: "") }

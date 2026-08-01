@@ -47,12 +47,24 @@ object MeshSpacing {
     val ListItemInternalPadding: Dp = 16.dp
     val ListBottomSpacing: Dp = 120.dp
 
-    val FabEndPadding: Dp = 20.dp
-    val FabBottomPadding: Dp = 96.dp
+    val FabEndPadding: Dp = 16.dp
+    val FabBottomPadding: Dp = 16.dp
 
     val BottomNavHeight: Dp = 80.dp
     val BottomNavSelectedIndicator: Dp = 48.dp
     val BottomNavHorizontalPadding: Dp = 12.dp
+
+    // Graph / Topology
+    /** Standard size for mesh node icon containers in the topology view. */
+    val NodeSize: Dp = 44.dp
+
+    // Section Gaps
+    /** Gap between major screen sections (larger than CardSpacing). */
+    val SectionGap: Dp = 28.dp
+
+    // List
+    /** Minimum height for a standard list item row. */
+    val ListItemHeight: Dp = 72.dp
 }
 
 @Immutable

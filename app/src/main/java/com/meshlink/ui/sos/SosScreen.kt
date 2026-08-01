@@ -55,6 +55,7 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.designsystem.theme.MeshSpacing
+import com.meshlink.ui.designsystem.theme.scaleOnPress
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -679,47 +680,61 @@ fun ActionChip(
     isActive: Boolean = false,
     onClick: () -> Unit
 ) {
-    val containerColor = if (isActive && isDanger) MeshTheme.colors.danger.copy(alpha = 0.1f) 
-        else if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) 
-        else Color.Transparent
-        
-    val contentColor = if (isDanger) MeshTheme.colors.danger 
-        else if (isActive) MaterialTheme.colorScheme.primary 
-        else MaterialTheme.colorScheme.onSurface
-        
-    val borderColor = if (isDanger) MeshTheme.colors.danger.copy(alpha = 0.5f) 
-        else if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) 
-        else MaterialTheme.colorScheme.outline
+    val containerColor = when {
+        isDanger && isActive -> MeshTheme.colors.danger.copy(alpha = 0.25f)
+        isDanger -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.60f)
+        isActive -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
 
-    val chipContentDescription = contentDescription ?: label
-        
-    OutlinedButton(
+    val contentColor = when {
+        isDanger -> MaterialTheme.colorScheme.error
+        isActive -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
+    val borderColor = when {
+        isDanger -> MeshTheme.colors.danger.copy(alpha = 0.5f)
+        isActive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    }
+
+    val customDesc = contentDescription ?: label
+
+    Surface(
         onClick = onClick,
         modifier = modifier
-            .defaultMinSize(minHeight = 48.dp)
-            .semantics {
-                this.contentDescription = chipContentDescription
-                this.role = Role.Button
+            .height(56.dp)
+            .scaleOnPress(0.95f)
+            .semantics(mergeDescendants = true) {
+                this.contentDescription = customDesc
             },
-        shape = MeshTheme.shapes.medium,
-        colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = contentColor,
-            containerColor = containerColor
-        ),
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        contentColor = contentColor,
         border = BorderStroke(1.dp, borderColor)
     ) {
-        Icon(
-            imageVector = icon, 
-            contentDescription = null, 
-            modifier = Modifier.size(MeshTheme.spacing.large)
-        )
-        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
-        Text(
-            text = label, 
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon, 
+                contentDescription = null, 
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label, 
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

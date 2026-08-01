@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -19,11 +20,20 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import com.meshlink.ui.designsystem.theme.accessibility.LocalMeshAccessibilityRules
+import com.meshlink.ui.designsystem.theme.accessibility.MeshAccessibilityRules
+import com.meshlink.ui.designsystem.theme.colors.AmoledSemanticColors
+import com.meshlink.ui.designsystem.theme.colors.DarkSemanticColors
+import com.meshlink.ui.designsystem.theme.colors.LightSemanticColors
+import com.meshlink.ui.designsystem.theme.colors.LocalMeshSemanticColors
+import com.meshlink.ui.designsystem.theme.colors.MeshSemanticColors
+import com.meshlink.ui.designsystem.theme.motion.LocalMeshMotion
+import com.meshlink.ui.designsystem.theme.motion.MeshMotion
+import com.meshlink.ui.designsystem.theme.responsive.LocalMeshWindowSize
+import com.meshlink.ui.designsystem.theme.responsive.MeshWindowSize
+import com.meshlink.ui.designsystem.theme.responsive.rememberMeshWindowSize
 
-/** Whether glass/frosted surface effects are active for this theme context. */
 val LocalGlassEffects = staticCompositionLocalOf { true }
-
-/** Whether motion/animations are active for this theme context. */
 val LocalReduceMotion = staticCompositionLocalOf { false }
 
 @Composable
@@ -48,13 +58,12 @@ fun MeshTheme(
         else -> isSystemDark
     }
 
-    // Resolve Custom Primary Color
     val customPrimary = when (accentColor) {
         "Green" -> Color(0xFF4CAF50)
         "Purple" -> Color(0xFF9C27B0)
         "Orange" -> Color(0xFFFF9800)
         "Red" -> Color(0xFFF44336)
-        else -> Color(0xFF2196F3) // Blue
+        else -> Color(0xFF00F59B)
     }
 
     val baseColorScheme = when {
@@ -69,7 +78,6 @@ fun MeshTheme(
         else -> MeshLightColorScheme.copy(primary = customPrimary)
     }
 
-    // Apply High Contrast modifications if needed
     val colorScheme = if (highContrast) {
         if (darkTheme) baseColorScheme.copy(
             surface = Color.Black,
@@ -84,7 +92,11 @@ fun MeshTheme(
         )
     } else baseColorScheme
 
-    val semanticColors = if (darkTheme) DarkSemanticColors else LightSemanticColors
+    val semanticColors = when {
+        darkTheme && amoledDark -> AmoledSemanticColors
+        darkTheme -> DarkSemanticColors
+        else -> LightSemanticColors
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -95,7 +107,6 @@ fun MeshTheme(
         }
     }
 
-    // Adjust Density for font scaling
     val currentDensity = LocalDensity.current
     val effectiveFontScale = fontScale * (if (largeTextEnabled) 1.3f else 1.0f)
     val customDensity = Density(
@@ -103,13 +114,13 @@ fun MeshTheme(
         fontScale = currentDensity.fontScale * effectiveFontScale
     )
 
-    // Adjust Shapes
     val shapes = MeshShapes(
         extraSmall = RoundedCornerShape(4.dp * cornerRadiusScale),
         small = RoundedCornerShape(8.dp * cornerRadiusScale),
         medium = RoundedCornerShape(12.dp * cornerRadiusScale),
         large = RoundedCornerShape(16.dp * cornerRadiusScale),
-        extraLarge = RoundedCornerShape(24.dp * cornerRadiusScale)
+        extraLarge = RoundedCornerShape(24.dp * cornerRadiusScale),
+        jumbo = RoundedCornerShape(32.dp * cornerRadiusScale)
     )
     val materialShapes = androidx.compose.material3.Shapes(
         extraSmall = RoundedCornerShape(4.dp * cornerRadiusScale),
@@ -119,7 +130,6 @@ fun MeshTheme(
         extraLarge = RoundedCornerShape(24.dp * cornerRadiusScale)
     )
 
-    // Adjust Animations
     val animations = if (!animationsEnabled) {
         MeshAnimations(fast = 0, normal = 0, slow = 0)
     } else if (reduceMotionEnabled) {
@@ -128,13 +138,22 @@ fun MeshTheme(
         MeshAnimations()
     }
 
+    val windowSize = rememberMeshWindowSize()
+    val accessibilityRules = MeshAccessibilityRules(
+        highContrastEnabled = highContrast,
+        reduceMotionEnabled = reduceMotionEnabled
+    )
+
     CompositionLocalProvider(
         LocalDensity provides customDensity,
         LocalMeshSpacing provides MeshSpacingTokens(),
         LocalMeshElevation provides MeshElevation(),
         LocalMeshShapes provides shapes,
         LocalMeshAnimations provides animations,
+        LocalMeshMotion provides MeshMotion(),
         LocalMeshSemanticColors provides semanticColors,
+        LocalMeshWindowSize provides windowSize,
+        LocalMeshAccessibilityRules provides accessibilityRules,
         LocalGlassEffects provides glassEffectsEnabled,
         LocalReduceMotion provides reduceMotionEnabled
     ) {
@@ -151,6 +170,9 @@ object MeshTheme {
     val colors: MeshSemanticColors
         @Composable
         get() = LocalMeshSemanticColors.current
+    val typography: Typography
+        @Composable
+        get() = MaterialTheme.typography
     val spacing: MeshSpacingTokens
         @Composable
         get() = LocalMeshSpacing.current
@@ -163,11 +185,18 @@ object MeshTheme {
     val animations: MeshAnimations
         @Composable
         get() = LocalMeshAnimations.current
-    /** True when glass/frosted surface effects are enabled in appearance settings. */
+    val motion: MeshMotion
+        @Composable
+        get() = LocalMeshMotion.current
+    val windowSize: MeshWindowSize
+        @Composable
+        get() = LocalMeshWindowSize.current
+    val accessibility: MeshAccessibilityRules
+        @Composable
+        get() = LocalMeshAccessibilityRules.current
     val glassEffects: Boolean
         @Composable
         get() = LocalGlassEffects.current
-    /** True when the user has enabled reduce-motion in appearance settings. */
     val reduceMotion: Boolean
         @Composable
         get() = LocalReduceMotion.current

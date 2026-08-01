@@ -9,6 +9,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import com.meshlink.ui.designsystem.theme.colors.MeshSemanticColors
 
 @Immutable
 data class MeshNodeColors(
@@ -70,7 +71,6 @@ object MeshGraphTheme {
         val isAmoled = colorScheme.background == BackgroundAmoled
         val isDark = bgLuminance < 0.2f
 
-        // Dynamic Glow Alpha Factor based on active theme
         val glowAlpha = when {
             isAmoled -> 0.45f
             isDark -> 0.30f
@@ -141,10 +141,6 @@ object MeshGraphTheme {
     }
 }
 
-/**
- * Animated Theme Transition:
- * Smoothly interpolates graph theme colors over 300ms when appearance mode changes.
- */
 @Composable
 fun animateMeshGraphColors(target: MeshGraphColors): MeshGraphColors {
     val duration = 300
@@ -154,7 +150,6 @@ fun animateMeshGraphColors(target: MeshGraphColors): MeshGraphColors {
     val border = animateColorAsState(target.containerBorder, tween(duration), label = "GraphBorder").value
     val containerBg = animateColorAsState(target.containerBackground, tween(duration), label = "ContainerBg").value
 
-    // Nodes
     val hubGlow = animateColorAsState(target.nodes.hubGlow, tween(duration), label = "HubGlow").value
     val hubSurface = animateColorAsState(target.nodes.hubSurface, tween(duration), label = "HubSurface").value
     val hubOutline = animateColorAsState(target.nodes.hubOutline, tween(duration), label = "HubOutline").value
@@ -181,7 +176,6 @@ fun animateMeshGraphColors(target: MeshGraphColors): MeshGraphColors {
     val selGlow = animateColorAsState(target.nodes.selectedGlow, tween(duration), label = "SelGlow").value
     val labelText = animateColorAsState(target.nodes.labelText, tween(duration), label = "LabelText").value
 
-    // Connections
     val connLine = animateColorAsState(target.connections.connectedLine, tween(duration), label = "ConnLine").value
     val relayLine = animateColorAsState(target.connections.relayLine, tween(duration), label = "RelayLine").value
     val discLine = animateColorAsState(target.connections.discoveredLine, tween(duration), label = "DiscLine").value

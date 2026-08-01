@@ -1,4 +1,4 @@
-package com.meshlink.ui.designsystem.theme
+package com.meshlink.ui.designsystem.theme.shapes
 
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,9 +8,9 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 
 @Immutable
-data class MeshShapes(
-    val extraSmall: Shape = RoundedCornerShape(4.dp),
-    val small: Shape = RoundedCornerShape(8.dp),
+data class MeshShapeScale(
+    val small: Shape = RoundedCornerShape(4.dp),
+    val mediumSmall: Shape = RoundedCornerShape(8.dp),
     val medium: Shape = RoundedCornerShape(12.dp),
     val large: Shape = RoundedCornerShape(16.dp),
     val extraLarge: Shape = RoundedCornerShape(24.dp),
@@ -19,4 +19,4 @@ data class MeshShapes(
     val circle: Shape = CircleShape
 )
 
-val LocalMeshShapes = staticCompositionLocalOf { MeshShapes() }
+val LocalMeshShapeScale = staticCompositionLocalOf { MeshShapeScale() }

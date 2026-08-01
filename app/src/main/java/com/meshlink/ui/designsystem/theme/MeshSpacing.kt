@@ -4,10 +4,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.meshlink.ui.designsystem.theme.spacing.MeshSpacingScale
 
-/**
- * Standardized Design System Spacing Tokens & Layout Rules for Mesh Link.
- */
 object MeshSpacing {
     val XS: Dp = 4.dp
     val SM: Dp = 8.dp
@@ -15,8 +13,12 @@ object MeshSpacing {
     val LG: Dp = 16.dp
     val XL: Dp = 20.dp
     val XXL: Dp = 24.dp
+    val SectionSM: Dp = 28.dp
     val Section: Dp = 32.dp
     val Hero: Dp = 40.dp
+    val Giant: Dp = 48.dp
+    val ExtraGiant: Dp = 56.dp
+    val Mega: Dp = 64.dp
 
     // Layout Rules Design System Tokens
     val ScreenPadding: Dp = 20.dp
@@ -54,16 +56,8 @@ object MeshSpacing {
     val BottomNavSelectedIndicator: Dp = 48.dp
     val BottomNavHorizontalPadding: Dp = 12.dp
 
-    // Graph / Topology
-    /** Standard size for mesh node icon containers in the topology view. */
     val NodeSize: Dp = 44.dp
-
-    // Section Gaps
-    /** Gap between major screen sections (larger than CardSpacing). */
     val SectionGap: Dp = 28.dp
-
-    // List
-    /** Minimum height for a standard list item row. */
     val ListItemHeight: Dp = 72.dp
 }
 
@@ -76,11 +70,13 @@ data class MeshSpacingTokens(
     val mediumLarge: Dp = MeshSpacing.LG,
     val large: Dp = MeshSpacing.XL,
     val extraLarge: Dp = MeshSpacing.XXL,
+    val sectionSmall: Dp = MeshSpacing.SectionSM,
     val huge: Dp = MeshSpacing.Section,
     val extraHuge: Dp = MeshSpacing.Hero,
-    val giant: Dp = 48.dp,
-    val extraGiant: Dp = 64.dp
+    val giant: Dp = MeshSpacing.Giant,
+    val extraGiant: Dp = MeshSpacing.ExtraGiant,
+    val mega: Dp = MeshSpacing.Mega,
+    val scale: MeshSpacingScale = MeshSpacingScale()
 )
 
 val LocalMeshSpacing = staticCompositionLocalOf { MeshSpacingTokens() }
-

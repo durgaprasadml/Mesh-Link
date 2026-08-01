@@ -333,7 +333,7 @@ fun HomeScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(MeshSpacing.SM))
 
                     // ── Search Bar ──────────────────────────────────────────────
                     SearchBar(

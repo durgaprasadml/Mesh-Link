@@ -7,6 +7,13 @@ import androidx.compose.ui.unit.dp
 
 @Immutable
 data class MeshElevation(
+    val flat: Dp = 0.dp,
+    val raised: Dp = 2.dp,
+    val floating: Dp = 6.dp,
+    val dialog: Dp = 12.dp,
+    val overlay: Dp = 16.dp,
+    val glass: Dp = 1.dp,
+    // Legacy levels
     val none: Dp = 0.dp,
     val level1: Dp = 1.dp,
     val level2: Dp = 3.dp,

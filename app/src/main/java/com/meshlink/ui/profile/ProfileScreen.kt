@@ -157,7 +157,6 @@ fun ProfileScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .imePadding()
                     .padding(MeshSpacing.ScreenPadding),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {

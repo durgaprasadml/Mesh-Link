@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import com.meshlink.analytics.data.LogType
 import com.meshlink.analytics.data.MeshStats
 import com.meshlink.analytics.data.RelayLogEntry
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.MeshTopAppBar
 import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
@@ -47,8 +48,7 @@ fun AnalyticsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
+    MeshScreen(
         topBar = {
             MeshTopAppBar(
                 title = "📊 Mesh Analytics",

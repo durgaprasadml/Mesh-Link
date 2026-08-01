@@ -47,7 +47,7 @@ object MeshSpacing {
 
     val ListItemVerticalPadding: Dp = 12.dp
     val ListItemInternalPadding: Dp = 16.dp
-    val ListBottomSpacing: Dp = 120.dp
+    val ListBottomSpacing: Dp = 24.dp
 
     val FabEndPadding: Dp = 16.dp
     val FabBottomPadding: Dp = 16.dp

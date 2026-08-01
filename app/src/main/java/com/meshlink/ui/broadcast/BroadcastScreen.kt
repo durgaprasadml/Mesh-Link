@@ -61,20 +61,11 @@ fun BroadcastScreen(
     MeshScreen(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
-                    }
-                },
-                title = {
-                    Column {
-                        Text("Broadcast", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-                        Text("All nearby devices", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                windowInsets = WindowInsets(0.dp)
+            com.meshlink.ui.components.MeshTopAppBar(
+                title = "Broadcast",
+                subtitle = "All nearby devices",
+                onBackClick = onBack,
+                containerColor = MaterialTheme.colorScheme.background
             )
         },
         bottomBar = {
@@ -83,7 +74,6 @@ fun BroadcastScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(MeshTheme.spacing.medium)
-                        .navigationBarsPadding()
                 ) {
                     // Info pill
                     Row(

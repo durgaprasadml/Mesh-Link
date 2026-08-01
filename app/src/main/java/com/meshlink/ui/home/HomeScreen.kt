@@ -181,7 +181,7 @@ fun HomeScreen(
                         .padding(
                             start = MeshSpacing.ScreenPadding,
                             end = MeshSpacing.ScreenPadding,
-                            top = 20.dp,
+                            top = MeshSpacing.XL,
                             bottom = 0.dp
                         )
                 ) {

@@ -24,7 +24,7 @@ fun MeshScreen(
     floatingActionButton: @Composable () -> Unit = {},
     snackbarHost: @Composable () -> Unit = {},
     containerColor: Color = MaterialTheme.colorScheme.background,
-    contentWindowInsets: WindowInsets = ScaffoldDefaults.contentWindowInsets,
+    contentWindowInsets: WindowInsets = WindowInsets(0.dp),
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
@@ -37,7 +37,9 @@ fun MeshScreen(
         contentWindowInsets = contentWindowInsets
     ) { paddingValues ->
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
         ) {
             content(paddingValues)
         }

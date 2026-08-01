@@ -28,6 +28,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.chat.DateSeparator
 import com.meshlink.ui.components.chat.MessageBubble
 import com.meshlink.ui.components.chat.MessageComposer
@@ -155,8 +156,7 @@ fun ChatDetailScreen(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0.dp),
+    MeshScreen(
         topBar = {
             TopAppBar(
                 title = {

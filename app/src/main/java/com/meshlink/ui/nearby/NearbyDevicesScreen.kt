@@ -93,38 +93,11 @@ fun NearbyDevicesScreen(
         MeshScreen(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                TopAppBar(
-                    title = { 
-                        Column {
-                            Text(
-                                text = "Nearby Mesh Network",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (uiState.isScanning) "Continuously discovering peers via BLE..." else "Mesh Active",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(
-                            onClick = onBack,
-                            modifier = Modifier.semantics { contentDescription = "Navigate back" }
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack, 
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
-                    ),
-                    windowInsets = TopAppBarDefaults.windowInsets
+                com.meshlink.ui.components.MeshTopAppBar(
+                    title = "Nearby Mesh Network",
+                    subtitle = if (uiState.isScanning) "Continuously discovering peers via BLE..." else "Mesh Active",
+                    onBackClick = onBack,
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             }
         ) { paddingValues ->
@@ -143,9 +116,9 @@ fun NearbyDevicesScreen(
                                 start = MeshSpacing.ScreenPadding,
                                 end = MeshSpacing.ScreenPadding,
                                 top = MeshSpacing.ScreenPadding,
-                                bottom = 12.dp
+                                bottom = MeshSpacing.MD
                             ),
-                        cornerRadius = 24.dp,
+                        cornerRadius = MeshSpacing.CardCornerRadius,
                         glowColor = MaterialTheme.colorScheme.primary,
                         glowRadius = 240f
                     ) {
@@ -172,7 +145,7 @@ fun NearbyDevicesScreen(
                     }
 
                     // Live Network Statistics Bar
-                    Box(modifier = Modifier.padding(bottom = 16.dp)) {
+                    Box(modifier = Modifier.padding(bottom = MeshSpacing.LG)) {
                         MeshNetworkStatsBar(
                             devices = uiState.devices,
                             isScanning = uiState.isScanning,

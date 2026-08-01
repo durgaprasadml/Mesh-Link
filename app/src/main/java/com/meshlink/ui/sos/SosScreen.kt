@@ -92,12 +92,12 @@ fun SosScreen(
             contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing)
         ) {
             item {
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(MeshSpacing.XL))
                 EmergencyStatusCard(state)
             }
 
             item {
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.height(MeshSpacing.Hero))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(),

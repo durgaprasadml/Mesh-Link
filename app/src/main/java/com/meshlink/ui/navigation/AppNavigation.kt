@@ -1,5 +1,6 @@
 package com.meshlink.ui.navigation
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -102,6 +103,7 @@ fun AppNavigation(
     val showNavigationBar = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact && isTopLevelScreen
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0.dp),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             if (showNavigationBar) {

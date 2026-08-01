@@ -1,5 +1,6 @@
 package com.meshlink.ui.components
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
@@ -24,6 +25,7 @@ import com.meshlink.ui.designsystem.theme.MeshSpacing
 fun MeshTopAppBar(
     title: String,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
     onBackClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
@@ -32,15 +34,22 @@ fun MeshTopAppBar(
 ) {
     TopAppBar(
         title = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = titleColor
-            )
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = titleColor
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         },
-        modifier = modifier
-            .defaultMinSize(minHeight = MeshSpacing.TopAppBarHeight)
-            .padding(horizontal = MeshSpacing.TopAppBarHorizontalPadding - 16.dp),
+        modifier = modifier.defaultMinSize(minHeight = MeshSpacing.TopAppBarHeight),
         navigationIcon = {
             if (onBackClick != null) {
                 IconButton(onClick = onBackClick) {

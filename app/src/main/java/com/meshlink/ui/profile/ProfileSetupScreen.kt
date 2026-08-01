@@ -160,7 +160,6 @@ fun ProfileSetupScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .imePadding()
                 .padding(MeshSpacing.ScreenPadding),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally

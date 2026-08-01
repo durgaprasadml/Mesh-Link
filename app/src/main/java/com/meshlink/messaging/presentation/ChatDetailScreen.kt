@@ -31,6 +31,7 @@ import coil.compose.AsyncImage
 import com.meshlink.ui.components.chat.DateSeparator
 import com.meshlink.ui.components.chat.MessageBubble
 import com.meshlink.ui.components.chat.MessageComposer
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.io.File
 import java.util.Calendar
@@ -155,6 +156,7 @@ fun ChatDetailScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = {
@@ -229,7 +231,8 @@ fun ChatDetailScreen(
                             }
                         }
                     }
-                }
+                },
+                windowInsets = WindowInsets(0.dp)
             )
         },
         bottomBar = {
@@ -256,8 +259,8 @@ fun ChatDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.mediumSmall),
-            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small)
+            contentPadding = PaddingValues(start = MeshSpacing.ScreenPadding, top = 12.dp, end = MeshSpacing.ScreenPadding, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(MeshSpacing.SM)
         ) {
             itemsIndexed(uiState.messages, key = { _, it -> it.messageId }, contentType = { _, _ -> "message_item" }) { index, msg ->
                 val showDateSeparator = shouldShowDateSeparator(
@@ -266,7 +269,9 @@ fun ChatDetailScreen(
                 )
 
                 if (showDateSeparator) {
-                    DateSeparator(timestamp = msg.timestamp)
+                    Box(modifier = Modifier.padding(bottom = 16.dp)) {
+                        DateSeparator(timestamp = msg.timestamp)
+                    }
                 }
 
                 val isSelected = uiState.selectedMessageIds.contains(msg.messageId)
@@ -276,7 +281,7 @@ fun ChatDetailScreen(
                 val previousMsg = if (index > 0) uiState.messages[index - 1] else null
                 val extraTopPadding = if (previousMsg != null && previousMsg.isFromMe != msg.isFromMe && !showDateSeparator) MeshTheme.spacing.mediumSmall else MeshTheme.spacing.extraSmall
 
-                Box(modifier = Modifier.padding(top = extraTopPadding)) {
+                Box(modifier = Modifier.padding(top = extraTopPadding).animateItem()) {
                     MessageBubble(
                         message = msg,
                         isSelected = isSelected,

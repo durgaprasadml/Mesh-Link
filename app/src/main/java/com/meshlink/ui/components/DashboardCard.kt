@@ -1,8 +1,15 @@
 package com.meshlink.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -13,7 +20,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.scaleOnPress
 
 @Composable
 fun DashboardCard(
@@ -21,22 +30,33 @@ fun DashboardCard(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier.width(160.dp),
+    modifier: Modifier = Modifier.width(MeshSpacing.DashboardCardWidth),
     iconContainerColor: Color = MaterialTheme.colorScheme.primaryContainer,
     iconTintColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
     badgeCount: Int = 0
 ) {
-    Card(
+    ElevatedCard(
         onClick = onClick,
-        modifier = modifier,
-        shape = MeshTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = MeshTheme.elevation.level2)
+        modifier = modifier
+            .scaleOnPress(targetScale = 0.96f)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(MeshSpacing.CardCornerRadius)
+            ),
+        shape = RoundedCornerShape(MeshSpacing.CardCornerRadius),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = 2.dp,
+            pressedElevation = 6.dp
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(MeshTheme.spacing.large)
+                .padding(MeshSpacing.CardInternalPadding)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -44,7 +64,7 @@ fun DashboardCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Surface(
-                    modifier = Modifier.size(MeshTheme.spacing.giant),
+                    modifier = Modifier.size(48.dp),
                     shape = CircleShape,
                     color = iconContainerColor
                 ) {
@@ -53,25 +73,30 @@ fun DashboardCard(
                             imageVector = icon,
                             contentDescription = title,
                             tint = iconTintColor,
-                            modifier = Modifier.size(MeshTheme.spacing.extraLarge)
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
                 
-                if (badgeCount > 0) {
+                AnimatedVisibility(
+                    visible = badgeCount > 0,
+                    enter = scaleIn() + fadeIn(),
+                    exit = scaleOut() + fadeOut()
+                ) {
                     Badge(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError
                     ) {
                         Text(
                             text = if (badgeCount > 99) "99+" else badgeCount.toString(),
-                            style = MaterialTheme.typography.labelSmall
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
             
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.large))
+            Spacer(modifier = Modifier.height(16.dp))
             
             Text(
                 text = title,
@@ -82,7 +107,7 @@ fun DashboardCard(
                 overflow = TextOverflow.Ellipsis
             )
             
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
+            Spacer(modifier = Modifier.height(4.dp))
             
             Text(
                 text = subtitle,

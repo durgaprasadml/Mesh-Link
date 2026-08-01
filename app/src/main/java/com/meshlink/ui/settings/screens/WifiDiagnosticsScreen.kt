@@ -25,6 +25,7 @@ import androidx.lifecycle.viewModelScope
 import com.meshlink.domain.model.RouteEntry
 import com.meshlink.routing.api.Router
 import com.meshlink.ui.components.MeshScreen
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.transport.HybridMode
 import com.meshlink.transport.HybridTransport
@@ -141,9 +142,9 @@ fun WifiDiagnosticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = MeshTheme.spacing.mediumLarge),
-            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
-            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
+                .padding(horizontal = MeshSpacing.ScreenPadding),
+            contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing),
+            verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
         ) {
             item {
                 Text(

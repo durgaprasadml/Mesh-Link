@@ -25,6 +25,7 @@ import com.meshlink.transfer.TransferMetrics
 import com.meshlink.transfer.TransferState
 import com.meshlink.transfer.TransportType
 import com.meshlink.ui.components.MeshScreen
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,9 +48,9 @@ fun MediaDiagnosticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = MeshSpacing.ScreenPadding),
+            contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing),
+            verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
         ) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))

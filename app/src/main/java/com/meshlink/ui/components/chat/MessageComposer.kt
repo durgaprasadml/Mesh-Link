@@ -31,7 +31,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.meshlink.ui.designsystem.theme.LocalMeshAnimations
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.scaleOnPress
 import com.meshlink.ui.util.rememberHapticManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,7 +70,9 @@ fun MessageComposer(
     }
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = MeshSpacing.SearchBarHeight),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = MeshTheme.elevation.level2
     ) {
@@ -77,7 +81,7 @@ fun MessageComposer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)
+                    .padding(horizontal = MeshSpacing.ScreenPadding, vertical = MeshTheme.spacing.medium)
                     .navigationBarsPadding(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -166,6 +170,7 @@ fun MessageComposer(
                             },
                             modifier = Modifier
                                 .padding(bottom = MeshTheme.spacing.small)
+                                .scaleOnPress(0.92f)
                                 .background(MaterialTheme.colorScheme.primary, CircleShape)
                         ) {
                             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send message", tint = MaterialTheme.colorScheme.onPrimary)
@@ -182,6 +187,7 @@ fun MessageComposer(
                             },
                             modifier = Modifier
                                 .padding(bottom = MeshTheme.spacing.small)
+                                .scaleOnPress(0.92f)
                                 .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                         ) {
                             Icon(Icons.Default.Mic, contentDescription = "Record voice note", tint = MaterialTheme.colorScheme.onSecondaryContainer)

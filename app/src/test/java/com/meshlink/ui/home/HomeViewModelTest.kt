@@ -62,6 +62,8 @@ class HomeViewModelTest {
         val chatEntity = ChatEntity("chat_1", "Chat 1", "msg_1", 1000L, unreadCount = 2)
         
         every { userRepository.localUser } returns flowOf(userEntity)
+        every { userRepository.localIdentity } returns flowOf(null)
+        every { userRepository.peerIdentities } returns MutableStateFlow(emptyMap())
         val devicesFlow = MutableStateFlow(mapOf("00:11:22" to device))
         every { meshRepository.scannedDevices } returns devicesFlow
         every { chatDao.getAllChats() } returns flowOf(listOf(chatEntity))

@@ -32,6 +32,8 @@ import androidx.compose.ui.semantics.semantics
 import com.meshlink.analytics.data.LogType
 import com.meshlink.analytics.data.MeshStats
 import com.meshlink.analytics.data.RelayLogEntry
+import com.meshlink.ui.components.MeshTopAppBar
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -46,14 +48,11 @@ fun AnalyticsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            TopAppBar(
-                title = { Text("📊 Mesh Analytics") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
+            MeshTopAppBar(
+                title = "📊 Mesh Analytics",
+                onBackClick = onBack
             )
         }
     ) { paddingValues ->
@@ -61,8 +60,8 @@ fun AnalyticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(MeshTheme.spacing.mediumLarge),
-            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumLarge)
+            contentPadding = PaddingValues(start = MeshSpacing.ScreenPadding, end = MeshSpacing.ScreenPadding, top = MeshSpacing.TopSafeArea, bottom = MeshSpacing.ListBottomSpacing),
+            verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
         ) {
             // ── Delivery Ring ──
             item {

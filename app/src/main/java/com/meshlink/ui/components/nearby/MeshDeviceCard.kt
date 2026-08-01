@@ -32,7 +32,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.meshlink.domain.model.BleDevice
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.meshlink.ui.components.UserAvatarImage
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.MeshIdNormalizer
 
@@ -107,22 +109,23 @@ fun MeshDeviceCard(
         },
         modifier = modifier
             .fillMaxWidth()
+            .defaultMinSize(minHeight = 88.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .border(width = if (isSelected) 1.5.dp else 1.dp, color = containerBorderColor, shape = MeshTheme.shapes.large)
+            .border(width = if (isSelected) 1.5.dp else 1.dp, color = containerBorderColor, shape = RoundedCornerShape(MeshSpacing.CardCornerRadius))
             .animateContentSize()
             .semantics {
                 role = Role.Button
                 contentDescription = "$displayName, ${if (device.isConnected) "Connected" else "Discovered"}, Signal $signalText, Distance $distanceText"
             },
-        shape = MeshTheme.shapes.large,
+        shape = RoundedCornerShape(MeshSpacing.CardCornerRadius),
         colors = CardDefaults.cardColors(containerColor = cardBackgroundColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) MeshTheme.elevation.level2 else MeshTheme.elevation.level1),
+        elevation = CardDefaults.cardElevation(defaultElevation = MeshSpacing.CardElevation),
         interactionSource = interactionSource
     ) {
-        Column(modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
+        Column(modifier = Modifier.padding(MeshSpacing.CardInternalPadding)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically

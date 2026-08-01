@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,8 +80,8 @@ fun AvatarGridBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = MeshTheme.spacing.large)
-                .padding(bottom = MeshTheme.spacing.large)
+                .padding(horizontal = MeshSpacing.ScreenPadding)
+                .padding(bottom = MeshSpacing.ScreenPadding)
         ) {
             Text(
                 text = "Choose Avatar",

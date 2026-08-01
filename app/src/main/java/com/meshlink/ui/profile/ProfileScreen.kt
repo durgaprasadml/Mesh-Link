@@ -45,8 +45,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.components.AnimatedErrorDialog
 import com.meshlink.ui.components.LoadingOverlay
 import com.meshlink.ui.components.MeshScreen
+import com.meshlink.ui.components.MeshTopAppBar
 import com.meshlink.ui.components.UserAvatar
 import com.meshlink.ui.components.UserAvatarImage
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import kotlinx.coroutines.launch
 import java.io.File
@@ -124,13 +126,9 @@ fun ProfileScreen(
 
     MeshScreen(
         topBar = {
-            TopAppBar(
-                title = { Text("Edit Profile") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
+            MeshTopAppBar(
+                title = "Edit Profile",
+                onBackClick = onNavigateBack,
                 actions = {
                     TextButton(
                         onClick = {
@@ -161,7 +159,7 @@ fun ProfileScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .imePadding()
-                    .padding(MeshTheme.spacing.mediumLarge),
+                    .padding(MeshSpacing.ScreenPadding),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Interactive Avatar Container with Camera Badge

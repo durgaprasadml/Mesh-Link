@@ -13,6 +13,7 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.material.icons.Icons
@@ -20,22 +21,18 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavHostController
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import androidx.navigation.NavType
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
+import androidx.navigation.*
+import androidx.navigation.compose.*
 import com.meshlink.messaging.presentation.ChatDetailScreen
 import com.meshlink.messaging.presentation.ChatsListScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -116,37 +113,49 @@ fun AppNavigation(
             }
             val topLevelRoutes = listOf(Screen.Home.route, Screen.Nearby.route, Screen.Sos.route, Screen.Settings.route)
             NavHost(
-                modifier = Modifier.padding(paddingValues),
+                modifier = Modifier.padding(
+                    androidx.compose.foundation.layout.PaddingValues(
+                        top = 0.dp,
+                        bottom = paddingValues.calculateBottomPadding()
+                    )
+                ),
                 navController = navController,
                 startDestination = if (hasProfile == true) Screen.Landing.createRoute(isWelcome = false) else Screen.ProfileSetup.route,
                 enterTransition = {
                     if (initialState.destination.route?.startsWith("landing") == true && targetState.destination.route == Screen.Home.route) {
                         androidx.compose.animation.EnterTransition.None
                     } else if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeIn(tween(210, delayMillis = 90))
+                        fadeIn(tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + 
+                            androidx.compose.animation.scaleIn(initialScale = 0.95f, animationSpec = tween(250))
                     } else {
-                        slideInHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeIn(tween(300))
+                        slideInHorizontally(tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { (it * 0.15f).toInt() } + 
+                            fadeIn(tween(300)) + androidx.compose.animation.scaleIn(initialScale = 0.96f, animationSpec = tween(300))
                     }
                 },
                 exitTransition = {
                     if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeOut(tween(90))
+                        fadeOut(tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + 
+                            androidx.compose.animation.scaleOut(targetScale = 0.95f, animationSpec = tween(180))
                     } else {
-                        fadeOut(tween(300))
+                        fadeOut(tween(250)) + androidx.compose.animation.scaleOut(targetScale = 0.96f, animationSpec = tween(250))
                     }
                 },
                 popEnterTransition = {
                     if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeIn(tween(210, delayMillis = 90))
+                        fadeIn(tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + 
+                            androidx.compose.animation.scaleIn(initialScale = 0.95f, animationSpec = tween(250))
                     } else {
-                        slideInHorizontally(tween(300)) { -(it * 0.2f).toInt() } + fadeIn(tween(300))
+                        slideInHorizontally(tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -(it * 0.15f).toInt() } + 
+                            fadeIn(tween(300)) + androidx.compose.animation.scaleIn(initialScale = 0.96f, animationSpec = tween(300))
                     }
                 },
                 popExitTransition = {
                     if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeOut(tween(90))
+                        fadeOut(tween(180, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + 
+                            androidx.compose.animation.scaleOut(targetScale = 0.95f, animationSpec = tween(180))
                     } else {
-                        slideOutHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeOut(tween(300))
+                        slideOutHorizontally(tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { (it * 0.15f).toInt() } + 
+                            fadeOut(tween(250))
                     }
                 }
             ) {
@@ -268,7 +277,11 @@ fun AppNavigation(
 
 @Composable
 fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
-    NavigationBar {
+    NavigationBar(
+        modifier = Modifier
+            .defaultMinSize(minHeight = MeshSpacing.BottomNavHeight)
+            .padding(horizontal = MeshSpacing.BottomNavHorizontalPadding)
+    ) {
         NavigationBarItem(
             icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
             label = { Text("Home") },

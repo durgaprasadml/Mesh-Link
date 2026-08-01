@@ -2,16 +2,23 @@ package com.meshlink.ui.home
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Campaign
@@ -32,6 +39,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.messaging.presentation.ChatsListViewModel
@@ -41,8 +49,9 @@ import com.meshlink.ui.components.EmptyState
 import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.ResponsiveDashboardGrid
 import com.meshlink.ui.components.chat.ChatRowItem
-import com.meshlink.ui.designsystem.theme.LayoutConstants
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.scaleOnPress
 
 enum class ConnectionState {
     CONNECTED, SEARCHING, NO_DEVICES
@@ -64,6 +73,7 @@ fun HomeScreen(
     
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
+    val lazyListState = rememberLazyListState()
 
     val connectionState = when {
         uiState.nearbyDevices.isNotEmpty() -> ConnectionState.CONNECTED
@@ -78,84 +88,119 @@ fun HomeScreen(
         }
     }
 
+    val isScrollingUp = remember {
+        derivedStateOf {
+            lazyListState.firstVisibleItemIndex == 0 || lazyListState.firstVisibleItemScrollOffset == 0
+        }
+    }
+
     MeshScreen(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToNearby,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = CircleShape
+            AnimatedVisibility(
+                visible = isScrollingUp.value,
+                enter = scaleIn(animationSpec = tween(200, easing = FastOutSlowInEasing)) + fadeIn(),
+                exit = scaleOut(animationSpec = tween(200, easing = FastOutSlowInEasing)) + fadeOut()
             ) {
-                Icon(Icons.Default.Add, contentDescription = "New Chat")
+                FloatingActionButton(
+                    onClick = onNavigateToNearby,
+                    modifier = Modifier
+                        .scaleOnPress(0.92f)
+                        .padding(end = MeshSpacing.FabEndPadding, bottom = MeshSpacing.FabBottomPadding),
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = CircleShape,
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp, pressedElevation = 8.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "New Chat")
+                }
             }
         }
     ) { paddingValues ->
         LazyColumn(
+            state = lazyListState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(bottom = LayoutConstants.SectionSpacing)
+            contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing)
         ) {
-            // Header Section: Connection Status + User Avatar + Search Bar
+            // Header Section: Modern Profile Header + Search Bar
             item {
-                Column(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = LayoutConstants.ScreenHorizontalPadding, vertical = MeshTheme.spacing.medium)
+                        .padding(horizontal = MeshSpacing.ScreenPadding, vertical = MeshSpacing.TopSafeArea),
+                    color = Color.Transparent
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        ConnectionStatusPill(state = connectionState)
-                        
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable(role = Role.Button, onClick = onNavigateToSettings)
-                                .semantics(mergeDescendants = true) {
-                                    role = Role.Button
-                                    contentDescription = "Profile and Settings"
-                                }
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            com.meshlink.ui.components.UserAvatar(
-                                identity = uiState.userIdentity,
-                                size = 40.dp
-                            )
+                            Column {
+                                Text(
+                                    text = "Hello, ${uiState.userIdentity?.displayName ?: "Mesh User"}",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                ConnectionStatusPill(state = connectionState)
+                            }
+                            
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .border(
+                                        width = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                        shape = CircleShape
+                                    )
+                                    .scaleOnPress(0.92f)
+                                    .clickable(role = Role.Button, onClick = onNavigateToSettings)
+                                    .semantics(mergeDescendants = true) {
+                                        role = Role.Button
+                                        contentDescription = "Profile and Settings"
+                                    }
+                            ) {
+                                com.meshlink.ui.components.UserAvatar(
+                                    identity = uiState.userIdentity,
+                                    size = 48.dp
+                                )
+                            }
                         }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(LayoutConstants.HeaderSpacing))
-                    
-                    SearchBar(
-                        inputField = {
-                            SearchBarDefaults.InputField(
-                                query = searchQuery,
-                                onQueryChange = { searchQuery = it },
-                                onSearch = { isSearchActive = false },
-                                expanded = isSearchActive,
-                                onExpandedChange = { isSearchActive = it },
-                                placeholder = { Text("Search chats or devices") },
-                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                                trailingIcon = {
-                                    if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { searchQuery = "" }) {
-                                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                        
+                        Spacer(modifier = Modifier.height(MeshSpacing.SearchBarSpacing))
+                        
+                        SearchBar(
+                            inputField = {
+                                SearchBarDefaults.InputField(
+                                    query = searchQuery,
+                                    onQueryChange = { searchQuery = it },
+                                    onSearch = { isSearchActive = false },
+                                    expanded = isSearchActive,
+                                    onExpandedChange = { isSearchActive = it },
+                                    placeholder = { Text("Search chats or devices...") },
+                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) {
+                                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                            }
                                         }
                                     }
-                                }
-                            )
-                        },
-                        expanded = isSearchActive,
-                        onExpandedChange = { isSearchActive = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = SearchBarDefaults.colors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
-                    ) {}
+                                )
+                            },
+                            expanded = isSearchActive,
+                            onExpandedChange = { isSearchActive = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = SearchBarDefaults.colors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            ),
+                            shape = RoundedCornerShape(MeshSpacing.SearchBarCornerRadius)
+                        ) {}
+                    }
                 }
             }
 
@@ -163,15 +208,15 @@ fun HomeScreen(
             if (!isSearchActive && searchQuery.isBlank()) {
                 item {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "Dashboard",
-                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.padding(horizontal = LayoutConstants.ScreenHorizontalPadding)
+                            modifier = Modifier.padding(horizontal = MeshSpacing.ScreenPadding)
                         )
-                        Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
+                        Spacer(modifier = Modifier.height(MeshSpacing.SectionTitleBottomSpacing))
                         
                         ResponsiveDashboardGrid(
                             items = listOf(
@@ -210,7 +255,7 @@ fun HomeScreen(
                                 }
                             )
                         )
-                        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
+                        Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
             }
@@ -219,10 +264,15 @@ fun HomeScreen(
             item {
                 Text(
                     text = "Recent Chats",
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(horizontal = LayoutConstants.ScreenHorizontalPadding, vertical = MeshTheme.spacing.small)
+                    modifier = Modifier.padding(
+                        start = MeshSpacing.ScreenPadding,
+                        end = MeshSpacing.ScreenPadding,
+                        top = 8.dp,
+                        bottom = MeshSpacing.SectionTitleBottomSpacing
+                    )
                 )
             }
 
@@ -245,14 +295,25 @@ fun HomeScreen(
                     }
                 }
             } else {
-                items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
-                    ChatRowItem(
-                        chat = chat,
-                        onClick = {
-                            val safeName = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) }
-                            onNavigateToChat(chat.id, safeName)
-                        }
-                    )
+                items(
+                    items = filteredChats,
+                    key = { it.id },
+                    contentType = { "chat_item" }
+                ) { chat ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = MeshSpacing.ScreenPadding, vertical = 4.dp)
+                            .animateItem()
+                    ) {
+                        ChatRowItem(
+                            chat = chat,
+                            onClick = {
+                                val safeName = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) }
+                                onNavigateToChat(chat.id, safeName)
+                            }
+                        )
+                    }
                 }
             }
         }

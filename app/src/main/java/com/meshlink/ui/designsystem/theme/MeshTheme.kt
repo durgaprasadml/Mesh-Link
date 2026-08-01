@@ -123,7 +123,7 @@ fun MeshTheme(
 
     CompositionLocalProvider(
         LocalDensity provides customDensity,
-        LocalMeshSpacing provides MeshSpacing(),
+        LocalMeshSpacing provides MeshSpacingTokens(),
         LocalMeshElevation provides MeshElevation(),
         LocalMeshShapes provides shapes,
         LocalMeshAnimations provides animations,
@@ -142,7 +142,7 @@ object MeshTheme {
     val colors: MeshSemanticColors
         @Composable
         get() = LocalMeshSemanticColors.current
-    val spacing: MeshSpacing
+    val spacing: MeshSpacingTokens
         @Composable
         get() = LocalMeshSpacing.current
     val elevation: MeshElevation

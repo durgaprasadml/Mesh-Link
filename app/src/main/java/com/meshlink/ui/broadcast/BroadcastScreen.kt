@@ -26,7 +26,9 @@ import androidx.compose.ui.semantics.semantics
 import com.meshlink.domain.model.Message
 import com.meshlink.ui.components.EmptyState
 import com.meshlink.ui.components.MeshScreen
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.scaleOnPress
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -71,7 +73,8 @@ fun BroadcastScreen(
                         Text("All nearby devices", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                windowInsets = WindowInsets(0.dp)
             )
         },
         bottomBar = {
@@ -133,6 +136,7 @@ fun BroadcastScreen(
                             },
                             modifier = Modifier
                                 .size(MeshTheme.spacing.giant)
+                                .scaleOnPress(0.92f)
                                 .clip(MeshTheme.shapes.pill)
                                 .background(if (messageText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
                         ) {
@@ -158,11 +162,12 @@ fun BroadcastScreen(
             label = "broadcast_list_transition"
         ) { isEmpty ->
             if (isEmpty) {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
+                        .padding(paddingValues)
+                        .padding(start = MeshSpacing.ScreenPadding, end = MeshSpacing.ScreenPadding, top = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     EmptyState(
                         icon = Icons.Default.Campaign,
@@ -185,10 +190,7 @@ fun BroadcastScreen(
                         key = { it.messageId },
                         contentType = { "broadcast_message" }
                     ) { msg ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn() + slideInVertically { it / 2 }
-                        ) {
+                        Box(modifier = Modifier.animateItem()) {
                             BroadcastBubble(msg, peerIdentities)
                         }
                     }

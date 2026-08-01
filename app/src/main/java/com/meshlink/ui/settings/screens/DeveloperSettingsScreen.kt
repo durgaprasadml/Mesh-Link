@@ -12,6 +12,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.settings.SettingsItemRow
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.settings.SettingsUiState
 import com.meshlink.ui.settings.SettingsViewModel
@@ -40,9 +41,9 @@ fun DeveloperSettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = MeshTheme.spacing.mediumLarge),
-            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
-            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
+                .padding(horizontal = MeshSpacing.ScreenPadding),
+            contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing),
+            verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
         ) {
             // Diagnostics Banner
             item {

@@ -26,8 +26,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.border
 import com.meshlink.ui.components.settings.SettingsItemRow
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.scaleOnPress
 import com.meshlink.ui.settings.screens.*
 import kotlinx.coroutines.flow.collectLatest
 
@@ -176,9 +181,8 @@ fun SettingsHome(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = MeshTheme.spacing.mediumLarge),
-            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
-            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumLarge)
+                .padding(horizontal = MeshSpacing.ScreenPadding),
+            contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing)
         ) {
             // Search Bar Filter
             if (isSearchActive) {
@@ -198,7 +202,7 @@ fun SettingsHome(
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = MeshTheme.spacing.small)
+                            .padding(bottom = 12.dp)
                     )
                 }
             }
@@ -210,19 +214,26 @@ fun SettingsHome(
                         onClick = { onNavigate(SettingsDestination.PROFILE) },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .scaleOnPress(0.96f)
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(MeshSpacing.CardCornerRadius)
+                            )
                             .semantics(mergeDescendants = true) {
                                 contentDescription = "Profile Card for $userName. Node ID $nodeId. Edit Profile."
                                 role = Role.Button
                             },
                         colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                         ),
-                        shape = MeshTheme.shapes.large
+                        shape = RoundedCornerShape(MeshSpacing.CardCornerRadius),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp, pressedElevation = 6.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(MeshTheme.spacing.mediumLarge)
+                                .padding(MeshSpacing.CardInternalPadding)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -236,7 +247,7 @@ fun SettingsHome(
                                     ),
                                     size = 64.dp
                                 )
-                                Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
+                                Spacer(modifier = Modifier.width(MeshSpacing.CardInternalPadding))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
@@ -350,7 +361,7 @@ fun SettingsHome(
                 )
             )
 
-            allSettings.forEach { category ->
+            allSettings.forEachIndexed { idx, category ->
                 val filteredItems = category.items.filter {
                     searchQuery.isEmpty() ||
                             it.title.contains(searchQuery, ignoreCase = true) ||
@@ -359,19 +370,21 @@ fun SettingsHome(
 
                 if (filteredItems.isNotEmpty()) {
                     item {
+                        val topSpace = if (idx == 0) 24.dp else 22.dp
+                        Spacer(modifier = Modifier.height(topSpace))
                         Text(
                             text = category.title,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = MeshTheme.spacing.small)
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 22.sp,
+                            color = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
+                        Spacer(modifier = Modifier.height(10.dp))
                         ElevatedCard(
                             colors = CardDefaults.elevatedCardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant
                             ),
-                            shape = MeshTheme.shapes.large
+                            shape = RoundedCornerShape(MeshSpacing.CardCornerRadius),
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = MeshSpacing.CardElevation)
                         ) {
                             Column {
                                 filteredItems.forEachIndexed { index, itemData ->

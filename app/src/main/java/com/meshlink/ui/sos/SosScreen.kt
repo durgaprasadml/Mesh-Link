@@ -50,10 +50,11 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.meshlink.ui.components.MeshScreen
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import com.meshlink.ui.components.MeshScreen
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,18 +88,18 @@ fun SosScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(bottom = MeshTheme.spacing.extraLarge),
-            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
+            contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing)
         ) {
             item {
+                Spacer(modifier = Modifier.height(20.dp))
                 EmergencyStatusCard(state)
             }
 
             item {
+                Spacer(modifier = Modifier.height(40.dp))
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = MeshTheme.spacing.large),
+                        .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     AnimatedContent(
@@ -126,14 +127,20 @@ fun SosScreen(
             }
 
             item {
+                Spacer(modifier = Modifier.height(36.dp))
                 EmergencyInfoCard(
                     state = state,
                     onRefresh = { viewModel.refreshLocation() }
                 )
             }
 
-            item { NearbyResponders(state) }
             item {
+                Spacer(modifier = Modifier.height(24.dp))
+                NearbyResponders(state)
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
                 val context = LocalContext.current
                 QuickActions(
                     state = state,
@@ -167,7 +174,10 @@ fun SosScreen(
                     onAlarm = { viewModel.toggleAlarm() }
                 )
             }
-            item { SafetyTips() }
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+                SafetyTips()
+            }
         }
     }
 }
@@ -198,14 +208,15 @@ fun EmergencyStatusCard(state: SosUiState) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = MeshTheme.spacing.large),
-        shape = MeshTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = containerColor)
+            .padding(horizontal = MeshSpacing.ScreenPadding),
+        shape = RoundedCornerShape(MeshSpacing.CardCornerRadius),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = MeshSpacing.CardElevation)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(MeshTheme.spacing.large),
+                .padding(MeshSpacing.CardInternalPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -446,11 +457,12 @@ fun EmergencyInfoCard(state: SosUiState, onRefresh: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = MeshTheme.spacing.large),
-        shape = MeshTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = MeshSpacing.ScreenPadding),
+        shape = RoundedCornerShape(MeshSpacing.CardCornerRadius),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = MeshSpacing.CardElevation)
     ) {
-        Column(modifier = Modifier.padding(MeshTheme.spacing.large)) {
+        Column(modifier = Modifier.padding(MeshSpacing.CardInternalPadding)) {
             Text("EMERGENCY INFO", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
 

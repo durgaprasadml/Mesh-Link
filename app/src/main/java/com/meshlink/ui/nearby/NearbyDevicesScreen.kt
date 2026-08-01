@@ -35,7 +35,7 @@ import com.meshlink.ui.components.nearby.MeshNetworkStatsBar
 import com.meshlink.ui.components.nearby.MeshScanningEmptyState
 import com.meshlink.ui.components.nearby.MeshTopologyCanvas
 import com.meshlink.ui.components.MeshScreen
-import com.meshlink.ui.components.TwoPaneLayout
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.MeshIdNormalizer
 import kotlinx.coroutines.launch
@@ -123,7 +123,8 @@ fun NearbyDevicesScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background
-                    )
+                    ),
+                    windowInsets = TopAppBarDefaults.windowInsets
                 )
             }
         ) { paddingValues ->
@@ -138,7 +139,12 @@ fun NearbyDevicesScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(0.42f)
-                            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
+                            .padding(
+                                start = MeshSpacing.ScreenPadding,
+                                end = MeshSpacing.ScreenPadding,
+                                top = MeshSpacing.ScreenPadding,
+                                bottom = 12.dp
+                            )
                             .border(
                                 width = 1.dp,
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
@@ -148,7 +154,7 @@ fun NearbyDevicesScreen(
                         colors = CardDefaults.elevatedCardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         ),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = MeshTheme.elevation.level2)
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = MeshSpacing.CardElevation)
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -173,17 +179,20 @@ fun NearbyDevicesScreen(
                     }
 
                     // Live Network Statistics Bar
-                    MeshNetworkStatsBar(
-                        devices = uiState.devices,
-                        isScanning = uiState.isScanning,
-                        packetCount = uiState.packetCount
-                    )
+                    Box(modifier = Modifier.padding(bottom = 16.dp)) {
+                        MeshNetworkStatsBar(
+                            devices = uiState.devices,
+                            isScanning = uiState.isScanning,
+                            packetCount = uiState.packetCount
+                        )
+                    }
 
                     // Search and Filter Bar
                     Box(
                         modifier = Modifier.padding(
-                            horizontal = MeshTheme.spacing.mediumLarge, 
-                            vertical = MeshTheme.spacing.small
+                            start = MeshSpacing.ScreenPadding,
+                            end = MeshSpacing.ScreenPadding,
+                            bottom = 16.dp
                         )
                     ) {
                         SearchBar(
@@ -285,8 +294,9 @@ fun NearbyDevicesScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(0.58f)
-                                .padding(horizontal = MeshTheme.spacing.mediumLarge),
-                            verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
+                                .padding(horizontal = MeshSpacing.ScreenPadding),
+                            contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing),
+                            verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
                         ) {
                             items(
                                 items = filteredDevices, 
@@ -311,7 +321,6 @@ fun NearbyDevicesScreen(
                                     }
                                 )
                             }
-                            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge)) }
                         }
                     }
                 }

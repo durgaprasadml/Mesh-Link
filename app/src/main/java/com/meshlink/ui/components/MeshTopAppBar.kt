@@ -2,6 +2,8 @@ package com.meshlink.ui.components
 
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -10,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 
 /**
  * Standardized TopAppBar wrapper for Mesh Link applications.
@@ -35,7 +38,9 @@ fun MeshTopAppBar(
                 color = titleColor
             )
         },
-        modifier = modifier,
+        modifier = modifier
+            .defaultMinSize(minHeight = MeshSpacing.TopAppBarHeight)
+            .padding(horizontal = MeshSpacing.TopAppBarHorizontalPadding - 16.dp),
         navigationIcon = {
             if (onBackClick != null) {
                 IconButton(onClick = onBackClick) {

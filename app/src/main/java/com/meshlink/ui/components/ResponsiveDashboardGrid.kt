@@ -6,9 +6,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.meshlink.ui.designsystem.theme.LayoutConstants
-import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.MeshSpacing
 
 /**
  * Standardized Responsive Dashboard Layout for Mesh Link.
@@ -21,7 +19,7 @@ import com.meshlink.ui.designsystem.theme.MeshTheme
 fun ResponsiveDashboardGrid(
     items: List<@Composable (Modifier) -> Unit>,
     modifier: Modifier = Modifier,
-    spacing: Dp = LayoutConstants.CardSpacing
+    spacing: Dp = MeshSpacing.DashboardCardSpacing
 ) {
     val breakpoint = rememberWindowBreakpoint()
 
@@ -30,11 +28,11 @@ fun ResponsiveDashboardGrid(
             // Horizontal LazyRow for Compact screens to preserve 1-row vertical viewport height
             LazyRow(
                 modifier = modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = LayoutConstants.ScreenHorizontalPadding),
+                contentPadding = PaddingValues(horizontal = MeshSpacing.ScreenPadding),
                 horizontalArrangement = Arrangement.spacedBy(spacing)
             ) {
                 itemsIndexed(items) { index, itemComposable ->
-                    itemComposable(Modifier.width(160.dp))
+                    itemComposable(Modifier.width(MeshSpacing.DashboardCardWidth))
                 }
             }
         }
@@ -43,7 +41,7 @@ fun ResponsiveDashboardGrid(
             Column(
                 modifier = modifier
                     .fillMaxWidth()
-                    .padding(horizontal = LayoutConstants.ScreenHorizontalPadding),
+                    .padding(horizontal = MeshSpacing.ScreenPadding),
                 verticalArrangement = Arrangement.spacedBy(spacing)
             ) {
                 val chunkedItems = items.chunked(columns)
@@ -65,3 +63,4 @@ fun ResponsiveDashboardGrid(
         }
     }
 }
+

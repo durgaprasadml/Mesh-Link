@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,14 +21,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.meshlink.ui.designsystem.components.buttons.MeshPrimaryButton
+import com.meshlink.ui.designsystem.components.buttons.MeshButton
 import com.meshlink.ui.designsystem.components.glass.MeshGlassCard
-import com.meshlink.ui.designsystem.components.inputs.MeshCircularProgress
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.designsystem.theme.colors.LocalMeshSemanticColors
 
 @Composable
-fun MeshEmptyState(
+fun MeshEmptyStateView(
     title: String,
     message: String,
     modifier: Modifier = Modifier,
@@ -60,19 +60,10 @@ fun MeshEmptyState(
         )
         if (actionTitle != null && onActionClick != null) {
             Spacer(modifier = Modifier.height(24.dp))
-            MeshPrimaryButton(text = actionTitle, onClick = onActionClick)
+            MeshButton(text = actionTitle, onClick = onActionClick)
         }
     }
 }
-
-// Alias for generic calls
-@Composable
-fun EmptyState(
-    title: String,
-    message: String,
-    modifier: Modifier = Modifier,
-    icon: ImageVector = Icons.Default.Inbox
-) = MeshEmptyState(title = title, message = message, modifier = modifier, icon = icon)
 
 @Composable
 fun MeshLoadingState(
@@ -85,7 +76,7 @@ fun MeshLoadingState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        MeshCircularProgress(size = 44.dp)
+        CircularProgressIndicator(modifier = Modifier.size(44.dp), color = MeshTheme.colors.primary)
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = label, style = MeshTheme.typography.bodyMedium, color = colors.textSecondary)
     }
@@ -98,7 +89,7 @@ fun MeshErrorState(
     onRetryClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    MeshEmptyState(
+    MeshEmptyStateView(
         title = title,
         message = message,
         icon = Icons.Default.ErrorOutline,
@@ -140,7 +131,7 @@ fun MeshOfflineState(
                 modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
             )
             if (onSearchMesh != null) {
-                MeshPrimaryButton(text = "Scan Nearby Nodes", onClick = onSearchMesh)
+                MeshButton(text = "Scan Nearby Nodes", onClick = onSearchMesh)
             }
         }
     }

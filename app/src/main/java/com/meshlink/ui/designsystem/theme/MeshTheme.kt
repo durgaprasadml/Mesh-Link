@@ -27,11 +27,20 @@ import com.meshlink.ui.designsystem.theme.colors.DarkSemanticColors
 import com.meshlink.ui.designsystem.theme.colors.LightSemanticColors
 import com.meshlink.ui.designsystem.theme.colors.LocalMeshSemanticColors
 import com.meshlink.ui.designsystem.theme.colors.MeshSemanticColors
+import com.meshlink.ui.designsystem.theme.elevation.LocalMeshElevation
+import com.meshlink.ui.designsystem.theme.elevation.MeshElevationScale
 import com.meshlink.ui.designsystem.theme.motion.LocalMeshMotion
 import com.meshlink.ui.designsystem.theme.motion.MeshMotion
 import com.meshlink.ui.designsystem.theme.responsive.LocalMeshWindowSize
 import com.meshlink.ui.designsystem.theme.responsive.MeshWindowSize
 import com.meshlink.ui.designsystem.theme.responsive.rememberMeshWindowSize
+import com.meshlink.ui.designsystem.theme.shapes.LocalMeshShapes
+import com.meshlink.ui.designsystem.theme.shapes.MeshShapeScale
+import com.meshlink.ui.designsystem.theme.spacing.LocalMeshSpacing
+import com.meshlink.ui.designsystem.theme.spacing.MeshSpacingScale
+import com.meshlink.ui.designsystem.theme.typography.LocalMeshTypography
+import com.meshlink.ui.designsystem.theme.typography.MeshTypographyScale
+import com.meshlink.ui.designsystem.theme.typography.toMaterial3Typography
 
 val LocalGlassEffects = staticCompositionLocalOf { true }
 val LocalReduceMotion = staticCompositionLocalOf { false }
@@ -114,12 +123,12 @@ fun MeshTheme(
         fontScale = currentDensity.fontScale * effectiveFontScale
     )
 
-    val shapes = MeshShapes(
-        extraSmall = RoundedCornerShape(4.dp * cornerRadiusScale),
+    val shapes = MeshShapeScale(
+        tiny = RoundedCornerShape(4.dp * cornerRadiusScale),
         small = RoundedCornerShape(8.dp * cornerRadiusScale),
         medium = RoundedCornerShape(12.dp * cornerRadiusScale),
         large = RoundedCornerShape(16.dp * cornerRadiusScale),
-        extraLarge = RoundedCornerShape(24.dp * cornerRadiusScale),
+        xl = RoundedCornerShape(24.dp * cornerRadiusScale),
         jumbo = RoundedCornerShape(32.dp * cornerRadiusScale)
     )
     val materialShapes = androidx.compose.material3.Shapes(
@@ -130,36 +139,30 @@ fun MeshTheme(
         extraLarge = RoundedCornerShape(24.dp * cornerRadiusScale)
     )
 
-    val animations = if (!animationsEnabled) {
-        MeshAnimations(fast = 0, normal = 0, slow = 0)
-    } else if (reduceMotionEnabled) {
-        MeshAnimations(fast = 100, normal = 150, slow = 250)
-    } else {
-        MeshAnimations()
-    }
-
     val windowSize = rememberMeshWindowSize()
     val accessibilityRules = MeshAccessibilityRules(
         highContrastEnabled = highContrast,
         reduceMotionEnabled = reduceMotionEnabled
     )
 
+    val typographyScale = MeshTypographyScale()
+
     CompositionLocalProvider(
         LocalDensity provides customDensity,
-        LocalMeshSpacing provides MeshSpacingTokens(),
-        LocalMeshElevation provides MeshElevation(),
+        LocalMeshSpacing provides MeshSpacingScale(),
+        LocalMeshElevation provides MeshElevationScale(),
         LocalMeshShapes provides shapes,
-        LocalMeshAnimations provides animations,
-        LocalMeshMotion provides MeshMotion(),
+        LocalMeshMotion provides MeshMotion,
         LocalMeshSemanticColors provides semanticColors,
         LocalMeshWindowSize provides windowSize,
         LocalMeshAccessibilityRules provides accessibilityRules,
+        LocalMeshTypography provides typographyScale,
         LocalGlassEffects provides glassEffectsEnabled,
         LocalReduceMotion provides reduceMotionEnabled
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = MeshTypography,
+            typography = typographyScale.toMaterial3Typography(),
             shapes = materialShapes,
             content = content
         )
@@ -173,18 +176,18 @@ object MeshTheme {
     val typography: Typography
         @Composable
         get() = MaterialTheme.typography
-    val spacing: MeshSpacingTokens
+    val customTypography: MeshTypographyScale
+        @Composable
+        get() = LocalMeshTypography.current
+    val spacing: MeshSpacingScale
         @Composable
         get() = LocalMeshSpacing.current
-    val elevation: MeshElevation
+    val elevation: MeshElevationScale
         @Composable
         get() = LocalMeshElevation.current
-    val shapes: MeshShapes
+    val shapes: MeshShapeScale
         @Composable
         get() = LocalMeshShapes.current
-    val animations: MeshAnimations
-        @Composable
-        get() = LocalMeshAnimations.current
     val motion: MeshMotion
         @Composable
         get() = LocalMeshMotion.current

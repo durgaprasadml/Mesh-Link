@@ -2,7 +2,6 @@ package com.meshlink.ui.designsystem.components.glass
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -14,35 +13,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.designsystem.theme.colors.LocalMeshSemanticColors
-import com.meshlink.ui.designsystem.theme.motion.meshPressScale
-
-@Composable
-fun MeshGlassCard(
-    modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(20.dp),
-    onClick: (() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    val clickableModifier = if (onClick != null) {
-        modifier
-            .meshPressScale()
-            .clickable { onClick() }
-    } else modifier
-
-    Column(
-        modifier = clickableModifier
-            .meshLightGlass(shape = shape)
-            .padding(18.dp),
-        content = content
-    )
-}
 
 @Composable
 fun MeshSectionCard(
@@ -56,7 +32,9 @@ fun MeshSectionCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .meshHeavyGlass(shape = shape)
+            .clip(shape)
+            .background(colors.cardSurface)
+            .border(0.5.dp, colors.border, shape)
             .padding(20.dp)
     ) {
         Text(
@@ -94,33 +72,4 @@ fun MeshSurface(
     ) {
         content()
     }
-}
-
-@Composable
-fun MeshFloatingContainer(
-    modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(32.dp),
-    content: @Composable () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .meshFloatingGlass(shape = shape)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-    ) {
-        content()
-    }
-}
-
-@Composable
-fun MeshDivider(
-    modifier: Modifier = Modifier,
-    color: Color = LocalMeshSemanticColors.current.border.copy(alpha = 0.3f),
-    thickness: Dp = 1.dp
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(thickness)
-            .background(color)
-    )
 }

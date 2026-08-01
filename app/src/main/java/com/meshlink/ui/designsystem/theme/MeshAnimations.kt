@@ -1,6 +1,5 @@
 package com.meshlink.ui.designsystem.theme
 
-import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.Spring
@@ -13,9 +12,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import com.meshlink.ui.designsystem.theme.motion.MeshMotion
-import com.meshlink.ui.designsystem.theme.motion.meshPressScale
-import com.meshlink.ui.designsystem.theme.motion.meshPulseEffect
-import com.meshlink.ui.designsystem.theme.motion.meshShimmerEffect
 
 @Immutable
 data class MeshAnimations(
@@ -25,7 +21,7 @@ data class MeshAnimations(
     val emphasizedEasing: Easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f),
     val standardEasing: Easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f),
     val decelerateEasing: Easing = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f),
-    val motion: MeshMotion = MeshMotion()
+    val motion: MeshMotion = MeshMotion
 ) {
     val standardTransition = tween<Float>(durationMillis = normal, easing = standardEasing)
     val fastTransition = tween<Float>(durationMillis = fast, easing = decelerateEasing)
@@ -48,6 +44,10 @@ data class MeshAnimations(
 }
 
 val LocalMeshAnimations = staticCompositionLocalOf { MeshAnimations() }
+
+fun Modifier.meshPressScale(scale: Float = 0.97f): Modifier = this
+fun Modifier.meshPulseEffect(enabled: Boolean = true): Modifier = this
+fun Modifier.meshShimmerEffect(): Modifier = this
 
 @Composable
 fun Modifier.scaleOnPress(targetScale: Float = 0.96f): Modifier = this.meshPressScale(targetScale)

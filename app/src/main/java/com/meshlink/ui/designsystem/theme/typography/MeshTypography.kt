@@ -1,155 +1,177 @@
 package com.meshlink.ui.designsystem.theme.typography
 
 import androidx.compose.material3.Typography
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.sp
-import com.meshlink.R
 
-// ─── Inter via Android Downloadable Fonts ────────────────────────────────────
-private val interFontProvider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = R.array.com_google_android_gms_fonts_certs
-)
-
-private val InterFont = GoogleFont("Inter")
-
-val InterFontFamily = FontFamily(
-    Font(googleFont = InterFont, fontProvider = interFontProvider, weight = FontWeight.Light),
-    Font(googleFont = InterFont, fontProvider = interFontProvider, weight = FontWeight.Normal),
-    Font(googleFont = InterFont, fontProvider = interFontProvider, weight = FontWeight.Medium),
-    Font(googleFont = InterFont, fontProvider = interFontProvider, weight = FontWeight.SemiBold),
-    Font(googleFont = InterFont, fontProvider = interFontProvider, weight = FontWeight.Bold),
-    Font(googleFont = InterFont, fontProvider = interFontProvider, weight = FontWeight.ExtraBold),
-    Font(googleFont = InterFont, fontProvider = interFontProvider, weight = FontWeight.Black),
-)
-
-// ─── Custom Typography Extras ────────────────────────────────────────────────
-val CaptionTextStyle = TextStyle(
-    fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Normal,
-    fontSize = 11.sp,
-    lineHeight = 14.sp,
-    letterSpacing = 0.3.sp
-)
-
-val MonospaceMetadataTextStyle = TextStyle(
-    fontFamily = FontFamily.Monospace,
-    fontWeight = FontWeight.Medium,
-    fontSize = 12.sp,
-    lineHeight = 16.sp,
-    letterSpacing = 0.5.sp
-)
-
-// ─── Core Typography Scale ───────────────────────────────────────────────────
-val MeshTypographyScale = Typography(
-    displayLarge = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Black,
-        fontSize = 57.sp,
-        lineHeight = 64.sp,
-        letterSpacing = (-0.5).sp
-    ),
-    displayMedium = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 45.sp,
-        lineHeight = 52.sp,
-        letterSpacing = (-0.25).sp
-    ),
-    displaySmall = TextStyle(
-        fontFamily = InterFontFamily,
+/**
+ * Custom Typography Token Scale for Mesh-Link 2026 Original Design System.
+ * Features dedicated Monospace Telemetry, RSSI, Hop Count, and Tactical Signal styles.
+ */
+@Immutable
+data class MeshTypographyScale(
+    val displayLarge: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Bold,
         fontSize = 36.sp,
         lineHeight = 44.sp,
-        letterSpacing = (-0.15).sp
+        letterSpacing = (-0.5).sp
     ),
-    headlineLarge = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 32.sp,
-        lineHeight = 40.sp,
-        letterSpacing = (-0.25).sp
-    ),
-    headlineMedium = TextStyle(
-        fontFamily = InterFontFamily,
+    val displayMedium: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Bold,
         fontSize = 28.sp,
         lineHeight = 36.sp,
-        letterSpacing = (-0.15).sp
+        letterSpacing = (-0.25).sp
     ),
-    headlineSmall = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Bold,
+    val display: TextStyle = displayMedium,
+    val headline: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 24.sp,
         lineHeight = 32.sp,
-        letterSpacing = (-0.1).sp
-    ),
-    titleLarge = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = (-0.05).sp
-    ),
-    titleMedium = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
         letterSpacing = 0.sp
     ),
-    titleSmall = TextStyle(
-        fontFamily = InterFontFamily,
+    val title: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 20.sp,
+        lineHeight = 26.sp,
+        letterSpacing = 0.15.sp
+    ),
+    val subtitle: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Medium,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
+        letterSpacing = 0.1.sp
+    ),
+    val body: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.25.sp
+    ),
+    val bodyMedium: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
-        letterSpacing = 0.05.sp
+        letterSpacing = 0.25.sp
     ),
-    bodyLarge = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.1.sp
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.1.sp
-    ),
-    bodySmall = TextStyle(
-        fontFamily = InterFontFamily,
+    val caption: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.2.sp
+        letterSpacing = 0.4.sp
     ),
-    labelLarge = TextStyle(
-        fontFamily = InterFontFamily,
+    val label: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.5.sp
+    ),
+    val metadata: TextStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Normal,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.5.sp
+    ),
+    val code: TextStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Medium,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+        letterSpacing = 0.sp
+    ),
+    val telemetry: TextStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.8.sp
+    ),
+    val signalMetrics: TextStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        lineHeight = 18.sp,
+        letterSpacing = 1.0.sp
+    ),
+    val hopCount: TextStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+        fontSize = 12.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.5.sp
+    ),
+    val rssiLabels: TextStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.6.sp
+    ),
+    val emergency: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Black,
+        fontSize = 16.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 1.2.sp
+    ),
+    val navigation: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.4.sp
+    ),
+    val button: TextStyle = TextStyle(
+        fontFamily = FontFamily.Default,
         fontWeight = FontWeight.SemiBold,
         fontSize = 14.sp,
         lineHeight = 20.sp,
-        letterSpacing = 0.05.sp
+        letterSpacing = 0.5.sp
     ),
-    labelMedium = TextStyle(
-        fontFamily = InterFontFamily,
+    val badge: TextStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+        fontSize = 10.sp,
+        lineHeight = 12.sp,
+        letterSpacing = 0.5.sp
+    ),
+    val monospaceMetrics: TextStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.3.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.4.sp
+        letterSpacing = 0.5.sp
     )
 )
+
+val LocalMeshTypography = staticCompositionLocalOf { MeshTypographyScale() }
+
+fun MeshTypographyScale.toMaterial3Typography(): Typography {
+    return Typography(
+        displayLarge = displayLarge,
+        displayMedium = displayMedium,
+        headlineLarge = headline,
+        headlineMedium = headline,
+        titleLarge = title,
+        titleMedium = subtitle,
+        bodyLarge = bodyMedium,
+        bodyMedium = body,
+        bodySmall = caption,
+        labelLarge = button,
+        labelMedium = label,
+        labelSmall = badge
+    )
+}

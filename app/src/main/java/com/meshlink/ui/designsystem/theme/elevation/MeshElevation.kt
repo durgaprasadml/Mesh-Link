@@ -5,14 +5,27 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+/**
+ * 8-Tier Elevation Model for Mesh-Link 2026 Original Design System.
+ */
 @Immutable
 data class MeshElevationScale(
     val flat: Dp = 0.dp,
     val raised: Dp = 2.dp,
-    val floating: Dp = 6.dp,
-    val dialog: Dp = 12.dp,
-    val overlay: Dp = 16.dp,
-    val glass: Dp = 1.dp
+    val level1: Dp = 2.dp,
+    val floating: Dp = 4.dp,
+    val level2: Dp = 4.dp,
+    val hero: Dp = 6.dp,
+    val overlay: Dp = 8.dp,
+    val level3: Dp = 8.dp,
+    val emergency: Dp = 12.dp,
+    val level4: Dp = 12.dp,
+    val level5: Dp = 16.dp,
+    val glass: Dp = 0.dp,
+    val navigation: Dp = 4.dp
 )
 
-val LocalMeshElevationScale = staticCompositionLocalOf { MeshElevationScale() }
+typealias MeshElevation = MeshElevationScale
+fun MeshElevation(): MeshElevationScale = MeshElevationScale()
+
+val LocalMeshElevation = staticCompositionLocalOf { MeshElevationScale() }

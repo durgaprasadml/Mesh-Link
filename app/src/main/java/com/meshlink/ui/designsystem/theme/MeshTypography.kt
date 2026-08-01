@@ -1,9 +1,9 @@
 package com.meshlink.ui.designsystem.theme
 
-import com.meshlink.ui.designsystem.theme.typography.CaptionTextStyle
-import com.meshlink.ui.designsystem.theme.typography.MonospaceMetadataTextStyle
 import com.meshlink.ui.designsystem.theme.typography.MeshTypographyScale
+import com.meshlink.ui.designsystem.theme.typography.toMaterial3Typography
 
-val MeshTypography = MeshTypographyScale
-val Caption = CaptionTextStyle
-val MonospaceMetadata = MonospaceMetadataTextStyle
+val MeshTypographyScaleInstance = MeshTypographyScale()
+val MeshTypography = MeshTypographyScaleInstance.toMaterial3Typography()
+val Caption = MeshTypographyScaleInstance.caption
+val MonospaceMetadata = MeshTypographyScaleInstance.metadata

@@ -1,40 +1,51 @@
 package com.meshlink.ui.designsystem.theme.accessibility
 
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
-/**
- * Accessibility Guidelines & Rule Enforcers for Mesh Link 2026.
- */
 @Immutable
 data class MeshAccessibilityRules(
-    val minTouchTargetSize: Dp = 48.dp,
     val highContrastEnabled: Boolean = false,
     val reduceMotionEnabled: Boolean = false,
-    val talkBackEnabled: Boolean = false
+    val minTouchTargetDp: Int = 48
 )
 
 val LocalMeshAccessibilityRules = staticCompositionLocalOf { MeshAccessibilityRules() }
 
-/** Enforces Android standard 48dp minimum touch target for interactive UI elements. */
-fun Modifier.meshMinTouchTarget(minSize: Dp = 48.dp): Modifier {
-    return this.defaultMinSize(minWidth = minSize, minHeight = minSize)
+/**
+ * Accessibility Guidelines & Modifiers for Mesh-Link 2026 Original Design System.
+ */
+@Immutable
+object MeshAccessibility {
+    val MIN_TOUCH_TARGET_SIZE = 48.dp
+
+    /**
+     * Ensures minimum touch target size of 48dp x 48dp per WCAG / M3 standards.
+     */
+    fun Modifier.meshTouchTarget(): Modifier = this.defaultMinSize(
+        minWidth = MIN_TOUCH_TARGET_SIZE,
+        minHeight = MIN_TOUCH_TARGET_SIZE
+    )
+
+    fun calculateContrastRatio(foreground: Color, background: Color): Float {
+        val l1 = foreground.luminance() + 0.05f
+        val l2 = background.luminance() + 0.05f
+        return if (l1 > l2) l1 / l2 else l2 / l1
+    }
+
+    fun isWcagAaCompliant(foreground: Color, background: Color, isLargeText: Boolean = false): Boolean {
+        val ratio = calculateContrastRatio(foreground, background)
+        return if (isLargeText) ratio >= 3.0f else ratio >= 4.5f
+    }
 }
 
-/** Configures TalkBack friendly semantic description and role. */
-fun Modifier.meshSemantics(
-    description: String,
-    role: Role? = null
-): Modifier = this.semantics(mergeDescendants = true) {
-    this.contentDescription = description
-    role?.let { this.role = it }
+fun Modifier.meshTouchTarget(): Modifier = MeshAccessibility.MIN_TOUCH_TARGET_SIZE.let {
+    this.defaultMinSize(minWidth = it, minHeight = it)
 }
+
+fun Modifier.meshMinTouchTarget(): Modifier = meshTouchTarget()

@@ -72,5 +72,7 @@ data class RouteEntry(
     var sequenceNumber: Long = 0L,
     var score: Int = 0, // 0-100 calculated by RouteScorer
     var isVerified: Boolean = false, // Set to true if a packet has successfully traversed this route
-    var state: RouteState = RouteState.ACTIVE
+    var state: RouteState = RouteState.ACTIVE,
+    var routeCost: Double = hops.toDouble(),
+    var expirationTime: Long = System.currentTimeMillis() + 60_000L
 )

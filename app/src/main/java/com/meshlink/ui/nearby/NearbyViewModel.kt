@@ -7,6 +7,7 @@ import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.model.TransportType
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
+import com.meshlink.routing.engine.MeshTopologyManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
@@ -46,7 +47,8 @@ data class NearbyUiState(
 @HiltViewModel
 class NearbyViewModel @Inject constructor(
     private val meshRepository: MeshRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val topologyManager: MeshTopologyManager
 ) : ViewModel() {
 
     private val _sortOption = MutableStateFlow(SortOption.RSSI)
@@ -95,15 +97,39 @@ class NearbyViewModel @Inject constructor(
 
     val uiState: StateFlow<NearbyUiState> = combine(
         devicesWithIdentity,
+        topologyManager.reachableNodes,
         _sortOption,
         _isScanning,
         _errorMessage,
         _trafficState
-    ) { devices, sortOption, isScanning, errorMessage, traffic ->
+    ) { directDevices, reachableNodes, sortOption, isScanning, errorMessage, traffic ->
+        
+        val mergedDevices = mutableMapOf<String, BleDevice>()
+        
+        // Direct physical devices with identity
+        directDevices.forEach { device ->
+            mergedDevices[device.address] = device
+        }
+
+        // Indirect multi-hop mesh nodes
+        reachableNodes.forEach { node ->
+            if (!mergedDevices.containsKey(node.nodeId)) {
+                mergedDevices[node.nodeId] = BleDevice(
+                    meshId = node.nodeId,
+                    name = node.nodeId,
+                    address = node.nodeId,
+                    rssi = node.rssi,
+                    hopCount = node.hopCount,
+                    isMeshNode = true,
+                    viaRelayId = node.viaRelayId
+                )
+            }
+        }
+
         val sortedList = when (sortOption) {
-            SortOption.RSSI -> devices.sortedByDescending { it.rssi }
-            SortOption.NAME -> devices.sortedBy { it.name.ifBlank { "~" } }
-            SortOption.STATUS -> devices.sortedByDescending { it.isConnected }
+            SortOption.RSSI -> mergedDevices.values.toList().sortedByDescending { it.rssi }
+            SortOption.NAME -> mergedDevices.values.toList().sortedBy { it.name.ifBlank { "~" } }
+            SortOption.STATUS -> mergedDevices.values.toList().sortedBy { it.hopCount }
         }
         
         NearbyUiState(

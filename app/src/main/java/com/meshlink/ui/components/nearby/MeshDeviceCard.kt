@@ -224,27 +224,54 @@ fun MeshDeviceCard(
                         else -> Icons.Default.Bluetooth to "BLE"
                     }
 
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
-                        shape = MeshTheme.shapes.small
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Surface(
+                            color = when (device.hopCount) {
+                                0 -> Color(0xFF4CAF50).copy(alpha = 0.15f)
+                                1 -> Color(0xFF2196F3).copy(alpha = 0.15f)
+                                else -> Color(0xFF9C27B0).copy(alpha = 0.15f)
+                            },
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Icon(
-                                imageVector = transportIcon,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(12.dp)
-                            )
                             Text(
-                                text = transportLabel,
+                                text = when (device.hopCount) {
+                                    0 -> "🟢 Direct"
+                                    1 -> "🔵 Mesh • 1 Hop"
+                                    else -> "🟣 Mesh • ${device.hopCount} Hops"
+                                },
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = when (device.hopCount) {
+                                    0 -> Color(0xFF2E7D32)
+                                    1 -> Color(0xFF1565C0)
+                                    else -> Color(0xFF6A1B9A)
+                                },
                                 fontWeight = FontWeight.Bold
                             )
+                        }
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = transportIcon,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = transportLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

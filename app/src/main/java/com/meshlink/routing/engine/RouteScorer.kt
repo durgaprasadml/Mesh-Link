@@ -28,66 +28,47 @@ import com.meshlink.domain.model.RouteEntry
 @Singleton
 class RouteScorer @Inject constructor() {
 
-    // Advanced Phase E7 Configurable weights
-    private val linkQualityWeight = 0.25f
-    private val reliabilityWeight = 0.20f
-    private val batteryWeight = 0.15f
-    private val congestionWeight = 0.15f
+    // Priority: Hop count > Stability > RSSI > Latency > Transport
+    private val hopCountWeight = 0.35f
+    private val stabilityWeight = 0.25f
+    private val linkQualityWeight = 0.20f
     private val latencyWeight = 0.10f
-    private val stabilityWeight = 0.05f
-    private val trustWeight = 0.05f
-    private val hopCountWeight = 0.05f
+    private val reliabilityWeight = 0.10f
 
     fun calculateScore(entry: RouteEntry): Int {
         val m = entry.metrics
 
-        // 1. Link Quality (0-100). Normalize RSSI (-100 to -40).
+        // 1. Hop Count Penalty (0-100). 1 hop = 100, 10 hops = 10.
+        val hopPenalty = min(100f, (entry.hops * (100f / 10f)))
+        val hopScore = (100f - hopPenalty) * hopCountWeight
+
+        // 2. Route Stability (0-100)
+        val stabilityScore = (m.routeStability * 100f) * stabilityWeight
+
+        // 3. Link Quality / RSSI (0-100)
         val rssiNormalized = max(0, min(100, ((m.rssi + 100) * 100) / 60))
         val linkQualityScore = rssiNormalized * linkQualityWeight
 
-        // 2. Reliability (0-100) combining Historical Success and Recent Packet Loss
-        val reliability = if ((m.successfulDeliveries + m.failedDeliveries) > 0) {
-            val hist = m.historicalSuccessRate * 100f
-            val recent = (1.0f - m.packetLossRate) * 100f
-            (hist * 0.4f) + (recent * 0.6f)
-        } else {
-            80f // New routes get benefit of the doubt
-        }
-        val reliabilityScore = reliability * reliabilityWeight
-
-        // 3. Battery (0-100)
-        val batteryScore = if (m.batteryLevel in 0..100) {
-            // Non-linear penalty: battery < 15% drops score drastically
-            if (m.batteryLevel < 15) {
-                m.batteryLevel * 0.1f * batteryWeight 
-            } else {
-                m.batteryLevel * batteryWeight
-            }
-        } else {
-            50f * batteryWeight // Unknown
-        }
-
-        // 4. Congestion (0-100)
-        val congestionPenalty = max(0f, min(100f, m.congestionLevel.toFloat()))
-        val congestionScore = (100f - congestionPenalty) * congestionWeight
-
-        // 5. Latency (0-100). 500ms = 100 penalty
+        // 4. Latency (0-100)
         val latencyPenalty = min(100f, (m.averageLatencyMs / 5f))
         val latencyScore = (100f - latencyPenalty) * latencyWeight
 
-        // 6. Stability (0-100)
-        val stabilityScore = (m.routeStability * 100f) * stabilityWeight
+        // 5. Reliability (0-100)
+        val reliability = if ((m.successfulDeliveries + m.failedDeliveries) > 0) {
+            (m.historicalSuccessRate * 40f) + ((1.0f - m.packetLossRate) * 60f)
+        } else {
+            80f
+        }
+        val reliabilityScore = reliability * reliabilityWeight
 
-        // 7. Trust (0-100)
-        val trustScore = m.trustScore * trustWeight
+        // Transport Boost (Wi-Fi Direct / Hybrid bonus)
+        val transportBoost = when (entry.routeType) {
+            RouteType.WIFI_DIRECT -> 10
+            RouteType.HYBRID -> 5
+            RouteType.BLE -> 0
+        }
 
-        // 8. Hop Count (0-100). 15 hops = max penalty
-        val hopPenalty = min(100f, (entry.hops * (100f / 15f)))
-        val hopScore = (100f - hopPenalty) * hopCountWeight
-
-        // Base total
-        var totalScore = (linkQualityScore + reliabilityScore + batteryScore + congestionScore + 
-                          latencyScore + stabilityScore + trustScore + hopScore).toInt()
+        var totalScore = (hopScore + stabilityScore + linkQualityScore + latencyScore + reliabilityScore).toInt() + transportBoost
 
         // Transport Boost (Wi-Fi Direct / Hybrid gets small preference due to higher bandwidth)
         if (entry.routeType == RouteType.WIFI_DIRECT || entry.routeType == RouteType.HYBRID) {

@@ -59,5 +59,12 @@ data class MeshPacket(
     val encrypted: Boolean = false,
     val ttl: Int = 10,
     val hopCount: Int = 0,
-    val visitedPath: List<String> = emptyList()
+    val visitedPath: List<String> = emptyList(),
+    val sequenceNumber: Long = 0L,
+    val sourceSequenceNumber: Long = 0L,
+    val nextHop: String? = null,
+    val previousHop: String? = null,
+    val timestamp: Long = System.currentTimeMillis(),
+    val transport: RouteType = RouteType.BLE,
+    val flags: Int = 0
 )

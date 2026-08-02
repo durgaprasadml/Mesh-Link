@@ -1,7 +1,16 @@
 package com.meshlink.domain.model
 
 enum class RouteType {
-    BLE
+    BLE,
+    WIFI_DIRECT,
+    HYBRID
+}
+
+enum class RouteState {
+    ACTIVE,
+    STALE,
+    EXPIRED,
+    REMOVED
 }
 
 data class RouteMetrics(
@@ -60,5 +69,8 @@ data class RouteEntry(
     val metrics: RouteMetrics = RouteMetrics(),
     var lastSeen: Long = System.currentTimeMillis(),
     var score: Int = 0, // 0-100 calculated by RouteScorer
-    var isVerified: Boolean = false // Set to true if a packet has successfully traversed this route
+    var isVerified: Boolean = false, // Set to true if a packet has successfully traversed this route
+    var state: RouteState = RouteState.ACTIVE,
+    var routeCost: Double = hops.toDouble(),
+    var expirationTime: Long = System.currentTimeMillis() + 60_000L
 )

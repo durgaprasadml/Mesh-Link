@@ -35,10 +35,15 @@ class IntelligentTransportManager @Inject constructor(
      * BLE, Wi-Fi Direct, or Hybrid.
      */
     fun selectTransportForPayload(destinationId: String, packetType: PacketType, payloadSizeBytes: Long = 1024L): RouteType {
-        // BLE is the only supported transport
+        if (currentPreferredTransport == "WIFI_DIRECT" || (isHighBandwidthRequired(packetType) || payloadSizeBytes > 50_000L)) {
+            return RouteType.WIFI_DIRECT
+        }
+        if (currentPreferredTransport == "HYBRID") {
+            return RouteType.HYBRID
+        }
         return RouteType.BLE
     }
-    
+
     private fun isHighBandwidthRequired(packetType: PacketType): Boolean {
         return when (packetType) {
             PacketType.VIDEO_FRAME, 

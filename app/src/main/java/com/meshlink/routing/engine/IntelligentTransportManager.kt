@@ -99,7 +99,13 @@ class IntelligentTransportManager @Inject constructor(
         val preferredTransport = selectTransportForPacket(packet)
         val payloadSize = packet.payload.toByteArray(Charsets.UTF_8).size
 
-        val isMediaPacket = packet.type == PacketType.MEDIA_META || packet.type == PacketType.MEDIA_CHUNK
+        val isMediaPacket = packet.type == PacketType.MEDIA_META ||
+                packet.type == PacketType.MEDIA_CHUNK ||
+                packet.type == PacketType.VOICE_SIGNAL ||
+                packet.type == PacketType.VOICE_FRAME ||
+                packet.type == PacketType.VIDEO_SIGNAL ||
+                packet.type == PacketType.VIDEO_FRAME ||
+                packet.type == PacketType.RESOURCE_SYNC
 
         return if (preferredTransport == RouteType.WIFI_DIRECT) {
             if (isWifiAvailable()) {

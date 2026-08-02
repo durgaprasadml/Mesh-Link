@@ -71,6 +71,15 @@ val defaultMeshNavItems = listOf(
     MeshNavItem("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 )
 
+val expandedMeshNavItems = listOf(
+    MeshNavItem("home", "Home", Icons.Filled.Home, Icons.Outlined.Home),
+    MeshNavItem("nearby", "Nearby", Icons.Filled.Wifi, Icons.Outlined.Wifi),
+    MeshNavItem("broadcast", "Broadcast", Icons.Filled.Wifi, Icons.Outlined.Wifi),
+    MeshNavItem("diagnostics", "Analytics", Icons.Filled.Home, Icons.Outlined.Home),
+    MeshNavItem("sos", "SOS", Icons.Filled.Warning, Icons.Outlined.Warning, isEmergency = true),
+    MeshNavItem("settings", "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+)
+
 @Composable
 fun MeshNavigationDock(
     currentRoute: String?,
@@ -225,6 +234,141 @@ fun MeshNavigationDock(
         }
     }
 }
+
+/**
+ * Permanent Navigation Drawer for Expanded Viewports (Tablets / Foldables / Desktops >840dp).
+ */
+@Composable
+fun MeshPermanentNavigationDrawer(
+    currentRoute: String?,
+    onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    items: List<MeshNavItem> = expandedMeshNavItems
+) {
+    val haptics = rememberMeshHaptics()
+
+    Surface(
+        modifier = modifier
+            .width(280.dp)
+            .fillMaxHeight(),
+        color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .padding(vertical = 24.dp, horizontal = 12.dp)
+        ) {
+            // Header
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = "Mesh-Link",
+                    style = MeshTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MeshTheme.colors.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Decentralized Mesh Network",
+                    style = MeshTheme.typography.bodySmall,
+                    color = MeshTheme.colors.textSecondary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Navigation Items
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items.forEach { item ->
+                    val isSelected = currentRoute == item.route
+                    val interactionSource = remember { MutableInteractionSource() }
+
+                    val containerColor by animateColorAsState(
+                        targetValue = when {
+                            isSelected && item.isEmergency -> Color(0xFFFFDADA)
+                            isSelected -> MeshTheme.colors.primary.copy(alpha = 0.15f)
+                            else -> Color.Transparent
+                        },
+                        label = "DrawerContainer_${item.route}"
+                    )
+
+                    val contentColor by animateColorAsState(
+                        targetValue = when {
+                            !item.isEnabled -> MeshTheme.colors.textSecondary.copy(alpha = 0.4f)
+                            isSelected && item.isEmergency -> Color(0xFFD32F2F)
+                            isSelected -> MeshTheme.colors.primary
+                            item.isEmergency -> Color(0xFFD32F2F)
+                            else -> MeshTheme.colors.textSecondary
+                        },
+                        label = "DrawerContent_${item.route}"
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clip(MeshTheme.shapes.pill)
+                            .background(containerColor)
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null,
+                                enabled = item.isEnabled
+                            ) {
+                                if (item.isEmergency) haptics.sosTrigger() else haptics.selection()
+                                onNavigate(item.route)
+                            }
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
+                            contentDescription = item.label,
+                            tint = contentColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Text(
+                            text = item.label,
+                            style = MeshTheme.typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = contentColor,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        if (item.badgeCount > 0 || item.showBadgeDot) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (item.isEmergency) Color(0xFFD32F2F) else MeshTheme.colors.primary
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (item.badgeCount > 99) "99+" else item.badgeCount.toString(),
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 
 

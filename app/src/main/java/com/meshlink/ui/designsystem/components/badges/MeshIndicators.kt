@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -147,3 +148,58 @@ fun MeshAnimatedCounter(
         )
     }
 }
+
+/**
+ * Status chip indicating mesh network connection status.
+ */
+@Composable
+fun MeshConnectedChip(
+    peerCount: Int,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalMeshSemanticColors.current
+    Row(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(colors.primary.copy(alpha = 0.15f))
+            .border(1.dp, colors.primary.copy(alpha = 0.3f), CircleShape)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        MeshStatusDot(color = colors.meshConnected, pulse = true)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = "$peerCount ${if (peerCount == 1) "Peer" else "Peers"}",
+            style = MeshTheme.typography.labelSmall,
+            color = colors.primary
+        )
+    }
+}
+
+/**
+ * Emergency status chip for SOS alerts.
+ */
+@Composable
+fun EmergencyIndicatorChip(
+    modifier: Modifier = Modifier,
+    label: String = "EMERGENCY SOS"
+) {
+    val colors = LocalMeshSemanticColors.current
+    Row(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(colors.emergency.copy(alpha = 0.2f))
+            .border(1.dp, colors.emergency.copy(alpha = 0.5f), CircleShape)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        MeshStatusDot(color = colors.emergency, pulse = true)
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MeshTheme.typography.labelSmall,
+            color = colors.emergency
+        )
+    }
+}
+

@@ -28,10 +28,14 @@ data class MeshShapeScale(
     val glass: Shape = RoundedCornerShape(16.dp),
     val navigation: Shape = RoundedCornerShape(24.dp),
     val fab: Shape = RoundedCornerShape(16.dp),
-    val dialogs: Shape = RoundedCornerShape(24.dp),
     val bottomSheets: Shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    val bottomSheet: Shape = bottomSheets,
     val cards: Shape = RoundedCornerShape(16.dp),
+    val card: Shape = cards,
+    val dialogs: Shape = RoundedCornerShape(28.dp),
+    val dialog: Shape = dialogs,
     val buttons: Shape = RoundedCornerShape(12.dp),
+    val button: Shape = buttons,
     val inputs: Shape = RoundedCornerShape(12.dp)
 )
 

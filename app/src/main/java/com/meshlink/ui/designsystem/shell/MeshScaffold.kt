@@ -16,12 +16,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.meshlink.ui.designsystem.navigation.MeshAdaptiveNavigationRail
 import com.meshlink.ui.designsystem.navigation.MeshNavigationDock
+import com.meshlink.ui.designsystem.navigation.MeshPermanentNavigationDrawer
+import com.meshlink.ui.designsystem.navigation.expandedMeshNavItems
 import com.meshlink.ui.designsystem.overlay.MeshSnackbarHost
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
 /**
- * Root Application Scaffold for Mesh-Link 2026.
- * Manages adaptive layout shell, floating navigation dock, navigation rail, global overlays, and window insets.
+ * Root Application Scaffold for Mesh-Link 2026 (Material 3 Adaptive Shell).
+ * Manages adaptive bottom navigation bar (Compact), navigation rail (Medium),
+ * permanent navigation drawer (Expanded), global overlays, and window insets.
  */
 @Composable
 fun MeshScaffold(
@@ -36,10 +39,14 @@ fun MeshScaffold(
     floatingActionButton: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    val isTopLevelScreen = currentRoute in listOf("home", "nearby", "sos", "settings")
+    val isTopLevelScreen = currentRoute in listOf("home", "nearby", "sos", "settings", "broadcast", "diagnostics")
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val isMedium = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium
+    val isExpanded = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded
+
     val showNavigationDock = isCompact && isTopLevelScreen
-    val showNavigationRail = !isCompact && isTopLevelScreen
+    val showNavigationRail = isMedium && isTopLevelScreen
+    val showNavigationDrawer = isExpanded && isTopLevelScreen
 
     ProvideMeshWindowInsetsManager {
         val insets = LocalMeshWindowInsetsManager.current
@@ -50,7 +57,13 @@ fun MeshScaffold(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.fillMaxSize()) {
-                    if (showNavigationRail) {
+                    if (showNavigationDrawer) {
+                        MeshPermanentNavigationDrawer(
+                            currentRoute = currentRoute,
+                            onNavigate = onNavigate,
+                            items = navItems ?: expandedMeshNavItems
+                        )
+                    } else if (showNavigationRail) {
                         MeshAdaptiveNavigationRail(
                             currentRoute = currentRoute,
                             onNavigate = onNavigate,
@@ -95,7 +108,7 @@ fun MeshScaffold(
                 if (floatingActionButton != null) {
                     val bottomFabPadding = when {
                         insets.isImeVisible -> insets.imeHeight + 16.dp
-                        showNavigationDock -> 76.dp + insets.navigationBarHeight
+                        showNavigationDock -> 80.dp + insets.navigationBarHeight
                         else -> 24.dp + insets.navigationBarHeight
                     }
                     Box(
@@ -129,3 +142,4 @@ fun MeshScaffold(
         }
     }
 }
+

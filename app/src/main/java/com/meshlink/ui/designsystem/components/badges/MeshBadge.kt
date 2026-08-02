@@ -150,3 +150,69 @@ fun SignalRssiMeter(
         }
     }
 }
+
+/**
+ * Unread Count Counter Badge.
+ */
+@Composable
+fun UnreadBadge(
+    count: Int,
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = Color(0xFF00F59B),
+    contentColor: Color = Color.Black
+) {
+    if (count <= 0) return
+    val countText = if (count > 99) "99+" else count.toString()
+
+    Box(
+        modifier = modifier
+            .defaultMinSize(minWidth = 20.dp, minHeight = 20.dp)
+            .clip(CircleShape)
+            .background(backgroundColor)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = countText,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = contentColor
+        )
+    }
+}
+
+/**
+ * Reusable Status Chip Component.
+ */
+@Composable
+fun StatusChip(
+    text: String,
+    modifier: Modifier = Modifier,
+    statusColor: Color = BrandPrimary,
+    leadingDot: Boolean = true
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(statusColor.copy(alpha = 0.12f))
+            .border(1.dp, statusColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (leadingDot) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(statusColor)
+            )
+        }
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = statusColor
+        )
+    }
+}

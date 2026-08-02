@@ -82,7 +82,14 @@ fun MeshButton(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (leadingIcon != null) {
+            if (isLoading) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = contentColor,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            } else if (leadingIcon != null) {
                 Icon(
                     imageVector = leadingIcon,
                     contentDescription = null,
@@ -92,13 +99,11 @@ fun MeshButton(
                 Spacer(modifier = Modifier.width(8.dp))
             }
             Text(
-                text = if (isLoading) "PROCESSING..." else text.uppercase(),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
+                text = text.uppercase(),
+                style = MeshTheme.customTypography.button,
                 color = contentColor
             )
-            if (trailingIcon != null) {
+            if (trailingIcon != null && !isLoading) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(
                     imageVector = trailingIcon,
@@ -107,6 +112,160 @@ fun MeshButton(
                     tint = contentColor
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun PrimaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
+    enabled: Boolean = true,
+    isLoading: Boolean = false
+) {
+    MeshButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        variant = MeshButtonVariant.PRIMARY,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        enabled = enabled,
+        isLoading = isLoading
+    )
+}
+
+@Composable
+fun SecondaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
+    enabled: Boolean = true,
+    isLoading: Boolean = false
+) {
+    MeshButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        variant = MeshButtonVariant.SECONDARY,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        enabled = enabled,
+        isLoading = isLoading
+    )
+}
+
+@Composable
+fun OutlinedButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
+    enabled: Boolean = true,
+    isLoading: Boolean = false
+) {
+    MeshButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        variant = MeshButtonVariant.OUTLINED,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        enabled = enabled,
+        isLoading = isLoading
+    )
+}
+
+@Composable
+fun TextButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
+    enabled: Boolean = true
+) {
+    MeshButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        variant = MeshButtonVariant.GHOST,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        enabled = enabled
+    )
+}
+
+@Composable
+fun DangerButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    enabled: Boolean = true,
+    isLoading: Boolean = false
+) {
+    MeshButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        variant = MeshButtonVariant.EMERGENCY,
+        leadingIcon = leadingIcon,
+        enabled = enabled,
+        isLoading = isLoading
+    )
+}
+
+@Composable
+fun SuccessButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    enabled: Boolean = true,
+    isLoading: Boolean = false
+) {
+    val colors = MeshTheme.colors
+    Surface(
+        onClick = onClick,
+        modifier = modifier.defaultMinSize(minHeight = 48.dp),
+        enabled = enabled && !isLoading,
+        shape = MeshTheme.shapes.buttons,
+        color = if (enabled) colors.success else colors.disabled,
+        contentColor = Color.Black
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isLoading) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = Color.Black,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            } else if (leadingIcon != null) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = Color.Black
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(
+                text = text.uppercase(),
+                style = MeshTheme.customTypography.button,
+                color = Color.Black
+            )
         }
     }
 }
@@ -138,7 +297,7 @@ fun MeshIconButton(
 ) {
     Box(
         modifier = modifier
-            .size(44.dp)
+            .size(48.dp)
             .clip(MeshTheme.shapes.circular)
             .background(MeshTheme.colors.surfaceVariant)
             .clickable(enabled = enabled, onClick = onClick),
@@ -148,7 +307,7 @@ fun MeshIconButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = if (enabled) tint else MeshTheme.colors.disabled,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(24.dp)
         )
     }
 }

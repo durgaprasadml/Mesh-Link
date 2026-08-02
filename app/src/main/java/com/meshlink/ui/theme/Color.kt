@@ -1,22 +1,29 @@
 package com.meshlink.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import com.meshlink.ui.designsystem.theme.colors.MeshColorTokens
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Semantic Color Tokens & Primary Brand Palettes for Mesh-Link Design System
+val CyberMint = MeshColorTokens.CyberMint
+val QuantumCyan = MeshColorTokens.QuantumCyan
+val TacticalTeal = MeshColorTokens.TacticalTeal
+val PlasmaPurple = MeshColorTokens.PlasmaPurple
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Emergency & Status Semantic Tokens
+val EmergencyCrimson = MeshColorTokens.EmergencyCrimson
+val DangerRed = MeshColorTokens.DangerRed
+val SuccessGreen = MeshColorTokens.SuccessGreen
+val WarningAmber = MeshColorTokens.WarningAmber
+val InfoSkyBlue = MeshColorTokens.InfoSkyBlue
 
-// Mesh Link specific colors
-val DarkBackground = Color(0xFF0D1117)
-val NeonGreen = Color(0xFF00FF88)
-val TextPrimary = Color(0xFFFFFFFF)
+// Surface & Neutral Semantic Tokens
+val DarkBackground = MeshColorTokens.NeutralDarkCanvas
+val NeonGreen = MeshColorTokens.CyberMint
+val TextPrimary = MeshColorTokens.NeutralDarkTextPrimary
 
-// Glass effect colors
-val GlassSurfaceDark = Color(0x1AFFFFFF)
-val GlassSurfaceLight = Color(0x1A000000)
-val GlassBorderDark = Color(0x33FFFFFF)
-val GlassBorderLight = Color(0x33000000)
+// Glass & Surface Effects Tokens
+val GlassSurfaceDark = MeshColorTokens.GlassSurfaceDark
+val GlassSurfaceLight = MeshColorTokens.GlassSurfaceLight
+val GlassBorderDark = MeshColorTokens.GlassBorderDark
+val GlassBorderLight = MeshColorTokens.GlassBorderLight
+

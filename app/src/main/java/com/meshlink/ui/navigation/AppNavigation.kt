@@ -74,7 +74,9 @@ fun AppNavigation(
         Screen.Home.route,
         Screen.Nearby.route,
         Screen.Sos.route,
-        Screen.Settings.route
+        Screen.Settings.route,
+        Screen.Broadcast.route,
+        Screen.Diagnostics.route
     )
 
     MeshScaffold(

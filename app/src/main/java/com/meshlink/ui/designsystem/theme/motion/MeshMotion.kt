@@ -66,6 +66,12 @@ object MeshMotion {
     val BottomSheetMotion = tween<Float>(DURATION_LONG_1, easing = DecelerateEasing)
     val DialogMotion = tween<Float>(DURATION_MEDIUM_2, easing = DecelerateEasing)
     val NavigationMotion = tween<Float>(DURATION_MEDIUM_2, easing = EmphasizedEasing)
+
+    // Standard duration & fade aliases
+    val Fast = tween<Float>(DURATION_SHORT_2, easing = DecelerateEasing)
+    val Medium = tween<Float>(DURATION_MEDIUM_2, easing = EmphasizedEasing)
+    val Slow = tween<Float>(DURATION_LONG_1, easing = EmphasizedEasing)
+    val FadeThrough = tween<Float>(DURATION_MEDIUM_1, easing = DecelerateEasing)
 }
 
 val LocalMeshMotion = staticCompositionLocalOf { MeshMotion }

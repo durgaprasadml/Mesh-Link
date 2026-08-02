@@ -22,8 +22,14 @@ data class MeshElevationScale(
     val level4: Dp = 12.dp,
     val level5: Dp = 16.dp,
     val glass: Dp = 0.dp,
+    val surface: Dp = 0.dp,
     val card: Dp = 2.dp,
-    val navigation: Dp = 4.dp
+    val fab: Dp = 6.dp,
+    val navigation: Dp = 4.dp,
+    val bottomSheet: Dp = 8.dp,
+    val dialog: Dp = 6.dp,
+    val dropdown: Dp = 8.dp,
+    val popup: Dp = 8.dp
 )
 
 typealias MeshElevation = MeshElevationScale

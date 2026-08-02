@@ -188,6 +188,86 @@ fun MeshAlertDialog(
 }
 
 /**
+ * Confirmation Dialog shorthand.
+ */
+@Composable
+fun MeshConfirmationDialog(
+    visible: Boolean,
+    title: String,
+    message: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    confirmText: String = "Confirm",
+    cancelText: String = "Cancel",
+    isDestructive: Boolean = false
+) {
+    MeshAlertDialog(
+        visible = visible,
+        title = title,
+        message = message,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        modifier = modifier,
+        confirmText = confirmText,
+        dismissText = cancelText,
+        isDestructive = isDestructive
+    )
+}
+
+/**
+ * Error Dialog.
+ */
+@Composable
+fun MeshErrorDialog(
+    visible: Boolean,
+    title: String = "Error",
+    message: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = Icons.Default.Warning
+) {
+    MeshAlertDialog(
+        visible = visible,
+        title = title,
+        message = message,
+        onConfirm = onDismiss,
+        onDismiss = onDismiss,
+        modifier = modifier,
+        confirmText = "OK",
+        dismissText = null,
+        icon = icon,
+        isDestructive = true
+    )
+}
+
+/**
+ * Success Dialog.
+ */
+@Composable
+fun MeshSuccessDialog(
+    visible: Boolean,
+    title: String = "Success",
+    message: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = Icons.Default.Info
+) {
+    MeshAlertDialog(
+        visible = visible,
+        title = title,
+        message = message,
+        onConfirm = onDismiss,
+        onDismiss = onDismiss,
+        modifier = modifier,
+        confirmText = "OK",
+        dismissText = null,
+        icon = icon,
+        isDestructive = false
+    )
+}
+
+/**
  * Loading Dialog for blocking asynchronous operations.
  */
 @Composable

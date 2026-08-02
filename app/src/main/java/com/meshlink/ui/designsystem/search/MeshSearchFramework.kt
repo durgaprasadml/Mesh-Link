@@ -52,10 +52,65 @@ import androidx.compose.ui.unit.sp
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
 /**
- * Global Search Framework for Mesh-Link 2026.
- * Contains Search Overlay, Search Animation system, Suggestion Panel,
- * and Empty State component with unified glass aesthetics.
+ * Standalone Reusable Search Bar Component for Mesh-Link Design System.
+ * 48dp height, 28dp pill radius, Material surface background.
  */
+@Composable
+fun MeshSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String = "Search...",
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onSearch: ((String) -> Unit)? = null
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(48.dp),
+        enabled = enabled,
+        placeholder = {
+            Text(
+                text = placeholder,
+                style = MeshTheme.customTypography.body,
+                color = MeshTheme.colors.textSecondary
+            )
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Search",
+                tint = MeshTheme.colors.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Clear",
+                        tint = MeshTheme.colors.textSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        },
+        singleLine = true,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MeshTheme.colors.surface,
+            unfocusedContainerColor = MeshTheme.colors.surface,
+            focusedBorderColor = MeshTheme.colors.primary,
+            unfocusedBorderColor = MeshTheme.colors.border
+        )
+    )
+}
 
 @Composable
 fun MeshSearchOverlay(

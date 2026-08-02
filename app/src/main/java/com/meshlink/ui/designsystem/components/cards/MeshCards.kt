@@ -51,6 +51,135 @@ fun MeshCard(
 }
 
 @Composable
+fun MeshOutlinedCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    border: BorderStroke = BorderStroke(1.dp, MeshTheme.colors.outline),
+    containerColor: Color = MeshTheme.colors.surface,
+    content: @Composable () -> Unit
+) {
+    MeshCard(
+        modifier = modifier,
+        onClick = onClick,
+        border = border,
+        containerColor = containerColor,
+        content = content
+    )
+}
+
+@Composable
+fun MeshStatusCard(
+    statusTitle: String,
+    statusSubtitle: String,
+    statusColor: Color = MeshTheme.colors.primary,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    icon: ImageVector? = null
+) {
+    MeshOutlinedCard(
+        modifier = modifier,
+        onClick = onClick,
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.4f)),
+        containerColor = statusColor.copy(alpha = 0.08f)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (icon != null) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(MeshTheme.shapes.small)
+                        .background(statusColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+            }
+            Column {
+                Text(
+                    text = statusTitle,
+                    style = MeshTheme.customTypography.title,
+                    color = MeshTheme.colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = statusSubtitle,
+                    style = MeshTheme.customTypography.caption,
+                    color = MeshTheme.colors.textSecondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MeshInfoCard(
+    title: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null
+) {
+    MeshCard(
+        modifier = modifier,
+        containerColor = MeshTheme.colors.surfaceVariant,
+        border = BorderStroke(0.5.dp, MeshTheme.colors.border)
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MeshTheme.colors.primary,
+                    modifier = Modifier
+                        .padding(top = 2.dp, end = 12.dp)
+                        .size(20.dp)
+                )
+            }
+            Column {
+                Text(
+                    text = title,
+                    style = MeshTheme.customTypography.subtitle,
+                    color = MeshTheme.colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = description,
+                    style = MeshTheme.customTypography.body,
+                    color = MeshTheme.colors.textSecondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MeshGlassCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+        shape = MeshTheme.shapes.cards,
+        color = MeshTheme.colors.glassSurface,
+        border = BorderStroke(1.dp, MeshTheme.colors.glassBorder),
+        shadowElevation = MeshTheme.elevation.flat
+    ) {
+        Box(modifier = Modifier.padding(16.dp)) {
+            content()
+        }
+    }
+}
+
+@Composable
 fun HeroCard(
     title: String,
     subtitle: String,

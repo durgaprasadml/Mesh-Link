@@ -71,7 +71,6 @@ class NearbyViewModel @Inject constructor(
             SortOption.NAME -> mergedDevices.values.toList().sortedBy { it.name.ifBlank { "~" } }
             SortOption.STATUS -> mergedDevices.values.toList().sortedBy { it.hopCount }
         }
-        }
         
         NearbyUiState(
             devices = sortedList, 

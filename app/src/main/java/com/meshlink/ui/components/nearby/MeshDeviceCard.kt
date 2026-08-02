@@ -37,14 +37,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.meshlink.domain.model.BleDevice
-<<<<<<< HEAD
 import com.meshlink.domain.model.TransportType
-=======
 import java.util.Locale
-import androidx.compose.foundation.shape.RoundedCornerShape
 import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.ui.designsystem.theme.MeshSpacing
->>>>>>> e7bba15 (fix(routing): update transport selection method signature and refine UI badge imports)
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.MeshIdNormalizer
 
@@ -210,11 +206,7 @@ fun MeshDeviceCard(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    val (transportIcon, transportLabel) = when (device.transport) {
-                        com.meshlink.domain.model.TransportType.WIFI_DIRECT -> Icons.Default.WifiTethering to "Wi-Fi Direct"
-                        com.meshlink.domain.model.TransportType.HYBRID -> Icons.Default.Hub to "Hybrid Active"
-                        else -> Icons.Default.Bluetooth to "BLE"
-                    }
+                    val (transportIcon, transportLabel) = Icons.Default.Bluetooth to "BLE"
 
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Surface(

@@ -21,19 +21,30 @@ fun MeshAnalyticsScreen(
     onSearchQueryChange: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var isExportDialogOpen by remember { mutableStateOf(false) }
+    var isExportSheetOpen by remember { mutableStateOf(false) }
+    var isSearchBarVisible by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf(state.searchQuery) }
+    var selectedFilter by remember { mutableStateOf(state.activeFilter) }
 
     MeshScreen(
-        modifier = modifier,
+        modifier = modifier
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding(),
         topBar = {
             AnalyticsTopBar(
-                title = "📊 Mesh Command Center",
+                title = "Mesh Analytics",
+                subtitle = "Network Insights",
                 meshStatus = state.health.networkHealth,
                 activeConnectionsCount = state.health.connectedPeersCount,
                 onBackClick = onBackClick,
                 onRefreshClick = onRefreshClick,
-                onExportClick = { isExportDialogOpen = true },
-                onSearchQueryChange = onSearchQueryChange
+                onExportClick = { isExportSheetOpen = true },
+                onSearchToggle = { isSearchBarVisible = !isSearchBarVisible },
+                onSearchQueryChange = { query ->
+                    searchQuery = query
+                    onSearchQueryChange?.invoke(query)
+                }
             )
         }
     ) { paddingValues ->
@@ -41,43 +52,81 @@ fun MeshAnalyticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .consumeWindowInsets(paddingValues)
         ) {
             val isWideScreen = maxWidth >= 840.dp
             val isMediumScreen = maxWidth >= 600.dp && maxWidth < 840.dp
 
             if (isWideScreen) {
-                // Two or Three Column Adaptive Dashboard for Tablets & Desktop
-                Row(
+                // Tablet / Desktop Multi-Column Dashboard
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = MeshSpacing.ScreenPadding),
-                    horizontalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
+                        .padding(horizontal = MeshSpacing.ScreenPadding)
                 ) {
-                    // Left Column
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(top = MeshSpacing.TopSafeArea, bottom = MeshSpacing.ListBottomSpacing),
-                        verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
+                    // Search & Filters Bar
+                    Column(
+                        modifier = Modifier.padding(vertical = MeshTheme.spacing.small),
+                        verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small)
                     ) {
-                        item { NetworkOverview(health = state.health) }
-                        item { ConnectionQualityCard(quality = state.connectionQuality) }
-                        item { PacketStatistics(stats = state.packetStats) }
-                        item { BatteryImpact(batteryUi = state.batteryImpact) }
+                        AnimatedVisibility(visible = isSearchBarVisible) {
+                            AnalyticsSearch(
+                                query = searchQuery,
+                                onQueryChange = {
+                                    searchQuery = it
+                                    onSearchQueryChange?.invoke(it)
+                                }
+                            )
+                        }
+                        AnalyticsFilters(
+                            selectedFilter = selectedFilter,
+                            onFilterSelected = { selectedFilter = it }
+                        )
                     }
 
-                    // Right Column
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(top = MeshSpacing.TopSafeArea, bottom = MeshSpacing.ListBottomSpacing),
-                        verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
                     ) {
-                        item { RoutingTopology(routes = state.routes, activeNodes = state.activeNodes) }
-                        item { ThroughputGraph(hopDistribution = state.hopDistribution) }
-                        item { StorageStatistics(storage = state.storageStats) }
+                        // Left Column (Health, Stats, Charts, Performance)
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = MeshSpacing.ListBottomSpacing),
+                            verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
+                        ) {
+                            item { HealthSummary(health = state.health) }
+                            item {
+                                NetworkStatistics(
+                                    packetStats = state.packetStats,
+                                    transferStats = state.transferStats,
+                                    activeSessionsCount = state.health.activeSessionsCount
+                                )
+                            }
+                            item {
+                                AnalyticsCharts(
+                                    hopDistribution = state.hopDistribution,
+                                    throughputSeries = state.throughputSeries
+                                )
+                            }
+                            item { ConnectionQuality(quality = state.connectionQuality) }
+                            item { PerformanceOverview(batteryImpact = state.batteryImpact) }
+                        }
+
+                        // Right Column (Topology, Routing, Transfers, Timeline)
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = MeshSpacing.ListBottomSpacing),
+                            verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
+                        ) {
+                            item { MeshTopology(routes = state.routes, activeNodes = state.activeNodes) }
+                            item { RoutingInsights(routes = state.routes, packetStats = state.packetStats) }
+                            item { TransferAnalytics(transferStats = state.transferStats) }
+                            item { AnalyticsTimeline(timelineEvents = state.timelineEvents) }
+                        }
                     }
                 }
             } else {
-                // Single Column Dashboard for Mobile Phones
+                // Mobile Phone Single Column Dashboard
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
@@ -88,26 +137,56 @@ fun MeshAnalyticsScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
                 ) {
-                    item { NetworkOverview(health = state.health) }
-                    item { ConnectionQualityCard(quality = state.connectionQuality) }
-                    item { PacketStatistics(stats = state.packetStats) }
-                    item { RoutingTopology(routes = state.routes, activeNodes = state.activeNodes) }
-                    item { ThroughputGraph(hopDistribution = state.hopDistribution) }
-                    item { BatteryImpact(batteryUi = state.batteryImpact) }
-                    item { StorageStatistics(storage = state.storageStats) }
+                    item {
+                        AnimatedVisibility(visible = isSearchBarVisible) {
+                            AnalyticsSearch(
+                                query = searchQuery,
+                                onQueryChange = {
+                                    searchQuery = it
+                                    onSearchQueryChange?.invoke(it)
+                                },
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+                    }
+                    item {
+                        AnalyticsFilters(
+                            selectedFilter = selectedFilter,
+                            onFilterSelected = { selectedFilter = it }
+                        )
+                    }
+
+                    item { HealthSummary(health = state.health) }
+                    item {
+                        NetworkStatistics(
+                            packetStats = state.packetStats,
+                            transferStats = state.transferStats,
+                            activeSessionsCount = state.health.activeSessionsCount
+                        )
+                    }
+                    item {
+                        AnalyticsCharts(
+                            hopDistribution = state.hopDistribution,
+                            throughputSeries = state.throughputSeries
+                        )
+                    }
+                    item { MeshTopology(routes = state.routes, activeNodes = state.activeNodes) }
+                    item { RoutingInsights(routes = state.routes, packetStats = state.packetStats) }
+                    item { TransferAnalytics(transferStats = state.transferStats) }
+                    item { ConnectionQuality(quality = state.connectionQuality) }
+                    item { PerformanceOverview(batteryImpact = state.batteryImpact) }
+                    item { AnalyticsTimeline(timelineEvents = state.timelineEvents) }
                     item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
                 }
             }
         }
 
-        ExportDialog(
-            isOpen = isExportDialogOpen,
-            isExporting = state.isExporting,
-            onConfirmExport = {
-                onExportClick()
-                isExportDialogOpen = false
-            },
-            onDismiss = { isExportDialogOpen = false }
+        AnalyticsExportSheet(
+            isOpen = isExportSheetOpen,
+            onDismiss = { isExportSheetOpen = false },
+            onExportSummary = { onExportClick() },
+            onExportDiagnostics = { onExportClick() },
+            onShareReport = { onExportClick() }
         )
     }
 }

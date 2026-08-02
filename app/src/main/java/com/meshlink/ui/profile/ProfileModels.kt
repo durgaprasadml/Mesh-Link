@@ -5,6 +5,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.meshlink.domain.model.User
 
 @Immutable
+enum class TrustLevelUi(val label: String) {
+    VERIFIED("Verified"),
+    TRUSTED("Trusted"),
+    PENDING("Pending"),
+    UNKNOWN("Unknown")
+}
+
+@Immutable
 data class UserIdentityUi(
     val meshId: String,
     val displayName: String,
@@ -12,7 +20,8 @@ data class UserIdentityUi(
     val avatarUri: String?,
     val isOnline: Boolean = true,
     val fingerprint: String = "",
-    val completionPercentage: Int = 0
+    val completionPercentage: Int = 0,
+    val trustLevel: TrustLevelUi = TrustLevelUi.VERIFIED
 ) {
     companion object {
         fun fromUser(user: User?, isOnline: Boolean = true): UserIdentityUi {
@@ -23,7 +32,8 @@ data class UserIdentityUi(
                 avatarUri = null,
                 isOnline = false,
                 fingerprint = "0000 0000 0000 0000",
-                completionPercentage = 30
+                completionPercentage = 30,
+                trustLevel = TrustLevelUi.VERIFIED
             )
 
             val namePoints = if (u.name.isNotBlank()) 40 else 0
@@ -41,7 +51,8 @@ data class UserIdentityUi(
                 avatarUri = u.avatarUri,
                 isOnline = isOnline,
                 fingerprint = formattedFingerprint,
-                completionPercentage = totalCompletion
+                completionPercentage = totalCompletion,
+                trustLevel = TrustLevelUi.VERIFIED
             )
         }
     }
@@ -58,6 +69,44 @@ data class MeshIdentityUi(
     val maxHops: Int,
     val ttl: Int
 )
+
+@Immutable
+data class TrustedDeviceUi(
+    val id: String,
+    val deviceName: String,
+    val meshId: String,
+    val avatarUri: String? = null,
+    val trustLevel: TrustLevelUi = TrustLevelUi.TRUSTED,
+    val deviceModel: String = "Mesh Peer Device",
+    val lastSeen: String = "Active now",
+    val isOnline: Boolean = true,
+    val fingerprint: String = "A1B2 C3D4 E5F6 7890"
+)
+
+@Immutable
+data class ContactUi(
+    val id: String,
+    val displayName: String,
+    val meshId: String,
+    val avatarUri: String? = null,
+    val isOnline: Boolean = true,
+    val statusMessage: String? = "Connected via BLE Mesh",
+    val lastSeen: String = "Just now",
+    val isMeshConnected: Boolean = true,
+    val trustLevel: TrustLevelUi = TrustLevelUi.VERIFIED,
+    val fingerprint: String = "4321 8765 FEDC BA09",
+    val deviceModel: String = "Android Mesh Terminal"
+)
+
+@Immutable
+enum class ContactFilterOption(val label: String) {
+    ALL("All"),
+    NEARBY("Nearby"),
+    ONLINE("Online"),
+    OFFLINE("Offline"),
+    TRUSTED("Trusted"),
+    VERIFIED("Verified")
+}
 
 @Immutable
 enum class ThemeModeOption(val key: String, val label: String) {

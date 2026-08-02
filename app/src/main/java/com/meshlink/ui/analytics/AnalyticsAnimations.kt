@@ -45,6 +45,26 @@ fun rememberAnimatedCounter(
 }
 
 @Composable
+fun rememberAnimatedFloatCounter(
+    targetValue: Float,
+    durationMs: Int = 800
+): State<Float> {
+    val isReduced = rememberReducedMotionState()
+    if (isReduced) {
+        return rememberUpdatedState(targetValue)
+    }
+
+    val animatable = remember { Animatable(targetValue) }
+    LaunchedEffect(targetValue) {
+        animatable.animateTo(
+            targetValue = targetValue,
+            animationSpec = tween(durationMillis = durationMs, easing = FastOutSlowInEasing)
+        )
+    }
+    return animatable.asState()
+}
+
+@Composable
 fun rememberPulseAnimation(
     durationMs: Int = 1600
 ): State<Float> {
@@ -81,3 +101,4 @@ fun rememberBeamAnimation(
         label = "beam_progress"
     )
 }
+

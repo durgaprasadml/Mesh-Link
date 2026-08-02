@@ -21,17 +21,20 @@ import com.meshlink.ui.designsystem.theme.MeshTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyticsTopBar(
-    title: String = "Tactical Command Center",
+    title: String = "Mesh Analytics",
+    subtitle: String = "Network Insights",
     meshStatus: String = "ONLINE",
     activeConnectionsCount: Int = 0,
     onBackClick: () -> Unit,
     onRefreshClick: () -> Unit = {},
     onExportClick: () -> Unit = {},
+    onSearchToggle: (() -> Unit)? = null,
     onSearchQueryChange: ((String) -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var showMenu by remember { mutableStateOf(false) }
 
     val statusColor = when (meshStatus.uppercase()) {
         "ONLINE", "HEALTHY", "OPERATIONAL" -> MeshTheme.colors.success
@@ -57,7 +60,7 @@ fun AnalyticsTopBar(
                                     searchQuery = it
                                     onSearchQueryChange?.invoke(it)
                                 },
-                                placeholder = { Text("Search diagnostics & logs...") },
+                                placeholder = { Text("Search events, devices & stats...") },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -90,7 +93,7 @@ fun AnalyticsTopBar(
                                             .background(statusColor)
                                     )
                                     Text(
-                                        text = "$meshStatus • $activeConnectionsCount Peers Connected",
+                                        text = "$subtitle • $activeConnectionsCount Peers",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -108,16 +111,48 @@ fun AnalyticsTopBar(
                     }
                 },
                 actions = {
-                    if (!isSearchActive && onSearchQueryChange != null) {
-                        IconButton(onClick = { isSearchActive = true }) {
-                            Icon(Icons.Default.Search, contentDescription = "Search logs")
+                    if (!isSearchActive) {
+                        IconButton(onClick = {
+                            if (onSearchToggle != null) {
+                                onSearchToggle()
+                            } else {
+                                isSearchActive = true
+                            }
+                        }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search analytics")
                         }
                     }
                     IconButton(onClick = onRefreshClick) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh telemetry")
                     }
                     IconButton(onClick = onExportClick) {
-                        Icon(Icons.Default.Share, contentDescription = "Export diagnostics")
+                        Icon(Icons.Default.Share, contentDescription = "Export report")
+                    }
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Refresh Network") },
+                                onClick = {
+                                    showMenu = false
+                                    onRefreshClick()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export Summary") },
+                                onClick = {
+                                    showMenu = false
+                                    onExportClick()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }
+                            )
+                        }
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -128,3 +163,4 @@ fun AnalyticsTopBar(
         }
     }
 }
+

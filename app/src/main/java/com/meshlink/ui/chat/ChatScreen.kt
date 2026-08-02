@@ -2,8 +2,11 @@ package com.meshlink.ui.chat
 
 import android.net.Uri
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -13,12 +16,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.window.Dialog
-import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
 import com.meshlink.domain.model.UserIdentity
 import com.meshlink.messaging.presentation.ChatDetailUiState
@@ -26,8 +27,8 @@ import com.meshlink.messaging.presentation.MediaViewerScreen
 import com.meshlink.ui.components.MeshScreen
 
 /**
- * Main presentation composable for Mesh-Link Phase 5 Chat Experience Redesign.
- * Composes tactical background, header, search overlay, lazy message list, typing indicators, and floating glass input.
+ * Main presentation composable for Mesh-Link Phase 4 Chat Experience & Conversation UI.
+ * Structure: Status Bar -> Conversation Header -> Message List -> Typing Indicator -> Message Composer -> Navigation.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,9 +66,7 @@ fun ChatScreen(
 
     var fullscreenMessageId by remember { mutableStateOf<String?>(null) }
 
-    val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = if (uiState.messages.isNotEmpty()) uiState.messages.size - 1 else 0
-    )
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = 0)
 
     val clipboardManager = LocalClipboardManager.current
 
@@ -80,12 +79,12 @@ fun ChatScreen(
         }
     }
 
-    // Scroll to bottom on new message arrival
+    // Scroll to top (index 0 in reverse layout) on new message arrival
     var previousLastMessageId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(uiState.messages) {
         val currentLast = uiState.messages.lastOrNull()?.messageId
         if (currentLast != null && currentLast != previousLastMessageId) {
-            listState.animateScrollToItem(uiState.messages.size - 1)
+            listState.animateScrollToItem(0)
         }
         previousLastMessageId = currentLast
     }
@@ -140,10 +139,13 @@ fun ChatScreen(
 
     ChatBackground(connectionState = uiState.connectionStatus) {
         MeshScreen(
-            modifier = modifier,
+            modifier = modifier
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding(),
             topBar = {
                 Box {
-                    ChatTopBar(
+                    ConversationTopBar(
                         peerIdentity = peerIdentity,
                         peerAddress = peerAddress,
                         fallbackName = fallbackName,
@@ -168,7 +170,7 @@ fun ChatScreen(
                         onSearchClick = { isSearchVisible = !isSearchVisible }
                     )
 
-                    ChatSearchOverlay(
+                    ChatSearch(
                         isVisible = isSearchVisible,
                         searchQuery = searchQuery,
                         matchCount = displayMessages.size,
@@ -196,27 +198,37 @@ fun ChatScreen(
             },
             bottomBar = {
                 if (!uiState.isSelectionMode) {
-                    ChatInputBar(
-                        inputText = inputText,
-                        onInputTextChanged = { inputText = it },
-                        isRecording = uiState.isRecording,
-                        recordingElapsedMs = uiState.recordingElapsedMs,
-                        activeReplyState = null,
-                        onCancelReply = {},
-                        onStartRecording = onStartRecording,
-                        onStopRecordingAndSend = onStopRecordingAndSend,
-                        onCancelRecording = onCancelRecording,
-                        onSendText = { text ->
-                            onSendMessage(text)
-                            inputText = ""
-                        },
-                        onAttachClick = { showAttachmentSheet = true }
-                    )
+                    Column {
+                        TypingIndicator(
+                            typingState = TypingState(
+                                isTyping = uiState.isRecording,
+                                peerName = peerIdentity.displayName.ifBlank { fallbackName }
+                            )
+                        )
+                        MessageComposer(
+                            inputText = inputText,
+                            onInputTextChanged = { inputText = it },
+                            onSendText = { text ->
+                                onSendMessage(text)
+                                inputText = ""
+                            },
+                            onAttachClick = { showAttachmentSheet = true },
+                            onMicClick = {
+                                if (uiState.isRecording) {
+                                    onStopRecordingAndSend()
+                                } else {
+                                    onStartRecording()
+                                }
+                            },
+                            isRecording = uiState.isRecording,
+                            recordingElapsedMs = uiState.recordingElapsedMs
+                        )
+                    }
                 }
             }
         ) { paddingValues ->
             Box(modifier = Modifier.fillMaxSize()) {
-                ChatMessageList(
+                MessageList(
                     messages = displayMessages,
                     listState = listState,
                     selectionState = SelectionState(

@@ -15,14 +15,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Router
-import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,11 +36,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.meshlink.ui.components.MeshGlassCard
-import com.meshlink.ui.designsystem.theme.MeshSpacing
-import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.util.MeshIdNormalizer
 
+/**
+ * DeviceDetailSheet — Material 3 Modal Bottom Sheet displaying node details & telemetry.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeviceDetailSheet(
@@ -61,146 +59,139 @@ fun DeviceDetailSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = MeshTheme.elevation.level3
+        tonalElevation = 4.dp
     ) {
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .padding(horizontal = MeshSpacing.ScreenPadding)
-                .padding(bottom = MeshSpacing.XL)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
         ) {
-            // Header: Close Action & Title
+            // Top Bar: Header Title & Close Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Node Tactical Inspector",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    text = "Device Details",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    ),
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 IconButton(onClick = onDismiss) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Close inspector",
+                        contentDescription = "Close",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(MeshSpacing.MD))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Device Avatar & Primary Info Card
-            MeshGlassCard(
+            // Main Info Header: Avatar & Name
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = MeshSpacing.CardCornerRadius,
-                glowColor = if (deviceUi.isConnected) MeshTheme.colors.connected else MeshTheme.colors.primary,
-                glowRadius = 160f
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(MeshSpacing.MD),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = deviceUi.name.take(1).uppercase(),
-                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MeshTheme.colors.primary
-                        )
-                    }
+                UserAvatarImage(
+                    avatarUri = deviceUi.avatarUri,
+                    displayName = deviceUi.name,
+                    size = 64.dp
+                )
 
-                    Spacer(modifier = Modifier.width(MeshSpacing.MD))
+                Spacer(modifier = Modifier.width(16.dp))
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = deviceUi.name,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = MeshIdNormalizer.canonicalize(deviceUi.address),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = deviceUi.name,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = MeshIdNormalizer.canonicalize(deviceUi.address),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ConnectionChip(
+                        status = if (deviceUi.isConnected) DeviceStatus.CONNECTED
+                        else if (deviceUi.hasRelayCapability) DeviceStatus.RELAY_PEER
+                        else DeviceStatus.DISCOVERED
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(MeshSpacing.LG))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Detailed Property Grid
+            // Attribute Cards
             Text(
-                text = "Telemetry & Security Attributes",
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "Network & Security Attributes",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                ),
+                color = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.height(MeshSpacing.SM))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Column(
-                verticalArrangement = Arrangement.spacedBy(MeshSpacing.SM)
-            ) {
-                DetailRow(
-                    label = "Signal Strength (RSSI)",
-                    value = "${deviceUi.signal.rssi} dBm (${deviceUi.signal.quality.label})"
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                DetailItem(
+                    label = "Signal Quality",
+                    value = "${deviceUi.signal.quality.label} (${deviceUi.formattedDistance})"
                 )
-                DetailRow(
-                    label = "Estimated Range",
-                    value = deviceUi.formattedDistance
-                )
-                DetailRow(
-                    label = "Primary Transport Protocol",
+                DetailItem(
+                    label = "Transport Protocol",
                     value = deviceUi.transportUi.label
                 )
-                DetailRow(
-                    label = "Encryption Status",
-                    value = "AES-256-GCM Encrypted Link"
+                DetailItem(
+                    label = "Mesh Security",
+                    value = "End-to-End Encrypted (Noise Protocol)"
                 )
-                DetailRow(
-                    label = "Relay Node Capability",
-                    value = if (deviceUi.hasRelayCapability) "Supported (Packet Forwarding Active)" else "Standard Peer Node"
+                DetailItem(
+                    label = "Node Topology Role",
+                    value = if (deviceUi.hasRelayCapability) "Relay Node (Packet Forwarder)" else "Standard Peer Node"
                 )
             }
 
-            Spacer(modifier = Modifier.height(MeshSpacing.XL))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // Primary Launch Action
-            ElevatedButton(
+            // Primary Action Button: Connect / Chat
+            Button(
                 onClick = { onConnectChat(deviceUi) },
                 enabled = !isConnecting,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(52.dp),
                 shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.elevatedButtonColors(
-                    containerColor = MeshTheme.colors.primary,
-                    contentColor = Color.White
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
                 if (isConnecting) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = Color.White
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.5.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 } else {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Chat,
-                        contentDescription = "Start Chat",
-                        modifier = Modifier.size(18.dp)
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(MeshSpacing.SM))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = if (deviceUi.isConnected) "Open Tactical Chat" else "Connect & Start Chat",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                        text = if (deviceUi.isConnected) "Open Chat" else "Connect & Start Chat",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                 }
             }
@@ -209,28 +200,33 @@ fun DeviceDetailSheet(
 }
 
 @Composable
-private fun DetailRow(
+private fun DetailItem(
     label: String,
     value: String
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .padding(horizontal = MeshSpacing.MD, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 1.dp
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }

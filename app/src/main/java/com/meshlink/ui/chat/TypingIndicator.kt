@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,45 +24,50 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.meshlink.ui.designsystem.theme.MeshTheme
 
 /**
  * Animated typing indicator with support for direct and mesh relay typing states.
+ * Follows Material 3 styling and supports TalkBack / reduced motion accessibility.
  */
 @Composable
 fun TypingIndicator(
     typingState: TypingState,
     modifier: Modifier = Modifier
 ) {
+    val labelText = if (typingState.isViaRelay) {
+        "${typingState.peerName.ifBlank { "Peer" }} typing via mesh"
+    } else {
+        "${typingState.peerName.ifBlank { "Peer" }} is typing..."
+    }
+
     AnimatedVisibility(
         visible = typingState.isTyping,
         enter = fadeIn() + expandVertically(),
         exit = fadeOut() + shrinkVertically(),
         modifier = modifier
     ) {
-        Box(
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            tonalElevation = 1.dp,
             modifier = Modifier
                 .padding(start = 16.dp, bottom = 8.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(MeshTheme.colors.surfaceVariant.copy(alpha = 0.85f))
-                .padding(horizontal = 14.dp, vertical = 8.dp)
+                .semantics { contentDescription = labelText }
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 TypingDotsAnimation()
                 Spacer(modifier = Modifier.width(8.dp))
-                val labelText = if (typingState.isViaRelay) {
-                    "${typingState.peerName.ifBlank { "Peer" }} typing via mesh"
-                } else {
-                    "${typingState.peerName.ifBlank { "Peer" }} is typing..."
-                }
                 Text(
                     text = labelText,
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -89,7 +95,7 @@ fun TypingDotsAnimation() {
                     .size(6.dp)
                     .scale(scaleFactor)
                     .clip(CircleShape)
-                    .background(MeshTheme.colors.primary)
+                    .background(MaterialTheme.colorScheme.primary)
             )
         }
     }

@@ -1,6 +1,5 @@
 package com.meshlink.ui.discovery
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -20,7 +18,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,16 +26,15 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.ui.components.AnimatedErrorDialog
-import com.meshlink.ui.components.MeshGlassCard
 import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.designsystem.responsive.MeshAdaptiveLayout
-import com.meshlink.ui.designsystem.theme.MeshSpacing
-import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.nearby.NearbyUiState
 import com.meshlink.ui.nearby.SortOption
 import com.meshlink.util.MeshIdNormalizer
-import kotlinx.coroutines.launch
 
+/**
+ * MeshDiscoveryScreen — Flagship presentation layout for Phase 5 Nearby Devices experience.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MeshDiscoveryScreen(
@@ -53,30 +49,36 @@ fun MeshDiscoveryScreen(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
     var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf(DiscoveryFilterCategory.ALL) }
     var connectingAddress by remember { mutableStateOf<String?>(null) }
     var selectedDeviceAddress by remember { mutableStateOf<String?>(null) }
-    var isFilterPanelVisible by remember { mutableStateOf(false) }
-    var filterConnectedOnly by remember { mutableStateOf(false) }
-    var filterRelayOnly by remember { mutableStateOf(false) }
 
-    // Map BleDevice to Presentation NearbyDeviceUiState
+    // Map BleDevice domain objects to presentation NearbyDeviceUiState
     val allDeviceUiStates = remember(uiState.devices) {
         uiState.devices.map { NearbyDeviceUiState.fromDomain(it) }
     }
 
-    // Filter devices based on query and chip selections
-    val filteredDeviceUiStates = remember(allDeviceUiStates, searchQuery, filterConnectedOnly, filterRelayOnly) {
+    // Filter devices based on search query and category chips
+    val filteredDeviceUiStates = remember(allDeviceUiStates, searchQuery, selectedCategory) {
         allDeviceUiStates.filter { dev ->
             val matchesQuery = searchQuery.isBlank() ||
                     dev.name.contains(searchQuery, ignoreCase = true) ||
-                    dev.address.contains(searchQuery, ignoreCase = true)
-            val matchesConnected = !filterConnectedOnly || dev.isConnected
-            val matchesRelay = !filterRelayOnly || dev.hasRelayCapability
-            matchesQuery && matchesConnected && matchesRelay
+                    dev.address.contains(searchQuery, ignoreCase = true) ||
+                    dev.meshId.contains(searchQuery, ignoreCase = true)
+
+            val matchesCategory = when (selectedCategory) {
+                DiscoveryFilterCategory.ALL -> true
+                DiscoveryFilterCategory.CONNECTED -> dev.isConnected
+                DiscoveryFilterCategory.NEARBY -> !dev.isConnected && !dev.hasRelayCapability
+                DiscoveryFilterCategory.RELAY -> dev.hasRelayCapability
+                DiscoveryFilterCategory.BLE -> dev.transportUi == TransportTypeUi.BLE
+                DiscoveryFilterCategory.WIFI_DIRECT -> dev.transportUi == TransportTypeUi.WIFI_DIRECT
+            }
+
+            matchesQuery && matchesCategory
         }
     }
 
@@ -86,7 +88,6 @@ fun MeshDiscoveryScreen(
 
     val totalNearbyCount = allDeviceUiStates.size
     val connectedCount = allDeviceUiStates.count { it.isConnected }
-    val relayCount = allDeviceUiStates.count { it.hasRelayCapability }
 
     AnimatedErrorDialog(
         visible = uiState.errorMessage != null,
@@ -103,14 +104,20 @@ fun MeshDiscoveryScreen(
     MeshScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            DiscoveryTopBar(
+            NearbyTopBar(
                 totalNearbyCount = totalNearbyCount,
                 connectedCount = connectedCount,
-                relayCount = relayCount,
                 isScanning = uiState.isScanning,
                 onBackClick = onBack,
                 onRefreshClick = onRefresh,
-                onFilterClick = { isFilterPanelVisible = true }
+                onSortClick = {
+                    val nextSort = when (uiState.sortOption) {
+                        SortOption.RSSI -> SortOption.NAME
+                        SortOption.NAME -> SortOption.STATUS
+                        SortOption.STATUS -> SortOption.RSSI
+                    }
+                    onSortOptionSelected(nextSort)
+                }
             )
         }
     ) { paddingValues ->
@@ -121,52 +128,50 @@ fun MeshDiscoveryScreen(
         ) {
             MeshAdaptiveLayout(
                 landscape = {
-                    // Split Pane Layout for Landscape / Tablet
+                    // Split Pane Layout for Landscape / Tablet / Foldables
                     Row(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(MeshSpacing.ScreenPadding),
-                        horizontalArrangement = Arrangement.spacedBy(MeshSpacing.LG)
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Left Column: Radar View Canvas & Stats
+                        // Left Pane: Discovery Hero Canvas
                         Column(
                             modifier = Modifier
                                 .weight(1.1f)
                                 .fillMaxHeight()
                         ) {
-                            MeshGlassCard(
+                            MeshDiscoveryHero(
+                                devices = uiState.devices,
+                                selectedAddress = selectedDeviceAddress,
+                                isScanning = uiState.isScanning,
+                                onNodeSelected = { dev ->
+                                    selectedDeviceAddress = if (selectedDeviceAddress == dev.address) null else dev.address
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .weight(1f),
-                                cornerRadius = MeshSpacing.CardCornerRadius,
-                                glowColor = MaterialTheme.colorScheme.primary,
-                                glowRadius = 240f
-                            ) {
-                                MeshRadarView(
-                                    devices = uiState.devices,
-                                    selectedAddress = selectedDeviceAddress,
-                                    isScanning = uiState.isScanning,
-                                    latestPacketEvent = uiState.latestPacketEvent,
-                                    onNodeSelected = { dev ->
-                                        selectedDeviceAddress = if (selectedDeviceAddress == dev.address) null else dev.address
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(MeshSpacing.MD))
-                            NetworkStatistics(
-                                devices = filteredDeviceUiStates,
-                                packetCount = uiState.packetCount,
-                                isScanning = uiState.isScanning
+                                    .weight(1f)
                             )
                         }
 
-                        // Right Column: Device List
+                        // Right Pane: Search, Filters & Device List
                         Column(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
                         ) {
+                            NearbySearch(
+                                query = searchQuery,
+                                onQueryChange = { searchQuery = it },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            DiscoveryFilters(
+                                selectedCategory = selectedCategory,
+                                onCategorySelected = { selectedCategory = it },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
                             DeviceList(
                                 devices = filteredDeviceUiStates,
                                 connectingAddress = connectingAddress,
@@ -186,6 +191,7 @@ fun MeshDiscoveryScreen(
                                         connectingAddress = null
                                     }
                                 },
+                                onRefresh = onRefresh,
                                 listState = listState,
                                 modifier = Modifier.weight(1f)
                             )
@@ -193,49 +199,42 @@ fun MeshDiscoveryScreen(
                     }
                 },
                 defaultLayout = {
-                    // Standard Phone Portrait Layout
+                    // Standard Single Column Phone Portrait Layout
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = MeshSpacing.ScreenPadding, vertical = MeshSpacing.SM)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        // Top Section: Mesh Tactical Radar View Card
-                        MeshGlassCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(0.40f)
-                                .padding(bottom = MeshSpacing.MD),
-                            cornerRadius = MeshSpacing.CardCornerRadius,
-                            glowColor = MaterialTheme.colorScheme.primary,
-                            glowRadius = 200f
-                        ) {
-                            MeshRadarView(
-                                devices = uiState.devices,
-                                selectedAddress = selectedDeviceAddress,
-                                isScanning = uiState.isScanning,
-                                latestPacketEvent = uiState.latestPacketEvent,
-                                onNodeSelected = { dev ->
-                                    selectedDeviceAddress = if (selectedDeviceAddress == dev.address) null else dev.address
-                                    val index = filteredDeviceUiStates.indexOfFirst { it.address == dev.address }
-                                    if (index >= 0) {
-                                        coroutineScope.launch {
-                                            listState.animateScrollToItem(index)
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-
-                        // Telemetry Statistics Dashboard Bar
-                        NetworkStatistics(
-                            devices = filteredDeviceUiStates,
-                            packetCount = uiState.packetCount,
+                        // 1. Mesh Discovery Hero Radar (35-40% Height)
+                        MeshDiscoveryHero(
+                            devices = uiState.devices,
+                            selectedAddress = selectedDeviceAddress,
                             isScanning = uiState.isScanning,
-                            modifier = Modifier.padding(bottom = MeshSpacing.MD)
+                            onNodeSelected = { dev ->
+                                selectedDeviceAddress = if (selectedDeviceAddress == dev.address) null else dev.address
+                            },
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
 
-                        // Main Discovered Device List
+                        // 2. Search Bar
+                        NearbySearch(
+                            query = searchQuery,
+                            onQueryChange = { searchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 10.dp)
+                        )
+
+                        // 3. Category Filter Chips
+                        DiscoveryFilters(
+                            selectedCategory = selectedCategory,
+                            onCategorySelected = { selectedCategory = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        )
+
+                        // 4. Discovered Device List
                         DeviceList(
                             devices = filteredDeviceUiStates,
                             connectingAddress = connectingAddress,
@@ -255,40 +254,15 @@ fun MeshDiscoveryScreen(
                                     connectingAddress = null
                                 }
                             },
+                            onRefresh = onRefresh,
                             listState = listState,
-                            modifier = Modifier.weight(0.60f)
+                            modifier = Modifier.weight(1f)
                         )
                     }
-
-                    // Floating Glass Control Action Bar
-                    DiscoveryControls(
-                        isScanning = uiState.isScanning,
-                        onToggleScan = onToggleScan,
-                        onRefresh = onRefresh,
-                        onFilterClick = { isFilterPanelVisible = true },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = MeshSpacing.MD)
-                            .padding(horizontal = MeshSpacing.ScreenPadding)
-                    )
                 }
             )
 
-            // Bottom Sheet Filter Drawer
-            FilterPanel(
-                visible = isFilterPanelVisible,
-                onDismiss = { isFilterPanelVisible = false },
-                searchQuery = searchQuery,
-                onSearchQueryChange = { searchQuery = it },
-                currentSort = uiState.sortOption,
-                onSortChange = onSortOptionSelected,
-                filterConnectedOnly = filterConnectedOnly,
-                onToggleConnectedOnly = { filterConnectedOnly = it },
-                filterRelayOnly = filterRelayOnly,
-                onToggleRelayOnly = { filterRelayOnly = it }
-            )
-
-            // Modal Device Inspector Bottom Sheet
+            // Device Detail Bottom Sheet Modal Inspector
             DeviceDetailSheet(
                 deviceUi = selectedDeviceUi,
                 onDismiss = { selectedDeviceAddress = null },

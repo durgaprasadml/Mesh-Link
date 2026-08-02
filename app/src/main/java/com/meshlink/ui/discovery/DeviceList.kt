@@ -1,34 +1,28 @@
 package com.meshlink.ui.discovery
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.meshlink.ui.components.nearby.MeshScanningEmptyState
-import com.meshlink.ui.designsystem.theme.MeshSpacing
-import com.meshlink.ui.designsystem.theme.MeshTheme
 
+/**
+ * DeviceList — Clean messaging-style lazy list of discovered devices categorized into Connected, Nearby, and Relay.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DeviceList(
@@ -38,111 +32,112 @@ fun DeviceList(
     searchQuery: String,
     onDeviceClick: (NearbyDeviceUiState) -> Unit,
     onConnectClick: (NearbyDeviceUiState) -> Unit,
-    modifier: Modifier = Modifier,
-    listState: LazyListState = rememberLazyListState()
+    onRefresh: () -> Unit,
+    listState: LazyListState = rememberLazyListState(),
+    modifier: Modifier = Modifier
 ) {
+    val connectedDevices = remember(devices) { devices.filter { it.isConnected } }
+    val nearbyDevices = remember(devices) { devices.filter { !it.isConnected && !it.hasRelayCapability } }
+    val relayDevices = remember(devices) { devices.filter { !it.isConnected && it.hasRelayCapability } }
+
     if (devices.isEmpty()) {
-        MeshScanningEmptyState(
-            title = if (searchQuery.isBlank()) "Scanning for Mesh Peers" else "No matching peers found",
-            description = if (searchQuery.isBlank()) "Looking for active Mesh Link devices over BLE & Wi-Fi Direct..." else "Try adjusting your search query or clear filters.",
+        NoNearbyDevices(
+            onRefresh = onRefresh,
             modifier = modifier
         )
-    } else {
-        val connectedPeers = devices.filter { it.isConnected }
-        val nearbyPeers = devices.filter { !it.isConnected }
+        return
+    }
 
-        LazyColumn(
-            state = listState,
-            modifier = modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing),
-            verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
-        ) {
-            // Connected Peers Category Header & Items
-            if (connectedPeers.isNotEmpty()) {
-                item(key = "header_connected") {
-                    CategoryHeader(
-                        title = "Active Connections",
-                        count = connectedPeers.size,
-                        color = MeshTheme.colors.connected
-                    )
-                }
-
-                items(
-                    items = connectedPeers,
-                    key = { it.address },
-                    contentType = { "device_card" }
-                ) { deviceUi ->
-                    Box(modifier = Modifier.animateItem()) {
-                        DeviceCard(
-                            deviceUi = deviceUi,
-                            isConnecting = connectingAddress == deviceUi.address,
-                            isSelected = selectedAddress == deviceUi.address,
-                            onClick = { onDeviceClick(deviceUi) },
-                            onConnectClick = { onConnectClick(deviceUi) }
-                        )
-                    }
-                }
+    LazyColumn(
+        state = listState,
+        contentPadding = PaddingValues(bottom = 24.dp),
+        modifier = modifier.fillMaxSize()
+    ) {
+        // 1. Connected Devices Section
+        if (connectedDevices.isNotEmpty()) {
+            item(key = "header_connected") {
+                SectionHeader(title = "CONNECTED (${connectedDevices.size})")
             }
+            items(
+                items = connectedDevices,
+                key = { it.address }
+            ) { dev ->
+                NearbyDeviceRow(
+                    deviceUi = dev,
+                    isConnecting = dev.address == connectingAddress,
+                    onDeviceClick = { onDeviceClick(dev) },
+                    onConnectClick = { onConnectClick(dev) },
+                    modifier = Modifier.animateItem()
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 86.dp, end = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                )
+            }
+        }
 
-            // Discovered Nearby Peers Category Header & Items
-            if (nearbyPeers.isNotEmpty()) {
-                item(key = "header_nearby") {
-                    CategoryHeader(
-                        title = "Discovered Mesh Nodes",
-                        count = nearbyPeers.size,
-                        color = MeshTheme.colors.primary
-                    )
-                }
+        // 2. Nearby Devices Section
+        if (nearbyDevices.isNotEmpty()) {
+            item(key = "header_nearby") {
+                SectionHeader(title = "NEARBY (${nearbyDevices.size})")
+            }
+            items(
+                items = nearbyDevices,
+                key = { it.address }
+            ) { dev ->
+                NearbyDeviceRow(
+                    deviceUi = dev,
+                    isConnecting = dev.address == connectingAddress,
+                    onDeviceClick = { onDeviceClick(dev) },
+                    onConnectClick = { onConnectClick(dev) },
+                    modifier = Modifier.animateItem()
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 86.dp, end = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                )
+            }
+        }
 
-                items(
-                    items = nearbyPeers,
-                    key = { it.address },
-                    contentType = { "device_card" }
-                ) { deviceUi ->
-                    Box(modifier = Modifier.animateItem()) {
-                        DeviceCard(
-                            deviceUi = deviceUi,
-                            isConnecting = connectingAddress == deviceUi.address,
-                            isSelected = selectedAddress == deviceUi.address,
-                            onClick = { onDeviceClick(deviceUi) },
-                            onConnectClick = { onConnectClick(deviceUi) }
-                        )
-                    }
-                }
+        // 3. Relay Devices Section
+        if (relayDevices.isNotEmpty()) {
+            item(key = "header_relay") {
+                SectionHeader(title = "RELAY NODES (${relayDevices.size})")
+            }
+            items(
+                items = relayDevices,
+                key = { it.address }
+            ) { dev ->
+                NearbyDeviceRow(
+                    deviceUi = dev,
+                    isConnecting = dev.address == connectingAddress,
+                    onDeviceClick = { onDeviceClick(dev) },
+                    onConnectClick = { onConnectClick(dev) },
+                    modifier = Modifier.animateItem()
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 86.dp, end = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun CategoryHeader(
-    title: String,
-    count: Int,
-    color: androidx.compose.ui.graphics.Color
-) {
-    Row(
+private fun SectionHeader(title: String) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = MeshSpacing.XS),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            ),
+            color = MaterialTheme.colorScheme.primary
         )
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(color.copy(alpha = 0.15f))
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-        ) {
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = color
-            )
-        }
     }
 }

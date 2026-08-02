@@ -1,8 +1,6 @@
 package com.meshlink.ui.discovery
 
 import android.provider.Settings
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -64,6 +62,24 @@ object DiscoveryAnimations {
                 repeatMode = RepeatMode.Restart
             ),
             label = "RadarDegrees"
+        )
+    }
+
+    @Composable
+    fun rememberRippleExpansion(): State<Float> {
+        val reducedMotion = isReducedMotion()
+        val transition = rememberInfiniteTransition(label = "RippleExpansion")
+        return transition.animateFloat(
+            initialValue = 0.1f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = if (reducedMotion) 4000 else 2400,
+                    easing = FastOutSlowInEasing
+                ),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "RippleProgress"
         )
     }
 

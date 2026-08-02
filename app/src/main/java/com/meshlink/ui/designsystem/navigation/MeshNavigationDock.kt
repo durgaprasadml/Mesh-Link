@@ -85,8 +85,8 @@ fun MeshNavigationDock(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding(),
-        color = Color(0xFFF4F7F5),
-        tonalElevation = 0.dp,
+        color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
         shadowElevation = 0.dp
     ) {
         BoxWithConstraints(

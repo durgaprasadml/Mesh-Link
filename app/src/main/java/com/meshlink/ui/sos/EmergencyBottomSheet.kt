@@ -4,25 +4,108 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.LocalPhone
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.StopCircle
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.PhoneInTalk
+import androidx.compose.material.icons.outlined.Radar
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.meshlink.ui.designsystem.theme.MeshTheme
+import androidx.compose.ui.unit.sp
+
+@Composable
+fun EmergencyQuickActions(
+    onCallEmergency: () -> Unit,
+    onAlertContacts: () -> Unit,
+    onBroadcastSos: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        QuickActionCard(
+            icon = Icons.Outlined.PhoneInTalk,
+            title = "Call Emergency",
+            subtitle = "Dial emergency services",
+            onClick = onCallEmergency,
+            modifier = Modifier.weight(1f)
+        )
+
+        QuickActionCard(
+            icon = Icons.Outlined.Group,
+            title = "Alert Contacts",
+            subtitle = "Notify emergency contacts",
+            onClick = onAlertContacts,
+            modifier = Modifier.weight(1f)
+        )
+
+        QuickActionCard(
+            icon = Icons.Outlined.Radar,
+            title = "Broadcast SOS",
+            subtitle = "Send alert to nearby devices",
+            onClick = onBroadcastSos,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun QuickActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(88.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.Start
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,9 +139,9 @@ fun EmergencyBottomSheet(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "EMERGENCY ACTIONS",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                    color = MeshTheme.colors.danger
+                    text = "Safety & Emergency Tips",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 IconButton(onClick = onDismiss) {
                     Icon(
@@ -68,148 +151,28 @@ fun EmergencyBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Primary Emergency Row: Call 112 & Share Location
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SheetActionButton(
-                    icon = Icons.Default.LocalPhone,
-                    label = "Call 112",
-                    isDanger = true,
-                    onClick = onCallEmergency,
-                    modifier = Modifier.weight(1f)
-                )
-
-                SheetActionButton(
-                    icon = Icons.Default.Share,
-                    label = "Share Location",
-                    onClick = onShareLocation,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Tactical Utilities Row: Flashlight & Alarm
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SheetActionButton(
-                    icon = Icons.Default.FlashlightOn,
-                    label = if (state.isFlashlightOn) "Flashlight ON" else "Flashlight",
-                    isActive = state.isFlashlightOn,
-                    onClick = onToggleFlashlight,
-                    modifier = Modifier.weight(1f)
-                )
-
-                SheetActionButton(
-                    icon = Icons.Default.NotificationsActive,
-                    label = if (state.isAlarmPlaying) "Siren Playing" else "Loud Siren",
-                    isDanger = state.isAlarmPlaying,
-                    isActive = state.isAlarmPlaying,
-                    onClick = onToggleAlarm,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Controls Row: Resend & Cancel
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SheetActionButton(
-                    icon = Icons.Default.Refresh,
-                    label = "Resend SOS",
-                    onClick = onResend,
-                    modifier = Modifier.weight(1f)
-                )
-
-                if (state.status == SosStatus.BROADCASTING || state.status == SosStatus.DELIVERED) {
-                    SheetActionButton(
-                        icon = Icons.Default.StopCircle,
-                        label = "Stop SOS",
-                        isDanger = true,
-                        onClick = onCancel,
-                        modifier = Modifier.weight(1f)
-                    )
-                } else {
-                    SheetActionButton(
-                        icon = Icons.Default.ContentCopy,
-                        label = "Copy Coordinates",
-                        onClick = onCopyCoordinates,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+            EmergencyQuickActions(
+                onCallEmergency = onCallEmergency,
+                onAlertContacts = onShareLocation,
+                onBroadcastSos = onResend
+            )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Safety Tips Section inside sheet
             SafetyGuidelinesCard()
         }
     }
 }
 
 @Composable
-private fun SheetActionButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    isDanger: Boolean = false,
-    isActive: Boolean = false
-) {
-    val bgColor = when {
-        isDanger && isActive -> MeshTheme.colors.danger
-        isDanger -> MaterialTheme.colorScheme.errorContainer
-        isActive -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceContainerHigh
-    }
-
-    val contentColor = when {
-        isDanger && isActive -> Color.White
-        isDanger -> MaterialTheme.colorScheme.onErrorContainer
-        isActive -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(52.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = bgColor,
-        contentColor = contentColor
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        }
-    }
-}
-
-@Composable
 private fun SafetyGuidelinesCard() {
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(true) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         onClick = { expanded = !expanded }
     ) {
@@ -262,3 +225,4 @@ private fun SafetyGuidelinesCard() {
         }
     }
 }
+

@@ -1,198 +1,175 @@
 package com.meshlink.ui.sos
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Radar
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.meshlink.ui.designsystem.theme.MeshTheme
+import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+data class EmergencyAlertRowItem(
+    val id: String,
+    val title: String,
+    val timestamp: String,
+    val deliveryState: String,
+    val isSuccess: Boolean
+)
 
 @Composable
 fun EmergencyTimeline(
     state: SosUiState,
     modifier: Modifier = Modifier
 ) {
-    val currentTimeStr = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date()) }
+    val currentTimeStr = remember { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()) }
 
-    val timelineItems = remember(state.status, state.latitude, state.relaysReached) {
-        listOf(
-            EmergencyTimelineItem(
-                id = "init",
-                title = "Emergency Protocol Ready",
-                description = "AES-256 encrypted distress channel standby",
-                timestamp = currentTimeStr,
-                isCompleted = true,
-                isCurrent = state.status == SosStatus.SAFE,
-                stage = EmergencyStage.SAFE
-            ),
-            EmergencyTimelineItem(
-                id = "gps",
-                title = "GPS Location Fix",
-                description = if (state.latitude != null) "Coordinates acquired: ${String.format(Locale.US, "%.4f, %.4f", state.latitude, state.longitude)}" else "Acquiring GPS satellite fix...",
-                timestamp = currentTimeStr,
-                isCompleted = state.latitude != null,
-                isCurrent = state.isFetchingLocation,
-                stage = EmergencyStage.SAFE
-            ),
-            EmergencyTimelineItem(
-                id = "broadcast",
-                title = "Mesh Broadcast Initiated",
-                description = "Distress signal emitted on BLE & Wi-Fi Direct channels",
-                timestamp = currentTimeStr,
-                isCompleted = state.status == SosStatus.BROADCASTING || state.status == SosStatus.DELIVERED,
-                isCurrent = state.status == SosStatus.BROADCASTING,
-                stage = EmergencyStage.BROADCASTING
-            ),
-            EmergencyTimelineItem(
-                id = "relay",
-                title = "Mesh Relays Reached",
-                description = if (state.relaysReached > 0) "Relayed across ${state.relaysReached} peer nodes" else "Awaiting hop confirmation from nearby nodes...",
-                timestamp = currentTimeStr,
-                isCompleted = state.relaysReached > 0 || state.status == SosStatus.DELIVERED,
-                isCurrent = state.status == SosStatus.BROADCASTING && state.relaysReached > 0,
-                stage = EmergencyStage.BROADCASTING
-            ),
-            EmergencyTimelineItem(
-                id = "delivered",
-                title = "Emergency Delivered",
-                description = if (state.status == SosStatus.DELIVERED) "Distress packet confirmed delivered to network" else "Awaiting final confirmation...",
-                timestamp = currentTimeStr,
-                isCompleted = state.status == SosStatus.DELIVERED,
-                isCurrent = state.status == SosStatus.DELIVERED,
-                stage = EmergencyStage.DELIVERED
+    val alerts = remember(state.status, state.sosSent) {
+        if (state.sosSent || state.status != SosStatus.SAFE) {
+            listOf(
+                EmergencyAlertRowItem(
+                    id = "alert_1",
+                    title = "Emergency Distress Broadcast",
+                    timestamp = currentTimeStr,
+                    deliveryState = when (state.status) {
+                        SosStatus.BROADCASTING -> "Broadcasting"
+                        SosStatus.DELIVERED -> "Delivered (${state.relaysReached} Hops)"
+                        SosStatus.FAILED -> "Failed"
+                        SosStatus.SAFE -> "Sent"
+                    },
+                    isSuccess = state.status == SosStatus.DELIVERED
+                )
             )
-        )
+        } else {
+            emptyList()
+        }
     }
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    Column(
+        modifier = modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp)
-        ) {
-            Text(
-                text = "MISSION TIMELINE",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
-                color = MaterialTheme.colorScheme.primary
-            )
+        Text(
+            text = "Recent Emergency History",
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+        )
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            timelineItems.forEachIndexed { index, item ->
-                TimelineRow(
-                    item = item,
-                    isLast = index == timelineItems.lastIndex
-                )
+        if (alerts.isEmpty()) {
+            // Compact Empty State
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Shield,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "No emergency history",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Your previous emergency broadcasts will appear here.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            alerts.forEachIndexed { index, item ->
+                EmergencyAlertRow(item = item)
+                if (index < alerts.lastIndex) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(start = 56.dp)
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TimelineRow(
-    item: EmergencyTimelineItem,
-    isLast: Boolean
+private fun EmergencyAlertRow(
+    item: EmergencyAlertRowItem
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { }
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            item.isCompleted -> MeshTheme.colors.success
-                            item.isCurrent -> MeshTheme.colors.warning
-                            else -> MaterialTheme.colorScheme.outlineVariant
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (item.isCompleted) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(14.dp)
-                    )
-                } else if (item.isCurrent) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color.White)
-                    )
-                }
-            }
-
-            if (!isLast) {
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .height(36.dp)
-                        .background(
-                            if (item.isCompleted) MeshTheme.colors.success.copy(alpha = 0.5f)
-                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+        // Avatar Circle
+        Surface(
+            shape = CircleShape,
+            color = if (item.isSuccess) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+            modifier = Modifier.size(40.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (item.isSuccess) Icons.Outlined.CheckCircle else Icons.Outlined.Radar,
+                    contentDescription = null,
+                    tint = if (item.isSuccess) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
 
         Spacer(modifier = Modifier.width(14.dp))
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(bottom = if (isLast) 0.dp else 12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = if (item.isCurrent || item.isCompleted) FontWeight.Bold else FontWeight.Normal
-                    ),
-                    color = if (item.isCompleted || item.isCurrent) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                )
-                Text(
-                    text = item.timestamp,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurface
+            )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = item.description,
+                text = item.deliveryState,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
+        Text(
+            text = item.timestamp,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+        )
     }
 }
+

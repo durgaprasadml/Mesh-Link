@@ -1,25 +1,15 @@
 package com.meshlink.ui.sos
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.meshlink.ui.designsystem.theme.MeshTheme
+import androidx.compose.ui.unit.sp
+import java.util.Locale
 
 @Composable
 fun EmergencyStatusCard(
@@ -28,66 +18,32 @@ fun EmergencyStatusCard(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val statusColor = when (state.status) {
-        SosStatus.SAFE -> MaterialTheme.colorScheme.onSurfaceVariant
-        SosStatus.BROADCASTING -> MeshTheme.colors.warning
-        SosStatus.DELIVERED -> MeshTheme.colors.success
-        SosStatus.FAILED -> MeshTheme.colors.danger
-    }
-
-    val cardBg = when (state.status) {
-        SosStatus.SAFE -> MaterialTheme.colorScheme.surfaceVariant
-        SosStatus.BROADCASTING -> MeshTheme.colors.warning.copy(alpha = 0.15f)
-        SosStatus.DELIVERED -> MeshTheme.colors.success.copy(alpha = 0.15f)
-        SosStatus.FAILED -> MaterialTheme.colorScheme.errorContainer
-    }
-
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(20.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = when (state.status) {
-                        SosStatus.SAFE -> Icons.Default.Info
-                        SosStatus.BROADCASTING -> Icons.Default.Radar
-                        SosStatus.DELIVERED -> Icons.Default.CheckCircle
-                        SosStatus.FAILED -> Icons.Default.ErrorOutline
-                    },
-                    contentDescription = null,
-                    tint = statusColor,
-                    modifier = Modifier.size(32.dp)
+                Text(
+                    text = "Current Status",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "EMERGENCY STATE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = statusColor.copy(alpha = 0.8f)
-                    )
-                    Text(
-                        text = when (state.status) {
-                            SosStatus.SAFE -> "Ready to Broadcast"
-                            SosStatus.BROADCASTING -> "Broadcasting Alert via Mesh..."
-                            SosStatus.DELIVERED -> "Delivered to Mesh Responders"
-                            SosStatus.FAILED -> "Transmission Failed"
-                        },
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = statusColor
-                    )
-                }
 
                 if (state.status == SosStatus.DELIVERED || state.status == SosStatus.BROADCASTING) {
                     TextButton(onClick = onCancel) {
@@ -98,27 +54,110 @@ fun EmergencyStatusCard(
                         )
                     }
                 } else if (state.status == SosStatus.FAILED) {
-                    IconButton(onClick = onRetry) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Retry Transmission",
-                            tint = MeshTheme.colors.danger
+                    TextButton(onClick = onRetry) {
+                        Text(
+                            text = "Retry",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                         )
                     }
                 }
             }
 
-            // Supplemental Status Detail
-            if (state.status == SosStatus.DELIVERED) {
-                Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = statusColor.copy(alpha = 0.2f))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Reached ${state.relaysReached} active relay devices across local mesh cluster.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                )
-            }
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Field 1: Status
+            StatusGridRow(
+                label = "Status",
+                value = when (state.status) {
+                    SosStatus.SAFE -> "Safe (Standby)"
+                    SosStatus.BROADCASTING -> "Broadcasting Alert"
+                    SosStatus.DELIVERED -> "Delivered to Responders"
+                    SosStatus.FAILED -> "Transmission Failed"
+                }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Field 2: Location
+            StatusGridRow(
+                label = "Location",
+                value = if (state.latitude != null && state.longitude != null) {
+                    String.format(Locale.US, "%.4f, %.4f", state.latitude, state.longitude)
+                } else {
+                    state.address ?: "Unavailable"
+                }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Field 3: Accuracy
+            StatusGridRow(
+                label = "Accuracy",
+                value = if (state.latitude != null) "GPS Fixed (~10m)" else if (state.isFetchingLocation) "Acquiring..." else "Unavailable"
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Field 4: Nearby Responders
+            StatusGridRow(
+                label = "Nearby Responders",
+                value = if (state.nearbyResponders.isNotEmpty()) "${state.nearbyResponders.size} devices" else "Scanning..."
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Field 5: Delivery Status
+            StatusGridRow(
+                label = "Delivery Status",
+                value = when (state.status) {
+                    SosStatus.SAFE -> "Not broadcasted"
+                    SosStatus.BROADCASTING -> "Transmitting across mesh..."
+                    SosStatus.DELIVERED -> "Confirmed (${state.relaysReached} hops)"
+                    SosStatus.FAILED -> state.errorMessage ?: "Delivery failed"
+                }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Field 6: Connection
+            StatusGridRow(
+                label = "Connection",
+                value = when {
+                    state.isBleEnabled && state.isWifiDirectEnabled -> "BLE + Wi-Fi Direct Mesh"
+                    state.isBleEnabled -> "BLE Mesh Active"
+                    state.isWifiDirectEnabled -> "Wi-Fi Direct Active"
+                    else -> "Unavailable"
+                }
+            )
         }
     }
 }
+
+@Composable
+private fun StatusGridRow(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+

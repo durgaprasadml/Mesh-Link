@@ -24,6 +24,8 @@ android {
             useSupportLibrary = true
         }
 
+        resourceConfigurations += "en"
+
         ndk {
             abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
         }
@@ -33,8 +35,6 @@ android {
         arg("room.schemaLocation", "$projectDir/schemas")
         arg("room.incremental", "true")
         arg("room.expandProjection", "true")
-        arg("dagger.fastInit", "enabled")
-        arg("dagger.hilt.android.internal.disableAndroidSuperclassValidation", "true")
     }
 
     buildFeatures {
@@ -72,6 +72,11 @@ android {
             isCrunchPngs = false
             // Speed up builds by avoiding split APKs in debug
             extra["alwaysUpdateBuildId"] = false
+            
+            // Disable Crashlytics mapping file generation for faster debug builds
+            configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
+                mappingFileUploadEnabled = false
+            }
         }
         create("benchmark") {
             initWith(getByName("release"))
@@ -111,9 +116,7 @@ android {
     kotlinOptions {
         jvmTarget = "17"
         freeCompilerArgs += listOf(
-            "-Xbackend-threads=4",
-            "-P",
-            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true"
+            "-Xbackend-threads=4"
         )
     }
 

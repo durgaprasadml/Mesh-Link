@@ -2,6 +2,9 @@ package com.meshlink.wifi.data
 
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.PacketType
+import com.meshlink.security.data.MeshCryptoManager
+import com.meshlink.security.data.SessionManager
+import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -18,11 +21,20 @@ import java.util.UUID
 @OptIn(ExperimentalCoroutinesApi::class)
 class WifiSocketTransportTest {
 
+    private val mockCryptoManager = mockk<MeshCryptoManager>(relaxed = true)
+    private val mockSessionManager = mockk<SessionManager>(relaxed = true)
+
+    private fun createTransport() = WifiSocketTransport(
+        applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO),
+        cryptoManager = mockCryptoManager,
+        sessionManager = mockSessionManager
+    )
+
     private lateinit var transport: WifiSocketTransport
 
     @Before
     fun setup() {
-        transport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
+        transport = createTransport()
     }
 
     @After
@@ -41,8 +53,8 @@ class WifiSocketTransportTest {
 
     @Test
     fun `startServer and connectAsClient establishes successful socket connection`() = runBlocking {
-        val serverTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
-        val clientTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
+        val serverTransport = createTransport()
+        val clientTransport = createTransport()
 
         var receivedPacketByServer: MeshPacket? = null
         var receivedPacketByClient: MeshPacket? = null
@@ -84,7 +96,7 @@ class WifiSocketTransportTest {
     fun `disconnect cleans up streams and socket state`() = runBlocking {
         transport.startServer()
         
-        val client = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
+        val client = createTransport()
         client.connectAsClient("127.0.0.1")
         eventually { client.isConnected() }
         
@@ -99,8 +111,8 @@ class WifiSocketTransportTest {
     
     @Test
     fun `massive packet serialization handles large payloads over TCP`() = runBlocking {
-        val serverTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
-        val clientTransport = WifiSocketTransport(applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO))
+        val serverTransport = createTransport()
+        val clientTransport = createTransport()
 
         var receivedPacket: MeshPacket? = null
         serverTransport.onPacketReceived = { receivedPacket = it }

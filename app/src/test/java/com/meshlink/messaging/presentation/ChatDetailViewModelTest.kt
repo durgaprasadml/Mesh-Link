@@ -40,6 +40,7 @@ class ChatDetailViewModelTest {
     private lateinit var voiceRecorder: VoiceRecorder
     private lateinit var voicePlayer: VoicePlayer
     private lateinit var sendMessageUseCase: SendMessageUseCase
+    private lateinit var transferManager: com.meshlink.transfer.TransferManager
     
     private lateinit var viewModel: ChatDetailViewModel
 
@@ -55,6 +56,7 @@ class ChatDetailViewModelTest {
         voiceRecorder = mockk(relaxed = true)
         voicePlayer = mockk(relaxed = true)
         sendMessageUseCase = mockk(relaxed = true)
+        transferManager = mockk(relaxed = true)
 
         every { meshRepository.resolveChatId(any()) } returns "peer_1"
         every { getChatMessagesUseCase("peer_1") } returns flowOf(emptyList())
@@ -70,7 +72,7 @@ class ChatDetailViewModelTest {
         viewModel = ChatDetailViewModel(
             savedStateHandle, meshRepository, getChatMessagesUseCase, deleteMessagesUseCase,
             deleteChatUseCase, markChatAsReadUseCase, getMessageUseCase, voiceRecorder,
-            voicePlayer, sendMessageUseCase
+            voicePlayer, sendMessageUseCase, transferManager
         )
     }
 

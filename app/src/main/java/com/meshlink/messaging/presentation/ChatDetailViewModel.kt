@@ -50,7 +50,8 @@ class ChatDetailViewModel @Inject constructor(
     private val getMessageUseCase: com.meshlink.domain.usecase.messaging.GetMessageUseCase,
     private val voiceRecorder: VoiceRecorder,
     val voicePlayer: VoicePlayer,
-    private val sendMessageUseCase: com.meshlink.domain.usecase.messaging.SendMessageUseCase
+    private val sendMessageUseCase: com.meshlink.domain.usecase.messaging.SendMessageUseCase,
+    private val transferManager: com.meshlink.transfer.TransferManager
 ) : ViewModel() {
 
     // URL-decode to recover original strings (colons, spaces, emojis, etc.)
@@ -105,7 +106,11 @@ class ChatDetailViewModel @Inject constructor(
     // ────────── Selection Logic ──────────
 
     private val _selectedMessageIds = MutableStateFlow<Set<String>>(emptySet())
-    val selectedMessageIds = _selectedMessageIds.asStateFlow()
+    val selectedMessageIds: StateFlow<Set<String>> = _selectedMessageIds.asStateFlow()
+
+    val isSelectionMode: StateFlow<Boolean> = _selectedMessageIds
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val uiState: StateFlow<ChatDetailUiState> = combine(
         combine(messages, connectionStatus, transferProgress) { msgs, conn, transfer ->
@@ -218,12 +223,21 @@ class ChatDetailViewModel @Inject constructor(
                 if (msg.messageType == com.meshlink.domain.model.MessageType.TEXT) {
                     meshRepository.sendMessage(rawPeerIdOrAddress.ifBlank { address }, msg)
                 } else if (msg.mediaPath != null) {
-                    // Resume upload from the beginning (manual retry for permanent failures)
-                    val uri = Uri.parse(msg.mediaPath)
-                    if (msg.messageType == com.meshlink.domain.model.MessageType.IMAGE) {
-                        meshRepository.sendImage(rawPeerIdOrAddress.ifBlank { address }, uri, name)
-                    } else if (msg.messageType == com.meshlink.domain.model.MessageType.VOICE) {
-                        meshRepository.sendVoiceNote(rawPeerIdOrAddress.ifBlank { address }, msg.mediaPath, msg.mediaDurationMs ?: 0L, name)
+                    val existingSession = transferManager.getSession(messageId)
+                    if (existingSession != null) {
+                        transferManager.resumeTransfer(messageId)
+                    } else {
+                        val file = java.io.File(msg.mediaPath)
+                        if (file.exists()) {
+                            val localPeerId = meshRepository.getLocalMeshId()
+                            val targetId = rawPeerIdOrAddress.ifBlank { address }
+                            transferManager.sendFile(
+                                file = file,
+                                senderId = localPeerId,
+                                targetId = targetId,
+                                transferId = messageId
+                            )
+                        }
                     }
                 }
             }

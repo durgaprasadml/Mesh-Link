@@ -12,6 +12,7 @@ import com.meshlink.routing.engine.CongestionMonitor
 import com.meshlink.routing.engine.IntelligentRetryEngine
 import com.meshlink.routing.engine.PowerState
 import io.mockk.*
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
 import org.junit.After
@@ -22,9 +23,6 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AutomaticRetryEngineTest {
 
-    private val testDispatcher = StandardTestDispatcher()
-    private val testScope = TestScope(testDispatcher)
-
     private val meshRepository = mockk<MeshRepository>(relaxed = true)
     private val meshRouter = mockk<Router>(relaxed = true)
     private val chatDao = mockk<ChatDao>(relaxed = true)
@@ -34,7 +32,6 @@ class AutomaticRetryEngineTest {
 
     private lateinit var intelligentRetryEngine: IntelligentRetryEngine
     private lateinit var stateMachine: MessageStateMachine
-    private lateinit var retryCoordinator: RetryCoordinator
 
     @Before
     fun setUp() {
@@ -43,10 +40,16 @@ class AutomaticRetryEngineTest {
 
         intelligentRetryEngine = IntelligentRetryEngine(congestionMonitor, batteryAwareNetworking)
         stateMachine = MessageStateMachine(chatDao)
+    }
 
+    @After
+    fun tearDown() {
+        clearAllMocks()
+    }
+
+    private fun createRetryCoordinator(scope: CoroutineScope): RetryCoordinator {
         val meshRepositoryProvider: javax.inject.Provider<MeshRepository> = javax.inject.Provider { meshRepository }
-
-        retryCoordinator = RetryCoordinator(
+        return RetryCoordinator(
             context = mockk(relaxed = true),
             meshRepositoryProvider = meshRepositoryProvider,
             meshRouter = meshRouter,
@@ -54,13 +57,8 @@ class AutomaticRetryEngineTest {
             relayDao = relayDao,
             intelligentRetryEngine = intelligentRetryEngine,
             stateMachine = stateMachine,
-            applicationScope = testScope.backgroundScope
+            applicationScope = scope
         )
-    }
-
-    @After
-    fun tearDown() {
-        clearAllMocks()
     }
 
     @Test
@@ -78,7 +76,7 @@ class AutomaticRetryEngineTest {
     }
 
     @Test
-    fun `triggerEvent immediately processes non-terminal pending messages`() = testScope.runTest {
+    fun `triggerEvent immediately processes non-terminal pending messages`() = runTest {
         val sampleMsg = MessageEntity(
             messageId = "msg_retry_1",
             chatId = "peer_A",
@@ -89,27 +87,29 @@ class AutomaticRetryEngineTest {
             status = DeliveryStatus.WAITING_FOR_ROUTE
         )
 
-        coEvery { chatDao.getMessagesByStatus(DeliveryStatus.WAITING_FOR_ROUTE) } returns listOf(sampleMsg)
-        coEvery { chatDao.getMessagesByStatus(or(not(eq(DeliveryStatus.WAITING_FOR_ROUTE)), any())) } returns emptyList()
+        coEvery { chatDao.getMessagesByStatus(eq(DeliveryStatus.WAITING_FOR_ROUTE)) } returns listOf(sampleMsg)
+        coEvery { chatDao.getMessageByUuid(eq("msg_retry_1")) } returns sampleMsg
 
+        val retryCoordinator = createRetryCoordinator(backgroundScope)
         retryCoordinator.start()
         retryCoordinator.triggerEvent("peer_connected")
-        testScheduler.advanceUntilIdle()
+        runCurrent()
 
-        coVerify { meshRepository.sendMessage("peer_A", any()) }
+        coVerify { meshRepository.sendMessage(eq("peer_A"), any()) }
     }
 
     @Test
-    fun `cancelRetryForPacket stops pending retry jobs`() = testScope.runTest {
+    fun `cancelRetryForPacket stops pending retry jobs`() = runTest {
+        val retryCoordinator = createRetryCoordinator(backgroundScope)
         retryCoordinator.start()
         retryCoordinator.cancelRetryForPacket("msg_retry_1")
-        testScheduler.advanceUntilIdle()
+        runCurrent()
 
-        coVerify(exactly = 0) { meshRepository.sendMessage("peer_A", any()) }
+        coVerify(exactly = 0) { meshRepository.sendMessage(any(), any()) }
     }
 
     @Test
-    fun `messages exceeding 24 hour TTL transition to EXPIRED`() = testScope.runTest {
+    fun `messages exceeding 24 hour TTL transition to EXPIRED`() = runTest {
         val oldTimestamp = System.currentTimeMillis() - (25 * 3600 * 1000L) // 25 hours ago
         val expiredMsg = MessageEntity(
             messageId = "msg_old_1",
@@ -121,14 +121,15 @@ class AutomaticRetryEngineTest {
             status = DeliveryStatus.RETRYING
         )
 
-        coEvery { chatDao.getMessagesByStatus(DeliveryStatus.RETRYING) } returns listOf(expiredMsg)
-        coEvery { chatDao.getMessagesByStatus(or(not(eq(DeliveryStatus.RETRYING)), any())) } returns emptyList()
+        coEvery { chatDao.getMessagesByStatus(eq(DeliveryStatus.RETRYING)) } returns listOf(expiredMsg)
+        coEvery { chatDao.getMessageByUuid(eq("msg_old_1")) } returns expiredMsg
 
+        val retryCoordinator = createRetryCoordinator(backgroundScope)
         retryCoordinator.start()
         retryCoordinator.triggerEvent("ttl_check")
-        testScheduler.advanceUntilIdle()
+        runCurrent()
 
-        coVerify { chatDao.updateMessageStatus("msg_old_1", DeliveryStatus.EXPIRED) }
+        coVerify { chatDao.updateMessageStatus(eq("msg_old_1"), eq(DeliveryStatus.EXPIRED)) }
         coVerify(exactly = 0) { meshRepository.sendMessage(any(), any()) }
     }
 }

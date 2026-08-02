@@ -104,19 +104,25 @@ fun LocationMessageCard(
         "Shared Location message. Latitude: $formattedLat, Longitude: $formattedLng, Battery: $batteryText, Connection: $connectionText, Shared at: $formattedTime."
     }
 
-    // Cached map thumbnail preview decoding
-    val mapBitmap = remember(message.thumbnailBase64, message.mediaPath) {
-        try {
-            if (!message.thumbnailBase64.isNullOrEmpty()) {
-                val bytes = Base64.decode(message.thumbnailBase64, Base64.DEFAULT)
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-            } else if (!message.mediaPath.isNullOrEmpty() && File(message.mediaPath).exists()) {
-                BitmapFactory.decodeFile(message.mediaPath)?.asImageBitmap()
-            } else {
+    // Cached map thumbnail preview decoding off-UI thread
+    val mapBitmap by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        initialValue = null,
+        key1 = message.thumbnailBase64,
+        key2 = message.mediaPath
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                if (!message.thumbnailBase64.isNullOrEmpty()) {
+                    val bytes = Base64.decode(message.thumbnailBase64, Base64.DEFAULT)
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                } else if (!message.mediaPath.isNullOrEmpty() && File(message.mediaPath).exists()) {
+                    BitmapFactory.decodeFile(message.mediaPath)?.asImageBitmap()
+                } else {
+                    null
+                }
+            } catch (_: Exception) {
                 null
             }
-        } catch (_: Exception) {
-            null
         }
     }
 
@@ -209,9 +215,10 @@ fun LocationMessageCard(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                if (mapBitmap != null) {
+                val currentMapBitmap = mapBitmap
+                if (currentMapBitmap != null) {
                     Image(
-                        bitmap = mapBitmap,
+                        bitmap = currentMapBitmap,
                         contentDescription = "Map preview snapshot",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop

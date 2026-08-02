@@ -60,7 +60,6 @@ class BleRepositoryImpl @Inject constructor(
     private val chatDao: ChatDao,
     private val userRepository: UserRepository,
     private val transferManager: com.meshlink.transfer.TransferManager,
-    private val mediaTransferManager: com.meshlink.media.data.MediaTransferManager,
     private val locationProvider: LocationProvider,
     private val cryptoManager: MeshCryptoManager,
 
@@ -74,14 +73,14 @@ class BleRepositoryImpl @Inject constructor(
     private val meshMessagingManager: MeshMessagingManager,
     private val voiceTransport: VoiceTransport,
     private val gattManager: BleGattManager,
-    @ApplicationContext private val context: Context
-,
-    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) : MeshRepository {
+    @ApplicationContext private val context: Context,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope
+) : MeshRepository {
     companion object {
         private const val TAG = "MeshRepository"
     }
 
-private val discoveryEngine get() = discoveryManager.discoveryEngine
+    private val discoveryEngine get() = discoveryManager.discoveryEngine
 
     private fun updatePeerState(address: String, newState: PeerConnectionState) {
         connectionManager.updatePeerState(address, newState)
@@ -101,7 +100,6 @@ private val discoveryEngine get() = discoveryManager.discoveryEngine
     override fun resolveChatId(peerIdOrAddress: String): String = com.meshlink.util.MeshIdNormalizer.canonicalize(peerIdOrAddress)
     private fun resolvePeerAddress(peerIdOrAddress: String): String? = routingCoordinator.resolvePeerAddress(peerIdOrAddress)
 
-    
     override suspend fun setLocalMeshId(meshId: String) {
         meshRouter.localMeshId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
     }
@@ -143,6 +141,25 @@ private val discoveryEngine get() = discoveryManager.discoveryEngine
         transferManager.onOutgoingTransferCompleted = { session ->
             applicationScope.launch {
                 chatDao.updateMessageStatus(session.transferId, DeliveryStatus.SENT)
+            }
+        }
+
+        transferManager.onTransferStateChanged = { transferId, state ->
+            applicationScope.launch {
+                val dbStatus = when (state) {
+                    com.meshlink.transfer.TransferState.QUEUED -> DeliveryStatus.QUEUED
+                    com.meshlink.transfer.TransferState.STREAMING,
+                    com.meshlink.transfer.TransferState.SENDING,
+                    com.meshlink.transfer.TransferState.RECEIVING,
+                    com.meshlink.transfer.TransferState.RESUMING -> DeliveryStatus.SENDING
+                    com.meshlink.transfer.TransferState.FAILED -> DeliveryStatus.FAILED
+                    com.meshlink.transfer.TransferState.CANCELLED -> DeliveryStatus.FAILED
+                    com.meshlink.transfer.TransferState.COMPLETED -> DeliveryStatus.SENT
+                    else -> null
+                }
+                if (dbStatus != null) {
+                    chatDao.updateMessageStatus(transferId, dbStatus)
+                }
             }
         }
 

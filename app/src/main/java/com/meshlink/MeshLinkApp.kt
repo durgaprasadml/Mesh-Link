@@ -9,6 +9,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.meshlink.service.work.BackgroundTaskScheduler
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.common.power.AdaptiveMeshPowerManager
+import com.meshlink.common.logger.MeshCrashReporter
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -24,6 +25,9 @@ class MeshLinkApp : Application(), Configuration.Provider {
 
     @Inject
     lateinit var adaptivePowerManager: AdaptiveMeshPowerManager
+
+    @Inject
+    lateinit var meshCrashReporter: MeshCrashReporter
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -42,6 +46,11 @@ class MeshLinkApp : Application(), Configuration.Provider {
         }
 
         super.onCreate()
+        
+        // Initialize MeshLogger crash reporter integration (Firebase Crashlytics)
+        MeshLogger.init(meshCrashReporter)
+        meshCrashReporter.setUserId("durgaprasadmadikeri@gmail.com")
+        meshCrashReporter.logBreadcrumb("MeshLinkApp initialized")
         
         applicationScope.launch {
             // Schedule periodic background maintenance off the main thread

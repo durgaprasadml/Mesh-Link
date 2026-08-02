@@ -36,6 +36,7 @@ class ChunkManager @Inject constructor() {
 
     /**
      * Reads a specific chunk from the file without loading the entire file into memory.
+     * Ensures borrowed buffers are safely returned to BufferPool if reading fails.
      */
     fun readChunkFromFile(file: File, chunkIndex: Int, chunkSize: Int): ByteArray? {
         if (!file.exists() || !file.canRead()) return null
@@ -49,8 +50,13 @@ class ChunkManager @Inject constructor() {
                 
                 val bytesToRead = minOf(chunkSize.toLong(), raf.length() - offset).toInt()
                 val buffer = BufferPool.borrowBuffer(bytesToRead)
-                raf.readFully(buffer)
-                buffer
+                try {
+                    raf.readFully(buffer)
+                    buffer
+                } catch (e: Exception) {
+                    BufferPool.returnBuffer(buffer)
+                    null
+                }
             }
         } catch (e: Exception) {
             null
@@ -66,4 +72,3 @@ class ChunkManager @Inject constructor() {
         return hashBytes.joinToString("") { "%02x".format(it) }
     }
 }
-

@@ -165,6 +165,46 @@ fun DeveloperSettingsScreen(
                 }
             }
 
+            // Firebase Crashlytics Diagnostics
+            item {
+                Text("Firebase Crashlytics", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = MeshTheme.shapes.large
+                ) {
+                    Column {
+                        SettingsItemRow(
+                            title = "Simulate Fatal Crash",
+                            subtitle = "Force a test RuntimeException (re-open app after crash to send report)",
+                            icon = Icons.Default.Warning,
+                            onClick = {
+                                viewModel.showToast("Triggering test crash in 1s...")
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    throw RuntimeException("Test Crashlytics Crash - durgaprasadmadikeri@gmail.com")
+                                }, 1000)
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        SettingsItemRow(
+                            title = "Log Non-Fatal Exception",
+                            subtitle = "Record non-fatal exception to Crashlytics dashboard",
+                            icon = Icons.Default.ReportProblem,
+                            onClick = {
+                                com.meshlink.common.logger.MeshLogger.log(
+                                    com.meshlink.common.logger.LogLevel.CRITICAL,
+                                    com.meshlink.common.logger.LogCategory.SYSTEM,
+                                    "Simulated non-fatal exception from Developer Menu",
+                                    mapOf("user_email" to "durgaprasadmadikeri@gmail.com", "triggered_by" to "DeveloperOptions"),
+                                    IllegalStateException("Diagnostic Non-Fatal Test Exception")
+                                )
+                                viewModel.showToast("Non-fatal exception reported to Crashlytics")
+                            }
+                        )
+                    }
+                }
+            }
+
             item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }

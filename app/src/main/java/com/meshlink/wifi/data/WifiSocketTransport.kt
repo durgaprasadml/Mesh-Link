@@ -14,19 +14,45 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.io.EOFException
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+enum class WifiSocketConnectionState {
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED,
+    RECONNECTING,
+    FAILED
+}
+
+data class WifiSocketMetrics(
+    val packetsSent: Long = 0L,
+    val packetsReceived: Long = 0L,
+    val bytesSent: Long = 0L,
+    val bytesReceived: Long = 0L,
+    val activePeers: Int = 0,
+    val reconnectAttempts: Int = 0,
+    val heartbeatCount: Long = 0L,
+    val averageLatencyMs: Long = 0L
+)
 
 @Singleton
 class WifiSocketTransport @Inject constructor(
@@ -38,47 +64,64 @@ class WifiSocketTransport @Inject constructor(
         private const val TAG = "WifiSocketTransport"
         private const val PORT = WifiConfig.DEFAULT_PORT
         private const val CONNECT_TIMEOUT_MS = 10_000
+        private const val READ_TIMEOUT_MS = 10_000
         private const val HEARTBEAT_INTERVAL_MS = 15_000L
+        private const val HEARTBEAT_WATCHDOG_TIMEOUT_MS = 30_000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val MAX_FRAME_SIZE_BYTES = 50 * 1024 * 1024 // 50MB safety limit
     }
 
     private var serverSocket: ServerSocket? = null
-    private var activeSocket: Socket? = null
-    private var dataOutStream: DataOutputStream? = null
-    private var dataInStream: DataInputStream? = null
-
-    private var listenJob: Job? = null
-    private var heartbeatJob: Job? = null
     private var reconnectJob: Job? = null
-
     private var lastHostAddress: String? = null
-    private var backoffDelayMs = 2000L
+    private var backoffDelayMs = 1000L
     private var reconnectAttempts = 0
     private var manualDisconnectRequested = false
 
-    // Pool of connected client sockets and resources when acting as Group Owner
+    // Concurrent multi-peer maps
     private val clientSockets = ConcurrentHashMap<String, Socket>()
-    private val clientStreams = ConcurrentHashMap<String, DataOutputStream>()
+    private val clientStreamsOut = ConcurrentHashMap<String, DataOutputStream>()
+    private val clientStreamsIn = ConcurrentHashMap<String, DataInputStream>()
     private val clientReadJobs = ConcurrentHashMap<String, Job>()
     private val clientHeartbeatJobs = ConcurrentHashMap<String, Job>()
+    private val clientLastHeartbeatMs = ConcurrentHashMap<String, Long>()
 
-    // Callback when a MeshPacket is received over Wi-Fi Direct
+    // Connection State & Metrics Flow
+    private val _connectionState = MutableStateFlow(WifiSocketConnectionState.DISCONNECTED)
+    val connectionState: StateFlow<WifiSocketConnectionState> = _connectionState.asStateFlow()
+
+    private val _metricsState = MutableStateFlow(WifiSocketMetrics())
+    val metricsState: StateFlow<WifiSocketMetrics> = _metricsState.asStateFlow()
+
+    // Callbacks
     var onPacketReceived: ((MeshPacket) -> Unit)? = null
-
-    // Callback when a socket connects / reconnects
     var onSocketConnected: (() -> Unit)? = null
+
+    // Metric Counters
+    private val packetsSentCounter = AtomicLong(0L)
+    private val packetsReceivedCounter = AtomicLong(0L)
+    private val bytesSentCounter = AtomicLong(0L)
+    private val bytesReceivedCounter = AtomicLong(0L)
+    private val heartbeatCounter = AtomicLong(0L)
+
+    private fun updateMetrics(transform: (WifiSocketMetrics) -> WifiSocketMetrics) {
+        _metricsState.update(transform)
+    }
 
     fun startServer() {
         manualDisconnectRequested = false
         if (serverSocket != null && !serverSocket!!.isClosed) return
         try {
             serverSocket = ServerSocket(PORT)
-            MeshLogger.d(TAG, "ServerSocket started on port $PORT. Listening for incoming multi-peer connections...")
+            MeshLogger.d(TAG, "ServerSocket started on port $PORT. Listening for multi-peer connections...")
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to start ServerSocket on port $PORT: ${e.message}")
+            _connectionState.value = WifiSocketConnectionState.FAILED
             return
         }
+
+        _connectionState.value = WifiSocketConnectionState.CONNECTING
+
         applicationScope.launch(Dispatchers.IO) {
             try {
                 while (isActive && serverSocket?.isClosed == false) {
@@ -86,8 +129,7 @@ class WifiSocketTransport @Inject constructor(
                     val clientHost = client.inetAddress?.hostAddress ?: "unknown"
                     MeshLogger.d(TAG, "Client connected to Group Owner: $clientHost")
                     
-                    clientSockets[clientHost] = client
-                    handleSocketConnection(client, isServerMode = true)
+                    handleSocketConnection(client, isServerMode = true, clientHost = clientHost)
                 }
             } catch (e: Exception) {
                 if (isActive) {
@@ -99,15 +141,9 @@ class WifiSocketTransport @Inject constructor(
 
     fun stopServer() {
         try {
-            clientHeartbeatJobs.values.forEach { try { it.cancel() } catch (_: Exception) {} }
-            clientReadJobs.values.forEach { try { it.cancel() } catch (_: Exception) {} }
-            clientStreams.values.forEach { try { it.close() } catch (_: Exception) {} }
-            clientSockets.values.forEach { try { it.close() } catch (_: Exception) {} }
-            
-            clientHeartbeatJobs.clear()
-            clientReadJobs.clear()
-            clientStreams.clear()
-            clientSockets.clear()
+            clientSockets.keys.toList().forEach { host ->
+                cleanupPeer(host)
+            }
 
             serverSocket?.close()
             serverSocket = null
@@ -120,6 +156,8 @@ class WifiSocketTransport @Inject constructor(
     fun connectAsClient(hostAddress: String) {
         manualDisconnectRequested = false
         lastHostAddress = hostAddress
+        _connectionState.value = WifiSocketConnectionState.CONNECTING
+
         applicationScope.launch(Dispatchers.IO) {
             try {
                 MeshLogger.d(TAG, "Connecting to Group Owner at $hostAddress:$PORT...")
@@ -129,59 +167,73 @@ class WifiSocketTransport @Inject constructor(
                 MeshLogger.d(TAG, "Socket Opened: Connected to Group Owner $hostAddress:$PORT")
                 
                 // Reset backoff on successful connection
-                backoffDelayMs = 2000L
+                backoffDelayMs = 1000L
                 reconnectAttempts = 0
-                handleSocketConnection(socket, isServerMode = false)
+                handleSocketConnection(socket, isServerMode = false, clientHost = hostAddress)
             } catch (e: Exception) {
-                MeshLogger.e(TAG, "Client socket error: ${e.message}")
+                MeshLogger.e(TAG, "Client socket error connecting to $hostAddress: ${e.message}")
+                _connectionState.value = WifiSocketConnectionState.FAILED
                 scheduleReconnect()
             }
         }
     }
 
-    private fun handleSocketConnection(socket: Socket, isServerMode: Boolean) {
-        val clientHost = socket.inetAddress?.hostAddress ?: "unknown"
-
-        if (!isServerMode) {
-            gracefulCloseActiveSocket()
-            activeSocket = socket
-        } else {
-            // Cancel existing jobs for this client host if re-connecting
-            clientReadJobs[clientHost]?.cancel()
-            clientHeartbeatJobs[clientHost]?.cancel()
-        }
-
-        socket.tcpNoDelay = true
-        socket.sendBufferSize = 2 * 1024 * 1024 // 2 MB buffer
-        socket.receiveBufferSize = 2 * 1024 * 1024 // 2 MB buffer
-
+    private fun handleSocketConnection(socket: Socket, isServerMode: Boolean, clientHost: String) {
         try {
+            socket.soTimeout = READ_TIMEOUT_MS
+            socket.tcpNoDelay = true
+            socket.sendBufferSize = 2 * 1024 * 1024 // 2 MB buffer
+            socket.receiveBufferSize = 2 * 1024 * 1024 // 2 MB buffer
+
             val bufferedOut = BufferedOutputStream(socket.getOutputStream(), 128 * 1024)
             val bufferedIn = BufferedInputStream(socket.getInputStream(), 128 * 1024)
 
             val currentOut = DataOutputStream(bufferedOut)
             val currentIn = DataInputStream(bufferedIn)
 
-            if (isServerMode) {
-                clientStreams[clientHost] = currentOut
-            } else {
-                dataOutStream = currentOut
-                dataInStream = currentIn
-            }
+            clientSockets[clientHost] = socket
+            clientStreamsOut[clientHost] = currentOut
+            clientStreamsIn[clientHost] = currentIn
+            clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
+
+            _connectionState.value = WifiSocketConnectionState.CONNECTED
+            updateMetrics { it.copy(activePeers = clientSockets.size) }
 
             // Trigger connection notification
             onSocketConnected?.invoke()
 
             // Start dedicated heartbeat monitoring for this connection
-            startHeartbeat(socket, currentOut, isServerMode, clientHost)
+            startHeartbeat(socket, currentOut, clientHost)
 
             // Dedicated binary read loop coroutine per client connection
             val readJob = applicationScope.launch(Dispatchers.IO) {
                 try {
                     while (isActive && !socket.isClosed) {
-                        val length = currentIn.readInt()
+                        val length = try {
+                            currentIn.readInt()
+                        } catch (e: SocketTimeoutException) {
+                            // Check heartbeat watchdog timeout (30s)
+                            val lastHb = clientLastHeartbeatMs[clientHost] ?: System.currentTimeMillis()
+                            if (System.currentTimeMillis() - lastHb > HEARTBEAT_WATCHDOG_TIMEOUT_MS) {
+                                MeshLogger.w(TAG, "Heartbeat Watchdog Timeout (>30s) for $clientHost")
+                                break
+                            }
+                            continue
+                        } catch (e: EOFException) {
+                            MeshLogger.d(TAG, "EOF reached for $clientHost")
+                            break
+                        } catch (e: Exception) {
+                            if (isActive && !socket.isClosed) {
+                                MeshLogger.e(TAG, "Socket binary read error on $clientHost: ${e.message}")
+                            }
+                            break
+                        }
+
                         if (length == 0) {
                             // Length = 0 is Heartbeat Ping
+                            clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
+                            val hbCount = heartbeatCounter.incrementAndGet()
+                            updateMetrics { it.copy(heartbeatCount = hbCount) }
                             MeshLogger.d(TAG, "Received Binary Heartbeat Ping from $clientHost")
                         } else if (length > 0) {
                             if (length > MAX_FRAME_SIZE_BYTES) {
@@ -190,49 +242,46 @@ class WifiSocketTransport @Inject constructor(
                             }
                             val payloadBytes = ByteArray(length)
                             currentIn.readFully(payloadBytes)
+
+                            clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
+                            val rxBytes = bytesReceivedCounter.addAndGet(length.toLong() + 4L)
+                            val rxPkts = packetsReceivedCounter.incrementAndGet()
+                            updateMetrics { it.copy(bytesReceived = rxBytes, packetsReceived = rxPkts) }
+
                             val jsonString = String(payloadBytes, Charsets.UTF_8)
                             val packet = MeshPacketParser.fromJson(jsonString)
                             if (packet != null) {
+                                MeshLogger.d(TAG, "Packet Received over Wi-Fi Direct from $clientHost: ${packet.packetId} (${length}B)")
                                 onPacketReceived?.invoke(packet)
                             }
+                        } else {
+                            MeshLogger.e(TAG, "Invalid negative packet length $length from $clientHost")
+                            break
                         }
-                    }
-                } catch (e: Exception) {
-                    if (isActive && !socket.isClosed) {
-                        MeshLogger.e(TAG, "Socket binary read error on $clientHost: ${e.message}")
                     }
                 } finally {
                     MeshLogger.d(TAG, "Socket Closed: Binary stream ended for $clientHost")
+                    cleanupPeer(clientHost)
+
                     if (!isServerMode) {
-                        disconnectSocketOnly()
+                        _connectionState.value = WifiSocketConnectionState.DISCONNECTED
                         scheduleReconnect()
-                    } else {
-                        clientReadJobs[clientHost]?.cancel()
-                        clientHeartbeatJobs[clientHost]?.cancel()
-                        clientReadJobs.remove(clientHost)
-                        clientHeartbeatJobs.remove(clientHost)
-                        clientStreams.remove(clientHost)
-                        clientSockets.remove(clientHost)
-                        try { socket.close() } catch (_: Exception) {}
                     }
                 }
             }
 
-            if (isServerMode) {
-                clientReadJobs[clientHost] = readJob
-            } else {
-                listenJob = readJob
-            }
+            clientReadJobs[clientHost] = readJob
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to setup socket streams for $clientHost: ${e.message}")
+            cleanupPeer(clientHost)
             if (!isServerMode) {
-                disconnectSocketOnly()
+                _connectionState.value = WifiSocketConnectionState.FAILED
                 scheduleReconnect()
             }
         }
     }
 
-    private fun startHeartbeat(socket: Socket, outStream: DataOutputStream, isServerMode: Boolean, clientHost: String) {
+    private fun startHeartbeat(socket: Socket, outStream: DataOutputStream, clientHost: String) {
         val heartbeat = applicationScope.launch(Dispatchers.IO) {
             while (isActive && !socket.isClosed) {
                 delay(HEARTBEAT_INTERVAL_MS)
@@ -241,6 +290,8 @@ class WifiSocketTransport @Inject constructor(
                         outStream.writeInt(0) // 0-length frame = heartbeat ping
                         outStream.flush()
                     }
+                    val txBytes = bytesSentCounter.addAndGet(4L)
+                    updateMetrics { it.copy(bytesSent = txBytes) }
                     MeshLogger.d(TAG, "Binary Heartbeat ping sent to $clientHost")
                 } catch (e: Exception) {
                     MeshLogger.w(TAG, "Heartbeat Failed to $clientHost: ${e.message}")
@@ -249,24 +300,23 @@ class WifiSocketTransport @Inject constructor(
             }
         }
 
-        if (isServerMode) {
-            clientHeartbeatJobs[clientHost] = heartbeat
-        } else {
-            heartbeatJob?.cancel()
-            heartbeatJob = heartbeat
-        }
+        clientHeartbeatJobs[clientHost]?.cancel()
+        clientHeartbeatJobs[clientHost] = heartbeat
     }
 
     private fun scheduleReconnect() {
         if (manualDisconnectRequested) {
             MeshLogger.d(TAG, "Manual disconnect was requested. Suppressing reconnect.")
+            _connectionState.value = WifiSocketConnectionState.DISCONNECTED
             return
         }
         val targetHost = lastHostAddress ?: return
 
         reconnectJob?.cancel()
         reconnectJob = applicationScope.launch(Dispatchers.IO) {
+            _connectionState.value = WifiSocketConnectionState.RECONNECTING
             reconnectAttempts++
+            updateMetrics { it.copy(reconnectAttempts = reconnectAttempts) }
             MeshLogger.d(TAG, "Scheduling persistent reconnect attempt #$reconnectAttempts to $targetHost in ${backoffDelayMs}ms...")
             delay(backoffDelayMs)
             
@@ -302,77 +352,70 @@ class WifiSocketTransport @Inject constructor(
         val json = MeshPacketParser.toJson(packetToSend)
         val payloadBytes = json.toByteArray(Charsets.UTF_8)
 
-        // Send over active client socket if acting as Client
-        val currentOut = dataOutStream
-        if (currentOut != null) {
-            try {
-                synchronized(currentOut) {
-                    currentOut.writeInt(payloadBytes.size)
-                    currentOut.write(payloadBytes)
-                    currentOut.flush()
-                }
-                MeshLogger.d(TAG, "Sent binary packet over Wi-Fi Direct socket: ${packetToSend.packetId} (${payloadBytes.size} bytes)")
-                return@withContext
-            } catch (e: Exception) {
-                MeshLogger.e(TAG, "Failed to send packet to server: ${e.message}")
-            }
+        if (clientStreamsOut.isEmpty()) {
+            MeshLogger.w(TAG, "Cannot send packet ${packetToSend.packetId}: No active socket streams available")
+            return@withContext
         }
 
-        // Send to all connected client sockets if acting as Group Owner
-        if (clientStreams.isNotEmpty()) {
-            clientStreams.forEach { (host, stream) ->
-                try {
-                    synchronized(stream) {
-                        stream.writeInt(payloadBytes.size)
-                        stream.write(payloadBytes)
-                        stream.flush()
-                    }
-                    MeshLogger.d(TAG, "Sent binary packet to client $host: ${packetToSend.packetId} (${payloadBytes.size} bytes)")
-                } catch (e: Exception) {
-                    MeshLogger.e(TAG, "Failed to send packet to client $host: ${e.message}")
+        val targetPeerAddress = packetToSend.targetId
+        val targetStreams = if (clientStreamsOut.containsKey(targetPeerAddress)) {
+            listOf(targetPeerAddress to clientStreamsOut[targetPeerAddress]!!)
+        } else {
+            // Broadcast or route via all connected client streams
+            clientStreamsOut.entries.map { it.key to it.value }
+        }
+
+        targetStreams.forEach { (host, stream) ->
+            try {
+                synchronized(stream) {
+                    stream.writeInt(payloadBytes.size)
+                    stream.write(payloadBytes)
+                    stream.flush()
                 }
+                val txBytes = bytesSentCounter.addAndGet(payloadBytes.size.toLong() + 4L)
+                val txPkts = packetsSentCounter.incrementAndGet()
+                updateMetrics { it.copy(bytesSent = txBytes, packetsSent = txPkts) }
+                MeshLogger.d(TAG, "Sent binary packet to $host: ${packetToSend.packetId} (${payloadBytes.size} bytes)")
+            } catch (e: Exception) {
+                MeshLogger.e(TAG, "Failed to send packet to $host: ${e.message}")
+                cleanupPeer(host)
             }
-        } else if (currentOut == null) {
-            MeshLogger.w(TAG, "Cannot send packet: No active socket connections")
         }
     }
 
     fun isConnected(): Boolean {
-        val clientConnected = activeSocket?.isConnected == true && activeSocket?.isClosed == false
-        val serverHasClients = clientSockets.values.any { it.isConnected && !it.isClosed }
-        return clientConnected || serverHasClients
+        val hasActivePeer = clientSockets.values.any { it.isConnected && !it.isClosed }
+        return hasActivePeer && _connectionState.value == WifiSocketConnectionState.CONNECTED
     }
 
     fun disconnect() {
         manualDisconnectRequested = true
-        disconnectSocketOnly()
+        reconnectJob?.cancel()
+        reconnectJob = null
+
+        clientSockets.keys.toList().forEach { host ->
+            cleanupPeer(host)
+        }
+
         stopServer()
+        _connectionState.value = WifiSocketConnectionState.DISCONNECTED
+        MeshLogger.d(TAG, "WifiSocketTransport disconnected cleanly")
     }
 
-    private fun disconnectSocketOnly() {
-        try {
-            reconnectJob?.cancel()
-            heartbeatJob?.cancel()
-            listenJob?.cancel()
+    private fun cleanupPeer(clientHost: String) {
+        clientReadJobs.remove(clientHost)?.cancel()
+        clientHeartbeatJobs.remove(clientHost)?.cancel()
 
-            gracefulCloseActiveSocket()
-            MeshLogger.d(TAG, "Socket layer disconnected cleanly")
-        } catch (e: Exception) {
-            MeshLogger.e(TAG, "Error during socket disconnect: ${e.message}")
-        }
-    }
+        val streamOut = clientStreamsOut.remove(clientHost)
+        val streamIn = clientStreamsIn.remove(clientHost)
+        val socket = clientSockets.remove(clientHost)
+        clientLastHeartbeatMs.remove(clientHost)
 
-    private fun gracefulCloseActiveSocket() {
-        try {
-            dataOutStream?.close()
-            dataInStream?.close()
-            activeSocket?.close()
-        } catch (e: Exception) {
-            MeshLogger.w(TAG, "Error closing active socket: ${e.message}")
-        } finally {
-            dataOutStream = null
-            dataInStream = null
-            activeSocket = null
-        }
+        try { streamOut?.close() } catch (_: Exception) {}
+        try { streamIn?.close() } catch (_: Exception) {}
+        try { socket?.close() } catch (_: Exception) {}
+
+        updateMetrics { it.copy(activePeers = clientSockets.size) }
+        MeshLogger.d(TAG, "Cleaned up socket resources for peer: $clientHost")
     }
 }

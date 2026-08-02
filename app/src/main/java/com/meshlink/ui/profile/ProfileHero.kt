@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meshlink.domain.model.User
+import com.meshlink.domain.model.UserIdentity
 import com.meshlink.ui.components.UserAvatar
 import com.meshlink.ui.designsystem.theme.MeshTheme
 

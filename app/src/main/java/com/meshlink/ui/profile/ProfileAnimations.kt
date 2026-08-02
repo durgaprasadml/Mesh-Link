@@ -1,5 +1,6 @@
 package com.meshlink.ui.profile
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -10,11 +11,14 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,11 +39,23 @@ object ProfileAnimations {
     val CardEnterTransition: EnterTransition = fadeIn(tween(350)) +
             scaleIn(initialScale = 0.95f, animationSpec = SpringSpec)
 
+    val QrZoomInTransition: EnterTransition = fadeIn(tween(300)) +
+            scaleIn(initialScale = 0.85f, animationSpec = spring(dampingRatio = 0.7f))
+
+    val QrZoomOutTransition: ExitTransition = fadeOut(tween(250)) +
+            scaleOut(targetScale = 0.85f)
+
     val ListStaggerEnter: EnterTransition = fadeIn(tween(300)) +
             slideInVertically(initialOffsetY = { it / 4 }, animationSpec = tween(300))
 
-    val CategoryExitTransition: ExitTransition = fadeOut(tween(200)) +
-            scaleOut(targetScale = 0.98f)
+    val FadeThroughEnter: EnterTransition = fadeIn(tween(250, easing = FastOutSlowInEasing)) +
+            scaleIn(initialScale = 0.96f)
+
+    val FadeThroughExit: ExitTransition = fadeOut(tween(200, easing = FastOutSlowInEasing)) +
+            scaleOut(targetScale = 0.96f)
+
+    val ExpandCardTransition: EnterTransition = expandVertically(animationSpec = spring()) + fadeIn(tween(200))
+    val ShrinkCardTransition: ExitTransition = shrinkVertically(animationSpec = spring()) + fadeOut(tween(200))
 
     @Composable
     fun PulseAvatarEffect(

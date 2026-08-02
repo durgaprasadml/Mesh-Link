@@ -32,7 +32,7 @@ fun DeviceList(
     searchQuery: String,
     onDeviceClick: (NearbyDeviceUiState) -> Unit,
     onConnectClick: (NearbyDeviceUiState) -> Unit,
-    onRefresh: () -> Unit,
+    onRefresh: () -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier
 ) {

@@ -70,7 +70,7 @@ class MessageStateMachineTest {
     fun `transitionToFailed does not update status if already SEEN`() = runTest {
         val message = mockk<MessageEntity>()
         every { message.status } returns DeliveryStatus.SEEN
-        coEvery { chatDao.getMessageByUuid("msg_1") } returns message
+        coEvery { chatDao.getMessageByUuid(any()) } returns message
 
         messageStateMachine.transitionToFailed("msg_1")
 

@@ -1,6 +1,7 @@
 package com.meshlink.enterprise.deployment
 
 import android.os.Build
+import com.meshlink.BuildConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,7 +20,7 @@ class FleetManagementManager @Inject constructor() {
     fun generateLocalFleetStatus(nodeId: String, batteryPercent: Int, storageMb: Long, compliance: Float): FleetStatus {
         return FleetStatus(
             nodeId = nodeId,
-            appVersion = com.meshlink.BuildConfig.VERSION_NAME,
+            appVersion = BuildConfig.VERSION_NAME,
             osVersion = Build.VERSION.RELEASE,
             batteryPercent = batteryPercent,
             storageAvailableMb = storageMb,

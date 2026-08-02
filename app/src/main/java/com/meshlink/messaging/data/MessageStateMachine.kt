@@ -78,15 +78,24 @@ class MessageStateMachine @Inject constructor(
     }
 
     suspend fun transitionToExpired(messageId: String) {
-        chatDao.updateMessageStatus(messageId, DeliveryStatus.EXPIRED)
+        val current = chatDao.getMessageByUuid(messageId)?.status
+        if (!isTerminalState(current)) {
+            chatDao.updateMessageStatus(messageId, DeliveryStatus.EXPIRED)
+        }
     }
 
     suspend fun transitionToCancelled(messageId: String) {
-        chatDao.updateMessageStatus(messageId, DeliveryStatus.CANCELLED)
+        val current = chatDao.getMessageByUuid(messageId)?.status
+        if (!isTerminalState(current)) {
+            chatDao.updateMessageStatus(messageId, DeliveryStatus.CANCELLED)
+        }
     }
 
     suspend fun transitionToPermanentFailure(messageId: String) {
-        chatDao.updateMessageStatus(messageId, DeliveryStatus.PERMANENT_FAILURE)
+        val current = chatDao.getMessageByUuid(messageId)?.status
+        if (!isTerminalState(current)) {
+            chatDao.updateMessageStatus(messageId, DeliveryStatus.PERMANENT_FAILURE)
+        }
     }
 
     suspend fun transitionToFailed(messageId: String) {

@@ -1,6 +1,7 @@
 package com.meshlink.common.logger
 
 import android.util.Log
+import com.meshlink.BuildConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -63,25 +64,25 @@ object MeshLogger {
 
     // Legacy wrappers for backward compatibility during the refactoring process
     fun d(tag: String, message: String) {
-        if (com.meshlink.BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG) {
             log(LogLevel.DEBUG, LogCategory.SYSTEM, "[$tag] $message")
         }
     }
 
     inline fun d(tag: String, lazyMessage: () -> String) {
-        if (com.meshlink.BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG) {
             log(LogLevel.DEBUG, LogCategory.SYSTEM, "[$tag] ${lazyMessage()}")
         }
     }
 
     fun v(tag: String, message: String) {
-        if (com.meshlink.BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG) {
             log(LogLevel.VERBOSE, LogCategory.SYSTEM, "[$tag] $message")
         }
     }
 
     inline fun v(tag: String, lazyMessage: () -> String) {
-        if (com.meshlink.BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG) {
             log(LogLevel.VERBOSE, LogCategory.SYSTEM, "[$tag] ${lazyMessage()}")
         }
     }

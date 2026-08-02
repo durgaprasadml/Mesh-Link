@@ -63,6 +63,7 @@ fun rememberMeshAdaptiveSpacing(
         MeshFormFactor.LARGE_PHONE -> 1.0f
         MeshFormFactor.FOLDABLE -> 1.25f
         MeshFormFactor.TABLET -> 1.5f
+        MeshFormFactor.DESKTOP -> 1.6f
         MeshFormFactor.LANDSCAPE -> 1.1f
         MeshFormFactor.PORTRAIT -> 1.0f
     }
@@ -99,6 +100,7 @@ fun MeshAdaptiveCard(
         MeshFormFactor.LARGE_PHONE -> 20.dp
         MeshFormFactor.FOLDABLE -> 24.dp
         MeshFormFactor.TABLET -> 28.dp
+        MeshFormFactor.DESKTOP -> 32.dp
         else -> 20.dp
     }
 
@@ -107,6 +109,7 @@ fun MeshAdaptiveCard(
         MeshFormFactor.LARGE_PHONE -> PaddingValues(16.dp)
         MeshFormFactor.FOLDABLE -> PaddingValues(20.dp)
         MeshFormFactor.TABLET -> PaddingValues(24.dp)
+        MeshFormFactor.DESKTOP -> PaddingValues(28.dp)
         else -> PaddingValues(16.dp)
     }
 
@@ -159,6 +162,7 @@ fun TextStyle.meshAdaptive(
         MeshFormFactor.LARGE_PHONE -> 1.0f
         MeshFormFactor.FOLDABLE -> 1.1f
         MeshFormFactor.TABLET -> 1.18f
+        MeshFormFactor.DESKTOP -> 1.25f
         else -> 1.0f
     }
     return this.copy(

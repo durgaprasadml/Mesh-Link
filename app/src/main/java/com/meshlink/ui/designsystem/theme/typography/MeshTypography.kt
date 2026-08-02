@@ -7,10 +7,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.meshlink.ui.designsystem.accessibility.meshDynamicFont
 
 /**
  * Custom Typography Token Scale for Mesh-Link 2026 Original Design System.
- * Features dedicated Monospace Telemetry, RSSI, Hop Count, and Tactical Signal styles.
+ * Features dedicated Monospace Telemetry, RSSI, Hop Count, Tactical Signal, and Dynamic Scaling support.
  */
 @Immutable
 data class MeshTypographyScale(

@@ -43,6 +43,7 @@ sealed class Screen(val route: String) {
     object Diagnostics : Screen("diagnostics")
     object MediaDiagnostics : Screen("media_diagnostics")
     object Media : Screen("media")
+    object Sync : Screen("sync")
 }
 
 @Composable
@@ -240,6 +241,16 @@ fun AppNavigation(
             composable(Screen.Media.route) {
                 com.meshlink.ui.media.MediaScreen(
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Sync.route) {
+                val syncViewModel: com.meshlink.ui.sync.SyncViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+                val syncState by syncViewModel.uiState.collectAsStateWithLifecycle()
+                com.meshlink.ui.sync.MeshSyncScreen(
+                    state = syncState,
+                    onBackClick = { navController.popBackStack() },
+                    onForceSyncClick = { syncViewModel.triggerForceSync() }
                 )
             }
         }

@@ -72,11 +72,15 @@ class WifiSocketTransport @Inject constructor(
     fun startServer() {
         manualDisconnectRequested = false
         if (serverSocket != null && !serverSocket!!.isClosed) return
+        try {
+            serverSocket = ServerSocket(PORT)
+            MeshLogger.d(TAG, "ServerSocket started on port $PORT. Listening for incoming multi-peer connections...")
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to start ServerSocket on port $PORT: ${e.message}")
+            return
+        }
         applicationScope.launch(Dispatchers.IO) {
             try {
-                serverSocket = ServerSocket(PORT)
-                MeshLogger.d(TAG, "ServerSocket started on port $PORT. Listening for incoming multi-peer connections...")
-
                 while (isActive && serverSocket?.isClosed == false) {
                     val client = serverSocket?.accept() ?: break
                     val clientHost = client.inetAddress?.hostAddress ?: "unknown"
@@ -87,7 +91,7 @@ class WifiSocketTransport @Inject constructor(
                 }
             } catch (e: Exception) {
                 if (isActive) {
-                    MeshLogger.e(TAG, "ServerSocket error: ${e.message}")
+                    MeshLogger.e(TAG, "ServerSocket accept loop error: ${e.message}")
                 }
             }
         }

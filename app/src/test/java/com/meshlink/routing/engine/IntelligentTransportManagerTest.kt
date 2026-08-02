@@ -96,7 +96,26 @@ class IntelligentTransportManagerTest {
     }
 
     @Test
-    fun `sendPacket automatically falls back to BLE when Wi-Fi Direct is unavailable for small payloads`() = runTest {
+    fun `sendPacket automatically falls back to BLE when Wi-Fi Direct is unavailable for small non-media payloads`() = runTest {
+        val smallTextPacket = MeshPacket(
+            packetId = "pkt_small_text",
+            senderId = "me",
+            targetId = "peer",
+            payload = "Small Text Data Bytes",
+            type = PacketType.TEXT
+        )
+
+        val result = manager.sendPacket(smallTextPacket)
+
+        assertTrue(result is MeshResult.Success)
+        coVerify(exactly = 1) { bleTransport.broadcastPacket(smallTextPacket, excludeAddress = null, includeAddress = null) }
+        coVerify(exactly = 0) { wifiTransport.broadcastPacket(any(), any(), any()) }
+        assertEquals(1L, metrics.fallbackCount)
+        assertEquals(1L, metrics.blePacketCount)
+    }
+
+    @Test
+    fun `sendPacket does not fall back to BLE when Wi-Fi Direct is unavailable for media packets`() = runTest {
         val smallMediaPacket = MeshPacket(
             packetId = "pkt_small_media",
             senderId = "me",
@@ -108,11 +127,8 @@ class IntelligentTransportManagerTest {
 
         val result = manager.sendPacket(smallMediaPacket)
 
-        assertTrue(result is MeshResult.Success)
-        coVerify(exactly = 1) { bleTransport.broadcastPacket(smallMediaPacket, excludeAddress = null, includeAddress = null) }
-        coVerify(exactly = 0) { wifiTransport.broadcastPacket(any(), any(), any()) }
-        assertEquals(1L, metrics.fallbackCount)
-        assertEquals(1L, metrics.blePacketCount)
+        assertTrue(result is MeshResult.Error)
+        coVerify(exactly = 0) { bleTransport.broadcastPacket(any(), any(), any()) }
     }
 
     @Test

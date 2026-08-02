@@ -161,3 +161,15 @@ private fun RecoveryStepItem(
         }
     }
 }
+
+/**
+ * MeshRecovery — Alias for MeshRecoveryCard for component name consistency.
+ */
+@Composable
+fun MeshRecovery(
+    recoveryUi: MeshRecoveryUi,
+    modifier: Modifier = Modifier
+) {
+    MeshRecoveryCard(recoveryUi = recoveryUi, modifier = modifier)
+}
+

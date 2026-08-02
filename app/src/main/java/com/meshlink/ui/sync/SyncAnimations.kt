@@ -86,6 +86,29 @@ fun Modifier.offlineFadeAnimation(isOffline: Boolean): Modifier {
 }
 
 @Composable
+fun Modifier.failureShakeAnimation(triggerShake: Boolean): Modifier {
+    if (MeshTheme.reduceMotion || !triggerShake) return this
+    val shakeAnim = remember { Animatable(0f) }
+    LaunchedEffect(triggerShake) {
+        shakeAnim.animateTo(
+            targetValue = 0f,
+            animationSpec = keyframes {
+                durationMillis = 400
+                0f at 0
+                -8f at 50
+                8f at 100
+                -6f at 150
+                6f at 200
+                -3f at 250
+                3f at 300
+                0f at 400
+            }
+        )
+    }
+    return this.graphicsLayer { translationX = shakeAnim.value }
+}
+
+@Composable
 fun AnimatedQueueProgress(
     targetProgress: Float,
     modifier: Modifier = Modifier,
@@ -143,3 +166,4 @@ fun RecoveryTransitionLayout(
         content()
     }
 }
+

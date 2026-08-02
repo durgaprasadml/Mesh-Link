@@ -1,5 +1,10 @@
 package com.meshlink.ui.sync
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,7 +19,19 @@ import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
 /**
- * OfflineBanner — Persistent banner displaying offline, recovery, or mesh state.
+ * BannerStateCategory representing discrete network & sync operational states.
+ */
+enum class BannerStateCategory {
+    ONLINE,
+    OFFLINE,
+    WAITING_FOR_PEERS,
+    MESH_AVAILABLE,
+    SYNC_PAUSED,
+    RECOVERING
+}
+
+/**
+ * OfflineBanner — Persistent status banner displaying online, offline, pause, waiting, or recovery state.
  */
 @Composable
 fun OfflineBanner(
@@ -23,38 +40,53 @@ fun OfflineBanner(
     onRetryClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val bannerConfig = when {
-        recoveryUi.isReconnecting -> BannerStateConfig(
+    val bannerCategory = when {
+        recoveryUi.isReconnecting -> BannerStateCategory.RECOVERING
+        syncUi.isOffline -> BannerStateCategory.OFFLINE
+        syncUi.isSyncing -> BannerStateCategory.ONLINE
+        !recoveryUi.isMeshRestored -> BannerStateCategory.WAITING_FOR_PEERS
+        else -> BannerStateCategory.MESH_AVAILABLE
+    }
+
+    val bannerConfig = when (bannerCategory) {
+        BannerStateCategory.RECOVERING -> BannerStateConfig(
             title = "Recovery in Progress",
-            description = "Attempting mesh reconnection and rebuilding route table...",
+            description = "Rebuilding mesh route topology and discovering peers...",
             icon = Icons.Default.Autorenew,
-            backgroundColor = Color(0xFF1976D2),
+            backgroundColor = Color(0xFF1565C0),
             contentColor = Color.White
         )
-        syncUi.isOffline -> BannerStateConfig(
+        BannerStateCategory.OFFLINE -> BannerStateConfig(
             title = "Offline Mode — Store & Forward Active",
-            description = "No direct peers connected. Outgoing messages are queued safely.",
+            description = "No direct peers reachable. Outgoing messages are queued safely.",
             icon = Icons.Default.WifiOff,
-            backgroundColor = Color(0xFFE65100),
+            backgroundColor = Color(0xFFD84315),
             contentColor = Color.White
         )
-        syncUi.isSyncing -> BannerStateConfig(
+        BannerStateCategory.ONLINE -> BannerStateConfig(
             title = "Mesh Synchronization Active",
-            description = "${syncUi.remainingItems} items remaining (${String.format("%.1f", syncUi.speedKbps)} KB/s)",
+            description = "${syncUi.remainingItems} items pending (${String.format("%.1f", syncUi.speedKbps)} KB/s)",
             icon = Icons.Default.Sync,
-            backgroundColor = Color(0xFF0288D1),
+            backgroundColor = Color(0xFF0277BD),
             contentColor = Color.White
         )
-        !recoveryUi.isMeshRestored -> BannerStateConfig(
+        BannerStateCategory.WAITING_FOR_PEERS -> BannerStateConfig(
             title = "Waiting for Peers",
-            description = "Peer routes interrupted. Scanning BLE & Wi-Fi Direct interfaces...",
+            description = "Scanning BLE & Wi-Fi Direct interfaces for available mesh routes...",
             icon = Icons.Default.Search,
-            backgroundColor = Color(0xFFF57C00),
+            backgroundColor = Color(0xFFEF6C00),
             contentColor = Color.White
         )
-        else -> BannerStateConfig(
+        BannerStateCategory.SYNC_PAUSED -> BannerStateConfig(
+            title = "Synchronization Paused",
+            description = "Sync paused to preserve energy. Tap refresh to resume.",
+            icon = Icons.Default.PauseCircle,
+            backgroundColor = Color(0xFF455A64),
+            contentColor = Color.White
+        )
+        BannerStateCategory.MESH_AVAILABLE -> BannerStateConfig(
             title = "Mesh Network Available",
-            description = "Fully connected. Direct peer delivery & relay enabled.",
+            description = "Connected to mesh network. Real-time peer relay active.",
             icon = Icons.Default.CheckCircle,
             backgroundColor = Color(0xFF2E7D32),
             contentColor = Color.White
@@ -66,55 +98,59 @@ fun OfflineBanner(
             .fillMaxWidth()
             .offlineFadeAnimation(syncUi.isOffline),
         shape = MeshTheme.shapes.medium,
-        color = bannerConfig.backgroundColor.copy(alpha = 0.92f),
+        color = bannerConfig.backgroundColor.copy(alpha = 0.95f),
         tonalElevation = MeshTheme.elevation.card
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = MeshSpacing.CardInternalPadding, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
+        AnimatedContent(
+            targetState = bannerConfig,
+            transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
+            label = "BannerTransition"
+        ) { config ->
+            Row(
                 modifier = Modifier
-                    .size(36.dp)
-                    .reconnectRippleAnimation(recoveryUi.isReconnecting),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = MeshSpacing.CardInternalPadding, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(
-                    imageVector = bannerConfig.icon,
-                    contentDescription = bannerConfig.title,
-                    tint = bannerConfig.contentColor,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = bannerConfig.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = bannerConfig.contentColor
-                )
-                Text(
-                    text = bannerConfig.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = bannerConfig.contentColor.copy(alpha = 0.85f)
-                )
-            }
-
-            if (onRetryClick != null && (syncUi.isOffline || !recoveryUi.isMeshRestored)) {
-                OutlinedButton(
-                    onClick = onRetryClick,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = bannerConfig.contentColor
-                    ),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .reconnectRippleAnimation(recoveryUi.isReconnecting)
+                        .syncSpinnerAnimation(syncUi.isSyncing && config.icon == Icons.Default.Sync),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Retry",
-                        style = MaterialTheme.typography.labelSmall
+                    Icon(
+                        imageVector = config.icon,
+                        contentDescription = config.title,
+                        tint = config.contentColor,
+                        modifier = Modifier.size(24.dp)
                     )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = config.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = config.contentColor
+                    )
+                    Text(
+                        text = config.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = config.contentColor.copy(alpha = 0.88f)
+                    )
+                }
+
+                if (onRetryClick != null) {
+                    IconButton(
+                        onClick = onRetryClick
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh Banner State",
+                            tint = config.contentColor
+                        )
+                    }
                 }
             }
         }

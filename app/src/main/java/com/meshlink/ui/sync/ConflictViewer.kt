@@ -184,3 +184,15 @@ private fun ConflictRowItem(
         }
     }
 }
+
+/**
+ * ConflictViewer — Alias for ConflictViewerCard for component name consistency.
+ */
+@Composable
+fun ConflictViewer(
+    conflicts: List<ConflictUi>,
+    modifier: Modifier = Modifier
+) {
+    ConflictViewerCard(conflicts = conflicts, modifier = modifier)
+}
+

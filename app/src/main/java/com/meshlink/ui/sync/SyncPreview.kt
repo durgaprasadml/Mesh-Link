@@ -82,7 +82,7 @@ private val sampleUiState = MeshSyncUiState(
     )
 )
 
-@Preview(name = "Light Mode", showBackground = true)
+@Preview(name = "Light Mode Phone", showBackground = true, widthDp = 360, heightDp = 740)
 @Composable
 fun MeshSyncScreenLightPreview() {
     MeshTheme(themeMode = "LIGHT") {
@@ -90,7 +90,7 @@ fun MeshSyncScreenLightPreview() {
     }
 }
 
-@Preview(name = "Dark Mode", showBackground = true)
+@Preview(name = "Dark Mode Phone", showBackground = true, widthDp = 360, heightDp = 740)
 @Composable
 fun MeshSyncScreenDarkPreview() {
     MeshTheme(themeMode = "DARK") {
@@ -98,7 +98,7 @@ fun MeshSyncScreenDarkPreview() {
     }
 }
 
-@Preview(name = "AMOLED Mode", showBackground = true)
+@Preview(name = "AMOLED Dark Mode", showBackground = true, widthDp = 360, heightDp = 740)
 @Composable
 fun MeshSyncScreenAmoledPreview() {
     MeshTheme(themeMode = "DARK", amoledDark = true) {
@@ -122,9 +122,25 @@ fun MeshSyncScreenFoldablePreview() {
     }
 }
 
-@Preview(name = "Compact Mobile", widthDp = 360, heightDp = 640, showBackground = true)
+@Preview(name = "Landscape Mode", widthDp = 840, heightDp = 400, showBackground = true)
 @Composable
-fun MeshSyncScreenCompactPreview() {
+fun MeshSyncScreenLandscapePreview() {
+    MeshTheme(themeMode = "DARK") {
+        MeshSyncScreen(state = sampleUiState, onBackClick = {})
+    }
+}
+
+@Preview(name = "Large Font Scaling", fontScale = 1.5f, showBackground = true, widthDp = 360, heightDp = 740)
+@Composable
+fun MeshSyncScreenLargeFontPreview() {
+    MeshTheme(themeMode = "DARK") {
+        MeshSyncScreen(state = sampleUiState, onBackClick = {})
+    }
+}
+
+@Preview(name = "RTL Layout Preview", locale = "ar", showBackground = true, widthDp = 360, heightDp = 740)
+@Composable
+fun MeshSyncScreenRtlPreview() {
     MeshTheme(themeMode = "DARK") {
         MeshSyncScreen(state = sampleUiState, onBackClick = {})
     }

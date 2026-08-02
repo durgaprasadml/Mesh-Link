@@ -14,7 +14,7 @@ import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
 /**
- * MeshSyncScreen — Main Master Screen for Mesh-Link Phase 14: Offline Experience, Synchronization & Mesh Reliability.
+ * MeshSyncScreen — Main Master Screen for Mesh-Link Phase 13: Offline Experience, Synchronization & Mesh Reliability.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,9 +28,58 @@ fun MeshSyncScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Overview & Queue, 1 = Recovery & Peers, 2 = Storage & History
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilterCategory by remember { mutableStateOf(SyncFilterCategory.ALL) }
+
+    val filteredPendingMessages = remember(state.pendingMessages, searchQuery, selectedFilterCategory) {
+        state.pendingMessages.filter { msg ->
+            val matchesSearch = searchQuery.isEmpty() ||
+                    msg.id.contains(searchQuery, ignoreCase = true) ||
+                    msg.recipientName.contains(searchQuery, ignoreCase = true) ||
+                    msg.previewText.contains(searchQuery, ignoreCase = true)
+
+            val matchesCategory = when (selectedFilterCategory) {
+                SyncFilterCategory.ALL -> true
+                SyncFilterCategory.PENDING -> msg.status == "QUEUED" || msg.status == "PENDING"
+                SyncFilterCategory.RETRY -> msg.status == "RETRYING"
+                SyncFilterCategory.FAILED -> msg.status == "FAILED"
+                SyncFilterCategory.DELIVERED -> msg.status == "DELIVERED"
+                SyncFilterCategory.QUEUE -> true
+                else -> true
+            }
+            matchesSearch && matchesCategory
+        }
+    }
+
+    val filteredTimelineEvents = remember(state.timelineEvents, searchQuery) {
+        if (searchQuery.isEmpty()) state.timelineEvents
+        else state.timelineEvents.filter {
+            it.title.contains(searchQuery, ignoreCase = true) ||
+                    it.detail.contains(searchQuery, ignoreCase = true) ||
+                    it.eventType.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    val filteredPeers = remember(state.peers, searchQuery, selectedFilterCategory) {
+        state.peers.filter { peer ->
+            val matchesSearch = searchQuery.isEmpty() ||
+                    peer.name.contains(searchQuery, ignoreCase = true) ||
+                    peer.peerId.contains(searchQuery, ignoreCase = true)
+
+            val matchesCategory = when (selectedFilterCategory) {
+                SyncFilterCategory.PEERS -> true
+                SyncFilterCategory.ALL -> true
+                else -> true
+            }
+            matchesSearch && matchesCategory
+        }
+    }
 
     MeshScreen(
-        modifier = modifier,
+        modifier = modifier
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding(),
         topBar = {
             MeshTopAppBar(
                 title = "Offline Sync & Mesh Reliability",
@@ -54,6 +103,7 @@ fun MeshSyncScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .consumeWindowInsets(paddingValues)
         ) {
             // Persistent Offline / Sync State Banner
             OfflineBanner(
@@ -61,6 +111,29 @@ fun MeshSyncScreen(
                 recoveryUi = state.recoveryStatus,
                 onRetryClick = onRetryClick,
                 modifier = Modifier.padding(horizontal = MeshSpacing.ScreenPadding, vertical = 6.dp)
+            )
+
+            // Search Bar Component
+            SyncSearch(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                modifier = Modifier.padding(horizontal = MeshSpacing.ScreenPadding, vertical = 4.dp)
+            )
+
+            // Filter Chips Component
+            SyncFilters(
+                selectedCategory = selectedFilterCategory,
+                onCategorySelected = { selectedFilterCategory = it },
+                counts = mapOf(
+                    SyncFilterCategory.ALL to state.pendingMessages.size + state.peers.size,
+                    SyncFilterCategory.PENDING to state.queueUi.pendingCount,
+                    SyncFilterCategory.DELIVERED to state.queueUi.completedCount,
+                    SyncFilterCategory.FAILED to state.queueUi.failedCount,
+                    SyncFilterCategory.RETRY to state.queueUi.retryingCount,
+                    SyncFilterCategory.QUEUE to state.queueUi.totalQueueSize,
+                    SyncFilterCategory.PEERS to state.peers.size
+                ),
+                modifier = Modifier.padding(horizontal = MeshSpacing.ScreenPadding, vertical = 2.dp)
             )
 
             // Mission Control Primary Navigation Tabs
@@ -89,7 +162,7 @@ fun MeshSyncScreen(
                 val isWideScreen = maxWidth >= 840.dp
 
                 if (isWideScreen) {
-                    // Responsive Tablet / Wide Screen Dual Column Layout
+                    // Responsive Tablet / Foldable Wide Screen Dual Column Layout
                     Row(
                         modifier = Modifier
                             .fillMaxSize()
@@ -106,19 +179,23 @@ fun MeshSyncScreen(
                         ) {
                             when (selectedTab) {
                                 0 -> {
-                                    item { SyncDashboard(syncUi = state.syncUi, queueUi = state.queueUi, deliveryUi = state.deliveryUi, onForceSyncClick = onForceSyncClick) }
-                                    item { SyncProgressCard(syncUi = state.syncUi) }
-                                    item { QueueStatusCard(queueUi = state.queueUi) }
-                                    item { PendingMessagesList(pendingMessages = state.pendingMessages, onCancelMessageClick = onCancelMessageClick, onForceRetryClick = onForceRetryMessageClick) }
+                                    item { MeshHealthDashboard(syncUi = state.syncUi, queueUi = state.queueUi, deliveryUi = state.deliveryUi, queueStatsUi = state.queueStatsUi, onForceSyncClick = onForceSyncClick) }
+                                    item { SyncProgress(syncUi = state.syncUi) }
+                                    item { QueueOverview(queueUi = state.queueUi) }
+                                    if (filteredPendingMessages.isEmpty() && searchQuery.isNotEmpty()) {
+                                        item { SyncEmptyState(onRefreshClick = onForceSyncClick) }
+                                    } else {
+                                        item { PendingMessages(pendingMessages = filteredPendingMessages, onCancelMessageClick = onCancelMessageClick, onForceRetryClick = onForceRetryMessageClick) }
+                                    }
                                 }
                                 1 -> {
-                                    item { MeshRecoveryCard(recoveryUi = state.recoveryStatus) }
-                                    item { PeerAvailabilityCard(peers = state.peers) }
+                                    item { MeshRecovery(recoveryUi = state.recoveryStatus) }
+                                    item { PeerAvailability(peers = filteredPeers) }
                                 }
                                 2 -> {
-                                    item { OfflineStorageCard(offlineUi = state.offlineUi) }
-                                    item { QueueStatisticsCard(stats = state.queueStatsUi) }
-                                    item { ConflictViewerCard(conflicts = state.conflicts) }
+                                    item { OfflineStorage(offlineUi = state.offlineUi) }
+                                    item { DeliveryStatistics(deliveryUi = state.deliveryUi, queueStatsUi = state.queueStatsUi) }
+                                    item { ConflictViewer(conflicts = state.conflicts) }
                                 }
                             }
                         }
@@ -133,17 +210,17 @@ fun MeshSyncScreen(
                         ) {
                             when (selectedTab) {
                                 0 -> {
-                                    item { RetryStatusCard(retryUi = state.retryUi) }
-                                    item { QueueStatisticsCard(stats = state.queueStatsUi) }
-                                    item { SyncTimelineCard(timelineEvents = state.timelineEvents) }
+                                    item { RetryStatus(retryUi = state.retryUi) }
+                                    item { DeliveryStatistics(deliveryUi = state.deliveryUi, queueStatsUi = state.queueStatsUi) }
+                                    item { SyncTimeline(timelineEvents = filteredTimelineEvents) }
                                 }
                                 1 -> {
                                     item { DeliveryHistoryCard(history = state.deliveryHistory) }
-                                    item { SyncTimelineCard(timelineEvents = state.timelineEvents) }
+                                    item { SyncTimeline(timelineEvents = filteredTimelineEvents) }
                                 }
                                 2 -> {
                                     item { DeliveryHistoryCard(history = state.deliveryHistory) }
-                                    item { SyncTimelineCard(timelineEvents = state.timelineEvents) }
+                                    item { SyncTimeline(timelineEvents = filteredTimelineEvents) }
                                 }
                             }
                         }
@@ -162,26 +239,30 @@ fun MeshSyncScreen(
                     ) {
                         when (selectedTab) {
                             0 -> {
-                                item { SyncDashboard(syncUi = state.syncUi, queueUi = state.queueUi, deliveryUi = state.deliveryUi, onForceSyncClick = onForceSyncClick) }
-                                item { SyncProgressCard(syncUi = state.syncUi) }
-                                item { QueueStatusCard(queueUi = state.queueUi) }
-                                item { PendingMessagesList(pendingMessages = state.pendingMessages, onCancelMessageClick = onCancelMessageClick, onForceRetryClick = onForceRetryMessageClick) }
-                                item { RetryStatusCard(retryUi = state.retryUi) }
-                                item { QueueStatisticsCard(stats = state.queueStatsUi) }
-                                item { SyncTimelineCard(timelineEvents = state.timelineEvents) }
+                                item { MeshHealthDashboard(syncUi = state.syncUi, queueUi = state.queueUi, deliveryUi = state.deliveryUi, queueStatsUi = state.queueStatsUi, onForceSyncClick = onForceSyncClick) }
+                                item { SyncProgress(syncUi = state.syncUi) }
+                                item { QueueOverview(queueUi = state.queueUi) }
+                                if (filteredPendingMessages.isEmpty() && state.pendingMessages.isEmpty()) {
+                                    item { SyncEmptyState(onRefreshClick = onForceSyncClick) }
+                                } else {
+                                    item { PendingMessages(pendingMessages = filteredPendingMessages, onCancelMessageClick = onCancelMessageClick, onForceRetryClick = onForceRetryMessageClick) }
+                                }
+                                item { RetryStatus(retryUi = state.retryUi) }
+                                item { DeliveryStatistics(deliveryUi = state.deliveryUi, queueStatsUi = state.queueStatsUi) }
+                                item { SyncTimeline(timelineEvents = filteredTimelineEvents) }
                             }
                             1 -> {
-                                item { MeshRecoveryCard(recoveryUi = state.recoveryStatus) }
-                                item { PeerAvailabilityCard(peers = state.peers) }
+                                item { MeshRecovery(recoveryUi = state.recoveryStatus) }
+                                item { PeerAvailability(peers = filteredPeers) }
                                 item { DeliveryHistoryCard(history = state.deliveryHistory) }
-                                item { SyncTimelineCard(timelineEvents = state.timelineEvents) }
+                                item { SyncTimeline(timelineEvents = filteredTimelineEvents) }
                             }
                             2 -> {
-                                item { OfflineStorageCard(offlineUi = state.offlineUi) }
-                                item { QueueStatisticsCard(stats = state.queueStatsUi) }
-                                item { ConflictViewerCard(conflicts = state.conflicts) }
+                                item { OfflineStorage(offlineUi = state.offlineUi) }
+                                item { DeliveryStatistics(deliveryUi = state.deliveryUi, queueStatsUi = state.queueStatsUi) }
+                                item { ConflictViewer(conflicts = state.conflicts) }
                                 item { DeliveryHistoryCard(history = state.deliveryHistory) }
-                                item { SyncTimelineCard(timelineEvents = state.timelineEvents) }
+                                item { SyncTimeline(timelineEvents = filteredTimelineEvents) }
                             }
                         }
                     }

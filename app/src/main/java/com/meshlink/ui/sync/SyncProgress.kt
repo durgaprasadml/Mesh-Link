@@ -172,3 +172,15 @@ fun SyncProgressCard(
         }
     }
 }
+
+/**
+ * SyncProgress — Alias for SyncProgressCard for component name consistency.
+ */
+@Composable
+fun SyncProgress(
+    syncUi: SyncUi,
+    modifier: Modifier = Modifier
+) {
+    SyncProgressCard(syncUi = syncUi, modifier = modifier)
+}
+

@@ -20,13 +20,20 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * SyncTimeline — Activity timeline displaying key sync events in chronological order.
+ * SyncTimeline — Activity stream displaying key sync events in chronological order, grouped by Today, Yesterday, and Earlier.
  */
 @Composable
 fun SyncTimelineCard(
     timelineEvents: List<SyncTimelineUi>,
     modifier: Modifier = Modifier
 ) {
+    val now = System.currentTimeMillis()
+    val oneDayMs = 24 * 60 * 60 * 1000L
+
+    val todayEvents = timelineEvents.filter { now - it.timestamp < oneDayMs }
+    val yesterdayEvents = timelineEvents.filter { now - it.timestamp in oneDayMs until (2 * oneDayMs) }
+    val earlierEvents = timelineEvents.filter { now - it.timestamp >= 2 * oneDayMs }
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MeshTheme.shapes.large,
@@ -54,7 +61,7 @@ fun SyncTimelineCard(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Sync Activity Timeline",
+                        text = "Network Activity Stream",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -77,7 +84,7 @@ fun SyncTimelineCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No timeline events recorded yet",
+                        text = "No activity events recorded yet",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -86,19 +93,49 @@ fun SyncTimelineCard(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 300.dp),
+                        .heightIn(max = 320.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    items(
-                        items = timelineEvents,
-                        key = { it.id }
-                    ) { event ->
-                        TimelineRowItem(event = event)
+                    if (todayEvents.isNotEmpty()) {
+                        item {
+                            TimelineHeader(title = "Today")
+                        }
+                        items(todayEvents, key = { "today_${it.id}" }) { event ->
+                            TimelineRowItem(event = event)
+                        }
+                    }
+
+                    if (yesterdayEvents.isNotEmpty()) {
+                        item {
+                            TimelineHeader(title = "Yesterday")
+                        }
+                        items(yesterdayEvents, key = { "yesterday_${it.id}" }) { event ->
+                            TimelineRowItem(event = event)
+                        }
+                    }
+
+                    if (earlierEvents.isNotEmpty()) {
+                        item {
+                            TimelineHeader(title = "Earlier")
+                        }
+                        items(earlierEvents, key = { "earlier_${it.id}" }) { event ->
+                            TimelineRowItem(event = event)
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun TimelineHeader(title: String) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+    )
 }
 
 @Composable
@@ -109,7 +146,8 @@ private fun TimelineRowItem(
     val (icon, color) = when (event.eventType) {
         "Message Queued" -> Icons.Default.MoveToInbox to Color(0xFFFF9800)
         "Peer Connected" -> Icons.Default.BluetoothConnected to Color(0xFF2196F3)
-        "Route Established" -> Icons.AutoMirrored.Filled.AltRoute to Color(0xFF9C27B0)
+        "Peer Found" -> Icons.Default.PersonSearch to Color(0xFF0288D1)
+        "Route Established", "Route Built" -> Icons.AutoMirrored.Filled.AltRoute to Color(0xFF9C27B0)
         "Delivered" -> Icons.Default.CheckCircle to Color(0xFF4CAF50)
         "Retry" -> Icons.Default.Replay to Color(0xFFFF5722)
         "Sync Complete" -> Icons.Default.DoneAll to Color(0xFF00F59B)
@@ -168,4 +206,15 @@ private fun TimelineRowItem(
             }
         }
     }
+}
+
+/**
+ * SyncTimeline — Alias for SyncTimelineCard for component name consistency.
+ */
+@Composable
+fun SyncTimeline(
+    timelineEvents: List<SyncTimelineUi>,
+    modifier: Modifier = Modifier
+) {
+    SyncTimelineCard(timelineEvents = timelineEvents, modifier = modifier)
 }

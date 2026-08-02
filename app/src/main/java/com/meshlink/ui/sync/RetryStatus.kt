@@ -154,3 +154,15 @@ fun RetryStatusCard(
         }
     }
 }
+
+/**
+ * RetryStatus — Alias for RetryStatusCard for component naming consistency.
+ */
+@Composable
+fun RetryStatus(
+    retryUi: RetryUi,
+    modifier: Modifier = Modifier
+) {
+    RetryStatusCard(retryUi = retryUi, modifier = modifier)
+}
+

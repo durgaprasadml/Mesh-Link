@@ -242,3 +242,22 @@ private fun PendingMessageItem(
         }
     }
 }
+
+/**
+ * PendingMessages — Alias for PendingMessagesList for component naming consistency.
+ */
+@Composable
+fun PendingMessages(
+    pendingMessages: List<PendingMessageUi>,
+    onCancelMessageClick: ((PendingMessageUi) -> Unit)? = null,
+    onForceRetryClick: ((PendingMessageUi) -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    PendingMessagesList(
+        pendingMessages = pendingMessages,
+        onCancelMessageClick = onCancelMessageClick,
+        onForceRetryClick = onForceRetryClick,
+        modifier = modifier
+    )
+}
+

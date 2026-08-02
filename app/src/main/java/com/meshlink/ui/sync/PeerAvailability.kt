@@ -218,3 +218,15 @@ private fun PeerStatusRow(
         }
     }
 }
+
+/**
+ * PeerAvailability — Alias for PeerAvailabilityCard for component name consistency.
+ */
+@Composable
+fun PeerAvailability(
+    peers: List<PeerStatusUi>,
+    modifier: Modifier = Modifier
+) {
+    PeerAvailabilityCard(peers = peers, modifier = modifier)
+}
+

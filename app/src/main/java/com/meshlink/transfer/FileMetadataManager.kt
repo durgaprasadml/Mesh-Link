@@ -8,33 +8,37 @@ data class FileMetadata(
     val fileName: String,
     val mimeType: String,
     val totalBytes: Long,
-    val sha256Checksum: String? = null
+    val sha256Checksum: String? = null,
+    val thumbnailBase64: String? = null
 )
 
 @Singleton
 class FileMetadataManager @Inject constructor() {
 
     fun generateMetaPayload(metadata: FileMetadata): String {
-        // Format: "MEDIA:{mimeType}:{sha256}:{totalBytes}:{fileName}"
+        // Format: "MEDIA:{mimeType}:{sha256}:{totalBytes}:{fileName}:{thumbnailBase64}"
         val checksum = metadata.sha256Checksum ?: ""
-        return "MEDIA:${metadata.mimeType}:$checksum:${metadata.totalBytes}:${metadata.fileName}"
+        val thumbnail = metadata.thumbnailBase64 ?: ""
+        return "MEDIA:${metadata.mimeType}:$checksum:${metadata.totalBytes}:${metadata.fileName}:$thumbnail"
     }
 
     fun parseMetaPayload(payload: String): FileMetadata? {
         if (!payload.startsWith("MEDIA:")) return null
-        val parts = payload.split(":", limit = 5)
+        val parts = payload.split(":", limit = 6)
         if (parts.size < 2) return null
         
         val mimeType = parts[1]
         val checksum = if (parts.size > 2 && parts[2].isNotBlank()) parts[2] else null
         val totalBytes = if (parts.size > 3) parts[3].toLongOrNull() ?: 0L else 0L
-        val fileName = if (parts.size > 4) parts[4] else generateDefaultFileName(mimeType)
+        val fileName = if (parts.size > 4 && parts[4].isNotBlank()) parts[4] else generateDefaultFileName(mimeType)
+        val thumbnailBase64 = if (parts.size > 5 && parts[5].isNotBlank()) parts[5] else null
         
         return FileMetadata(
             fileName = fileName,
             mimeType = mimeType,
             totalBytes = totalBytes,
-            sha256Checksum = checksum
+            sha256Checksum = checksum,
+            thumbnailBase64 = thumbnailBase64
         )
     }
 

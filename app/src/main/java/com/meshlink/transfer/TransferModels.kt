@@ -56,7 +56,8 @@ data class TransferSession(
     var startTimeMs: Long = 0L,
     var endTimeMs: Long = 0L,
     var retries: Int = 0,
-    var filePath: String? = null // Null until assembled, or points to source file for outgoing
+    var filePath: String? = null, // Null until assembled, or points to source file for outgoing
+    var thumbnailBase64: String? = null
 ) {
     fun getProgress(): Float {
         if (totalChunks <= 0) return 0f

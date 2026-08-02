@@ -25,9 +25,25 @@ class VoiceMessageHandler @Inject constructor(
         val targetPeerId = MeshIdNormalizer.canonicalize(targetMeshId)
 
         val voiceFile = File(filePath)
-        if (!voiceFile.exists()) return
-
         val messageId = UUID.randomUUID().toString()
+
+        if (!voiceFile.exists()) {
+            val failedMessage = MessageEntity(
+                messageId = messageId,
+                chatId = targetPeerId,
+                senderId = localPeerId,
+                text = "🎤 Voice Note (Failed)",
+                timestamp = System.currentTimeMillis(),
+                isFromMe = true,
+                status = DeliveryStatus.FAILED,
+                messageType = MessageType.VOICE,
+                mediaPath = filePath,
+                mediaDurationMs = durationMs
+            )
+            chatDao.insertMessageAndUpdateChat(failedMessage, chatName)
+            return
+        }
+
         val message = MessageEntity(
             messageId = messageId,
             chatId = targetPeerId,

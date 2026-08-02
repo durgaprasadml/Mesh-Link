@@ -91,7 +91,8 @@ class TransferManager @Inject constructor(
         senderId: String,
         targetId: String,
         priority: TransferPriority = TransferPriority.MEDIUM,
-        transferId: String = UUID.randomUUID().toString()
+        transferId: String = UUID.randomUUID().toString(),
+        thumbnailBase64: String? = null
     ): String {
         if (!file.exists()) {
             MeshLogger.e(TAG, "Cannot send non-existent file: ${file.absolutePath}")
@@ -123,6 +124,7 @@ class TransferManager @Inject constructor(
             transportUsed = transport,
             sha256Checksum = checksum,
             filePath = file.absolutePath,
+            thumbnailBase64 = thumbnailBase64,
             state = TransferState.QUEUED,
             startTimeMs = System.currentTimeMillis()
         )
@@ -152,7 +154,7 @@ class TransferManager @Inject constructor(
 
         // Send META packet
         val metaPayload = metaManager.generateMetaPayload(
-            FileMetadata(session.fileName, session.mimeType, session.totalBytes, session.sha256Checksum)
+            FileMetadata(session.fileName, session.mimeType, session.totalBytes, session.sha256Checksum, session.thumbnailBase64)
         )
         sendPacket(
             session.senderId, session.targetId, session.transferId,
@@ -243,6 +245,7 @@ class TransferManager @Inject constructor(
             totalChunks = packet.totalChunks,
             direction = TransferDirection.INCOMING,
             sha256Checksum = meta.sha256Checksum,
+            thumbnailBase64 = meta.thumbnailBase64,
             state = TransferState.RECEIVING,
             startTimeMs = System.currentTimeMillis()
         )

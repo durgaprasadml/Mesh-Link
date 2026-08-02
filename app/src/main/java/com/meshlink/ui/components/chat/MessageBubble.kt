@@ -145,7 +145,9 @@ fun MessageBubble(
                 MessageType.IMAGE -> {
                     val mediaPath = message.mediaPath
                     val isComplete = message.status != DeliveryStatus.QUEUED && message.status != DeliveryStatus.FAILED
-                    val hasFullFile = mediaPath != null && File(mediaPath).exists()
+                    val hasFullFile = remember(mediaPath) {
+                        mediaPath != null && File(mediaPath).exists()
+                    }
                     
                     if (isComplete && hasFullFile) {
                         AsyncImage(

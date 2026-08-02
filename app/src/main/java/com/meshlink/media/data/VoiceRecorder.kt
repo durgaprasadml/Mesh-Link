@@ -27,7 +27,8 @@ class VoiceRecorder @Inject constructor(
         private const val TAG = "VoiceRecorder"
     }
 
-private var recorder: MediaRecorder? = null
+    @Volatile private var isRecorderStarted = false
+    private var recorder: MediaRecorder? = null
     private var outputFile: File? = null
     private var timerJob: Job? = null
 
@@ -38,6 +39,7 @@ private var recorder: MediaRecorder? = null
     val elapsedMs: StateFlow<Long> = _elapsedMs.asStateFlow()
 
     fun startRecording(): Boolean {
+        cleanup()
         return try {
             val mediaDir = File(context.filesDir, "mesh_media")
             if (!mediaDir.exists()) mediaDir.mkdirs()
@@ -63,10 +65,11 @@ private var recorder: MediaRecorder? = null
                 start()
             }
 
+            isRecorderStarted = true
             _isRecording.value = true
             _elapsedMs.value = 0L
 
-            // Timer with auto-stop at 10 seconds
+            // Timer with auto-stop at MAX_DURATION_MS
             timerJob = applicationScope.launch(defaultDispatcher) {
                 val startTime = System.currentTimeMillis()
                 while (isActive && _isRecording.value) {
@@ -93,31 +96,42 @@ private var recorder: MediaRecorder? = null
 
     /**
      * Stop recording and return the file path and duration.
-     * Returns null if recording failed.
+     * Returns null if recording failed or duration was too short (<300ms).
      */
     fun stopRecording(): Pair<String, Long>? {
-        return try {
-            val duration = _elapsedMs.value
-            timerJob?.cancel()
-            timerJob = null
+        val duration = _elapsedMs.value
+        timerJob?.cancel()
+        timerJob = null
 
-            recorder?.apply {
-                stop()
-                release()
-            }
-            recorder = null
-            _isRecording.value = false
+        val wasStarted = isRecorderStarted
+        isRecorderStarted = false
 
-            val path = outputFile?.absolutePath
-            if (path != null && File(path).exists()) {
-                MeshLogger.d(TAG, "Recording stopped: $path (${duration}ms)")
-                path to duration
-            } else {
-                null
+        val rec = recorder
+        recorder = null
+        _isRecording.value = false
+
+        var stopSuccessful = false
+        if (wasStarted && rec != null) {
+            try {
+                rec.stop()
+                stopSuccessful = true
+            } catch (e: Exception) {
+                MeshLogger.w(TAG, "MediaRecorder stop failed (e.g. recording too short): ${e.message}")
+            } finally {
+                try {
+                    rec.release()
+                } catch (_: Exception) {}
             }
-        } catch (e: Exception) {
-            MeshLogger.e(TAG, "Failed to stop recording: ${e.message}")
-            cleanup()
+        }
+
+        val path = outputFile?.absolutePath
+        return if (stopSuccessful && duration >= 300L && path != null && File(path).exists()) {
+            MeshLogger.d(TAG, "Recording stopped successfully: $path (${duration}ms)")
+            path to duration
+        } else {
+            MeshLogger.w(TAG, "Recording discarded (duration=${duration}ms, path=$path)")
+            outputFile?.delete()
+            outputFile = null
             null
         }
     }
@@ -129,15 +143,27 @@ private var recorder: MediaRecorder? = null
     private fun cleanup() {
         timerJob?.cancel()
         timerJob = null
-        try {
-            recorder?.apply {
-                stop()
-                release()
-            }
-        } catch (_: Exception) {}
+
+        val wasStarted = isRecorderStarted
+        isRecorderStarted = false
+
+        val rec = recorder
         recorder = null
         _isRecording.value = false
         _elapsedMs.value = 0L
+
+        if (rec != null) {
+            if (wasStarted) {
+                try {
+                    rec.stop()
+                } catch (_: Exception) {}
+            }
+            try {
+                rec.release()
+            } catch (_: Exception) {}
+        }
+
         outputFile?.delete()
+        outputFile = null
     }
 }

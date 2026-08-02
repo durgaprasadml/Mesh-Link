@@ -36,6 +36,9 @@ interface ChatDao {
     @Query("UPDATE messages SET status = :status, text = :text, mediaPath = :mediaPath WHERE messageId = :messageId")
     suspend fun updateMediaMessage(messageId: String, status: DeliveryStatus, text: String, mediaPath: String?)
 
+    @Query("UPDATE messages SET thumbnailBase64 = :thumbnailBase64 WHERE messageId = :messageId")
+    suspend fun updateMessageThumbnail(messageId: String, thumbnailBase64: String?)
+
     @Transaction
     suspend fun insertMessageAndUpdateChat(message: MessageEntity, chatName: String) {
         val existing = getMessageByUuid(message.messageId)

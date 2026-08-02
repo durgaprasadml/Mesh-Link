@@ -29,7 +29,8 @@ class MediaMessageHandler @Inject constructor(
     private val userRepository: UserRepository,
     private val chatDao: ChatDao,
     private val transferManager: TransferManager,
-    private val packetDispatcher: PacketDispatcher
+    private val packetDispatcher: PacketDispatcher,
+    private val metaManager: com.meshlink.transfer.FileMetadataManager
 ) {
     private val TAG = "MediaMessageHandler"
 
@@ -89,7 +90,8 @@ class MediaMessageHandler @Inject constructor(
             file = localFile,
             senderId = localPeerId,
             targetId = targetPeerId,
-            transferId = messageId
+            transferId = messageId,
+            thumbnailBase64 = thumbnailBase64
         )
     }
 
@@ -142,10 +144,11 @@ class MediaMessageHandler @Inject constructor(
 
     suspend fun insertPlaceholderIncomingMedia(packet: MeshPacket) {
         val transferId = packet.transferId ?: return
-        if (chatDao.getMessageByUuid(transferId) != null) return
+        val parsedMeta = metaManager.parseMetaPayload(packet.payload)
 
-        val isImage = packet.mimeType?.contains("image") == true
-        val isVoice = packet.mimeType?.contains("audio") == true
+        val mime = parsedMeta?.mimeType ?: packet.mimeType
+        val isImage = mime?.contains("image") == true
+        val isVoice = mime?.contains("audio") == true
 
         val messageType = when {
             isImage -> MessageType.IMAGE
@@ -162,6 +165,14 @@ class MediaMessageHandler @Inject constructor(
         val chatId = MeshIdNormalizer.canonicalize(packet.senderId)
         val senderName = MeshIdNormalizer.canonicalize(packet.senderId)
 
+        val existingMessage = chatDao.getMessageByUuid(transferId)
+        if (existingMessage != null) {
+            if (parsedMeta?.thumbnailBase64 != null && existingMessage.thumbnailBase64 == null) {
+                chatDao.updateMessageThumbnail(transferId, parsedMeta.thumbnailBase64)
+            }
+            return
+        }
+
         val message = MessageEntity(
             messageId = transferId,
             chatId = chatId,
@@ -171,7 +182,10 @@ class MediaMessageHandler @Inject constructor(
             isFromMe = false,
             status = DeliveryStatus.QUEUED,
             messageType = messageType,
-            mediaPath = null
+            mediaPath = null,
+            mimeType = mime,
+            mediaSize = parsedMeta?.totalBytes,
+            thumbnailBase64 = parsedMeta?.thumbnailBase64
         )
         chatDao.insertMessageAndUpdateChat(message, senderName)
     }

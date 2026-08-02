@@ -1,265 +1,28 @@
 package com.meshlink.ui.broadcast
 
-import androidx.compose.animation.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import com.meshlink.domain.model.Message
-import com.meshlink.ui.components.EmptyState
-import com.meshlink.ui.components.MeshScreen
-import com.meshlink.ui.designsystem.theme.MeshSpacing
-import com.meshlink.ui.designsystem.theme.MeshTheme
-import com.meshlink.ui.designsystem.theme.scaleOnPress
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Public entry-point bridge screen for Broadcast & Group Communication.
+ * Strictly collects ViewModel state and forwards interactions to [MeshBroadcastScreen].
+ */
 @Composable
 fun BroadcastScreen(
     onBack: () -> Unit,
     viewModel: BroadcastViewModel = hiltViewModel()
 ) {
-    var messageText by remember { mutableStateOf("") }
-    val maxChars = 500
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val peerIdentities by viewModel.peerIdentities.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
 
-    // Auto-scroll to bottom only when user is already at bottom
-    LaunchedEffect(uiState.messages.size) {
-        if (uiState.messages.isNotEmpty()) {
-            val visibleItems = listState.layoutInfo.visibleItemsInfo
-            val isAtBottom = visibleItems.isEmpty() || 
-                (visibleItems.last().index >= listState.layoutInfo.totalItemsCount - 2)
-            
-            if (isAtBottom) {
-                listState.animateScrollToItem(uiState.messages.size - 1)
-            }
+    MeshBroadcastScreen(
+        messages = uiState.messages,
+        peerIdentities = peerIdentities,
+        onBack = onBack,
+        onSendBroadcast = { messageText ->
+            viewModel.sendBroadcast(messageText)
         }
-    }
-
-    MeshScreen(
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-        topBar = {
-            com.meshlink.ui.components.MeshTopAppBar(
-                title = "Broadcast",
-                subtitle = "All nearby devices",
-                onBackClick = onBack,
-                containerColor = MaterialTheme.colorScheme.background
-            )
-        },
-        bottomBar = {
-            Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = MeshTheme.elevation.level1) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(MeshTheme.spacing.medium)
-                ) {
-                    // Info pill
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(MeshTheme.shapes.small)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
-                            .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Info, contentDescription = "Information", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MeshTheme.spacing.mediumLarge))
-                        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
-                        Text(
-                            "Message will be sent to all nearby devices",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
-
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        OutlinedTextField(
-                            value = messageText,
-                            onValueChange = { if (it.length <= maxChars) messageText = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("Type a broadcast...", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                cursorColor = MaterialTheme.colorScheme.primary,
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            shape = MeshTheme.shapes.large,
-                            maxLines = 4,
-                            textStyle = MaterialTheme.typography.bodyLarge
-                        )
-
-                        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
-
-                        IconButton(
-                            onClick = {
-                                val msg = messageText.trim()
-                                if (msg.isNotBlank()) {
-                                    viewModel.sendBroadcast(msg)
-                                    messageText = ""
-                                }
-                            },
-                            modifier = Modifier
-                                .size(MeshTheme.spacing.giant)
-                                .scaleOnPress(0.92f)
-                                .clip(MeshTheme.shapes.pill)
-                                .background(if (messageText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Send broadcast",
-                                tint = if (messageText.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Text(
-                        text = "${messageText.length}/$maxChars",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.align(Alignment.End).padding(top = MeshTheme.spacing.extraSmall)
-                    )
-                }
-            }
-        }
-    ) { paddingValues ->
-        AnimatedContent<Boolean>(
-            targetState = uiState.messages.isEmpty(),
-            label = "broadcast_list_transition"
-        ) { isEmpty ->
-            if (isEmpty) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .padding(start = MeshSpacing.ScreenPadding, end = MeshSpacing.ScreenPadding, top = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    EmptyState(
-                        icon = Icons.Default.Campaign,
-                        title = "No broadcasts yet",
-                        description = "Messages you send will appear here"
-                    )
-                }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentPadding = PaddingValues(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall),
-                    verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumSmall),
-                    reverseLayout = false
-                ) {
-                    items(
-                        items = uiState.messages,
-                        key = { it.messageId },
-                        contentType = { "broadcast_message" }
-                    ) { msg ->
-                        Box(modifier = Modifier.animateItem()) {
-                            BroadcastBubble(msg, peerIdentities)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BroadcastBubble(msg: Message, peerIdentities: Map<String, com.meshlink.domain.model.UserIdentity>) {
-    val isMe = msg.isFromMe
-    val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
-    val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
-    val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
-    
-    val formattedTime = remember(msg.timestamp) {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.timestamp))
-    }
-    val senderName = remember(msg.senderId) {
-        com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId)
-    }
-
-    val semanticDescription = buildString {
-        if (isMe) append("Your broadcast: ") else append("Broadcast from $senderName: ")
-        append("${msg.text}. Sent at $formattedTime.")
-    }
-
-    val shape = if (isMe) {
-        RoundedCornerShape(
-            topStart = MeshTheme.spacing.mediumLarge, 
-            topEnd = MeshTheme.spacing.mediumLarge, 
-            bottomStart = MeshTheme.spacing.mediumLarge, 
-            bottomEnd = MeshTheme.spacing.small
-        )
-    } else {
-        RoundedCornerShape(
-            topStart = MeshTheme.spacing.mediumLarge, 
-            topEnd = MeshTheme.spacing.mediumLarge, 
-            bottomStart = MeshTheme.spacing.small, 
-            bottomEnd = MeshTheme.spacing.mediumLarge
-        )
-    }
-
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = MeshTheme.spacing.extraGiant * 4 + MeshTheme.spacing.extraLarge)
-                .clip(shape)
-                .background(bubbleColor)
-                .semantics(mergeDescendants = true) {
-                    contentDescription = semanticDescription
-                }
-                .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
-        ) {
-            if (!isMe) {
-                val senderIdentity = peerIdentities[msg.senderId] ?: com.meshlink.domain.model.UserIdentity.create(msg.senderId, senderName)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    com.meshlink.ui.components.UserAvatar(
-                        identity = senderIdentity,
-                        size = 24.dp
-                    )
-                    Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-                    Text(
-                        text = senderIdentity.displayName.ifBlank { senderName },
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-            }
-            Text(text = msg.text, color = textColor, style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-            Text(
-                text = formattedTime,
-                color = textColor.copy(alpha = 0.7f),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.align(Alignment.End)
-            )
-        }
-    }
+    )
 }

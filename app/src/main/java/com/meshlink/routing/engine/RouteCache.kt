@@ -44,6 +44,8 @@ class RouteCache @Inject constructor(
                 // Update existing route metrics and freshness
                 existing.lastSeen = entry.lastSeen
                 if (entry.hops < existing.hops) existing.hops = entry.hops
+                existing.currentTransport = entry.currentTransport
+                existing.capability = entry.capability
                 
                 // EMA RSSI Smoothing
                 existing.metrics.updateRssi(entry.metrics.rssi, config.emaAlpha)

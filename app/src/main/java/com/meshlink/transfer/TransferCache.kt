@@ -16,7 +16,7 @@ class TransferCache @Inject constructor(
 ) {
     companion object {
         private const val TAG = "TransferCache"
-        private const val CACHE_DIR_NAME = "mesh_transfer_staging"
+        private const val CACHE_DIR_NAME = "transfers"
     }
 
     private val gson = Gson()
@@ -92,6 +92,15 @@ class TransferCache @Inject constructor(
             }
         } else {
             null
+        }
+    }
+
+    suspend fun deleteChunk(transferId: String, chunkIndex: Int): Boolean = withContext(Dispatchers.IO) {
+        val chunkFile = File(stagingDir, "$transferId/$chunkIndex.chk")
+        if (chunkFile.exists()) {
+            chunkFile.delete()
+        } else {
+            true
         }
     }
 

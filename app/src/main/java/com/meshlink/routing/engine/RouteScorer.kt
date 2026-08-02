@@ -35,7 +35,7 @@ class RouteScorer @Inject constructor() {
     private val latencyWeight = 0.10f
     private val reliabilityWeight = 0.10f
 
-    fun calculateScore(entry: RouteEntry): Int {
+    fun calculateScore(entry: RouteEntry, packetType: com.meshlink.domain.model.PacketType? = null): Int {
         val m = entry.metrics
 
         // 1. Hop Count Penalty (0-100). 1 hop = 100, 10 hops = 10.
@@ -61,21 +61,52 @@ class RouteScorer @Inject constructor() {
         }
         val reliabilityScore = reliability * reliabilityWeight
 
-        // Transport Boost (Wi-Fi Direct / Hybrid bonus)
-        val transportBoost = when (entry.routeType) {
-            RouteType.WIFI_DIRECT -> 10
-            RouteType.HYBRID -> 5
-            RouteType.BLE -> 0
+        // 6. Battery & Congestion penalties
+        var penalty = 0
+        if (m.batteryLevel in 0..20) penalty += 15
+        if (m.congestionLevel > 75) penalty += 20
+
+        // 7. Transport Boost based on packet type
+        val transportBoost = when (packetType) {
+            com.meshlink.domain.model.PacketType.MEDIA_CHUNK,
+            com.meshlink.domain.model.PacketType.MEDIA_META,
+            com.meshlink.domain.model.PacketType.VOICE_FRAME,
+            com.meshlink.domain.model.PacketType.VIDEO_FRAME,
+            com.meshlink.domain.model.PacketType.RESOURCE_SYNC -> {
+                when (entry.currentTransport) {
+                    RouteType.WIFI_DIRECT -> 15
+                    RouteType.HYBRID -> 12
+                    RouteType.BLE -> 0
+                }
+            }
+            com.meshlink.domain.model.PacketType.TEXT,
+            com.meshlink.domain.model.PacketType.LOCATION,
+            com.meshlink.domain.model.PacketType.SOS,
+            com.meshlink.domain.model.PacketType.DELIVERY_ACK -> {
+                when (entry.currentTransport) {
+                    RouteType.BLE -> 8
+                    RouteType.HYBRID -> 10
+                    RouteType.WIFI_DIRECT -> 5
+                }
+            }
+            else -> {
+                when (entry.currentTransport) {
+                    RouteType.WIFI_DIRECT -> 10
+                    RouteType.HYBRID -> 8
+                    RouteType.BLE -> 5
+                }
+            }
         }
 
-        var totalScore = (hopScore + stabilityScore + linkQualityScore + latencyScore + reliabilityScore).toInt() + transportBoost
+        val baseScore = (hopScore + stabilityScore + linkQualityScore + latencyScore + reliabilityScore).toInt()
+        val totalScore = baseScore - penalty + transportBoost
 
         return max(0, min(100, totalScore))
     }
     
-    fun updateScores(routes: List<RouteEntry>) {
+    fun updateScores(routes: List<RouteEntry>, packetType: com.meshlink.domain.model.PacketType? = null) {
         routes.forEach {
-            it.score = calculateScore(it)
+            it.score = calculateScore(it, packetType)
         }
     }
 }

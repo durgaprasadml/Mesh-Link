@@ -94,7 +94,7 @@ internal class MeshRouter @Inject constructor(
             launch {
                 bleTransport.incomingPackets.collect { (sender, packet) ->
                     try {
-                        handleIncomingPacket(sender, packet)
+                        handleIncomingPacket(sender, packet, RouteType.BLE)
                     } catch (e: Exception) {
                         MeshLogger.e(TAG, "Error handling BLE packet from $sender: ${e.message}")
                     }
@@ -103,7 +103,7 @@ internal class MeshRouter @Inject constructor(
             launch {
                 wifiTransport.incomingPackets.collect { (sender, packet) ->
                     try {
-                        handleIncomingPacket(sender, packet)
+                        handleIncomingPacket(sender, packet, RouteType.WIFI_DIRECT)
                     } catch (e: Exception) {
                         MeshLogger.e(TAG, "Error handling Wi-Fi packet from $sender: ${e.message}")
                     }
@@ -193,7 +193,8 @@ internal class MeshRouter @Inject constructor(
 
     private fun handleIncomingPacket(
         immediateSenderAddress: String,
-        packet: MeshPacket
+        packet: MeshPacket,
+        incomingTransport: RouteType = RouteType.BLE
     ) {
         val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)
         val canonicalLocalId  = com.meshlink.util.MeshIdNormalizer.canonicalize(localMeshId)
@@ -233,14 +234,14 @@ internal class MeshRouter @Inject constructor(
             }
         }
 
-        // Dynamic Route Learning - Track this sender's path
+        // Dynamic Route Learning - Track this sender's path with transport awareness
         routingEngine.routeManager.updateRoute(
             destinationId = packet.senderId,
             nextHop = immediateSenderAddress,
             hops = packet.hopCount,
-            rssi = -65, // In the future, we could extract RSSI from BLE stack for this packet, but for now just update freshness
+            rssi = -65,
             trustScore = trustManager.getTrustScore(packet.senderId),
-            type = RouteType.BLE
+            type = incomingTransport
         )
 
         MeshLogger.d(TAG) { "Packet [${packet.type}] from=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)} target=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)} ttl=${packet.ttl} hops=${packet.hopCount}" }
@@ -297,7 +298,6 @@ internal class MeshRouter @Inject constructor(
             visitedPath = if (localMeshId.isNotBlank()) packet.visitedPath + localMeshId else packet.visitedPath
         )
 
-        val forwardedJson = MeshPacketParser.toJson(relayPacket)
         val connectedNodes = bleTransport.connectedPeers + wifiTransport.connectedPeers
         val hasPeersToForward = connectedNodes.any { it != immediateSenderAddress }
 
@@ -382,9 +382,6 @@ internal class MeshRouter @Inject constructor(
             ttl = initialTtl
         )
 
-        val serialized = MeshPacketParser.toJson(packet)
-
-        
         routingEngine.markPacketProcessed(packet.packetId)
         routingEngine.queueOptimizer.enqueue(packet)
     }

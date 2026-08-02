@@ -64,25 +64,29 @@ class IntelligentTransportManagerTest {
     }
 
     @Test
-    fun `selectTransportForPayload routes TEXT and ACKs to BLE`() {
+    fun `selectTransportForPayload routes TEXT ACKs Location Beacons and Key Exchange to BLE`() {
         val textRoute = manager.selectTransportForPayload("target", PacketType.TEXT, 100L)
         val ackRoute = manager.selectTransportForPayload("target", PacketType.DELIVERY_ACK, 50L)
         val readRoute = manager.selectTransportForPayload("target", PacketType.READ_RECEIPT, 50L)
+        val locationRoute = manager.selectTransportForPayload("target", PacketType.LOCATION, 80L)
 
         assertEquals(RouteType.BLE, textRoute)
         assertEquals(RouteType.BLE, ackRoute)
         assertEquals(RouteType.BLE, readRoute)
+        assertEquals(RouteType.BLE, locationRoute)
     }
 
     @Test
-    fun `selectTransportForPayload routes Voice Video and Images to Wi-Fi Direct`() {
+    fun `selectTransportForPayload routes Voice Video Images and Files to Wi-Fi Direct`() {
         val voiceRoute = manager.selectTransportForPayload("target", PacketType.VOICE_FRAME, 200L)
         val videoRoute = manager.selectTransportForPayload("target", PacketType.VIDEO_FRAME, 5000L)
         val imageRoute = manager.selectTransportForPayload("target", PacketType.MEDIA_CHUNK, 1024L, mimeType = "image/jpeg")
+        val fileRoute = manager.selectTransportForPayload("target", PacketType.MEDIA_META, 2048L, mimeType = "application/pdf")
 
         assertEquals(RouteType.WIFI_DIRECT, voiceRoute)
         assertEquals(RouteType.WIFI_DIRECT, videoRoute)
         assertEquals(RouteType.WIFI_DIRECT, imageRoute)
+        assertEquals(RouteType.WIFI_DIRECT, fileRoute)
     }
 
     @Test
@@ -92,23 +96,42 @@ class IntelligentTransportManagerTest {
     }
 
     @Test
-    fun `sendPacket automatically falls back to BLE when Wi-Fi Direct is unavailable`() = runTest {
-        val mediaPacket = MeshPacket(
-            packetId = "pkt_media",
+    fun `sendPacket automatically falls back to BLE when Wi-Fi Direct is unavailable for small payloads`() = runTest {
+        val smallMediaPacket = MeshPacket(
+            packetId = "pkt_small_media",
             senderId = "me",
             targetId = "peer",
-            payload = "Image Data Bytes",
+            payload = "Small Image Data Bytes",
             type = PacketType.MEDIA_CHUNK,
             mimeType = "image/png"
         )
 
-        val result = manager.sendPacket(mediaPacket)
+        val result = manager.sendPacket(smallMediaPacket)
 
         assertTrue(result is MeshResult.Success)
-        coVerify(exactly = 1) { bleTransport.broadcastPacket(mediaPacket, excludeAddress = null, includeAddress = null) }
+        coVerify(exactly = 1) { bleTransport.broadcastPacket(smallMediaPacket, excludeAddress = null, includeAddress = null) }
         coVerify(exactly = 0) { wifiTransport.broadcastPacket(any(), any(), any()) }
         assertEquals(1L, metrics.fallbackCount)
         assertEquals(1L, metrics.blePacketCount)
+    }
+
+    @Test
+    fun `sendPacket keeps large payload queued when Wi-Fi Direct is unavailable`() = runTest {
+        val largeBytes = ByteArray(60_000) { 0x01 }
+        val largeMediaPacket = MeshPacket(
+            packetId = "pkt_large_media",
+            senderId = "me",
+            targetId = "peer",
+            payload = String(largeBytes, Charsets.ISO_8859_1),
+            type = PacketType.MEDIA_CHUNK,
+            mimeType = "application/octet-stream"
+        )
+
+        val result = manager.sendPacket(largeMediaPacket)
+
+        assertTrue(result is MeshResult.Error)
+        coVerify(exactly = 0) { bleTransport.broadcastPacket(any(), any(), any()) }
+        coVerify(exactly = 0) { wifiTransport.broadcastPacket(any(), any(), any()) }
     }
 
     @Test
@@ -134,7 +157,7 @@ class IntelligentTransportManagerTest {
     }
 
     @Test
-    fun `sendPacket retries Wi-Fi Direct and falls back to BLE if Wi-Fi fails`() = runTest {
+    fun `sendPacket retries Wi-Fi Direct and falls back to BLE if small payload Wi-Fi fails`() = runTest {
         every { wifiTransport.connectedPeers } returns setOf("wifi_peer_1")
         wifiHealthFlow.value = TransportHealth.CONNECTED
 
@@ -142,7 +165,7 @@ class IntelligentTransportManagerTest {
             com.meshlink.domain.model.MeshError.TransportError("Socket Error")
         )
 
-        val mediaPacket = MeshPacket(
+        val smallMediaPacket = MeshPacket(
             packetId = "pkt_media_fail",
             senderId = "me",
             targetId = "peer",
@@ -151,11 +174,11 @@ class IntelligentTransportManagerTest {
             mimeType = "image/png"
         )
 
-        val result = manager.sendPacket(mediaPacket)
+        val result = manager.sendPacket(smallMediaPacket)
 
         assertTrue(result is MeshResult.Success)
-        coVerify(exactly = 2) { wifiTransport.broadcastPacket(mediaPacket, excludeAddress = null, includeAddress = null) }
-        coVerify(exactly = 1) { bleTransport.broadcastPacket(mediaPacket, excludeAddress = null, includeAddress = null) }
+        coVerify(exactly = 2) { wifiTransport.broadcastPacket(smallMediaPacket, excludeAddress = null, includeAddress = null) }
+        coVerify(exactly = 1) { bleTransport.broadcastPacket(smallMediaPacket, excludeAddress = null, includeAddress = null) }
         assertEquals(1L, metrics.fallbackCount)
         assertEquals(1L, metrics.retryCount)
     }

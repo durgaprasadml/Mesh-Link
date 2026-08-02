@@ -61,11 +61,20 @@ data class RouteMetrics(
     }
 }
 
+enum class TransportCapability {
+    BLE,
+    WIFI_DIRECT,
+    HYBRID
+}
+
 data class RouteEntry(
     val destinationId: String,
     val nextHop: String, // The immediate peer's MAC/ID
     var hops: Int,
     val routeType: RouteType = RouteType.BLE,
+    val preferredTransport: RouteType = routeType,
+    var currentTransport: RouteType = routeType,
+    var capability: TransportCapability = if (routeType == RouteType.HYBRID) TransportCapability.HYBRID else if (routeType == RouteType.WIFI_DIRECT) TransportCapability.WIFI_DIRECT else TransportCapability.BLE,
     val metrics: RouteMetrics = RouteMetrics(),
     var lastSeen: Long = System.currentTimeMillis(),
     var score: Int = 0, // 0-100 calculated by RouteScorer

@@ -1,17 +1,21 @@
 package com.meshlink.transfer
 
 enum class TransferState {
+    QUEUED,
     WAITING,
     PREPARING,
+    CONNECTING,
+    STREAMING,
     COMPRESSING,
     SENDING,
     RECEIVING,
+    PAUSED,
+    RESUMING,
+    RETRYING,
     VERIFYING,
     COMPLETED,
     FAILED,
-    CANCELLED,
-    PAUSED,
-    RESUMING
+    CANCELLED
 }
 
 enum class TransferPriority(val value: Int) {
@@ -43,7 +47,7 @@ data class TransferSession(
     val totalBytes: Long,
     val totalChunks: Int,
     val direction: TransferDirection,
-    var state: TransferState = TransferState.WAITING,
+    var state: TransferState = TransferState.QUEUED,
     var priority: TransferPriority = TransferPriority.MEDIUM,
     var transportUsed: TransportType = TransportType.UNKNOWN,
     var bytesTransferred: Long = 0L,
@@ -64,4 +68,15 @@ data class TransferSession(
         if (elapsed <= 0) return 0f
         return (bytesTransferred.toFloat() / (elapsed / 1000f))
     }
+
+    fun getRemainingBytes(): Long {
+        return (totalBytes - bytesTransferred).coerceAtLeast(0L)
+    }
+
+    fun getEstimatedEtaSeconds(): Long {
+        val speed = getAverageSpeedBytesPerSec()
+        if (speed <= 0f) return -1L
+        return (getRemainingBytes() / speed).toLong()
+    }
 }
+

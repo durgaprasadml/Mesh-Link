@@ -106,23 +106,29 @@ class IntelligentTransportManager @Inject constructor(
                 if (wifiResult is MeshResult.Success) {
                     metrics.recordWifiPacket(payloadSize)
                     wifiResult
-                } else {
-                    MeshLogger.w(TAG, "Wi-Fi Direct send failed for packet ${packet.packetId}. Automatic Fallback -> BLE")
+                } else if (payloadSize <= LARGE_PAYLOAD_THRESHOLD) {
+                    MeshLogger.w(TAG, "Wi-Fi Direct send failed for packet ${packet.packetId} (${payloadSize}B <= 50KB). Fallback -> BLE")
                     metrics.recordFallback()
                     val fallbackBleResult = sendOverBleWithRetry(packet, includeAddress, excludeAddress)
                     if (fallbackBleResult is MeshResult.Success) {
                         metrics.recordBlePacket(payloadSize)
                     }
                     fallbackBleResult
+                } else {
+                    MeshLogger.w(TAG, "Wi-Fi Direct send failed for large packet ${packet.packetId} (${payloadSize}B > 50KB). Skipping BLE fallback to preserve BLE bandwidth.")
+                    wifiResult
                 }
-            } else {
-                MeshLogger.d(TAG, "Packet ID=${packet.packetId} Type=${packet.type} -> Preferred Wi-Fi Direct unavailable. Automatic Fallback -> BLE")
+            } else if (payloadSize <= LARGE_PAYLOAD_THRESHOLD) {
+                MeshLogger.d(TAG, "Packet ID=${packet.packetId} Type=${packet.type} -> Preferred Wi-Fi Direct unavailable. Small payload (${payloadSize}B <= 50KB), Fallback -> BLE")
                 metrics.recordFallback()
                 val fallbackBleResult = sendOverBleWithRetry(packet, includeAddress, excludeAddress)
                 if (fallbackBleResult is MeshResult.Success) {
                     metrics.recordBlePacket(payloadSize)
                 }
                 fallbackBleResult
+            } else {
+                MeshLogger.w(TAG, "Wi-Fi Direct unavailable for large packet ${packet.packetId} (${payloadSize}B > 50KB). Staying queued for Wi-Fi Direct.")
+                MeshResult.Error(MeshError.TransportError("Wi-Fi Direct unavailable for large payload (${payloadSize}B)"))
             }
         } else {
             MeshLogger.d(TAG, "Packet ID=${packet.packetId} Type=${packet.type} Size=${payloadSize}B -> Selected Transport: BLE (Reason: Lightweight / Signaling)")

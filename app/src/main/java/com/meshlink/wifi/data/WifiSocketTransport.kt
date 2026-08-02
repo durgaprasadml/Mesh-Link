@@ -58,6 +58,9 @@ class WifiSocketTransport @Inject constructor(
     // Callback when a MeshPacket is received over Wi-Fi Direct
     var onPacketReceived: ((MeshPacket) -> Unit)? = null
 
+    // Callback when a socket connects / reconnects
+    var onSocketConnected: (() -> Unit)? = null
+
     fun startServer() {
         if (serverSocket != null && !serverSocket!!.isClosed) return
         applicationScope.launch(Dispatchers.IO) {
@@ -123,12 +126,12 @@ class WifiSocketTransport @Inject constructor(
         }
 
         socket.tcpNoDelay = true
-        socket.sendBufferSize = 1024 * 1024 // 1 MB buffer
-        socket.receiveBufferSize = 1024 * 1024 // 1 MB buffer
+        socket.sendBufferSize = 2 * 1024 * 1024 // 2 MB buffer
+        socket.receiveBufferSize = 2 * 1024 * 1024 // 2 MB buffer
 
         try {
-            val bufferedOut = BufferedOutputStream(socket.getOutputStream())
-            val bufferedIn = BufferedInputStream(socket.getInputStream())
+            val bufferedOut = BufferedOutputStream(socket.getOutputStream(), 128 * 1024)
+            val bufferedIn = BufferedInputStream(socket.getInputStream(), 128 * 1024)
 
             val currentWriter = PrintWriter(OutputStreamWriter(bufferedOut, Charsets.UTF_8), true)
             val currentReader = BufferedReader(InputStreamReader(bufferedIn, Charsets.UTF_8))
@@ -140,6 +143,9 @@ class WifiSocketTransport @Inject constructor(
                 writer = currentWriter
                 reader = currentReader
             }
+
+            // Trigger reconnection notification
+            onSocketConnected?.invoke()
 
             // Start heartbeat monitoring
             startHeartbeat(socket, currentWriter)

@@ -34,16 +34,18 @@ class TransferManager @Inject constructor(
     private val verifier: IntegrityVerifier,
     private val analytics: TransferAnalytics,
     private val intelligentTransportManager: IntelligentTransportManager,
-    @IoDispatcher private val ioDispatcher: CoroutineDispatcher
-,
-    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
+    private val wifiSocketTransport: com.meshlink.wifi.data.WifiSocketTransport,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope
+) {
     companion object {
         private const val TAG = "TransferManager"
-        private const val INTER_CHUNK_DELAY_MS = 30L
+        private const val BLE_INTER_CHUNK_DELAY_MS = 30L
+        private const val WIFI_INTER_CHUNK_DELAY_MS = 2L
         private const val TRANSFER_TIMEOUT_MS = 120_000L
     }
 
-var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
+    var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
     var onTransferCompleted: ((TransferSession) -> Unit)? = null
     var onOutgoingTransferCompleted: ((TransferSession) -> Unit)? = null
 
@@ -59,10 +61,23 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
         applicationScope.launch {
             val persisted = cache.loadPersistedSessions()
             for (session in persisted) {
-                if (session.state == TransferState.SENDING || session.state == TransferState.RECEIVING) {
+                if (session.state == TransferState.SENDING || session.state == TransferState.RECEIVING || session.state == TransferState.STREAMING) {
                     session.state = TransferState.PAUSED
                 }
                 scheduler.addSession(session)
+            }
+        }
+
+        // Auto-resume active/paused transfers on Wi-Fi Direct socket connection
+        wifiSocketTransport.onSocketConnected = {
+            applicationScope.launch {
+                MeshLogger.d(TAG, "Wi-Fi Direct socket re-connected. Auto-resuming paused transfers...")
+                val activeSessions = scheduler.activeSessions.value
+                for (session in activeSessions) {
+                    if (session.state == TransferState.PAUSED || session.state == TransferState.RETRYING || session.state == TransferState.QUEUED) {
+                        resumeTransfer(session.transferId)
+                    }
+                }
             }
         }
     }
@@ -81,9 +96,15 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
             return transferId
         }
 
-        val transport = TransportType.BLE
-        
         val mimeType = metaManager.getMimeTypeForFile(file)
+        val selectedRoute = intelligentTransportManager.selectTransportForPayload(
+            destinationId = targetId,
+            packetType = PacketType.MEDIA_CHUNK,
+            payloadSizeBytes = file.length(),
+            mimeType = mimeType
+        )
+
+        val transport = if (selectedRoute == RouteType.WIFI_DIRECT) TransportType.WIFI_DIRECT else TransportType.BLE
         val checksum = verifier.calculateFileChecksum(file)
         val totalChunks = chunkManager.getTotalChunks(file.length(), transport)
 
@@ -100,7 +121,7 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
             transportUsed = transport,
             sha256Checksum = checksum,
             filePath = file.absolutePath,
-            state = TransferState.WAITING,
+            state = TransferState.QUEUED,
             startTimeMs = System.currentTimeMillis()
         )
 
@@ -116,16 +137,16 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
     }
 
     private suspend fun startOutgoingTransfer(session: TransferSession) {
-        val file = File(session.filePath!!)
+        val file = File(session.filePath ?: return)
         if (!file.exists()) {
             failSession(session.transferId, "Source file vanished")
             return
         }
 
-        scheduler.updateSessionState(session.transferId, TransferState.SENDING)
+        scheduler.updateSessionState(session.transferId, TransferState.STREAMING)
         applicationScope.launch { cache.persistSession(session) }
 
-        // Send META
+        // Send META packet
         val metaPayload = metaManager.generateMetaPayload(
             FileMetadata(session.fileName, session.mimeType, session.totalBytes, session.sha256Checksum)
         )
@@ -135,22 +156,21 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
         )
 
         // Give receiver time to init cache
-        delay(100L)
+        delay(50L)
 
-        // Send Chunks (respecting scheduler queue and QoS)
+        val delayMs = if (session.transportUsed == TransportType.WIFI_DIRECT) WIFI_INTER_CHUNK_DELAY_MS else BLE_INTER_CHUNK_DELAY_MS
+
+        // Send Chunks
         var i = session.chunksTransferred
         while (i < session.totalChunks && applicationScope.isActive) {
-            
-            // Check state (e.g. if paused/cancelled)
             val currentState = scheduler.getSession(session.transferId)?.state
-            if (currentState != TransferState.SENDING) {
+            if (currentState != TransferState.STREAMING && currentState != TransferState.SENDING) {
                 MeshLogger.d(TAG, "Stopping outgoing loop for ${session.transferId}. State: $currentState")
                 return
             }
             
-            // Check scheduler if we are allowed to send (Congestion/Priority limits)
             if (!scheduler.canSendNextChunk(session.transferId)) {
-                delay(50L) // Yield to higher priority transfers
+                delay(20L)
                 continue
             }
 
@@ -170,10 +190,11 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
                 b64, PacketType.MEDIA_CHUNK, i, session.totalChunks, session.mimeType
             )
 
-            scheduler.updateSessionProgress(session.transferId, i + 1, (i + 1).toLong() * chunkSize)
+            val bytesSentSoFar = (i + 1).toLong() * chunkSize
+            scheduler.updateSessionProgress(session.transferId, i + 1, bytesSentSoFar.coerceAtMost(session.totalBytes))
             i++
             
-            // Yield to other coroutines but don't artificially delay
+            if (delayMs > 0) delay(delayMs)
             kotlinx.coroutines.yield()
         }
     }
@@ -224,14 +245,12 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
         applicationScope.launch { cache.persistSession(session) }
         analytics.recordTransferStarted(session)
         
-        // Start timeout monitor
         startTimeoutMonitor(transferId)
     }
 
     private suspend fun handleChunk(packet: MeshPacket, transferId: String) {
         var session = scheduler.getSession(transferId)
         
-        // Handle late-joiners (META dropped, but chunks arrived)
         if (session == null) {
             val mime = packet.mimeType ?: "application/octet-stream"
             cache.initSessionCache(transferId)
@@ -270,7 +289,6 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
                 packet.chunkIndex.toString(), PacketType.MEDIA_ACK, packet.chunkIndex, packet.totalChunks, session.mimeType
             )
 
-            // Check completion
             if (count >= packet.totalChunks) {
                 assembleAndVerify(session)
             }
@@ -295,8 +313,23 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
                 analytics.recordTransferCompleted(session)
                 onTransferCompleted?.invoke(session)
             } else {
-                failSession(session.transferId, "Checksum verification failed")
-                outputFile.delete()
+                MeshLogger.w(TAG, "Checksum verification failed for ${session.transferId}. Requesting chunk recovery.")
+                if (session.retries < 3) {
+                    session.retries++
+                    outputFile.delete()
+                    scheduler.updateSessionState(session.transferId, TransferState.RETRYING)
+                    // Request all missing / corrupted chunks
+                    val received = cache.getReceivedChunkIndices(session.transferId)
+                    val missing = (0 until session.totalChunks).filter { !received.contains(it) }
+                    val indicesToRequest = if (missing.isNotEmpty()) missing else (0 until session.totalChunks).toList()
+                    sendPacket(
+                        session.targetId, session.senderId, session.transferId,
+                        indicesToRequest.joinToString(","), PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType
+                    )
+                } else {
+                    failSession(session.transferId, "Checksum verification failed after retries")
+                    outputFile.delete()
+                }
             }
         } else {
             failSession(session.transferId, "File assembly failed")
@@ -317,7 +350,7 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
 
     private fun handleNack(packet: MeshPacket, transferId: String) {
         val session = scheduler.getSession(transferId) ?: return
-        if (session.state != TransferState.SENDING) return
+        if (session.state != TransferState.STREAMING && session.state != TransferState.SENDING) return
 
         val missing = packet.payload.split(",").mapNotNull { it.toIntOrNull() }
         applicationScope.launch {
@@ -344,7 +377,7 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
         applicationScope.launch {
             delay(TRANSFER_TIMEOUT_MS)
             val session = scheduler.getSession(transferId) ?: return@launch
-            if (session.state == TransferState.RECEIVING) {
+            if (session.state == TransferState.RECEIVING || session.state == TransferState.STREAMING) {
                 val received = cache.getReceivedChunkIndices(transferId)
                 val missing = (0 until session.totalChunks).filter { !received.contains(it) }
                 
@@ -355,7 +388,7 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
                         missing.joinToString(","), PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType
                     )
                     
-                    delay(30_000L) // Wait 30s for recovery
+                    delay(30_000L)
                     val newReceived = cache.getReceivedChunkIndices(transferId)
                     if (newReceived.size < session.totalChunks) {
                         failSession(transferId, "Timeout expired, failed to recover.")
@@ -365,11 +398,11 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
         }
     }
 
-    // ─────────────────── Helpers ───────────────────
+    // ─────────────────── Public Control API ───────────────────
 
     fun pauseTransfer(transferId: String) {
         val session = scheduler.getSession(transferId) ?: return
-        if (session.state == TransferState.SENDING || session.state == TransferState.RECEIVING) {
+        if (session.state == TransferState.SENDING || session.state == TransferState.STREAMING || session.state == TransferState.RECEIVING) {
             scheduler.updateSessionState(transferId, TransferState.PAUSED)
             applicationScope.launch { cache.persistSession(session) }
             MeshLogger.d(TAG, "Paused transfer $transferId")
@@ -378,12 +411,11 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
 
     fun resumeTransfer(transferId: String) {
         val session = scheduler.getSession(transferId) ?: return
-        if (session.state == TransferState.PAUSED) {
+        if (session.state == TransferState.PAUSED || session.state == TransferState.RETRYING || session.state == TransferState.QUEUED) {
             scheduler.updateSessionState(transferId, TransferState.RESUMING)
             if (session.direction == TransferDirection.OUTGOING) {
                 applicationScope.launch { startOutgoingTransfer(session) }
             } else {
-                // Incoming relies on sender to resume, or we can send a NACK to pull
                 applicationScope.launch {
                     val received = cache.getReceivedChunkIndices(transferId)
                     val missing = (0 until session.totalChunks).filter { !received.contains(it) }
@@ -409,6 +441,15 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
             cache.cleanUpSession(transferId) 
         }
     }
+
+    // Optional Stats API for Components 3 & 10
+    fun getSession(transferId: String): TransferSession? = scheduler.getSession(transferId)
+
+    fun getTransferSpeedBytesPerSec(transferId: String): Float = scheduler.getSession(transferId)?.getAverageSpeedBytesPerSec() ?: 0f
+
+    fun getTransferEtaSeconds(transferId: String): Long = scheduler.getSession(transferId)?.getEstimatedEtaSeconds() ?: -1L
+
+    fun getRemainingBytes(transferId: String): Long = scheduler.getSession(transferId)?.getRemainingBytes() ?: 0L
 
     private suspend fun failSession(transferId: String, reason: String) {
         val session = scheduler.getSession(transferId)
@@ -438,3 +479,4 @@ var onSendPacket: (suspend (MeshPacket) -> Unit)? = null
         onSendPacket?.invoke(packet)
     }
 }
+

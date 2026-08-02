@@ -7,8 +7,6 @@ import com.meshlink.database.data.local.ChatDao
 import com.meshlink.database.data.local.MeshDatabase
 import com.meshlink.database.data.local.RelayDao
 import com.meshlink.database.data.local.UserDao
-import com.meshlink.database.data.source.ChatLocalDataSource
-import com.meshlink.database.data.source.ChatLocalDataSourceImpl
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

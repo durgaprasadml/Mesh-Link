@@ -3,6 +3,7 @@ package com.meshlink.transfer
 import com.meshlink.common.pool.BufferPool
 import java.io.File
 import java.io.RandomAccessFile
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.ceil
@@ -11,25 +12,24 @@ import kotlin.math.ceil
 class ChunkManager @Inject constructor() {
 
     companion object {
-        // Base64 expansion is roughly 4/3. 
-        // 180 bytes of raw data -> 240 bytes Base64 -> fits in safe MTU limits
         const val BLE_MTU_CHUNK_BYTES = 180 
-        
-        // Wi-Fi can handle much larger packets. Let's do 64KB chunks.
-        // 64KB -> ~85KB Base64
-        const val WIFI_MTU_CHUNK_BYTES = 64 * 1024 
+        const val WIFI_MTU_CHUNK_BYTES_64K = 64 * 1024
+        const val WIFI_MTU_CHUNK_BYTES_128K = 128 * 1024
     }
 
-    fun calculateChunkSize(transportType: TransportType): Int {
+    var defaultWifiChunkSize: Int = WIFI_MTU_CHUNK_BYTES_64K
+
+    fun calculateChunkSize(transportType: TransportType, customChunkSize: Int? = null): Int {
+        if (customChunkSize != null && customChunkSize > 0) return customChunkSize
         return when (transportType) {
-            TransportType.WIFI_DIRECT -> WIFI_MTU_CHUNK_BYTES
+            TransportType.WIFI_DIRECT -> defaultWifiChunkSize
             TransportType.BLE -> BLE_MTU_CHUNK_BYTES
             else -> BLE_MTU_CHUNK_BYTES
         }
     }
 
-    fun getTotalChunks(fileSize: Long, transportType: TransportType): Int {
-        val chunkSize = calculateChunkSize(transportType)
+    fun getTotalChunks(fileSize: Long, transportType: TransportType, customChunkSize: Int? = null): Int {
+        val chunkSize = calculateChunkSize(transportType, customChunkSize)
         if (fileSize <= 0) return 1
         return ceil(fileSize.toDouble() / chunkSize).toInt()
     }
@@ -56,4 +56,14 @@ class ChunkManager @Inject constructor() {
             null
         }
     }
+
+    /**
+     * Computes SHA-256 digest of a specific chunk.
+     */
+    fun calculateChunkChecksum(chunkBytes: ByteArray): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val hashBytes = md.digest(chunkBytes)
+        return hashBytes.joinToString("") { "%02x".format(it) }
+    }
 }
+

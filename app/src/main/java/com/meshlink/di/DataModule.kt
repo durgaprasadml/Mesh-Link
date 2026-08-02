@@ -4,8 +4,6 @@ import com.meshlink.ble.data.BleRepositoryImpl
 import com.meshlink.core.data.UserRepositoryImpl
 import com.meshlink.core.data.source.UserLocalDataSource
 import com.meshlink.core.data.source.UserLocalDataSourceImpl
-import com.meshlink.database.data.source.ChatLocalDataSource
-import com.meshlink.database.data.source.ChatLocalDataSourceImpl
 import com.meshlink.domain.repository.ChatRepository
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
@@ -47,8 +45,8 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindChatLocalDataSource(
-        impl: ChatLocalDataSourceImpl
-    ): ChatLocalDataSource
+        impl: com.meshlink.database.data.source.ChatLocalDataSourceImpl
+    ): com.meshlink.database.data.source.ChatLocalDataSource
 
     @Binds
     @Singleton

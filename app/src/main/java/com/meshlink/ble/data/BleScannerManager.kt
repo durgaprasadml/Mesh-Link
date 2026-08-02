@@ -167,6 +167,7 @@ class BleScannerManager @Inject constructor(
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun processResult(result: ScanResult) {
         val record = result.scanRecord ?: return
         val uuids = record.serviceUuids ?: emptyList()
@@ -196,7 +197,7 @@ class BleScannerManager @Inject constructor(
         var name = String(nameBytes, Charsets.UTF_8).replace("\u0000", "").trim()
         
         if (name.isBlank()) {
-            name = record.deviceName ?: result.device.name ?: "Peer"
+            name = record.deviceName ?: try { result.device.name } catch (_: SecurityException) { null } ?: "Peer"
         }
         
         // Pass to Discovery Engine

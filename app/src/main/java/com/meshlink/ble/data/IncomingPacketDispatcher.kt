@@ -20,6 +20,7 @@ import com.meshlink.security.policy.PacketEncryptionPolicy
 import com.meshlink.transfer.TransferManager
 import com.meshlink.util.MeshIdNormalizer
 import com.meshlink.voice.transport.VoiceTransport
+import com.meshlink.ble.data.handlers.BeaconHandler
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -40,7 +41,8 @@ class IncomingPacketDispatcher @Inject constructor(
     private val locationMessageHandler: LocationMessageHandler,
     private val voiceMessageHandler: VoiceMessageHandler,
     private val broadcastHandler: BroadcastHandler,
-    private val ackManager: AckManager
+    private val ackManager: AckManager,
+    private val beaconHandler: BeaconHandler
 ) {
     private val TAG = "IncomingPacketDispatcher"
 
@@ -143,9 +145,11 @@ class IncomingPacketDispatcher @Inject constructor(
                 PacketType.VOICE_FRAME -> {
                     voiceTransport.handleIncomingPacket(processedPacket)
                 }
+                PacketType.BEACON -> {
+                    beaconHandler.handleBeaconPacket(processedPacket)
+                }
                 PacketType.VIDEO_SIGNAL,
                 PacketType.VIDEO_FRAME,
-                PacketType.BEACON,
                 PacketType.INCIDENT_REPORT,
                 PacketType.CHECK_IN,
                 PacketType.FORM_SYNC,

@@ -54,6 +54,7 @@ class ConcurrencyTests {
             relayDao = relayDao,
             trustManager = mockk(relaxed = true),
             routingEngine = routingEngine,
+            topologyManager = mockk(relaxed = true),
             settingsRepository = settingsRepository,
             applicationScope = testScope.backgroundScope
         )

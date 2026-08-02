@@ -34,6 +34,7 @@ class MeshRouterTest {
     private val relayDao = mockk<RelayDao>(relaxed = true)
     private val trustManager = mockk<TrustManager>(relaxed = true)
     private val routingEngine = mockk<RoutingEngine>(relaxed = true)
+    private val topologyManager = mockk<com.meshlink.routing.engine.MeshTopologyManager>(relaxed = true)
     private val queueOptimizer = mockk<QueueOptimizer>(relaxed = true)
     private val congestionMonitor = mockk<CongestionMonitor>(relaxed = true)
     private val settingsRepository = mockk<SettingsRepository>(relaxed = true)
@@ -69,6 +70,7 @@ class MeshRouterTest {
             relayDao = relayDao,
             trustManager = trustManager,
             routingEngine = routingEngine,
+            topologyManager = topologyManager,
             settingsRepository = settingsRepository,
             applicationScope = scope
         )

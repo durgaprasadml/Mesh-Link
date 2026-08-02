@@ -29,10 +29,10 @@ import kotlinx.coroutines.flow.stateIn
 @Singleton
 internal class MeshRouter @Inject constructor(
     private val bleTransport: BleTransport,
-
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,
     private val routingEngine: RoutingEngine,
+    private val topologyManager: com.meshlink.routing.engine.MeshTopologyManager,
     private val settingsRepository: SettingsRepository,
     @ApplicationScope private val applicationScope: CoroutineScope
 ) : com.meshlink.routing.api.Router {
@@ -210,12 +210,11 @@ internal class MeshRouter @Inject constructor(
             return
         }
 
-
-
         // Strict de-dup — reject if already processed, UNLESS it's a direct message for us
         // (we want to re-process duplicates for ourselves so we can re-send ACKs if the sender retried)
         val isDuplicate = !routingEngine.markPacketProcessed(packet.packetId)
         if (isDuplicate) {
+            topologyManager.recordDuplicate()
             if (isForMe && packet.type != PacketType.DELIVERY_ACK) {
                 MeshLogger.d(TAG) { "Dedup: re-processing duplicate ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} for local delivery/ACK" }
             } else {
@@ -236,16 +235,10 @@ internal class MeshRouter @Inject constructor(
 
         MeshLogger.d(TAG) { "Packet [${packet.type}] from=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)} target=${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)} ttl=${packet.ttl} hops=${packet.hopCount}" }
 
-
-
         // Deliver locally if it's for us or a broadcast
         if (isForMe || isBroadcast) {
-
-            
             // If it's a delivery ACK, we can record a successful delivery on our route
             if (packet.type == PacketType.DELIVERY_ACK) {
-                // The payload contains the packet ID that was delivered.
-                // We'd need to track latency, but for now we'll just track success.
                 routingEngine.routeManager.recordDeliverySuccess(packet.senderId, immediateSenderAddress, 100L)
             }
             
@@ -262,10 +255,14 @@ internal class MeshRouter @Inject constructor(
         val isAckNack = packet.type == PacketType.MEDIA_ACK || packet.type == PacketType.MEDIA_NACK
 
         // TTL check
-        if (packet.ttl <= 0) return
+        if (packet.ttl <= 0) {
+            topologyManager.recordDrop()
+            return
+        }
 
         // Loop guard
         if (routingEngine.isRoutingLoop(packet, localMeshId)) {
+            topologyManager.recordDrop()
             MeshLogger.d(TAG) { "Loop guard: already visited or TTL expired ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}, dropping" }
             return
         }
@@ -279,6 +276,7 @@ internal class MeshRouter @Inject constructor(
 
         val maxHops = maxHopsState.value
         if (packet.hopCount >= maxHops) {
+            topologyManager.recordDrop()
             MeshLogger.d(TAG) { "Max hops exceeded, dropping packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}" }
             return
         }
@@ -288,8 +286,6 @@ internal class MeshRouter @Inject constructor(
             hopCount = packet.hopCount + 1,
             visitedPath = if (localMeshId.isNotBlank()) packet.visitedPath + localMeshId else packet.visitedPath
         )
-
-
 
         val forwardedJson = MeshPacketParser.toJson(relayPacket)
         val connectedNodes = bleTransport.connectedPeers
@@ -307,14 +303,17 @@ internal class MeshRouter @Inject constructor(
         if (hasPeersToForward) {
             val nextHop = routingEngine.getNextHopForForwarding(relayPacket, connectedNodes, excludeHop = immediateSenderAddress)
             if (nextHop != null) {
+                topologyManager.recordForward()
                 routingEngine.queueOptimizer.enqueue(relayPacket)
                 MeshLogger.d(TAG) { "Directed relay queued ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} via $nextHop" }
             } else {
                 if (routingEngine.shouldRelayBroadcast(relayPacket.type)) {
+                    topologyManager.recordForward()
                     routingEngine.congestionMonitor.recordBroadcast()
                     routingEngine.queueOptimizer.enqueue(relayPacket)
                     MeshLogger.d(TAG) { "Forwarded broadcast queued ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} (ttl=${relayPacket.ttl})" }
                 } else {
+                    topologyManager.recordDrop()
                     MeshLogger.d(TAG) { "Dropped broadcast due to battery/congestion heuristics" }
                 }
             }

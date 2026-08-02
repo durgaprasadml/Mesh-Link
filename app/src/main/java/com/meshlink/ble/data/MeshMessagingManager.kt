@@ -60,6 +60,7 @@ class MeshMessagingManager @Inject constructor(
     private val locationMessageHandler: LocationMessageHandler,
     private val broadcastHandler: BroadcastHandler,
     private val ackManager: AckManager,
+    private val beaconHandler: com.meshlink.ble.data.handlers.BeaconHandler,
     private val retryCoordinator: com.meshlink.common.recovery.RetryCoordinator
 ) : MessageProcessor, PacketDispatcher by corePacketDispatcher {
 
@@ -70,6 +71,7 @@ class MeshMessagingManager @Inject constructor(
 
     private val retryMutex = Mutex()
     private val lastKeyExchangeRequest = ConcurrentHashMap<String, Long>()
+    private var beaconJob: kotlinx.coroutines.Job? = null
 
     init {
         setupTransferManager()
@@ -339,6 +341,22 @@ class MeshMessagingManager @Inject constructor(
             dispatchSinglePacket("BROADCAST", keyExchangePacket)
 
             startupState.set(MeshStartupState.RUNNING)
+
+            beaconJob?.cancel()
+            beaconJob = applicationScope.launch {
+                while (startupState.get() == MeshStartupState.RUNNING) {
+                    delay(20_000L)
+                    try {
+                        val current = userRepository.getLocalUser()
+                        if (current != null && isAnyPeerConnected()) {
+                            val beaconPkt = beaconHandler.generateBeaconPacket(current.meshId)
+                            dispatchSinglePacket("BROADCAST", beaconPkt)
+                        }
+                    } catch (e: Exception) {
+                        MeshLogger.w(TAG, "Periodic topology beacon error: ${e.message}")
+                    }
+                }
+            }
         } catch (e: Exception) {
             MeshLogger.e(TAG, "autoStartMesh failed: ${e.message}")
             stopMesh()
@@ -373,6 +391,8 @@ class MeshMessagingManager @Inject constructor(
 
     fun stopMesh() {
         startupState.set(MeshStartupState.STOPPED)
+        beaconJob?.cancel()
+        beaconJob = null
         stopAdvertising()
         stopScanning()
         stopServer()

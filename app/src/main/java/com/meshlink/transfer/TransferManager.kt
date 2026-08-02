@@ -199,11 +199,28 @@ class TransferManager @Inject constructor(
             }
 
             val bytesSentSoFar = (i + 1).toLong() * chunkSize
-            scheduler.updateSessionProgress(session.transferId, i + 1, bytesSentSoFar.coerceAtMost(session.totalBytes))
+            updateProgressThrottled(session.transferId, i + 1, session.totalChunks, bytesSentSoFar.coerceAtMost(session.totalBytes))
             i++
             
             if (delayMs > 0) delay(delayMs)
             kotlinx.coroutines.yield()
+        }
+    }
+
+    private val lastProgressEmitMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val lastProgressEmitPct = java.util.concurrent.ConcurrentHashMap<String, Float>()
+
+    private fun updateProgressThrottled(transferId: String, chunksDone: Int, totalChunks: Int, bytesTransferred: Long) {
+        if (totalChunks <= 0) return
+        val currentPct = chunksDone.toFloat() / totalChunks.toFloat()
+        val lastPct = lastProgressEmitPct[transferId] ?: -1f
+        val lastTime = lastProgressEmitMs[transferId] ?: 0L
+        val now = System.currentTimeMillis()
+
+        if (chunksDone >= totalChunks || Math.abs(currentPct - lastPct) >= 0.01f || (now - lastTime) >= 100L) {
+            lastProgressEmitPct[transferId] = currentPct
+            lastProgressEmitMs[transferId] = now
+            scheduler.updateSessionProgress(transferId, chunksDone, bytesTransferred)
         }
     }
 
@@ -292,7 +309,7 @@ class TransferManager @Inject constructor(
         val success = cache.writeChunk(transferId, packet.chunkIndex, chunkBytes)
         if (success) {
             val count = cache.getReceivedChunkIndices(transferId).size
-            scheduler.updateSessionProgress(transferId, count, count.toLong() * chunkBytes.size)
+            updateProgressThrottled(transferId, count, packet.totalChunks, count.toLong() * chunkBytes.size)
             
             // Send ACK
             sendPacket(

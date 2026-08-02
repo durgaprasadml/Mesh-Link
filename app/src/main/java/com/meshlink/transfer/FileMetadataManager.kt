@@ -18,7 +18,7 @@ class FileMetadataManager @Inject constructor() {
     fun generateMetaPayload(metadata: FileMetadata): String {
         // Format: "MEDIA:{mimeType}:{sha256}:{totalBytes}:{fileName}:{thumbnailBase64}"
         val checksum = metadata.sha256Checksum ?: ""
-        val thumbnail = metadata.thumbnailBase64 ?: ""
+        val thumbnail = metadata.thumbnailBase64?.let { if (it.length <= 7168) it else "" } ?: ""
         return "MEDIA:${metadata.mimeType}:$checksum:${metadata.totalBytes}:${metadata.fileName}:$thumbnail"
     }
 
@@ -31,7 +31,7 @@ class FileMetadataManager @Inject constructor() {
         val checksum = if (parts.size > 2 && parts[2].isNotBlank()) parts[2] else null
         val totalBytes = if (parts.size > 3) parts[3].toLongOrNull() ?: 0L else 0L
         val fileName = if (parts.size > 4 && parts[4].isNotBlank()) parts[4] else generateDefaultFileName(mimeType)
-        val thumbnailBase64 = if (parts.size > 5 && parts[5].isNotBlank()) parts[5] else null
+        val thumbnailBase64 = if (parts.size > 5 && parts[5].isNotBlank() && parts[5].length <= 7168) parts[5] else null
         
         return FileMetadata(
             fileName = fileName,

@@ -1,5 +1,6 @@
 package com.meshlink.ble.data.handlers
 
+import com.meshlink.common.logger.MeshLogger
 import com.meshlink.database.data.local.ChatDao
 import com.meshlink.database.data.local.DeliveryStatus
 import com.meshlink.database.data.local.MessageEntity
@@ -19,6 +20,11 @@ class VoiceMessageHandler @Inject constructor(
     private val chatDao: ChatDao,
     private val transferManager: TransferManager
 ) {
+    companion object {
+        private const val TAG = "VoiceMessageHandler"
+        private const val MIN_DURATION_MS = 300L
+    }
+
     suspend fun sendVoiceNote(targetMeshId: String, filePath: String, durationMs: Long, chatName: String) {
         val user = userRepository.getLocalUser() ?: return
         val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
@@ -27,7 +33,8 @@ class VoiceMessageHandler @Inject constructor(
         val voiceFile = File(filePath)
         val messageId = UUID.randomUUID().toString()
 
-        if (!voiceFile.exists()) {
+        if (!voiceFile.exists() || voiceFile.length() == 0L || durationMs < MIN_DURATION_MS) {
+            MeshLogger.w(TAG, "Voice note validation failed (exists=${voiceFile.exists()}, length=${voiceFile.length()}, duration=${durationMs}ms)")
             val failedMessage = MessageEntity(
                 messageId = messageId,
                 chatId = targetPeerId,

@@ -334,14 +334,16 @@ class WifiSocketTransport @Inject constructor(
                 val aadResult = try { sessionManager.generateAad(packetToSend.targetId) } catch (_: Throwable) { null }
                 val aadBytes = aadResult?.first
                 val aadPrefix = aadResult?.second ?: ""
-                val encryptedResult = cryptoManager.encryptOrPassthrough(
-                    packetToSend.payload,
-                    packetToSend.targetId,
-                    true,
-                    packetToSend.packetId,
-                    0,
-                    aadBytes
-                )
+                val encryptedResult = try {
+                    cryptoManager.encryptOrPassthrough(
+                        packetToSend.payload,
+                        packetToSend.targetId,
+                        true,
+                        packetToSend.packetId,
+                        0,
+                        aadBytes
+                    )
+                } catch (_: Throwable) { null }
                 if (encryptedResult != null && encryptedResult.second) {
                     val finalPayload = if (aadPrefix.isNotEmpty()) "$aadPrefix${encryptedResult.first}" else encryptedResult.first
                     packetToSend = packetToSend.copy(payload = finalPayload, encrypted = true)

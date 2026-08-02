@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaRecorder
 import android.os.Build
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.di.ApplicationScope
 import com.meshlink.di.DefaultDispatcher
 import com.meshlink.di.MainDispatcher
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -19,13 +20,15 @@ import kotlinx.coroutines.flow.asStateFlow
 class VoiceRecorder @Inject constructor(
     @ApplicationContext private val context: Context,
     @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
-    @MainDispatcher private val mainDispatcher: CoroutineDispatcher
-,
-    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
+    @MainDispatcher private val mainDispatcher: CoroutineDispatcher,
+    @ApplicationScope private val applicationScope: CoroutineScope
+) {
     companion object {
         private const val MAX_DURATION_MS = 60_000L
         private const val TAG = "VoiceRecorder"
     }
+
+    private val recorderLock = Any()
 
     @Volatile private var isRecorderStarted = false
     private var recorder: MediaRecorder? = null
@@ -38,8 +41,8 @@ class VoiceRecorder @Inject constructor(
     private val _elapsedMs = MutableStateFlow(0L)
     val elapsedMs: StateFlow<Long> = _elapsedMs.asStateFlow()
 
-    fun startRecording(): Boolean {
-        cleanup()
+    fun startRecording(): Boolean = synchronized(recorderLock) {
+        cleanupInternal()
         return try {
             val mediaDir = File(context.filesDir, "mesh_media")
             if (!mediaDir.exists()) mediaDir.mkdirs()
@@ -89,7 +92,7 @@ class VoiceRecorder @Inject constructor(
             true
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to start recording: ${e.message}")
-            cleanup()
+            cleanupInternal()
             false
         }
     }
@@ -98,7 +101,7 @@ class VoiceRecorder @Inject constructor(
      * Stop recording and return the file path and duration.
      * Returns null if recording failed or duration was too short (<300ms).
      */
-    fun stopRecording(): Pair<String, Long>? {
+    fun stopRecording(): Pair<String, Long>? = synchronized(recorderLock) {
         val duration = _elapsedMs.value
         timerJob?.cancel()
         timerJob = null
@@ -136,11 +139,11 @@ class VoiceRecorder @Inject constructor(
         }
     }
 
-    fun cancelRecording() {
-        cleanup()
+    fun cancelRecording() = synchronized(recorderLock) {
+        cleanupInternal()
     }
 
-    private fun cleanup() {
+    private fun cleanupInternal() {
         timerJob?.cancel()
         timerJob = null
 

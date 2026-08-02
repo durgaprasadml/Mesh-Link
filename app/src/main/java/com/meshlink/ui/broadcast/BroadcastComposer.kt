@@ -2,11 +2,9 @@ package com.meshlink.ui.broadcast
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -40,90 +38,68 @@ fun BroadcastComposer(
     var text by remember { mutableStateOf("") }
     var selectedPriority by remember { mutableStateOf(BroadcastPriority.NORMAL) }
     var includeLocation by remember { mutableStateOf(false) }
-    var isOptionsExpanded by remember { mutableStateOf(false) }
+    var isPrioritySelectorOpen by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
     val isSendEnabled = text.trim().isNotBlank()
     val charCount = text.length
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .imePadding(),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = MeshTheme.elevation.level2
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(MeshTheme.spacing.medium)
+                .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.small)
         ) {
-            // Priority & Mode Selector Bar
+            // Priority Drawer Toggle & Active Chips
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = MeshTheme.spacing.small),
+                    .padding(bottom = MeshTheme.spacing.extraSmall),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Scope indicator
+                // Scope Indicator
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Campaign,
                         contentDescription = "Broadcast scope",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "SCOPE: ALL NEARBY NODES",
+                        text = "COMMUNITY BROADCAST",
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
                         ),
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
 
-                // Priority Badge selector trigger
-                Surface(
-                    shape = CircleShape,
-                    color = Color(selectedPriority.containerColor),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        Color(selectedPriority.badgeColor)
-                    ),
-                    modifier = Modifier
-                        .scaleOnPress(0.95f)
-                        .clickable { isOptionsExpanded = !isOptionsExpanded }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (selectedPriority.isEmergency) {
-                            EmergencyBeaconPulse(size = 8.dp)
-                            Spacer(modifier = Modifier.width(6.dp))
-                        }
-                        Text(
-                            text = selectedPriority.label.uppercase(),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Color(selectedPriority.badgeColor)
-                        )
-                    }
-                }
+                // Priority Badge Trigger
+                PriorityChip(
+                    priority = selectedPriority,
+                    onClick = { isPrioritySelectorOpen = !isPrioritySelectorOpen },
+                    compact = true
+                )
             }
 
-            // Expanded Priority Selection Drawer
+            // Expanded Priority Drawer
             AnimatedVisibility(
-                visible = isOptionsExpanded,
+                visible = isPrioritySelectorOpen,
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
@@ -139,7 +115,7 @@ fun BroadcastComposer(
                             selected = isSelected,
                             onClick = {
                                 selectedPriority = priority
-                                isOptionsExpanded = false
+                                isPrioritySelectorOpen = false
                             },
                             label = {
                                 Text(
@@ -148,7 +124,14 @@ fun BroadcastComposer(
                                 )
                             },
                             leadingIcon = if (priority.isEmergency) {
-                                { Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(priority.badgeColor)) }
+                                {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint = Color(priority.badgeColor)
+                                    )
+                                }
                             } else null,
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = Color(priority.containerColor),
@@ -159,116 +142,129 @@ fun BroadcastComposer(
                 }
             }
 
-            // Input Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { if (it.length <= maxChars) text = it },
-                    modifier = Modifier
-                        .weight(1f)
-                        .semantics { contentDescription = "Broadcast message input" },
-                    placeholder = {
-                        Text(
-                            text = if (selectedPriority.isEmergency) "Broadcast EMERGENCY SOS to mesh..." else "Broadcast to all nearby devices...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(selectedPriority.badgeColor),
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        cursorColor = Color(selectedPriority.badgeColor),
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    shape = MeshTheme.shapes.large,
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
-                )
-
-                Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-
-                // Send Button with Ripple Animation
-                Box(contentAlignment = Alignment.Center) {
-                    BroadcastSendRipple(
-                        modifier = Modifier.size(48.dp),
-                        isBroadcasting = isSendEnabled,
-                        color = Color(selectedPriority.badgeColor)
-                    )
-
-                    IconButton(
-                        onClick = {
-                            val msgToSend = buildString {
-                                if (selectedPriority != BroadcastPriority.NORMAL) {
-                                    append("[${selectedPriority.label.uppercase()}] ")
-                                }
-                                append(text.trim())
-                            }
-                            if (msgToSend.isNotBlank()) {
-                                onSendBroadcast(msgToSend)
-                                text = ""
-                                keyboardController?.hide()
-                            }
-                        },
-                        enabled = isSendEnabled,
-                        modifier = Modifier
-                            .size(44.dp)
-                            .scaleOnPress(0.92f)
-                            .clip(CircleShape)
-                            .background(
-                                if (isSendEnabled) Color(selectedPriority.badgeColor)
-                                else MaterialTheme.colorScheme.surfaceVariant
-                            )
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send Broadcast",
-                            tint = if (isSendEnabled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // Footer info: Char count & location toggle
-            Row(
+            // Multiline Input Field
+            OutlinedTextField(
+                value = text,
+                onValueChange = { if (it.length <= maxChars) text = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = MeshTheme.spacing.extraSmall),
+                    .semantics { contentDescription = "What's happening broadcast input" },
+                placeholder = {
+                    Text(
+                        text = if (selectedPriority.isEmergency) "Broadcast EMERGENCY SOS to mesh..." else "What's happening?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(selectedPriority.badgeColor),
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                    cursorColor = Color(selectedPriority.badgeColor),
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                ),
+                shape = MeshTheme.shapes.large,
+                maxLines = 4,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
+            )
+
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
+
+            // Action Row: Attachments, Char Counter, Send Action
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Attachments Shortcuts
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = { includeLocation = !includeLocation },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.LocationOn,
                             contentDescription = "Attach Location",
                             tint = if (includeLocation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
+
+                    IconButton(
+                        onClick = { /* Attachment shortcut */ },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = "Attach File",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     if (includeLocation) {
                         Text(
-                            text = "GPS Attached",
+                            text = "Location Attached",
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 4.dp)
+                            modifier = Modifier.padding(start = 2.dp)
                         )
                     }
                 }
 
-                Text(
-                    text = "$charCount/$maxChars",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = if (charCount >= maxChars) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // Character Counter & Send Button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small)
+                ) {
+                    Text(
+                        text = "$charCount/$maxChars",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = if (charCount >= maxChars) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Box(contentAlignment = Alignment.Center) {
+                        BroadcastSendRipple(
+                            modifier = Modifier.size(44.dp),
+                            isBroadcasting = isSendEnabled,
+                            color = Color(selectedPriority.badgeColor)
+                        )
+
+                        IconButton(
+                            onClick = {
+                                val msgToSend = buildString {
+                                    if (selectedPriority != BroadcastPriority.NORMAL) {
+                                        append("[${selectedPriority.label.uppercase()}] ")
+                                    }
+                                    append(text.trim())
+                                }
+                                if (msgToSend.isNotBlank()) {
+                                    onSendBroadcast(msgToSend)
+                                    text = ""
+                                    keyboardController?.hide()
+                                }
+                            },
+                            enabled = isSendEnabled,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .scaleOnPress(0.92f)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isSendEnabled) Color(selectedPriority.badgeColor)
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send Broadcast",
+                                tint = if (isSendEnabled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }

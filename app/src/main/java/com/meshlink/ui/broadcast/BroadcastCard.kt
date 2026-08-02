@@ -1,9 +1,7 @@
 package com.meshlink.ui.broadcast
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -14,12 +12,10 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -63,7 +59,7 @@ fun BroadcastCard(
 
     val cardContainerColor = if (priority.isEmergency) Color(priority.containerColor).copy(alpha = 0.15f)
     else if (isMe) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
 
     Card(
         modifier = modifier
@@ -90,7 +86,7 @@ fun BroadcastCard(
                 .fillMaxWidth()
                 .padding(MeshTheme.spacing.medium)
         ) {
-            // Header Row: Avatar, Sender, Priority Badge, Options Menu
+            // Header Row: Avatar, Sender Name, Timestamp, Priority Badge, Options
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -99,7 +95,7 @@ fun BroadcastCard(
                     Surface(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
@@ -111,7 +107,7 @@ fun BroadcastCard(
                     }
                 } else {
                     val identity = uiState.senderIdentity ?: UserIdentity.create(message.senderId, senderName)
-                    UserAvatar(identity = identity, size = 32.dp)
+                    UserAvatar(identity = identity, size = 36.dp)
                 }
 
                 Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
@@ -123,7 +119,7 @@ fun BroadcastCard(
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = "Encrypted",
@@ -140,29 +136,7 @@ fun BroadcastCard(
                 }
 
                 // Priority Badge
-                Surface(
-                    shape = CircleShape,
-                    color = Color(priority.containerColor),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(priority.badgeColor))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (priority.isEmergency) {
-                            EmergencyBeaconPulse(size = 6.dp)
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
-                        Text(
-                            text = priority.label.uppercase(),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Color(priority.badgeColor)
-                        )
-                    }
-                }
+                PriorityChip(priority = priority, compact = true)
 
                 Box {
                     IconButton(
@@ -239,19 +213,19 @@ fun BroadcastCard(
 
             Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
 
-            // Footer Row: Delivery State Pill & Scope Badge
+            // Footer Row: Delivery State & ID
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Broadcast ID: ${message.messageId.take(8)}",
+                    text = "ID: ${message.messageId.take(8)}",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
 
-                DeliveryProgress(status = message.status)
+                DeliveryProgress(status = message.status, showProgressLine = true)
             }
         }
     }

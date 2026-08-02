@@ -1,6 +1,7 @@
 package com.meshlink.ui.broadcast
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,8 +17,98 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.designsystem.theme.scaleOnPress
+
+@Composable
+fun BroadcastFilterChipsRow(
+    filterState: BroadcastFilterState,
+    onUpdateFilter: (BroadcastFilterState) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.extraSmall),
+        horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.extraSmall),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // All
+        FilterChip(
+            selected = !filterState.isActive,
+            onClick = { onUpdateFilter(BroadcastFilterState()) },
+            label = { Text("All", style = MaterialTheme.typography.labelSmall) }
+        )
+
+        // Mine
+        FilterChip(
+            selected = filterState.filterMeOnly,
+            onClick = {
+                onUpdateFilter(
+                    filterState.copy(
+                        filterMeOnly = !filterState.filterMeOnly,
+                        filterPeersOnly = false
+                    )
+                )
+            },
+            label = { Text("Mine", style = MaterialTheme.typography.labelSmall) }
+        )
+
+        // Nearby / Peers
+        FilterChip(
+            selected = filterState.filterPeersOnly,
+            onClick = {
+                onUpdateFilter(
+                    filterState.copy(
+                        filterPeersOnly = !filterState.filterPeersOnly,
+                        filterMeOnly = false
+                    )
+                )
+            },
+            label = { Text("Nearby", style = MaterialTheme.typography.labelSmall) }
+        )
+
+        // Emergency
+        FilterChip(
+            selected = filterState.emergencyOnly,
+            onClick = {
+                onUpdateFilter(
+                    filterState.copy(
+                        emergencyOnly = !filterState.emergencyOnly,
+                        selectedPriority = null
+                    )
+                )
+            },
+            label = { Text("Emergency", style = MaterialTheme.typography.labelSmall) },
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = Color(0x33FF0055),
+                selectedLabelColor = Color(0xFFFF0055)
+            )
+        )
+
+        // Delivered
+        FilterChip(
+            selected = filterState.selectedDeliveryState == BroadcastDeliveryState.DELIVERED,
+            onClick = {
+                val nextState = if (filterState.selectedDeliveryState == BroadcastDeliveryState.DELIVERED) null else BroadcastDeliveryState.DELIVERED
+                onUpdateFilter(filterState.copy(selectedDeliveryState = nextState))
+            },
+            label = { Text("Delivered", style = MaterialTheme.typography.labelSmall) }
+        )
+
+        // Pending
+        FilterChip(
+            selected = filterState.selectedDeliveryState == BroadcastDeliveryState.PENDING,
+            onClick = {
+                val nextState = if (filterState.selectedDeliveryState == BroadcastDeliveryState.PENDING) null else BroadcastDeliveryState.PENDING
+                onUpdateFilter(filterState.copy(selectedDeliveryState = nextState))
+            },
+            label = { Text("Pending", style = MaterialTheme.typography.labelSmall) }
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,9 +182,7 @@ fun BroadcastFiltersSheet(
                 value = query,
                 onValueChange = {
                     query = it
-                    onUpdateFilter(
-                        filterState.copy(searchQuery = it)
-                    )
+                    onUpdateFilter(filterState.copy(searchQuery = it))
                 },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Search by keyword or sender...") },
@@ -194,48 +283,6 @@ fun BroadcastFiltersSheet(
                         label = { Text(state.label) }
                     )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
-
-            // Sender Filter Section
-            Text(
-                text = "Sender",
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.extraSmall)
-            ) {
-                FilterChip(
-                    selected = !filterMeOnly && !filterPeersOnly,
-                    onClick = {
-                        filterMeOnly = false
-                        filterPeersOnly = false
-                        onUpdateFilter(filterState.copy(filterMeOnly = false, filterPeersOnly = false))
-                    },
-                    label = { Text("Everyone") }
-                )
-                FilterChip(
-                    selected = filterMeOnly,
-                    onClick = {
-                        filterMeOnly = !filterMeOnly
-                        filterPeersOnly = false
-                        onUpdateFilter(filterState.copy(filterMeOnly = filterMeOnly, filterPeersOnly = false))
-                    },
-                    label = { Text("Sent by Me") }
-                )
-                FilterChip(
-                    selected = filterPeersOnly,
-                    onClick = {
-                        filterPeersOnly = !filterPeersOnly
-                        filterMeOnly = false
-                        onUpdateFilter(filterState.copy(filterPeersOnly = filterPeersOnly, filterMeOnly = false))
-                    },
-                    label = { Text("Received from Peers") }
-                )
             }
 
             Spacer(modifier = Modifier.height(MeshTheme.spacing.large))

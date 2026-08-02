@@ -1,9 +1,7 @@
 package com.meshlink.ui.profile
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,16 +10,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,15 +28,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meshlink.domain.model.UserIdentity
-import com.meshlink.ui.components.MeshGlassCard
 import com.meshlink.ui.components.UserAvatar
-import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 
 @Composable
@@ -47,145 +45,116 @@ fun ProfileHero(
     onEditAvatarClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    MeshGlassCard(
-        modifier = modifier.fillMaxWidth(),
-        cornerRadius = MeshSpacing.CardCornerRadius,
-        glowColor = MaterialTheme.colorScheme.primary,
-        glowRadius = 180f
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .semantics { contentDescription = "Profile Header for ${userIdentity.displayName}" },
+        color = Color.Transparent
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(MeshSpacing.CardInternalPadding),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Interactive Avatar Box with Completion Ring
+            // 64dp Avatar Container with Online Indicator & Badge
             Box(
-                contentAlignment = Alignment.Center,
+                contentAlignment = Alignment.BottomEnd,
                 modifier = Modifier
-                    .size(110.dp)
-                    .semantics { contentDescription = "Profile picture of ${userIdentity.displayName}" }
+                    .size(64.dp)
+                    .clip(CircleShape)
                     .clickable(onClick = onEditAvatarClick)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = "Edit avatar for ${userIdentity.displayName}"
+                    }
             ) {
-                // Profile Completion Ring
-                CircularProgressIndicator(
-                    progress = { userIdentity.completionPercentage / 100f },
-                    modifier = Modifier.size(110.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                    strokeWidth = 3.dp
+                UserAvatar(
+                    identity = UserIdentity.create(
+                        userId = userIdentity.meshId,
+                        displayName = userIdentity.displayName,
+                        avatarUri = userIdentity.avatarUri
+                    ),
+                    size = 64.dp,
+                    contentDescriptionText = "User Profile Picture"
                 )
 
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shadowElevation = 6.dp,
-                    modifier = Modifier.size(96.dp)
-                ) {
-                    UserAvatar(
-                        identity = UserIdentity.create(
-                            userId = userIdentity.meshId,
-                            displayName = userIdentity.displayName,
-                            avatarUri = userIdentity.avatarUri
-                        ),
-                        size = 96.dp,
-                        contentDescriptionText = "Avatar"
-                    )
-                }
-
-                // Camera Badge Button
+                // Online indicator dot
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .align(Alignment.BottomEnd)
+                        .size(14.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
+                        .background(if (userIdentity.isOnline) MeshTheme.colors.online else Color.Gray)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // User Info Column
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = userIdentity.displayName,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
                     Icon(
-                        imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Change profile picture",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(16.dp)
+                        imageVector = Icons.Default.VerifiedUser,
+                        contentDescription = "Verified Profile",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
-            // Display Name and Verification Badge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
                 Text(
-                    text = userIdentity.displayName,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    text = "Mesh ID: ${userIdentity.meshId.take(12).uppercase()}",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.Default.VerifiedUser,
-                    contentDescription = "Verified Identity",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
 
-            Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
-            // Online Status & Mesh Identity Tag
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (userIdentity.isOnline) MeshTheme.colors.online.copy(alpha = 0.15f)
-                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(7.dp)
                             .clip(CircleShape)
-                            .background(if (userIdentity.isOnline) MeshTheme.colors.online else Color.Gray)
+                            .background(MeshTheme.colors.online)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (userIdentity.isOnline) "Mesh Active" else "Offline",
+                        text = if (userIdentity.isOnline) "Connected • Verified" else "Offline",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = if (userIdentity.isOnline) MeshTheme.colors.online else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                Text(
-                    text = "•",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
-
-                Text(
-                    text = "Profile ${userIdentity.completionPercentage}% Complete",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
 
-            if (!userIdentity.aboutMe.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = userIdentity.aboutMe,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp
+            // Edit Profile Button
+            FilledTonalIconButton(
+                onClick = onEditAvatarClick,
+                shape = RoundedCornerShape(12.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit profile",
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

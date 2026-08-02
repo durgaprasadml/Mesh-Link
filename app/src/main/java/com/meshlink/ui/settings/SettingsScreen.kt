@@ -1,39 +1,39 @@
 package com.meshlink.ui.settings
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import com.meshlink.ui.components.MeshScreen
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.border
-import com.meshlink.ui.components.settings.SettingsItemRow
-import com.meshlink.ui.designsystem.theme.MeshSpacing
-import com.meshlink.ui.designsystem.theme.MeshTheme
-import com.meshlink.ui.designsystem.theme.scaleOnPress
-import com.meshlink.ui.settings.screens.*
+import com.meshlink.ui.profile.MeshSettingsScreen
+import com.meshlink.ui.profile.ProfileScreen
+import com.meshlink.ui.settings.screens.AboutSettingsScreen
+import com.meshlink.ui.settings.screens.AppearanceSettingsScreen
+import com.meshlink.ui.settings.screens.DeveloperSettingsScreen
+import com.meshlink.ui.settings.screens.EmergencySettingsScreen
+import com.meshlink.ui.settings.screens.MessagingSettingsScreen
+import com.meshlink.ui.settings.screens.NetworkSettingsScreen
+import com.meshlink.ui.settings.screens.NotificationsSettingsScreen
+import com.meshlink.ui.settings.screens.PrivacySettingsScreen
+import com.meshlink.ui.settings.screens.StorageSettingsScreen
+import com.meshlink.ui.settings.screens.WifiDiagnosticsScreen
 import kotlinx.coroutines.flow.collectLatest
 
 enum class SettingsDestination {
@@ -48,8 +48,6 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var currentDestination by remember { mutableStateOf(SettingsDestination.HOME) }
-    val userName = uiState.user?.name ?: "Mesh User"
-    val nodeId = uiState.user?.meshId?.take(8)?.uppercase() ?: "NODE-8A9F"
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -76,14 +74,29 @@ fun SettingsScreen(
             label = "SettingsNav"
         ) { dest ->
             when (dest) {
-                SettingsDestination.HOME -> SettingsHome(
-                    userName = userName,
-                    nodeId = nodeId,
+                SettingsDestination.HOME -> MeshSettingsScreen(
                     uiState = uiState,
-                    onNavigate = { currentDestination = it },
-                    onBack = onBack
+                    onBack = onBack,
+                    onNavigateToProfile = { currentDestination = SettingsDestination.PROFILE },
+                    onSetThemeMode = { viewModel.setThemeMode(it) },
+                    onSetMaterialYou = { viewModel.setMaterialYouEnabled(it) },
+                    onSetHighContrast = { viewModel.setHighContrast(it) },
+                    onSetGlassEffects = { viewModel.setGlassEffectsEnabled(it) },
+                    onSetReduceMotion = { viewModel.setReduceMotionEnabled(it) },
+                    onSetLargeText = { viewModel.setLargeTextEnabled(it) },
+                    onSetEncryptionEnabled = { viewModel.setEncryptionEnabled(it) },
+                    onSetOnlineVisible = { viewModel.setOnlineVisible(it) },
+                    onSetAdvancedEncryption = { viewModel.setAdvancedEncryptionEnforcement(it) },
+                    onSetBleEnabled = { viewModel.setBleEnabled(it) },
+                    onSetBleAdv = { viewModel.setBleAdvertisingEnabled(it) },
+                    onSetBleScan = { viewModel.setBleScanningEnabled(it) },
+                    onSetTransport = { viewModel.setPreferredTransport(it) },
+                    onSetRelayEnabled = { viewModel.setMeshRelayEnabled(it) },
+                    onSetMaxHops = { viewModel.setMeshMaxHops(it) },
+                    onExportLogs = { viewModel.exportDebugLogs() },
+                    onShowToast = { viewModel.showToast(it) }
                 )
-                SettingsDestination.PROFILE -> com.meshlink.ui.profile.ProfileScreen(
+                SettingsDestination.PROFILE -> ProfileScreen(
                     onNavigateBack = { currentDestination = SettingsDestination.HOME }
                 )
                 SettingsDestination.NETWORK -> NetworkSettingsScreen(
@@ -143,291 +156,3 @@ fun SettingsScreen(
         )
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-fun SettingsHome(
-    userName: String,
-    nodeId: String,
-    uiState: SettingsUiState,
-    onNavigate: (SettingsDestination) -> Unit,
-    onBack: () -> Unit
-) {
-    var searchQuery by remember { mutableStateOf("") }
-    var isSearchActive by remember { mutableStateOf(false) }
-
-    MeshScreen(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            com.meshlink.ui.components.MeshTopAppBar(
-                title = "Settings",
-                onBackClick = onBack,
-                actions = {
-                    IconButton(
-                        onClick = { isSearchActive = !isSearchActive },
-                        modifier = Modifier.minimumInteractiveComponentSize()
-                    ) {
-                        Icon(
-                            imageVector = if (isSearchActive) Icons.Default.Close else Icons.Default.Search,
-                            contentDescription = if (isSearchActive) "Close Search" else "Search Settings"
-                        )
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.background
-            )
-        }
-    ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = MeshSpacing.ScreenPadding),
-            contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing)
-        ) {
-            // Search Bar Filter
-            if (isSearchActive) {
-                item {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search settings (e.g. BLE, Theme, SOS)...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp)
-                    )
-                }
-            }
-
-            // Profile Header Card
-            if (searchQuery.isEmpty()) {
-                item {
-                    ElevatedCard(
-                        onClick = { onNavigate(SettingsDestination.PROFILE) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .scaleOnPress(0.96f)
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(MeshSpacing.CardCornerRadius)
-                            )
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = "Profile Card for $userName. Node ID $nodeId. Edit Profile."
-                                role = Role.Button
-                            },
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        ),
-                        shape = RoundedCornerShape(MeshSpacing.CardCornerRadius),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp, pressedElevation = 6.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(MeshSpacing.CardInternalPadding)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                com.meshlink.ui.components.UserAvatar(
-                                    identity = com.meshlink.domain.model.UserIdentity.create(
-                                        userId = uiState.user?.meshId ?: "",
-                                        displayName = userName,
-                                        avatarUri = uiState.user?.avatarUri
-                                    ),
-                                    size = 64.dp
-                                )
-                                Spacer(modifier = Modifier.width(MeshSpacing.CardInternalPadding))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = userName,
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-                                        Box(
-                                            modifier = Modifier
-                                                .size(10.dp)
-                                                .clip(CircleShape)
-                                                .background(MeshTheme.colors.online)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-                                    Text(
-                                        text = "Node ID: $nodeId",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-                                    FlowRow(
-                                        horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small),
-                                        verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.extraSmall)
-                                    ) {
-                                        AssistChip(
-                                            onClick = { },
-                                            label = { Text("Mesh Node Active", style = MaterialTheme.typography.labelSmall) },
-                                            leadingIcon = { Icon(Icons.Default.WifiTethering, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                                        )
-                                        AssistChip(
-                                            onClick = { },
-                                            label = { Text("Relay ON", style = MaterialTheme.typography.labelSmall) },
-                                            leadingIcon = { Icon(Icons.Default.Memory, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                                        )
-                                    }
-                                }
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit Profile",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Categorized Settings Cards
-            val allSettings = listOf(
-                SettingCategory(
-                    title = "Profile & Identity",
-                    items = listOf(
-                        SettingRowData("User Profile", "Display name, Node ID & status", Icons.Default.Person, SettingsDestination.PROFILE)
-                    )
-                ),
-                SettingCategory(
-                    title = "Network & Connectivity",
-                    items = listOf(
-                        SettingRowData("Network & Transport", "BLE, Wi-Fi Direct, Relaying & Hops", Icons.Default.WifiTethering, SettingsDestination.NETWORK)
-                    )
-                ),
-                SettingCategory(
-                    title = "Messaging & Media",
-                    items = listOf(
-                        SettingRowData("Messaging & Media", "Quality, Retry, Receipts & Retention", Icons.Default.Chat, SettingsDestination.MESSAGING)
-                    )
-                ),
-                SettingCategory(
-                    title = "Safety & Emergency",
-                    items = listOf(
-                        SettingRowData("Emergency SOS", "Hotline (112), Broadcasts & Live Location", Icons.Default.WarningAmber, SettingsDestination.EMERGENCY)
-                    )
-                ),
-                SettingCategory(
-                    title = "Storage & Data",
-                    items = listOf(
-                        SettingRowData("Storage & Data", "Database, Cache, Backup & Export", Icons.Default.Storage, SettingsDestination.STORAGE)
-                    )
-                ),
-                SettingCategory(
-                    title = "Appearance & Customization",
-                    items = listOf(
-                        SettingRowData("Appearance", "Theme, Dynamic Color, Font Scale & Motion", Icons.Default.Palette, SettingsDestination.APPEARANCE)
-                    )
-                ),
-                SettingCategory(
-                    title = "Notifications & Alerts",
-                    items = listOf(
-                        SettingRowData("Notifications", "Messages, SOS Alerts, Sounds & Vibration", Icons.Default.Notifications, SettingsDestination.NOTIFICATIONS)
-                    )
-                ),
-                SettingCategory(
-                    title = "Privacy & Security",
-                    items = listOf(
-                        SettingRowData("Privacy & Security", "AES-256 E2EE, Biometrics & Trusted Keys", Icons.Default.Security, SettingsDestination.PRIVACY)
-                    )
-                ),
-                SettingCategory(
-                    title = "Diagnostics & Tools",
-                    items = listOf(
-                        SettingRowData("Developer Options", "Mesh Topology Graph, Logs & BLE Specs", Icons.Default.BugReport, SettingsDestination.DEVELOPER)
-                    )
-                ),
-                SettingCategory(
-                    title = "App Info & Support",
-                    items = listOf(
-                        SettingRowData("About Mesh Link", "Version 1.4.0, Open Source Licenses & GitHub", Icons.Default.Info, SettingsDestination.ABOUT)
-                    )
-                )
-            )
-
-            allSettings.forEachIndexed { idx, category ->
-                val filteredItems = category.items.filter {
-                    searchQuery.isEmpty() ||
-                            it.title.contains(searchQuery, ignoreCase = true) ||
-                            it.subtitle.contains(searchQuery, ignoreCase = true)
-                }
-
-                if (filteredItems.isNotEmpty()) {
-                    item {
-                        val topSpace = if (idx == 0) 24.dp else 18.dp
-                        Spacer(modifier = Modifier.height(topSpace))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .width(3.dp)
-                                    .height(16.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(MaterialTheme.colorScheme.primary)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = category.title.uppercase(),
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                letterSpacing = 1.sp
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        ElevatedCard(
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                            ),
-                            shape = RoundedCornerShape(MeshSpacing.CardCornerRadius),
-                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
-                        ) {
-                            Column {
-                                filteredItems.forEachIndexed { index, itemData ->
-                                    SettingsItemRow(
-                                        title = itemData.title,
-                                        subtitle = itemData.subtitle,
-                                        icon = itemData.icon,
-                                        onClick = { onNavigate(itemData.destination) }
-                                    )
-                                    if (index < filteredItems.size - 1) {
-                                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private data class SettingCategory(
-    val title: String,
-    val items: List<SettingRowData>
-)
-
-private data class SettingRowData(
-    val title: String,
-    val subtitle: String,
-    val icon: ImageVector,
-    val destination: SettingsDestination
-)

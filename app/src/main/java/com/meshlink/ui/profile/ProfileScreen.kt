@@ -6,51 +6,20 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.components.AnimatedErrorDialog
-import com.meshlink.ui.components.LoadingOverlay
-import com.meshlink.ui.components.MeshScreen
-import com.meshlink.ui.components.MeshTopAppBar
-import com.meshlink.ui.components.UserAvatar
-import com.meshlink.ui.components.UserAvatarImage
-import com.meshlink.ui.designsystem.theme.MeshSpacing
-import com.meshlink.ui.designsystem.theme.MeshTheme
-import kotlinx.coroutines.launch
+import com.meshlink.ui.settings.SettingsViewModel
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,12 +28,11 @@ fun ProfileScreen(
     onNavigateBack: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val profileState by viewModel.uiState.collectAsStateWithLifecycle()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
-    var name by remember(uiState.user?.name) { mutableStateOf(uiState.user?.name ?: "") }
-    var aboutMe by remember(uiState.user?.aboutMe) { mutableStateOf(uiState.user?.aboutMe ?: "") }
-    var avatarUriString by remember(uiState.user?.avatarUri) { mutableStateOf(uiState.user?.avatarUri) }
+    val context = LocalContext.current
 
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showAvatarGridSheet by remember { mutableStateOf(false) }
@@ -73,12 +41,18 @@ fun ProfileScreen(
     val avatarSheetState = rememberModalBottomSheetState()
 
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var currentAvatarUriString by remember(profileState.user?.avatarUri) { mutableStateOf(profileState.user?.avatarUri) }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && tempCameraUri != null) {
-            avatarUriString = tempCameraUri.toString()
+            currentAvatarUriString = tempCameraUri.toString()
+            viewModel.saveProfile(
+                name = profileState.user?.name ?: "",
+                aboutMe = profileState.user?.aboutMe,
+                avatarUri = currentAvatarUriString
+            )
         }
     }
 
@@ -109,141 +83,41 @@ fun ProfileScreen(
                         android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                     )
                 } catch (_: Exception) {}
-                avatarUriString = it.toString()
+                currentAvatarUriString = it.toString()
+                viewModel.saveProfile(
+                    name = profileState.user?.name ?: "",
+                    aboutMe = profileState.user?.aboutMe,
+                    avatarUri = currentAvatarUriString
+                )
             }
         }
     )
 
     AnimatedErrorDialog(
-        visible = uiState.saveError != null,
+        visible = profileState.saveError != null,
         title = "Profile Update Error",
-        message = uiState.saveError ?: "",
+        message = profileState.saveError ?: "",
         onDismiss = { viewModel.dismissError() },
         primaryButtonText = "OK",
         onPrimaryClick = { viewModel.dismissError() }
     )
 
-    MeshScreen(
-        topBar = {
-            MeshTopAppBar(
-                title = "Edit Profile",
-                onBackClick = onNavigateBack,
-                actions = {
-                    TextButton(
-                        onClick = {
-                            viewModel.saveProfile(name, aboutMe, avatarUriString)
-                        },
-                        enabled = name.isNotBlank() && !uiState.isSaving
-                    ) {
-                        if (uiState.isSaving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(MeshTheme.spacing.mediumLarge),
-                                strokeWidth = MeshTheme.spacing.extraSmall
-                            )
-                        } else {
-                            Text("Save")
-                        }
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(MeshSpacing.ScreenPadding),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Interactive Avatar Container with Camera Badge
-                Box(
-                    modifier = Modifier
-                        .size(120.dp)
-                        .clickable { showOptionsSheet = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        shadowElevation = 4.dp,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        UserAvatar(
-                            identity = com.meshlink.domain.model.UserIdentity.create(
-                                userId = uiState.user?.meshId ?: "",
-                                displayName = name,
-                                avatarUri = avatarUriString
-                            ),
-                            size = 120.dp,
-                            contentDescriptionText = "Profile Picture"
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .align(Alignment.BottomEnd)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "Edit Profile Picture",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.extraLarge))
-
-                // Name Input
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Display Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-
-                // About Me Input
-                OutlinedTextField(
-                    value = aboutMe,
-                    onValueChange = { aboutMe = it },
-                    label = { Text("About Me") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    maxLines = 5
-                )
-
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-
-                // Mesh ID Display (Read only)
-                uiState.user?.meshId?.let { meshId ->
-                    Text(
-                        text = "Mesh ID: $meshId",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            LoadingOverlay(isLoading = uiState.isLoading)
-        }
-    }
+    MeshProfileScreen(
+        profileState = profileState,
+        settingsState = settingsState,
+        onNavigateBack = onNavigateBack,
+        onEditAvatarClick = { showOptionsSheet = true },
+        onSaveProfile = { name, aboutMe, avatarUri ->
+            viewModel.saveProfile(name, aboutMe, avatarUri ?: currentAvatarUriString)
+        },
+        onExportLogs = { settingsViewModel.exportDebugLogs() },
+        onShowToast = { settingsViewModel.showToast(it) }
+    )
 
     if (showOptionsSheet) {
         ProfileImageOptionsBottomSheet(
             sheetState = optionsSheetState,
-            hasCustomImage = !avatarUriString.isNullOrEmpty(),
+            hasCustomImage = !currentAvatarUriString.isNullOrEmpty(),
             onDismiss = { showOptionsSheet = false },
             onTakePhoto = {
                 val hasPermission = ContextCompat.checkSelfPermission(
@@ -275,7 +149,12 @@ fun ProfileScreen(
                 showAvatarGridSheet = true
             },
             onRemovePhoto = {
-                avatarUriString = null
+                currentAvatarUriString = null
+                viewModel.saveProfile(
+                    name = profileState.user?.name ?: "",
+                    aboutMe = profileState.user?.aboutMe,
+                    avatarUri = null
+                )
             }
         )
     }
@@ -283,10 +162,15 @@ fun ProfileScreen(
     if (showAvatarGridSheet) {
         AvatarGridBottomSheet(
             sheetState = avatarSheetState,
-            selectedAvatarId = avatarUriString,
+            selectedAvatarId = currentAvatarUriString,
             onDismiss = { showAvatarGridSheet = false },
             onAvatarSelected = { avatarUri ->
-                avatarUriString = avatarUri
+                currentAvatarUriString = avatarUri
+                viewModel.saveProfile(
+                    name = profileState.user?.name ?: "",
+                    aboutMe = profileState.user?.aboutMe,
+                    avatarUri = avatarUri
+                )
             }
         )
     }

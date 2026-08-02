@@ -50,11 +50,27 @@ fun SecurityTimelineSection(
                         .padding(MeshTheme.spacing.mediumLarge),
                     verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                 ) {
-                    events.forEachIndexed { index, event ->
-                        TimelineEventItem(
-                            event = event,
-                            isLast = index == events.lastIndex
+                    val groupedEvents = events.groupBy { event ->
+                        when {
+                            event.timestamp.contains("Today", ignoreCase = true) || event.timestamp.contains("Recent", ignoreCase = true) || event.timestamp.contains("System Startup", ignoreCase = true) -> "Today"
+                            event.timestamp.contains("Yesterday", ignoreCase = true) -> "Yesterday"
+                            else -> "Earlier"
+                        }
+                    }
+
+                    groupedEvents.forEach { (groupHeader, groupList) ->
+                        Text(
+                            text = groupHeader,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
                         )
+
+                        groupList.forEachIndexed { index, event ->
+                            TimelineEventItem(
+                                event = event,
+                                isLast = index == groupList.lastIndex
+                            )
+                        }
                     }
                 }
             }

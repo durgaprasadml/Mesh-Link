@@ -164,3 +164,82 @@ data class SecurityTimelineEventUi(
     val type: String = "INFO",
     val trustLevel: TrustLevel = TrustLevel.TRUSTED
 )
+
+/**
+ * Filter categories for Security Center.
+ */
+enum class SecurityFilterCategory(val label: String) {
+    ALL("All"),
+    IDENTITY("Identity"),
+    DEVICES("Devices"),
+    SESSIONS("Sessions"),
+    PRIVACY("Privacy"),
+    PERMISSIONS("Permissions"),
+    DIAGNOSTICS("Diagnostics")
+}
+
+/**
+ * Permission status enumeration.
+ */
+enum class PermissionStatus {
+    GRANTED,
+    DENIED,
+    LIMITED
+}
+
+/**
+ * System Runtime Permission item UI model.
+ */
+@Immutable
+data class PermissionItemUi(
+    val id: String,
+    val name: String,
+    val group: String,
+    val status: PermissionStatus,
+    val description: String
+)
+
+/**
+ * Identity Backup & Key Export UI status model.
+ */
+@Immutable
+data class BackupStatusUi(
+    val identityBackupConfigured: Boolean = true,
+    val recoveryPhraseCreated: Boolean = true,
+    val offlineKeyExportAvailable: Boolean = true,
+    val cloudStorageIsolated: Boolean = true,
+    val lastBackupTimestamp: String = "Today, 10:15 AM",
+    val backupLocation: String = "Local Encrypted Storage"
+)
+
+/**
+ * Security Diagnostics System Health UI status model.
+ */
+enum class DiagnosticHealthStatus {
+    HEALTHY,
+    WARNING,
+    UNAVAILABLE
+}
+
+@Immutable
+data class DiagnosticComponentUi(
+    val id: String,
+    val name: String,
+    val category: String,
+    val status: DiagnosticHealthStatus,
+    val details: String,
+    val metricValue: String? = null
+)
+
+/**
+ * Advanced Security Settings presentation UI model.
+ */
+@Immutable
+data class AdvancedSecurityUi(
+    val screenshotProtectionEnabled: Boolean = true,
+    val autoLockTimeoutMinutes: Int = 5,
+    val developerModeAllowed: Boolean = false,
+    val encryptedLogsEnabled: Boolean = true,
+    val strictTransportSecurity: Boolean = true
+)
+

@@ -2,10 +2,7 @@ package com.meshlink.ui.security
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -60,6 +57,14 @@ fun PrivacyControlsCard(
             )
 
             PrivacyItemRow(
+                icon = Icons.Default.VisibilityOff,
+                title = "Online Visibility",
+                subtitle = "Broadcast online presence status to verified mesh contacts",
+                checked = privacyUi.onlineVisibility,
+                onCheckedChange = onVisibilityToggle
+            )
+
+            PrivacyItemRow(
                 icon = Icons.Default.Fingerprint,
                 title = "Biometric Lock",
                 subtitle = "Require fingerprint / face identification to launch Mesh-Link",
@@ -68,11 +73,19 @@ fun PrivacyControlsCard(
             )
 
             PrivacyItemRow(
+                icon = Icons.Default.Security,
+                title = "Anonymous Mesh Broadcasts",
+                subtitle = "Strip node identity signatures from public local emergency broadcasts",
+                checked = privacyUi.appLockEnabled,
+                onCheckedChange = onAppLockToggle
+            )
+
+            PrivacyItemRow(
                 icon = Icons.Default.Lock,
                 title = "Enforce Strict Payload Encryption",
                 subtitle = "Reject plain text or unauthenticated mesh packets automatically",
                 checked = privacyUi.advancedEncryptionEnforced,
-                onCheckedChange = onAppLockToggle
+                onCheckedChange = null
             )
         }
     }

@@ -3,7 +3,6 @@ package com.meshlink.ui.settings.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,6 +13,7 @@ import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.settings.SettingsItemRow
 import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.security.*
 import com.meshlink.ui.settings.SettingsUiState
 import com.meshlink.ui.settings.SettingsViewModel
 
@@ -25,8 +25,31 @@ fun PrivacySettingsScreen(
     onBack: () -> Unit
 ) {
     var biometricUnlock by remember { mutableStateOf(uiState.biometricUnlock) }
-    var appLockEnabled by remember { mutableStateOf(uiState.appLockEnabled) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+
+    val encryptionUi = remember(uiState) {
+        EncryptionUi(
+            isE2eeActive = uiState.isEncryptionEnabled,
+            cipherSuite = "AES-256-GCM",
+            keyExchangeAlg = "ECDH X25519",
+            ratchetProtocol = "Double Ratchet v2",
+            isHardwareKeystoreUsed = true,
+            broadcastKeyVersion = 1,
+            sessionEstablishedCount = uiState.trustedDevicesCount,
+            perfectForwardSecrecy = uiState.advancedEncryptionEnforcement
+        )
+    }
+
+    val privacyUi = remember(biometricUnlock, uiState) {
+        PrivacyUi(
+            discoverabilityEnabled = uiState.isOnlineVisible,
+            onlineVisibility = uiState.isOnlineVisible,
+            biometricLockEnabled = biometricUnlock,
+            appLockEnabled = uiState.appLockEnabled,
+            autoLockTimeoutMinutes = 5,
+            advancedEncryptionEnforced = uiState.advancedEncryptionEnforcement
+        )
+    }
 
     MeshScreen(
         topBar = {
@@ -45,49 +68,35 @@ fun PrivacySettingsScreen(
             contentPadding = PaddingValues(bottom = MeshSpacing.ListBottomSpacing),
             verticalArrangement = Arrangement.spacedBy(MeshSpacing.CardSpacing)
         ) {
-            // Encryption Banner Card
+            // Enterprise Encryption Status Banner
             item {
-                ElevatedCard(
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
-                    shape = MeshTheme.shapes.large,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(MeshTheme.spacing.mediumLarge),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VerifiedUser,
-                            contentDescription = "Security Active",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
-                        Column {
-                            Text(
-                                text = "End-to-End Encryption Active",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-                            Text(
-                                text = "AES-256-GCM & Curve25519 ratchet protect all mesh payload frames.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-                }
+                EncryptionStatusCard(
+                    encryptionUi = encryptionUi
+                )
             }
 
-            // Authentication & Access
+            // Node Privacy & Protection Controls
             item {
-                Text("App Authentication", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                PrivacyControlsCard(
+                    privacyUi = privacyUi,
+                    onDiscoverabilityToggle = {
+                        viewModel.setOnlineVisible(it)
+                        viewModel.showToast(if (it) "Node discoverability enabled" else "Node discoverability hidden")
+                    },
+                    onBiometricsToggle = {
+                        biometricUnlock = it
+                        viewModel.showToast(if (it) "Biometric unlock enabled" else "Biometric unlock disabled")
+                    },
+                    onAppLockToggle = {
+                        viewModel.setAdvancedEncryptionEnforcement(it)
+                        viewModel.showToast(if (it) "Strict encryption enforced" else "Standard encryption active")
+                    }
+                )
+            }
+
+            // Devices & Keyring Summary
+            item {
+                Text("Trusted Devices & Keyring", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                 ElevatedCard(
                     colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -95,46 +104,7 @@ fun PrivacySettingsScreen(
                 ) {
                     Column {
                         SettingsItemRow(
-                            title = "Biometric Unlock",
-                            subtitle = "Require fingerprint or face identification to launch Mesh Link",
-                            icon = Icons.Default.Fingerprint,
-                            trailingContent = {
-                                Switch(
-                                    checked = biometricUnlock,
-                                    onCheckedChange = {
-                                        biometricUnlock = it
-                                        viewModel.showToast(if (it) "Biometric unlock enabled" else "Biometric unlock disabled")
-                                    }
-                                )
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "PIN / Pattern Lock",
-                            subtitle = "Passcode lock fallback (Coming Soon)",
-                            icon = Icons.Default.Lock,
-                            trailingContent = {
-                                AssistChip(
-                                    onClick = { },
-                                    label = { Text("Coming Soon", style = MaterialTheme.typography.labelSmall) }
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Devices & Keys
-            item {
-                Text("Trusted Devices & Keys", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                ElevatedCard(
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
-                ) {
-                    Column {
-                        SettingsItemRow(
-                            title = "Trusted Devices",
+                            title = "Trusted Devices Keyring",
                             subtitle = "${uiState.trustedDevicesCount} verified public key fingerprints in keyring",
                             icon = Icons.Default.Devices,
                             onClick = { viewModel.showToast("Keyring details opened") }

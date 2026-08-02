@@ -42,6 +42,7 @@ sealed class Screen(val route: String) {
     object Broadcast : Screen("broadcast")
     object Diagnostics : Screen("diagnostics")
     object MediaDiagnostics : Screen("media_diagnostics")
+    object Media : Screen("media")
 }
 
 @Composable
@@ -233,6 +234,12 @@ fun AppNavigation(
             composable(Screen.MediaDiagnostics.route) {
                 MediaDiagnosticsScreen(
                     onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.Media.route) {
+                com.meshlink.ui.media.MediaScreen(
+                    onBack = { navController.popBackStack() }
                 )
             }
         }

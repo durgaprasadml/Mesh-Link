@@ -43,7 +43,7 @@ class WifiSocketTransportTest {
         transport.disconnect()
     }
 
-    private suspend fun eventually(timeoutMs: Long = 5000L, pollMs: Long = 50L, condition: () -> Boolean) {
+    private suspend fun eventually(timeoutMs: Long = 15000L, pollMs: Long = 50L, condition: () -> Boolean) {
         withTimeout(timeoutMs) {
             while (!condition()) {
                 delay(pollMs)

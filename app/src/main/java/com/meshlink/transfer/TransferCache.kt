@@ -73,7 +73,10 @@ class TransferCache @Inject constructor(
             if (!sessionDir.exists()) sessionDir.mkdirs()
             
             val chunkFile = File(sessionDir, "$chunkIndex.chk")
-            chunkFile.writeBytes(data)
+            java.io.BufferedOutputStream(chunkFile.outputStream(), 64 * 1024).use { out ->
+                out.write(data)
+                out.flush()
+            }
             true
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Failed to write chunk $chunkIndex for $transferId: ${e.message}")
@@ -85,7 +88,9 @@ class TransferCache @Inject constructor(
         val chunkFile = File(stagingDir, "$transferId/$chunkIndex.chk")
         if (chunkFile.exists()) {
             try {
-                chunkFile.readBytes()
+                java.io.BufferedInputStream(chunkFile.inputStream(), 64 * 1024).use { input ->
+                    input.readBytes()
+                }
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Failed to read chunk $chunkIndex for $transferId: ${e.message}")
                 null
@@ -119,17 +124,18 @@ class TransferCache @Inject constructor(
             val sessionDir = File(stagingDir, transferId)
             if (!sessionDir.exists()) return@withContext false
 
-            outputFile.outputStream().use { out ->
+            java.io.BufferedOutputStream(outputFile.outputStream(), 64 * 1024).use { out ->
                 for (i in 0 until totalChunks) {
                     val chunkFile = File(sessionDir, "$i.chk")
                     if (!chunkFile.exists()) {
                         MeshLogger.e(TAG, "Missing chunk $i during assembly of $transferId")
                         return@withContext false
                     }
-                    chunkFile.inputStream().use { input ->
-                        input.copyTo(out)
+                    java.io.BufferedInputStream(chunkFile.inputStream(), 64 * 1024).use { input ->
+                        input.copyTo(out, bufferSize = 64 * 1024)
                     }
                 }
+                out.flush()
             }
             true
         } catch (e: Exception) {
@@ -151,6 +157,17 @@ class TransferCache @Inject constructor(
             stagingDir.deleteRecursively()
             stagingDir.mkdirs()
             MeshLogger.w(TAG, "Transfer cache fully cleared due to memory pressure")
+        }
+    }
+
+    suspend fun cleanStaleSessions(maxAgeMs: Long = 24 * 60 * 60 * 1000L) = withContext(Dispatchers.IO) {
+        if (!stagingDir.exists()) return@withContext
+        val now = System.currentTimeMillis()
+        stagingDir.listFiles()?.forEach { sessionDir ->
+            if (sessionDir.isDirectory && (now - sessionDir.lastModified()) > maxAgeMs) {
+                sessionDir.deleteRecursively()
+                MeshLogger.d(TAG, "Evicted stale transfer cache directory: ${sessionDir.name}")
+            }
         }
     }
 }

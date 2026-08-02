@@ -2,6 +2,7 @@ package com.meshlink.media.data
 
 import android.media.MediaPlayer
 import com.meshlink.common.logger.MeshLogger
+import com.meshlink.di.ApplicationScope
 import com.meshlink.di.DefaultDispatcher
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,15 +13,15 @@ import kotlinx.coroutines.flow.asStateFlow
 
 @Singleton
 class VoicePlayer @Inject constructor(
-    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher
-,
-    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope) {
+    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
+    @ApplicationScope private val applicationScope: CoroutineScope
+) {
 
     companion object {
         private const val TAG = "VoicePlayer"
     }
 
-private var mediaPlayer: MediaPlayer? = null
+    private var mediaPlayer: MediaPlayer? = null
     private var progressJob: Job? = null
 
     // Currently playing file path (null = nothing playing)
@@ -32,21 +33,30 @@ private var mediaPlayer: MediaPlayer? = null
     val progress: StateFlow<Float> = _progress.asStateFlow()
 
     fun play(filePath: String) {
-        // Validate file exists before attempting playback
         val file = java.io.File(filePath)
         if (!file.exists() || file.length() == 0L) {
             MeshLogger.e(TAG, "Cannot play: file missing or empty: $filePath")
+            stop()
             return
         }
 
-        // If already playing this file, toggle pause
+        // If already playing this file, toggle pause / resume
         if (_currentlyPlaying.value == filePath) {
             try {
-                if (mediaPlayer?.isPlaying == true) {
-                    pause()
-                    return
+                val player = mediaPlayer
+                if (player != null) {
+                    if (player.isPlaying) {
+                        pause()
+                        return
+                    } else {
+                        player.start()
+                        startProgressLoop()
+                        return
+                    }
                 }
-            } catch (_: Exception) { /* IllegalStateException */ }
+            } catch (e: Exception) {
+                MeshLogger.w(TAG, "Failed to toggle pause for $filePath: ${e.message}")
+            }
         }
 
         // Stop any existing playback
@@ -55,6 +65,14 @@ private var mediaPlayer: MediaPlayer? = null
         try {
             mediaPlayer = MediaPlayer().apply {
                 setDataSource(filePath)
+                setOnErrorListener { _, what, extra ->
+                    MeshLogger.e(TAG, "MediaPlayer error: what=$what extra=$extra for $filePath")
+                    stop()
+                    true
+                }
+                setOnCompletionListener {
+                    stop()
+                }
                 prepare()
                 start()
             }
@@ -62,36 +80,46 @@ private var mediaPlayer: MediaPlayer? = null
             _currentlyPlaying.value = filePath
             _progress.value = 0f
 
-            mediaPlayer?.setOnCompletionListener {
-                stop()
-            }
-
-            // Progress tracking loop
-            progressJob = applicationScope.launch(defaultDispatcher) {
-                while (isActive) {
-                    try {
-                        val player = mediaPlayer ?: break
-                        if (!player.isPlaying) break
-                        val current = player.currentPosition.toFloat()
-                        val total = player.duration.toFloat()
-                        if (total > 0) {
-                            _progress.value = current / total
-                        }
-                    } catch (_: Exception) { break }
-                    delay(100)
-                }
-            }
-
+            startProgressLoop()
             MeshLogger.d(TAG, "Playing: $filePath")
         } catch (e: Exception) {
-            MeshLogger.e(TAG, "Playback failed: ${e.message}")
+            MeshLogger.e(TAG, "Playback failed for $filePath: ${e.message}")
             stop()
         }
     }
 
-    fun pause() {
-        mediaPlayer?.pause()
+    private fun startProgressLoop() {
         progressJob?.cancel()
+        progressJob = applicationScope.launch(defaultDispatcher) {
+            while (isActive) {
+                try {
+                    val player = mediaPlayer ?: break
+                    if (!player.isPlaying) break
+                    val current = player.currentPosition.toFloat()
+                    val total = player.duration.toFloat()
+                    if (total > 0) {
+                        _progress.value = (current / total).coerceIn(0f, 1f)
+                    }
+                } catch (_: Exception) {
+                    break
+                }
+                delay(100)
+            }
+        }
+    }
+
+    fun pause() {
+        progressJob?.cancel()
+        progressJob = null
+        try {
+            mediaPlayer?.let {
+                if (it.isPlaying) {
+                    it.pause()
+                }
+            }
+        } catch (e: Exception) {
+            MeshLogger.w(TAG, "Error pausing player: ${e.message}")
+        }
     }
 
     fun stop() {
@@ -99,12 +127,17 @@ private var mediaPlayer: MediaPlayer? = null
         progressJob = null
         try {
             mediaPlayer?.apply {
-                if (isPlaying) stop()
+                try {
+                    if (isPlaying) stop()
+                } catch (_: Exception) {}
                 release()
             }
-        } catch (_: Exception) {}
-        mediaPlayer = null
-        _currentlyPlaying.value = null
-        _progress.value = 0f
+        } catch (e: Exception) {
+            MeshLogger.w(TAG, "Error stopping player: ${e.message}")
+        } finally {
+            mediaPlayer = null
+            _currentlyPlaying.value = null
+            _progress.value = 0f
+        }
     }
 }

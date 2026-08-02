@@ -6,21 +6,20 @@ import com.meshlink.domain.model.MeshError
 import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.MeshResult
 import com.meshlink.domain.transport.Transport
+import com.meshlink.domain.transport.TransportHealth
+import com.meshlink.wifi.api.WifiTransport
 import com.meshlink.wifi.manager.WifiP2pManagerFacade
 import com.meshlink.wifi.model.WifiP2pState
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.launch
-
-import com.meshlink.domain.transport.TransportHealth
-import com.meshlink.wifi.api.WifiTransport
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 @Singleton
 internal class WifiTransportImpl @Inject constructor(
@@ -75,6 +74,24 @@ internal class WifiTransportImpl @Inject constructor(
             }
         }
 
+        // Monitor Socket Connection State transitions
+        applicationScope.launch {
+            wifiSocketTransport.connectionState.collect { socketState ->
+                MeshLogger.d(TAG, "Socket ConnectionState updated: $socketState")
+                when (socketState) {
+                    WifiSocketConnectionState.CONNECTED -> {
+                        _healthState.value = TransportHealth.CONNECTED
+                    }
+                    WifiSocketConnectionState.CONNECTING, WifiSocketConnectionState.RECONNECTING -> {
+                        _healthState.value = TransportHealth.CONNECTING
+                    }
+                    WifiSocketConnectionState.DISCONNECTED, WifiSocketConnectionState.FAILED -> {
+                        _healthState.value = TransportHealth.DISCONNECTED
+                    }
+                }
+            }
+        }
+
         // Monitor P2P State transitions to automatically orchestrate socket layer
         applicationScope.launch {
             wifiP2pManagerFacade.p2pState.collect { state ->
@@ -98,7 +115,9 @@ internal class WifiTransportImpl @Inject constructor(
                     }
 
                     else -> {
-                        _healthState.value = TransportHealth.AVAILABLE
+                        if (_healthState.value != TransportHealth.CONNECTED) {
+                            _healthState.value = TransportHealth.AVAILABLE
+                        }
                     }
                 }
             }
@@ -115,6 +134,7 @@ internal class WifiTransportImpl @Inject constructor(
             wifiSocketTransport.sendPacket(packet)
             MeshResult.Success(Unit)
         } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to send Wi-Fi packet: ${e.message}", e)
             MeshResult.Error(
                 MeshError.TransportError("Failed to send Wi-Fi packet", cause = e)
             )
@@ -131,6 +151,7 @@ internal class WifiTransportImpl @Inject constructor(
             wifiSocketTransport.sendPacket(packet)
             MeshResult.Success(Unit)
         } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to broadcast Wi-Fi packet: ${e.message}", e)
             MeshResult.Error(
                 MeshError.TransportError("Failed to broadcast Wi-Fi packet", cause = e)
             )
@@ -147,6 +168,7 @@ internal class WifiTransportImpl @Inject constructor(
             wifiP2pManagerFacade.connect(peerId)
             MeshResult.Success(Unit)
         } catch (e: Exception) {
+            MeshLogger.e(TAG, "Failed to connect via Wi-Fi P2P to $peerId: ${e.message}", e)
             MeshResult.Error(
                 MeshError.TransportError("Failed to connect via Wi-Fi P2P", deviceAddress = peerId, cause = e)
             )

@@ -63,8 +63,6 @@ object BufferPool {
             return // Let it be garbage collected
         }
 
-        // Extremely basic prevention of duplicate returns: we don't scan the queue (O(N)),
-        // so the caller MUST ensure they don't return the same buffer twice while it's in use.
         queue.offer(buffer)
     }
 
@@ -75,6 +73,32 @@ object BufferPool {
     fun returnSecureBuffer(buffer: ByteArray) {
         buffer.fill(0) // Secure wipe
         returnBuffer(buffer)
+    }
+
+    /**
+     * Executes [block] using a borrowed buffer, automatically returning the buffer
+     * to the pool in a try-finally block to prevent pool leaks.
+     */
+    inline fun <R> useBuffer(size: Int, block: (ByteArray) -> R): R {
+        val buffer = borrowBuffer(size)
+        return try {
+            block(buffer)
+        } finally {
+            returnBuffer(buffer)
+        }
+    }
+
+    /**
+     * Executes [block] using a clean borrowed buffer, automatically returning it
+     * securely (wiped) to the pool in a try-finally block.
+     */
+    inline fun <R> useCleanBuffer(size: Int, block: (ByteArray) -> R): R {
+        val buffer = borrowCleanBuffer(size)
+        return try {
+            block(buffer)
+        } finally {
+            returnSecureBuffer(buffer)
+        }
     }
     
     /**

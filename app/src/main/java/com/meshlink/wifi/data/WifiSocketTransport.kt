@@ -332,8 +332,8 @@ class WifiSocketTransport @Inject constructor(
             val requirement = PacketEncryptionPolicy.getRequirement(packetToSend.type)
             if (requirement == EncryptionRequirement.REQUIRED || requirement == EncryptionRequirement.OPTIONAL) {
                 val aadResult = try { sessionManager.generateAad(packetToSend.targetId) } catch (_: Throwable) { null }
-                val aadBytes = aadResult?.first
-                val aadPrefix = aadResult?.second ?: ""
+                val aadBytes = (aadResult as? Pair<*, *>)?.first as? ByteArray
+                val aadPrefix = ((aadResult as? Pair<*, *>)?.second as? String) ?: ""
                 val encryptedResult = try {
                     cryptoManager.encryptOrPassthrough(
                         packetToSend.payload,

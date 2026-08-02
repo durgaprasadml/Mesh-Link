@@ -156,13 +156,21 @@ object ImageCompressor {
             val scaled = scaleBitmapToMax(bitmap, 120)
             val baos = ByteArrayOutputStream()
             scaled.compress(Bitmap.CompressFormat.JPEG, 40, baos)
+            var thumbBytes = baos.toByteArray()
+            if (thumbBytes.size > 5000) {
+                baos.reset()
+                scaled.compress(Bitmap.CompressFormat.JPEG, 25, baos)
+                thumbBytes = baos.toByteArray()
+            }
             
             if (scaled !== bitmap) {
                 scaled.recycle()
             }
             bitmap.recycle()
 
-            android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.NO_WRAP)
+            if (thumbBytes.size <= 5000) {
+                android.util.Base64.encodeToString(thumbBytes, android.util.Base64.NO_WRAP)
+            } else null
         } catch (e: Exception) {
             MeshLogger.e(TAG, "generateThumbnailBase64() failed: ${e.message}", e)
             null

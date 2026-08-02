@@ -33,10 +33,10 @@ class QueueOptimizer @Inject constructor() {
      */
     private fun getLegacyPriorityScore(type: PacketType): Int {
         return when (type) {
-            PacketType.SOS -> 1
+            PacketType.SOS, PacketType.DELIVERY_ACK, PacketType.READ_RECEIPT, PacketType.KEY_EXCHANGE -> 1
             PacketType.VOICE_SIGNAL, PacketType.VOICE_FRAME, PacketType.VIDEO_SIGNAL, PacketType.VIDEO_FRAME -> 2
-            PacketType.TEXT, PacketType.LOCATION -> 3
-            PacketType.MEDIA_CHUNK, PacketType.DELIVERY_ACK, PacketType.READ_RECEIPT -> 4
+            PacketType.TEXT, PacketType.LOCATION, PacketType.PRESENCE, PacketType.TYPING -> 3
+            PacketType.MEDIA_META, PacketType.MEDIA_CHUNK, PacketType.RESOURCE_SYNC -> 4
             else -> 4
         }
     }

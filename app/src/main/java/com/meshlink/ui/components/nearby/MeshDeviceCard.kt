@@ -37,7 +37,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.meshlink.domain.model.BleDevice
+<<<<<<< HEAD
 import com.meshlink.domain.model.TransportType
+=======
+import java.util.Locale
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.meshlink.ui.components.UserAvatarImage
+import com.meshlink.ui.designsystem.theme.MeshSpacing
+>>>>>>> e7bba15 (fix(routing): update transport selection method signature and refine UI badge imports)
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.MeshIdNormalizer
 
@@ -73,7 +80,7 @@ fun MeshDeviceCard(
     val distanceText = remember(device.distanceMeters, device.distanceConfidence) {
         if (device.distanceMeters != null) {
             val confStr = device.distanceConfidence?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Estimated"
-            "~${String.format("%.1f m", device.distanceMeters)} ($confStr)"
+            "~${String.format(Locale.getDefault(), "%.1f m", device.distanceMeters)} ($confStr)"
         } else {
             "Distance: Calculating..."
         }

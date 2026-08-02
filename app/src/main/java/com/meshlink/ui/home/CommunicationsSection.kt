@@ -1,10 +1,6 @@
 package com.meshlink.ui.home
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,11 +15,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -34,13 +29,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meshlink.domain.model.Chat
-import com.meshlink.ui.components.EmptyState
-import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.util.MeshIdNormalizer
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -72,92 +69,30 @@ fun CommunicationsSection(
     }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(top = 12.dp, bottom = 8.dp)
+        modifier = modifier.fillMaxWidth()
     ) {
-        // Section Header Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .width(3.5.dp)
-                        .height(18.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color(0xFF00E676))
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "ACTIVE COMMUNICATIONS",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black,
-                    color = MeshTheme.colors.textPrimary,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            if (filteredChats.isNotEmpty()) {
-                Surface(
-                    shape = CircleShape,
-                    color = MeshTheme.colors.primary.copy(alpha = 0.15f)
-                ) {
-                    Text(
-                        text = "${filteredChats.size}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MeshTheme.colors.primary,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                    )
-                }
-            }
-        }
-
         if (filteredChats.isEmpty()) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, MeshTheme.colors.border, RoundedCornerShape(20.dp)),
-                color = MeshTheme.colors.surface
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp, horizontal = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    EmptyState(
-                        icon = Icons.Outlined.ChatBubbleOutline,
-                        title = if (searchQuery.isNotBlank()) "No Matching Communications" else "No Active Conversations",
-                        description = if (searchQuery.isNotBlank()) {
-                            "No mesh peer or conversation matched \"$searchQuery\"."
-                        } else {
-                            "Discover nearby nodes on BLE & Wi-Fi Direct to start secure multi-hop messaging."
-                        },
-                        primaryButtonText = if (searchQuery.isBlank()) "Find Nearby Nodes" else null,
-                        onPrimaryButtonClick = if (searchQuery.isBlank()) onNavigateToNearby else null
-                    )
-                }
-            }
+            RecentChatsEmptyState(
+                searchQuery = searchQuery,
+                onStartChatting = onNavigateToNearby
+            )
         } else {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                filteredChats.forEach { chat ->
-                    TacticalChatCard(
+            Column(modifier = Modifier.fillMaxWidth()) {
+                filteredChats.forEachIndexed { index, chat ->
+                    RecentChatRow(
                         chat = chat,
                         onClick = {
                             val safeName = chat.name.ifBlank { MeshIdNormalizer.canonicalize(chat.id) }
                             onNavigateToChat(chat.id, safeName)
                         }
                     )
+                    if (index < filteredChats.size - 1) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 76.dp, end = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                    }
                 }
             }
         }
@@ -165,125 +100,197 @@ fun CommunicationsSection(
 }
 
 @Composable
-private fun TacticalChatCard(
+fun RecentChatRow(
     chat: Chat,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val displayName = chat.name.ifBlank { MeshIdNormalizer.canonicalize(chat.id) }
     val formattedTime = formatChatTimestamp(chat.lastMessageAt)
+    val hasUnread = chat.unreadCount > 0
+    val firstLetter = displayName.take(1).uppercase()
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .border(
-                width = 0.5.dp,
-                color = if (chat.unreadCount > 0) MeshTheme.colors.primary.copy(alpha = 0.5f) else MeshTheme.colors.border,
-                shape = RoundedCornerShape(16.dp)
-            )
-            .tactileClick(onClick = onClick, pressScale = 0.98f),
-        color = if (chat.unreadCount > 0) MeshTheme.colors.primary.copy(alpha = 0.04f) else MeshTheme.colors.surface,
-        tonalElevation = MeshTheme.elevation.flat,
-        shadowElevation = 2.dp
+            .clickable(onClick = onClick)
+            .semantics {
+                role = Role.Button
+                contentDescription = "Chat with $displayName, ${chat.lastMessage ?: ""}"
+            },
+        color = Color.Transparent
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar with Mesh Node Ring Indicator
-            Box(contentAlignment = Alignment.BottomEnd) {
-                com.meshlink.ui.components.UserAvatar(
-                    identity = null,
-                    size = 48.dp
-                )
-                // Active mesh connection status dot
+            // 48dp Circular Avatar with Online Indicator
+            Box(
+                modifier = Modifier.size(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = firstLetter,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+
+                // Online indicator at bottom-right
                 Box(
                     modifier = Modifier
                         .size(12.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF00E676))
-                        .border(2.dp, MeshTheme.colors.surface, CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(1.5.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF4CAF50))
+                        .align(Alignment.BottomEnd)
                 )
             }
 
             Spacer(modifier = Modifier.width(14.dp))
 
-            // Main chat summary info
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = displayName,
-                        fontSize = 15.sp,
-                        fontWeight = if (chat.unreadCount > 0) FontWeight.Black else FontWeight.Bold,
-                        color = MeshTheme.colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+            // Contact Name & Last Message Preview
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = displayName,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
-                    Text(
-                        text = formattedTime,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (chat.unreadCount > 0) MeshTheme.colors.primary else MeshTheme.colors.textSecondary
-                    )
-                }
+                Text(
+                    text = chat.lastMessage ?: "Tap to open conversation",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
-                Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Last message text with E2E lock icon
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+            // Right side: Timestamp & Unread Badge
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = formattedTime,
+                    fontSize = 12.sp,
+                    fontWeight = if (hasUnread) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (hasUnread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (hasUnread) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color(0xFF2E7D32))
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = "E2E Encrypted",
-                            tint = MeshTheme.colors.primary,
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = chat.lastMessage ?: "Secure mesh channel ready",
-                            fontSize = 13.sp,
-                            fontWeight = if (chat.unreadCount > 0) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (chat.unreadCount > 0) MeshTheme.colors.textPrimary else MeshTheme.colors.textSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            text = if (chat.unreadCount > 99) "99+" else "${chat.unreadCount}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
-                    }
-
-                    if (chat.unreadCount > 0) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MeshTheme.colors.primary)
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "${chat.unreadCount}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.Black
-                            )
-                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun RecentChatsEmptyState(
+    searchQuery: String,
+    onStartChatting: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.ChatBubbleOutline,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Text(
+            text = if (searchQuery.isNotBlank()) "No matching conversations" else "No conversations yet",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = if (searchQuery.isNotBlank()) {
+                "No chat matches \"$searchQuery\""
+            } else {
+                "Connect with nearby devices over BLE & Wi-Fi Direct to start messaging."
+            },
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        if (searchQuery.isBlank()) {
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Button(
+                onClick = onStartChatting,
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2E7D32),
+                    contentColor = Color.White
+                ),
+                modifier = Modifier.height(44.dp)
+            ) {
+                Text(
+                    text = "Start chatting",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

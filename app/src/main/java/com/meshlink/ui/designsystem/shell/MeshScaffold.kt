@@ -76,13 +76,12 @@ fun MeshScaffold(
                     }
                 }
 
-                // Floating Navigation Dock for Compact Screen Viewports
+                // Integrated Navigation Bar for Compact Screen Viewports
                 if (showNavigationDock && !insets.isImeVisible) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(bottom = insets.navigationBarHeight)
                     ) {
                         MeshNavigationDock(
                             currentRoute = currentRoute,
@@ -96,7 +95,7 @@ fun MeshScaffold(
                 if (floatingActionButton != null) {
                     val bottomFabPadding = when {
                         insets.isImeVisible -> insets.imeHeight + 16.dp
-                        showNavigationDock -> 96.dp + insets.navigationBarHeight
+                        showNavigationDock -> 76.dp + insets.navigationBarHeight
                         else -> 24.dp + insets.navigationBarHeight
                     }
                     Box(

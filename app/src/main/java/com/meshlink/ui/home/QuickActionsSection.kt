@@ -1,7 +1,7 @@
 package com.meshlink.ui.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,14 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.CellTower
-import androidx.compose.material.icons.filled.NetworkCheck
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon
@@ -31,19 +27,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.meshlink.ui.designsystem.theme.MeshTheme
 
 private data class QuickActionItem(
     val title: String,
     val subtitle: String,
     val icon: ImageVector,
-    val accentColor: Color,
-    val containerColor: Color,
-    val onClick: () -> Unit,
-    val badgeCount: Int = 0
+    val iconBg: Color,
+    val iconTint: Color,
+    val onClick: () -> Unit
 )
 
 @Composable
@@ -51,97 +50,49 @@ fun QuickActionsSection(
     onNavigateToNearby: () -> Unit,
     onNavigateToBroadcast: () -> Unit,
     onNavigateToSos: () -> Unit,
-    onNavigateToDiagnostics: (() -> Unit)?,
-    onStartConversation: () -> Unit,
+    onNavigateToDiagnostics: (() -> Unit)? = null,
+    onStartConversation: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     nearbyCount: Int = 0
 ) {
     val items = listOf(
         QuickActionItem(
-            title = "Scan Mesh",
-            subtitle = if (nearbyCount > 0) "$nearbyCount discovered" else "Discover peers",
+            title = "Nearby",
+            subtitle = "Discover",
             icon = Icons.Default.Wifi,
-            accentColor = MeshTheme.colors.primary,
-            containerColor = MeshTheme.colors.primary.copy(alpha = 0.12f),
-            onClick = onNavigateToNearby,
-            badgeCount = nearbyCount
+            iconBg = MaterialTheme.colorScheme.primaryContainer,
+            iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+            onClick = onNavigateToNearby
         ),
         QuickActionItem(
             title = "Broadcast",
-            subtitle = "Mesh-wide post",
+            subtitle = "Post message",
             icon = Icons.Default.Campaign,
-            accentColor = Color(0xFF00E676),
-            containerColor = Color(0xFF00E676).copy(alpha = 0.12f),
+            iconBg = MaterialTheme.colorScheme.secondaryContainer,
+            iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
             onClick = onNavigateToBroadcast
         ),
         QuickActionItem(
-            title = "Emergency",
-            subtitle = "SOS Beacon",
+            title = "SOS",
+            subtitle = "Emergency",
             icon = Icons.Default.Warning,
-            accentColor = Color(0xFFFF5252),
-            containerColor = Color(0xFFFF5252).copy(alpha = 0.12f),
+            iconBg = MaterialTheme.colorScheme.errorContainer,
+            iconTint = MaterialTheme.colorScheme.onErrorContainer,
             onClick = onNavigateToSos
-        ),
-        QuickActionItem(
-            title = "Diagnostics",
-            subtitle = "Route Telemetry",
-            icon = Icons.Default.NetworkCheck,
-            accentColor = Color(0xFF00B0FF),
-            containerColor = Color(0xFF00B0FF).copy(alpha = 0.12f),
-            onClick = { onNavigateToDiagnostics?.invoke() ?: onNavigateToNearby() }
         )
     )
 
-    Column(
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Section title header
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(3.5.dp)
-                    .height(18.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MeshTheme.colors.primary)
+        items.forEach { item ->
+            QuickActionCard(
+                item = item,
+                modifier = Modifier.weight(1f)
             )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "TACTICAL QUICK ACTIONS",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Black,
-                color = MeshTheme.colors.textPrimary,
-                letterSpacing = 1.sp
-            )
-        }
-
-        // 2x2 Tactical Grid
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Left Column
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                QuickActionCard(item = items[0])
-                QuickActionCard(item = items[2])
-            }
-
-            // Right Column
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                QuickActionCard(item = items[1])
-                QuickActionCard(item = items[3])
-            }
         }
     }
 }
@@ -153,76 +104,58 @@ private fun QuickActionCard(
 ) {
     Surface(
         modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .border(
-                width = 1.dp,
-                color = item.accentColor.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(18.dp)
-            )
-            .tactileClick(onClick = item.onClick, pressScale = 0.95f),
-        color = MeshTheme.colors.surface,
-        tonalElevation = MeshTheme.elevation.flat,
-        shadowElevation = 2.dp
+            .height(96.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .clickable(onClick = item.onClick)
+            .semantics {
+                role = Role.Button
+                contentDescription = "${item.title}, ${item.subtitle}"
+            },
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.Start
         ) {
+            // Top: Small circular tinted icon
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(28.dp)
                     .clip(CircleShape)
-                    .background(item.containerColor),
+                    .background(item.iconBg),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = item.icon,
-                    contentDescription = item.title,
-                    tint = item.accentColor,
-                    modifier = Modifier.size(22.dp)
+                    contentDescription = null,
+                    tint = item.iconTint,
+                    modifier = Modifier.size(16.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = item.title,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MeshTheme.colors.textPrimary
-                    )
-
-                    if (item.badgeCount > 0) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(item.accentColor)
-                                .padding(horizontal = 6.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = "${item.badgeCount}",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.Black
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(2.dp))
+            // Middle: Bold Title & Bottom: Subtitle
+            Column {
+                Text(
+                    text = item.title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
                 Text(
                     text = item.subtitle,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Normal,
-                    color = MeshTheme.colors.textSecondary,
-                    maxLines = 1
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

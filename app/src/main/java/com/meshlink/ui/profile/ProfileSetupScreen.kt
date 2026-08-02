@@ -18,15 +18,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,12 +35,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,10 +59,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.meshlink.domain.model.UserIdentity
+import com.meshlink.ui.auth.ProfilePreviewCard
 import com.meshlink.ui.components.MeshScreen
 import com.meshlink.ui.components.MeshTopAppBar
 import com.meshlink.ui.components.UserAvatar
-import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import kotlinx.coroutines.flow.collectLatest
@@ -78,6 +79,7 @@ fun ProfileSetupScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var displayName by remember { mutableStateOf("") }
+    var aboutText by remember { mutableStateOf("Available on Mesh-Link") }
     val selectedAvatarUri by viewModel.selectedAvatarUri.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -88,7 +90,6 @@ fun ProfileSetupScreen(
     val optionsSheetState = rememberModalBottomSheetState()
     val avatarSheetState = rememberModalBottomSheetState()
 
-    // Temporary camera image URI storage
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -151,7 +152,7 @@ fun ProfileSetupScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             MeshTopAppBar(
-                title = "Mesh Link"
+                title = "Create Profile"
             )
         }
     ) { padding ->
@@ -161,125 +162,162 @@ fun ProfileSetupScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(MeshSpacing.ScreenPadding),
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Welcome to Mesh Link",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-            
-            Text(
-                text = "Create your profile to join the mesh network.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraGiant))
-
-            // Large Circular Profile Picture Container
-            Box(
-                modifier = Modifier
-                    .size(130.dp)
-                    .clickable { showOptionsSheet = true },
-                contentAlignment = Alignment.Center
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.widthIn(max = 480.dp)
             ) {
-                Surface(
-                    shape = CircleShape,
-                    shadowElevation = 6.dp,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    UserAvatar(
-                        identity = com.meshlink.domain.model.UserIdentity.create(
-                            userId = "preview",
-                            displayName = displayName,
-                            avatarUri = selectedAvatarUri
-                        ),
-                        size = 130.dp,
-                        contentDescriptionText = "Profile Picture Preview"
-                    )
-                }
+                Text(
+                    text = "Set Up Your Identity",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center
+                )
 
-                // Camera Badge Button
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "Choose your display name and avatar for nearby peers.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Avatar Clickable Selector
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .align(Alignment.BottomEnd)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
+                        .size(120.dp)
+                        .clickable { showOptionsSheet = true },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Change Profile Picture",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+                    Surface(
+                        shape = CircleShape,
+                        shadowElevation = 6.dp,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        UserAvatar(
+                            identity = UserIdentity.create(
+                                userId = "preview",
+                                displayName = displayName,
+                                avatarUri = selectedAvatarUri
+                            ),
+                            size = 120.dp,
+                            contentDescriptionText = "Profile Picture Selection"
+                        )
+                    }
 
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraGiant))
-
-            // Display Name Input
-            OutlinedTextField(
-                value = displayName,
-                onValueChange = { displayName = it },
-                label = { Text("Display Name") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Display Name Icon"
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                isError = displayName.isNotEmpty() && (displayName.trim().length < 2 || displayName.trim().length > 30),
-                supportingText = {
-                    val len = displayName.trim().length
-                    if (displayName.isNotEmpty() && (len < 2 || len > 30)) {
-                        Text("Name must be between 2 and 30 characters ($len/30)")
-                    } else {
-                        Text("$len/30 characters")
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .align(Alignment.BottomEnd)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Change Profile Picture",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
-            )
 
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.large))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            // Create Profile Button
-            Button(
-                onClick = { viewModel.createProfile(displayName) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = MeshTheme.shapes.large,
-                enabled = uiState !is ProfileSetupUiState.Loading && displayName.trim().length in 2..30
-            ) {
-                AnimatedVisibility(
-                    visible = uiState is ProfileSetupUiState.Loading,
-                    enter = fadeIn(),
-                    exit = fadeOut()
+                // Display Name Input
+                OutlinedTextField(
+                    value = displayName,
+                    onValueChange = { displayName = it },
+                    label = { Text("Display Name") },
+                    placeholder = { Text("e.g. Alex Rivera") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Display Name Icon"
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    isError = displayName.isNotEmpty() && (displayName.trim().length < 2 || displayName.trim().length > 30),
+                    supportingText = {
+                        val len = displayName.trim().length
+                        if (displayName.isNotEmpty() && (len < 2 || len > 30)) {
+                            Text("Name must be between 2 and 30 characters ($len/30)")
+                        } else {
+                            Text("$len/30 characters")
+                        }
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // About / Status Input
+                OutlinedTextField(
+                    value = aboutText,
+                    onValueChange = { if (it.length <= 80) aboutText = it },
+                    label = { Text("About / Status") },
+                    placeholder = { Text("e.g. Available on Mesh-Link") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "About Status Icon"
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    supportingText = {
+                        Text("${aboutText.length}/80 characters")
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Live Preview Card Component
+                ProfilePreviewCard(
+                    displayName = displayName,
+                    aboutText = aboutText,
+                    avatarUri = selectedAvatarUri
+                )
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                // Create Profile Button
+                Button(
+                    onClick = { viewModel.createProfile(displayName) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    enabled = uiState !is ProfileSetupUiState.Loading && displayName.trim().length in 2..30
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .padding(end = MeshTheme.spacing.small)
-                            .size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
+                    AnimatedVisibility(
+                        visible = uiState is ProfileSetupUiState.Loading,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(end = MeshTheme.spacing.small)
+                                .size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    }
+                    Text(
+                        text = "Create Profile",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-                Text(
-                    text = "Create Profile",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
             }
         }
     }

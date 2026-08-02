@@ -124,9 +124,9 @@ fun MeshNavigationDock(
 
                 val indicatorColor by animateColorAsState(
                     targetValue = if (activeItem.isEmergency) {
-                        Color(0xFFFFDADA)
+                        androidx.compose.material3.MaterialTheme.colorScheme.errorContainer
                     } else {
-                        Color(0xFFD2ECE0)
+                        androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer
                     },
                     label = "IndicatorColor"
                 )
@@ -152,11 +152,11 @@ fun MeshNavigationDock(
 
                     val contentColor by animateColorAsState(
                         targetValue = when {
-                            !item.isEnabled -> Color(0xFF9E9E9E)
-                            isSelected && item.isEmergency -> Color(0xFFD32F2F)
-                            isSelected -> Color(0xFF191C1A)
-                            item.isEmergency -> Color(0xFFD32F2F)
-                            else -> Color(0xFF404944)
+                            !item.isEnabled -> androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            isSelected && item.isEmergency -> androidx.compose.material3.MaterialTheme.colorScheme.onErrorContainer
+                            isSelected -> androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer
+                            item.isEmergency -> androidx.compose.material3.MaterialTheme.colorScheme.error
+                            else -> androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
                         },
                         label = "ContentColor_${item.route}"
                     )

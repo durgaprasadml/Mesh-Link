@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Notification icon for MediaTransferService foreground service.
+    Represents an active file/media upload/download over the mesh.
+    Vector drawable — single-color, suitable for notification tray.
+    Design: upward arrow with a horizontal progress bar base — universal "transfer" metaphor.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <!-- Upload arrow stem -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M11,20 L11,8.83 L7.41,12.41 L6,11 L12,5 L18,11 L16.59,12.41 L13,8.83 L13,20 L11,20Z" />
+    <!-- Base bar representing transfer channel / progress -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,22 L4,20 L20,20 L20,22 L4,22Z" />
+</vector>

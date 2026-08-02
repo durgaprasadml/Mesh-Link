@@ -1,7 +1,6 @@
 package com.meshlink.ui.home
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -26,7 +25,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.meshlink.ui.designsystem.theme.haptics.rememberMeshHaptics
 
 /**
- * Tactical animations for Home screen components.
+ * Tactical & Smooth Modern Animations for Home Screen.
+ * Fully supports reduced motion and Material 3 motion specs.
  */
 
 /**
@@ -115,6 +115,67 @@ fun Modifier.homeSectionStagger(
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioLowBouncy,
                 stiffness = Spring.StiffnessLow
+            )
+        )
+    }
+
+    this.graphicsLayer {
+        alpha = alphaAnim.value
+        translationY = offsetYAnim.value
+    }
+}
+
+/**
+ * Smooth entrance animation for chat insertion.
+ */
+fun Modifier.chatRowInsertion(): Modifier = composed {
+    val alphaAnim = remember { Animatable(0f) }
+    val scaleAnim = remember { Animatable(0.95f) }
+
+    LaunchedEffect(Unit) {
+        alphaAnim.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing)
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        scaleAnim.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMedium
+            )
+        )
+    }
+
+    this.graphicsLayer {
+        alpha = alphaAnim.value
+        scaleX = scaleAnim.value
+        scaleY = scaleAnim.value
+    }
+}
+
+/**
+ * Empty state smooth fade and slide entrance animation modifier.
+ */
+fun Modifier.emptyStateFade(): Modifier = composed {
+    val alphaAnim = remember { Animatable(0f) }
+    val offsetYAnim = remember { Animatable(16f) }
+
+    LaunchedEffect(Unit) {
+        alphaAnim.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        offsetYAnim.animateTo(
+            targetValue = 0f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioLowBouncy,
+                stiffness = Spring.StiffnessMedium
             )
         )
     }

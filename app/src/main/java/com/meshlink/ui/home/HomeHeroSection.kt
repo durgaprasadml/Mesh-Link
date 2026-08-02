@@ -60,13 +60,13 @@ fun HomeHeroSection(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left side: Greeting and Subtitle
+        // Left side: Greeting (20sp bold) and Subtitle (14sp)
         Column(
             modifier = Modifier.weight(1f)
         ) {
             Text(
                 text = greeting,
-                fontSize = 19.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1
@@ -92,7 +92,7 @@ fun HomeHeroSection(
             }
         }
 
-        // Right side: Profile Avatar (48dp)
+        // Right side: 48dp profile avatar with online indicator and click feedback
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -104,8 +104,10 @@ fun HomeHeroSection(
                 },
             contentAlignment = Alignment.Center
         ) {
-            UserAvatar(
+            ChatAvatar(
+                name = userIdentity?.displayName ?: "Durga",
                 identity = userIdentity,
+                isOnline = true,
                 size = 48.dp
             )
         }

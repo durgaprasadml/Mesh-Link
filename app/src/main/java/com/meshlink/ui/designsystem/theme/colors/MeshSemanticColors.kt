@@ -61,7 +61,20 @@ data class MeshSemanticColors(
     val error: Color = danger,
     val primaryBackground: Color = background,
     val secondaryBackground: Color = surfaceVariant,
-    val amoledBackground: Color = canvas
+    val amoledBackground: Color = canvas,
+    val onPrimary: Color = Color.White,
+    val onSecondary: Color = Color.White,
+    val onSurface: Color = textPrimary,
+    val onSurfaceVariant: Color = textSecondary,
+    val onBackground: Color = textPrimary,
+    val onError: Color = Color.White,
+    val primaryContainer: Color = surfaceVariant,
+    val onPrimaryContainer: Color = textPrimary,
+    val secondaryContainer: Color = surfaceVariant,
+    val onSecondaryContainer: Color = textPrimary,
+    val errorContainer: Color = danger.copy(alpha = 0.2f),
+    val onErrorContainer: Color = danger,
+    val surfaceContainer: Color = surfaceVariant
 )
 
 val LightSemanticColors = MeshSemanticColors(

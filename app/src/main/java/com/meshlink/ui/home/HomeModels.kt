@@ -59,3 +59,12 @@ data class MeshRecommendation(
         SUGGESTION
     }
 }
+
+/**
+ * Tactical Connection State for the Home status components.
+ */
+enum class ConnectionState {
+    CONNECTED,
+    SEARCHING,
+    NO_DEVICES
+}

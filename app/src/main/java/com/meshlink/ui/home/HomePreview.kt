@@ -18,7 +18,7 @@ fun HomeHeroSectionPreview() {
             userIdentity = UserIdentity(
                 userId = "node_alpha_123",
                 displayName = "Tactical Operator",
-                createdAt = System.currentTimeMillis()
+                lastUpdated = System.currentTimeMillis()
             ),
             onNavigateToSettings = {}
         )

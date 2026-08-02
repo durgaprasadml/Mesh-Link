@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CellTower
@@ -71,10 +72,7 @@ fun MeshOverviewSection(
         MeshGlassCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .tactileClick(onClick = onNavigateToNearby, pressScale = 0.98f),
-            cornerRadius = 24.dp,
-            glowColor = primaryColor,
-            glowRadius = 140f
+                .tactileClick(onClick = onNavigateToNearby, pressScale = 0.98f)
         ) {
             Box(
                 modifier = Modifier

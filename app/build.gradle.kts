@@ -34,6 +34,8 @@ android {
     ksp {
         arg("room.incremental", "true")
         arg("room.expandProjection", "true")
+        arg("room.schemaLocation", "$projectDir/schemas")
+        arg("room.generateKotlin", "false")
         arg("dagger.fastInit", "true")
         arg("dagger.hilt.android.internal.disableAndroidSuperclassValidation", "true")
         // Skips internal Hilt checks that are slow and usually unnecessary during dev
@@ -151,6 +153,11 @@ android {
         checkReleaseBuilds = true
         disable += "ExtractNativeLibs"
     }
+}
+
+composeCompiler {
+    stabilityConfigurationFile = layout.projectDirectory.file("stability_config.conf")
+    enableStrongSkippingMode = true
 }
 
 dependencies {

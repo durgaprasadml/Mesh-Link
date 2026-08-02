@@ -30,7 +30,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.meshlink.ui.designsystem.theme.MeshTheme
-import com.meshlink.ui.home.ConnectionState
+
+enum class ConnectionState {
+    CONNECTED,
+    SEARCHING,
+    NO_DEVICES
+}
 
 @Composable
 fun ConnectionStatusPill(

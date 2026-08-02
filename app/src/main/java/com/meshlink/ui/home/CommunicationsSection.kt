@@ -196,8 +196,7 @@ private fun TacticalChatCard(
             // Avatar with Mesh Node Ring Indicator
             Box(contentAlignment = Alignment.BottomEnd) {
                 com.meshlink.ui.components.UserAvatar(
-                    avatarUri = chat.avatarUri,
-                    name = displayName,
+                    identity = null,
                     size = 48.dp
                 )
                 // Active mesh connection status dot

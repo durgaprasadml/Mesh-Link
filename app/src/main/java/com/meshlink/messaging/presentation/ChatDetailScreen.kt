@@ -4,40 +4,24 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import com.meshlink.ui.components.MeshScreen
-import com.meshlink.ui.components.chat.DateSeparator
-import com.meshlink.ui.components.chat.MessageBubble
-import com.meshlink.ui.components.chat.MessageComposer
-import com.meshlink.ui.designsystem.theme.MeshSpacing
-import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.chat.ChatScreen
+import com.meshlink.util.NotificationHelper
 import java.io.File
-import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Presentation bridge connecting ChatDetailViewModel state and launchers to the redesigned
+ * com.meshlink.ui.chat.ChatScreen component.
+ */
 @Composable
 fun ChatDetailScreen(
     onBack: () -> Unit,
@@ -47,22 +31,12 @@ fun ChatDetailScreen(
     val peerIdentity by viewModel.peerIdentity.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    var inputText by remember { mutableStateOf("") }
-    val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = if (uiState.messages.isNotEmpty()) uiState.messages.size - 1 else 0
-    )
-
-    var fullscreenMessageId by remember { mutableStateOf<String?>(null) }
-    var showMenu by remember { mutableStateOf(false) }
-    var showAttachmentSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
+    // Media pickers
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { viewModel.sendImage(it) }
     }
-
 
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -73,325 +47,66 @@ fun ChatDetailScreen(
         }
     }
 
-    var previousLastMessageId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(uiState.messages) {
-        val currentLast = uiState.messages.lastOrNull()?.messageId
-        if (currentLast != null && currentLast != previousLastMessageId) {
-            listState.animateScrollToItem(uiState.messages.size - 1)
-        }
-        previousLastMessageId = currentLast
-    }
-
+    // Auto-mark chat as read when messages change
     LaunchedEffect(uiState.messages.lastOrNull()?.messageId) {
         if (uiState.messages.isNotEmpty()) {
             viewModel.markChatAsRead()
         }
     }
 
-    if (fullscreenMessageId != null) {
-        val mediaMessages = uiState.messages.filter { it.messageType == com.meshlink.domain.model.MessageType.IMAGE }
-        val initialIndex = mediaMessages.indexOfFirst { it.messageId == fullscreenMessageId }.coerceAtLeast(0)
-        
-        Dialog(
-            onDismissRequest = { fullscreenMessageId = null },
-            properties = androidx.compose.ui.window.DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnBackPress = true,
-                dismissOnClickOutside = false
-            )
-        ) {
-            MediaViewerScreen(
-                mediaMessages = mediaMessages,
-                initialIndex = initialIndex,
-                onBack = { fullscreenMessageId = null },
-                onDelete = { msg ->
-                    if (!uiState.selectedMessageIds.contains(msg.messageId)) {
-                        viewModel.toggleMessageSelection(msg.messageId)
-                    }
-                    viewModel.deleteSelectedMessages()
-                    fullscreenMessageId = null
-                }
-            )
-        }
-    }
-
+    // Bind current notification chat target
     DisposableEffect(viewModel.address) {
-        com.meshlink.util.NotificationHelper.setCurrentChatId(viewModel.address)
+        NotificationHelper.setCurrentChatId(viewModel.address)
         onDispose {
-            com.meshlink.util.NotificationHelper.setCurrentChatId(null)
+            NotificationHelper.setCurrentChatId(null)
         }
     }
 
-    if (showAttachmentSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showAttachmentSheet = false },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-            dragHandle = { BottomSheetDefaults.DragHandle() }
-        ) {
-            AttachmentMenu(
-                onGalleryClick = {
-                    showAttachmentSheet = false
-                    imagePickerLauncher.launch("image/*")
-                },
-
-                onCameraClick = {
-                    showAttachmentSheet = false
-                    val dir = File(context.cacheDir, "images")
-                    dir.mkdirs()
-                    val tempFile = File(dir, "camera_${System.currentTimeMillis()}.jpg")
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        tempFile
-                    )
-                    cameraUri = uri
-                    cameraLauncher.launch(uri)
-                },
-                onLocationClick = {
-                    showAttachmentSheet = false
-                    viewModel.sendLocation()
-                }
-            )
-        }
-    }
-
-    MeshScreen(
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (uiState.isSelectionMode) {
-                        Text("${uiState.selectedMessageIds.size} selected")
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            com.meshlink.ui.components.UserAvatar(
-                                identity = peerIdentity,
-                                size = 36.dp
-                            )
-                            Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
-                            Column {
-                                Text(
-                                    text = peerIdentity.displayName.ifBlank { viewModel.name },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                val statusText = when (uiState.connectionStatus) {
-                                    ConnectionState.DIRECT -> "Direct connection"
-                                    ConnectionState.RELAY -> "Via mesh (relay)"
-                                    ConnectionState.OFFLINE -> "Offline"
-                                }
-                                val statusColor = when (uiState.connectionStatus) {
-                                    ConnectionState.DIRECT -> MaterialTheme.colorScheme.primary
-                                    ConnectionState.RELAY -> MaterialTheme.colorScheme.tertiary
-                                    ConnectionState.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                                Text(
-                                    text = statusText,
-                                    color = statusColor,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        if (uiState.isSelectionMode) viewModel.clearSelection() else onBack()
-                    }) {
-                        Icon(
-                            if (uiState.isSelectionMode) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                actions = {
-                    if (uiState.isSelectionMode) {
-                        IconButton(onClick = { viewModel.deleteSelectedMessages() }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete selected")
-                        }
-                    } else {
-                        Box {
-                            IconButton(onClick = { showMenu = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Menu")
-                            }
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Delete Chat") },
-                                    onClick = {
-                                        showMenu = false
-                                        viewModel.deleteChat()
-                                        onBack()
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = "Delete") }
-                                )
-                            }
-                        }
-                    }
-                },
-                windowInsets = WindowInsets(0.dp)
-            )
+    ChatScreen(
+        peerIdentity = peerIdentity,
+        peerAddress = viewModel.address,
+        fallbackName = viewModel.name,
+        uiState = uiState,
+        onBack = onBack,
+        onSendMessage = { viewModel.sendMessage(it) },
+        onSendImage = { viewModel.sendImage(it) },
+        onSendLocation = { viewModel.sendLocation() },
+        onStartRecording = { viewModel.startRecording() },
+        onStopRecordingAndSend = { viewModel.stopRecordingAndSend() },
+        onCancelRecording = { viewModel.cancelRecording() },
+        onToggleMessageSelection = { viewModel.toggleMessageSelection(it) },
+        onClearSelection = { viewModel.clearSelection() },
+        onDeleteSelectedMessages = { viewModel.deleteSelectedMessages() },
+        onDeleteChat = {
+            viewModel.deleteChat()
+            onBack()
         },
-        bottomBar = {
-            if (!uiState.isSelectionMode) {
-                MessageComposer(
-                    inputText = inputText,
-                    onInputTextChanged = { inputText = it },
-                    isRecording = uiState.isRecording,
-                    recordingElapsedMs = uiState.recordingElapsedMs,
-                    onStartRecording = { viewModel.startRecording() },
-                    onStopRecordingAndSend = { viewModel.stopRecordingAndSend() },
-                    onCancelRecording = { viewModel.cancelRecording() },
-                    onSendText = {
-                        viewModel.sendMessage(it)
-                        inputText = ""
-                    },
-                    onAttachClick = { showAttachmentSheet = true }
-                )
-            }
-        }
-    ) { paddingValues ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            contentPadding = PaddingValues(start = MeshSpacing.ScreenPadding, top = 12.dp, end = MeshSpacing.ScreenPadding, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(MeshSpacing.SM)
-        ) {
-            itemsIndexed(uiState.messages, key = { _, it -> it.messageId }, contentType = { _, _ -> "message_item" }) { index, msg ->
-                val showDateSeparator = shouldShowDateSeparator(
-                    currentTimestamp = msg.timestamp,
-                    previousTimestamp = if (index > 0) uiState.messages[index - 1].timestamp else null
-                )
-
-                if (showDateSeparator) {
-                    Box(modifier = Modifier.padding(bottom = 16.dp)) {
-                        DateSeparator(timestamp = msg.timestamp)
-                    }
+        onPlayVoice = { viewModel.playVoice(it) },
+        onStopPlayback = { viewModel.stopPlayback() },
+        onRetryTransfer = { viewModel.retryTransfer(it) },
+        onOpenLocation = { lat, lng ->
+            try {
+                val geoUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(Location)")
+                val mapIntent = Intent(Intent.ACTION_VIEW, geoUri)
+                if (mapIntent.resolveActivity(context.packageManager) != null) {
+                    context.startActivity(mapIntent)
                 }
-
-                val isSelected = uiState.selectedMessageIds.contains(msg.messageId)
-                val msgTransferProgress = uiState.transferProgress[msg.messageId]
-
-                // Add extra padding if consecutive messages are from different senders
-                val previousMsg = if (index > 0) uiState.messages[index - 1] else null
-                val extraTopPadding = if (previousMsg != null && previousMsg.isFromMe != msg.isFromMe && !showDateSeparator) MeshTheme.spacing.mediumSmall else MeshTheme.spacing.extraSmall
-
-                Box(modifier = Modifier.padding(top = extraTopPadding).animateItem()) {
-                    MessageBubble(
-                        message = msg,
-                        isSelected = isSelected,
-                        isSelectionMode = uiState.isSelectionMode,
-                        currentlyPlaying = uiState.currentlyPlaying,
-                        playbackProgress = uiState.playbackProgress,
-                        transferProgress = msgTransferProgress,
-                        onToggleSelection = { viewModel.toggleMessageSelection(msg.messageId) },
-                        onPlayVoice = { viewModel.playVoice(it) },
-                        onStopPlayback = { viewModel.stopPlayback() },
-                        onImageClick = { if (!uiState.isSelectionMode) fullscreenMessageId = it },
-                        onLocationClick = { lat, lng ->
-                            if (!uiState.isSelectionMode) {
-                                try {
-                                    val geoUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(Location)")
-                                    val mapIntent = Intent(Intent.ACTION_VIEW, geoUri)
-                                    if (mapIntent.resolveActivity(context.packageManager) != null) {
-                                        context.startActivity(mapIntent)
-                                    }
-                                } catch (_: Exception) { /* No map app installed */ }
-                            }
-                        },
-                        onRetryMedia = { viewModel.retryTransfer(it) }
-                    )
-                }
-            }
+            } catch (_: Exception) { /* No map application installed */ }
+        },
+        onLaunchGallery = {
+            imagePickerLauncher.launch("image/*")
+        },
+        onLaunchCamera = {
+            val dir = File(context.cacheDir, "images")
+            dir.mkdirs()
+            val tempFile = File(dir, "camera_${System.currentTimeMillis()}.jpg")
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                tempFile
+            )
+            cameraUri = uri
+            cameraLauncher.launch(uri)
         }
-    }
-}
-
-private fun shouldShowDateSeparator(currentTimestamp: Long, previousTimestamp: Long?): Boolean {
-    if (previousTimestamp == null) return true
-    
-    val currentCalendar = Calendar.getInstance().apply { timeInMillis = currentTimestamp }
-    val previousCalendar = Calendar.getInstance().apply { timeInMillis = previousTimestamp }
-    
-    return currentCalendar.get(Calendar.YEAR) != previousCalendar.get(Calendar.YEAR) ||
-           currentCalendar.get(Calendar.DAY_OF_YEAR) != previousCalendar.get(Calendar.DAY_OF_YEAR)
-}
-
-@Composable
-fun AttachmentMenu(
-    onGalleryClick: () -> Unit,
-    onCameraClick: () -> Unit,
-    onLocationClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = MeshTheme.spacing.mediumLarge, end = MeshTheme.spacing.mediumLarge, bottom = MeshTheme.spacing.huge, top = MeshTheme.spacing.mediumSmall)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            AttachmentIcon(
-                icon = Icons.Default.InsertPhoto,
-                label = "Gallery",
-                color = MaterialTheme.colorScheme.secondary,
-                onClick = onGalleryClick
-            )
-
-            AttachmentIcon(
-                icon = Icons.Default.CameraAlt,
-                label = "Camera",
-                color = MaterialTheme.colorScheme.tertiary,
-                onClick = onCameraClick
-            )
-            AttachmentIcon(
-                icon = Icons.Default.LocationOn,
-                label = "Location",
-                color = MaterialTheme.colorScheme.primary,
-                onClick = onLocationClick
-            )
-        }
-    }
-}
-
-@Composable
-fun AttachmentIcon(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    color: Color,
-    onClick: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(MeshTheme.spacing.mediumSmall)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(MeshTheme.spacing.extraGiant - MeshTheme.spacing.extraSmall)
-                .clip(CircleShape)
-                .background(color),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(MeshTheme.spacing.extraLarge + MeshTheme.spacing.small)
-            )
-        }
-        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
+    )
 }

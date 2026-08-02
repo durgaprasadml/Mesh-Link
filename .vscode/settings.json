@@ -1,3 +1,35 @@
 {
-    "java.configuration.updateBuildConfiguration": "automatic"
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "java.autobuild.enabled": false,
+  "java.import.gradle.annotationProcessing.enabled": false,
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/build/**": true,
+    "**/.gradle/**": true,
+    "**/app/build/**": true,
+    "**/app/schemas/**": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/build": true,
+    "**/.gradle": true
+  },
+  "search.exclude": {
+    "**/build": true,
+    "**/.gradle": true,
+    "**/app/build": true,
+    "**/*.apk": true,
+    "**/*.aab": true
+  },
+  "git.autorefresh": false,
+  "git.autofetch": false,
+  "git.decorations.enabled": false,
+  "git.statusLimit": 1000
 }

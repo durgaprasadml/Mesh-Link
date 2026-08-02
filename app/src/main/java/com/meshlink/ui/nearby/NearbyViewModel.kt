@@ -100,9 +100,9 @@ class NearbyViewModel @Inject constructor(
         topologyManager.reachableNodes,
         _sortOption,
         _isScanning,
-        _errorMessage,
-        _trafficState
-    ) { directDevices, reachableNodes, sortOption, isScanning, errorMessage, traffic ->
+        combine(_errorMessage, _trafficState) { err, traffic -> err to traffic }
+    ) { directDevices, reachableNodes, sortOption, isScanning, errorAndTraffic ->
+        val (errorMessage, traffic) = errorAndTraffic
         
         val mergedDevices = mutableMapOf<String, BleDevice>()
         

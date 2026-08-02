@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -32,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.meshlink.domain.model.BleDevice
+import java.util.Locale
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.ui.designsystem.theme.MeshSpacing
@@ -71,7 +73,7 @@ fun MeshDeviceCard(
     val distanceText = remember(device.distanceMeters, device.distanceConfidence) {
         if (device.distanceMeters != null) {
             val confStr = device.distanceConfidence?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Estimated"
-            "~${String.format("%.1f m", device.distanceMeters)} ($confStr)"
+            "~${String.format(Locale.getDefault(), "%.1f m", device.distanceMeters)} ($confStr)"
         } else {
             "Distance: Calculating..."
         }

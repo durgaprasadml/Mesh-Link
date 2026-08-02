@@ -31,6 +31,11 @@ class IntelligentTransportManager @Inject constructor(
      * Given a target, payload type, and payload size, determines whether this should go over
      * BLE, Wi-Fi Direct, or Hybrid using HybridTransport decision logic.
      */
+    fun getSelectedRouteType(
+        destinationId: String,
+        packetType: PacketType,
+        payloadSizeBytes: Long
+    ): RouteType {
         if (currentPreferredTransport == "WIFI_DIRECT" || (isHighBandwidthRequired(packetType) || payloadSizeBytes > 50_000L)) {
             return RouteType.WIFI_DIRECT
         }
@@ -38,6 +43,7 @@ class IntelligentTransportManager @Inject constructor(
             return RouteType.HYBRID
         }
         return hybridTransport.getSelectedRouteType(destinationId, packetType, payloadSizeBytes)
+    }
 
     fun isHighBandwidthRequired(packetType: PacketType): Boolean {
         return when (packetType) {

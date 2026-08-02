@@ -2,9 +2,11 @@ package com.meshlink.di
 
 import android.content.Context
 import android.net.wifi.p2p.WifiP2pManager
+import com.meshlink.wifi.api.WifiTransport
 import com.meshlink.wifi.data.WifiSocketTransport
 import com.meshlink.wifi.data.WifiTransportImpl
 import com.meshlink.wifi.manager.WifiP2pManagerFacade
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -32,4 +34,15 @@ object WifiModule {
     ): WifiP2pManager.Channel? {
         return wifiP2pManager?.initialize(context, context.mainLooper, null)
     }
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class WifiBindingModule {
+
+    @Binds
+    @Singleton
+    internal abstract fun bindWifiTransport(
+        impl: WifiTransportImpl
+    ): WifiTransport
 }

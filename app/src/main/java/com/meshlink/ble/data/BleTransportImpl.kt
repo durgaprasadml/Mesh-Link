@@ -14,12 +14,27 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import com.meshlink.di.ApplicationScope
 
+import com.meshlink.domain.transport.TransportHealth
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 @Singleton
 internal class BleTransportImpl @Inject constructor(
     private val gattManager: BleGattManager,
     private val connectionManager: BleConnectionManager,
     @ApplicationScope private val applicationScope: CoroutineScope
 ) : BleTransport {
+
+    private val _healthState = MutableStateFlow(TransportHealth.CONNECTED)
+    override val health: StateFlow<TransportHealth> = _healthState.asStateFlow()
+
+    private val _connectedPeersFlow = MutableStateFlow<Set<String>>(emptySet())
+    override val connectedPeersFlow: StateFlow<Set<String>>
+        get() {
+            _connectedPeersFlow.value = connectedPeers
+            return _connectedPeersFlow.asStateFlow()
+        }
 
     override val incomingPackets: SharedFlow<Pair<String, MeshPacket>> = gattManager.incomingMessages
         .mapNotNull { (sender, json) ->
@@ -29,7 +44,12 @@ internal class BleTransportImpl @Inject constructor(
         .shareIn(applicationScope, SharingStarted.Eagerly, 200)
 
     override val connectedPeers: Set<String>
-        get() = gattManager.connectedServers.keys + gattManager.activeClients.keys
+        get() {
+            val peers = gattManager.connectedServers.keys + gattManager.activeClients.keys
+            _connectedPeersFlow.value = peers
+            _healthState.value = if (peers.isNotEmpty()) TransportHealth.CONNECTED else TransportHealth.AVAILABLE
+            return peers
+        }
 
     @Deprecated("Use sendPacket instead", ReplaceWith("sendPacket(packet)"))
     override suspend fun send(packet: MeshPacket) {

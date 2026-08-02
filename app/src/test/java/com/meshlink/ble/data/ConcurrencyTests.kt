@@ -42,7 +42,9 @@ class ConcurrencyTests {
     @Before
     fun setup() {
         val bleTransport: com.meshlink.ble.api.BleTransport = mockk(relaxed = true)
+        val wifiTransport: com.meshlink.wifi.api.WifiTransport = mockk(relaxed = true)
         every { bleTransport.incomingPackets } returns MutableSharedFlow()
+        every { wifiTransport.incomingPackets } returns MutableSharedFlow()
 
         every { settingsRepository.advancedEncryptionEnforcement } returns kotlinx.coroutines.flow.flowOf(true)
         every { settingsRepository.isMeshRelayEnabled } returns kotlinx.coroutines.flow.flowOf(true)
@@ -51,6 +53,7 @@ class ConcurrencyTests {
         
         meshRouter = MeshRouter(
             bleTransport = bleTransport,
+            wifiTransport = wifiTransport,
             relayDao = relayDao,
             trustManager = mockk(relaxed = true),
             routingEngine = routingEngine,

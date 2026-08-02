@@ -1,18 +1,20 @@
 package com.meshlink.routing.data
 
-import com.meshlink.routing.engine.CongestionMonitor
 import com.meshlink.ble.api.BleTransport
 import com.meshlink.database.data.local.RelayDao
-import com.meshlink.database.data.local.RelayPacketEntity
 import com.meshlink.domain.model.DispatchResult
 import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.MeshResult
 import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.repository.SettingsRepository
 import com.meshlink.routing.api.PacketQueued
+import com.meshlink.routing.engine.CongestionMonitor
+import com.meshlink.routing.engine.IntelligentTransportManager
 import com.meshlink.routing.engine.QueueOptimizer
 import com.meshlink.routing.engine.RoutingEngine
 import com.meshlink.security.data.TrustLevel
 import com.meshlink.security.data.TrustManager
+import com.meshlink.wifi.api.WifiTransport
 import io.mockk.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,6 +33,7 @@ import org.junit.Test
 class MeshRouterTest {
 
     private val bleTransport = mockk<BleTransport>(relaxed = true)
+    private val wifiTransport = mockk<WifiTransport>(relaxed = true)
     private val relayDao = mockk<RelayDao>(relaxed = true)
     private val trustManager = mockk<TrustManager>(relaxed = true)
     private val routingEngine = mockk<RoutingEngine>(relaxed = true)
@@ -38,25 +41,31 @@ class MeshRouterTest {
     private val queueOptimizer = mockk<QueueOptimizer>(relaxed = true)
     private val congestionMonitor = mockk<CongestionMonitor>(relaxed = true)
     private val settingsRepository = mockk<SettingsRepository>(relaxed = true)
+    private val transportManager = mockk<IntelligentTransportManager>(relaxed = true)
 
-    private lateinit var incomingPacketsFlow: MutableSharedFlow<Pair<String, MeshPacket>>
+    private lateinit var bleIncomingPacketsFlow: MutableSharedFlow<Pair<String, MeshPacket>>
+    private lateinit var wifiIncomingPacketsFlow: MutableSharedFlow<Pair<String, MeshPacket>>
 
     @Before
     fun setUp() {
-        incomingPacketsFlow = MutableSharedFlow(extraBufferCapacity = 100)
+        bleIncomingPacketsFlow = MutableSharedFlow(extraBufferCapacity = 100)
+        wifiIncomingPacketsFlow = MutableSharedFlow(extraBufferCapacity = 100)
 
         every { settingsRepository.advancedEncryptionEnforcement } returns flowOf(true)
         every { settingsRepository.isMeshRelayEnabled } returns flowOf(true)
         every { settingsRepository.meshMaxHops } returns flowOf(5)
         every { settingsRepository.meshTtl } returns flowOf(10)
-        every { bleTransport.incomingPackets } returns incomingPacketsFlow
+        every { bleTransport.incomingPackets } returns bleIncomingPacketsFlow
+        every { wifiTransport.incomingPackets } returns wifiIncomingPacketsFlow
         every { trustManager.getTrustLevel(any()) } returns TrustLevel.TRUSTED
         every { routingEngine.queueOptimizer } returns queueOptimizer
         every { routingEngine.congestionMonitor } returns congestionMonitor
+        every { routingEngine.transportManager } returns transportManager
         every { queueOptimizer.size() } returns 0
         every { routingEngine.markPacketProcessed(any()) } returns true
         every { routingEngine.isRoutingLoop(any(), any()) } returns false
         coEvery { relayDao.insertPacket(any()) } just Runs
+        coEvery { transportManager.sendPacket(any(), any(), any()) } returns MeshResult.Success(Unit)
     }
 
     @After
@@ -67,6 +76,7 @@ class MeshRouterTest {
     private fun createRouter(scope: CoroutineScope): MeshRouter {
         val router = MeshRouter(
             bleTransport = bleTransport,
+            wifiTransport = wifiTransport,
             relayDao = relayDao,
             trustManager = trustManager,
             routingEngine = routingEngine,
@@ -103,7 +113,7 @@ class MeshRouterTest {
     }
 
     @Test
-    fun `handleIncomingPacket delivers packet locally when target matches localMeshId`() = runTest {
+    fun `handleIncomingPacket delivers BLE packet locally when target matches localMeshId`() = runTest {
         val meshRouter = createRouter(backgroundScope)
         val payloadDeferred = async { meshRouter.incomingPayloads.first() }
         testScheduler.runCurrent()
@@ -117,12 +127,37 @@ class MeshRouterTest {
             ttl = 5
         )
 
-        incomingPacketsFlow.emit("peer_address_1" to packet)
+        bleIncomingPacketsFlow.emit("peer_address_1" to packet)
         testScheduler.advanceUntilIdle()
 
         val (sender, receivedPacket) = payloadDeferred.await()
         assertEquals("node_sender", sender)
         assertEquals("pkt_100", receivedPacket.packetId)
+    }
+
+    @Test
+    fun `handleIncomingPacket delivers Wi-Fi Direct packet locally when target matches localMeshId`() = runTest {
+        val meshRouter = createRouter(backgroundScope)
+        val payloadDeferred = async { meshRouter.incomingPayloads.first() }
+        testScheduler.runCurrent()
+
+        val packet = MeshPacket(
+            packetId = "pkt_wifi_100",
+            senderId = "node_wifi_sender",
+            targetId = "node_local",
+            payload = "Wi-Fi Direct Secret Message",
+            type = PacketType.MEDIA_CHUNK,
+            mimeType = "image/jpeg",
+            encrypted = true,
+            ttl = 5
+        )
+
+        wifiIncomingPacketsFlow.emit("wifi_peer_address_1" to packet)
+        testScheduler.advanceUntilIdle()
+
+        val (sender, receivedPacket) = payloadDeferred.await()
+        assertEquals("node_wifi_sender", sender)
+        assertEquals("pkt_wifi_100", receivedPacket.packetId)
     }
 
     @Test
@@ -144,7 +179,7 @@ class MeshRouterTest {
             ttl = 5
         )
 
-        incomingPacketsFlow.emit("peer_address_1" to packet)
+        bleIncomingPacketsFlow.emit("peer_address_1" to packet)
         testScheduler.advanceUntilIdle()
 
         assertTrue(receivedPayloads.isEmpty())
@@ -169,7 +204,7 @@ class MeshRouterTest {
             ttl = 5
         )
 
-        incomingPacketsFlow.emit("peer_address_1" to packet)
+        bleIncomingPacketsFlow.emit("peer_address_1" to packet)
         testScheduler.advanceUntilIdle()
 
         verify(exactly = 0) { queueOptimizer.enqueue(match { it.packetId == "pkt_dup" }) }
@@ -179,6 +214,7 @@ class MeshRouterTest {
     @Test
     fun `handleIncomingPacket stores packet in RelayDao when no peers available to forward`() = runTest {
         every { bleTransport.connectedPeers } returns emptySet()
+        every { wifiTransport.connectedPeers } returns emptySet()
         createRouter(backgroundScope)
         testScheduler.runCurrent()
 
@@ -191,7 +227,7 @@ class MeshRouterTest {
             ttl = 4
         )
 
-        incomingPacketsFlow.emit("peer_address_1" to packet)
+        bleIncomingPacketsFlow.emit("peer_address_1" to packet)
         testScheduler.advanceUntilIdle()
         testScheduler.runCurrent()
         testScheduler.advanceUntilIdle()

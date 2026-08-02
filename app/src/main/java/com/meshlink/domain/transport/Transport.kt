@@ -4,6 +4,9 @@ import com.meshlink.domain.model.MeshPacket
 import com.meshlink.domain.model.MeshResult
 import kotlinx.coroutines.flow.SharedFlow
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
 /**
  * Transport abstraction representing a communication medium (e.g., BLE, Wi-Fi).
  *
@@ -16,6 +19,10 @@ import kotlinx.coroutines.flow.SharedFlow
 interface Transport {
     val incomingPackets: SharedFlow<Pair<String, MeshPacket>>
     val connectedPeers: Set<String>
+    val connectedPeersFlow: StateFlow<Set<String>>
+        get() = MutableStateFlow(connectedPeers)
+    val health: StateFlow<TransportHealth>
+        get() = MutableStateFlow(if (connectedPeers.isNotEmpty()) TransportHealth.CONNECTED else TransportHealth.AVAILABLE)
 
     @Deprecated("Use sendPacket instead", ReplaceWith("sendPacket(packet)"))
     suspend fun send(packet: MeshPacket)

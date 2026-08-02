@@ -26,9 +26,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 
 
+import com.meshlink.wifi.api.WifiTransport
+
 @Singleton
 internal class MeshRouter @Inject constructor(
     private val bleTransport: BleTransport,
+    private val wifiTransport: WifiTransport,
     private val relayDao: RelayDao,
     private val trustManager: TrustManager,
     private val routingEngine: RoutingEngine,
@@ -88,12 +91,22 @@ internal class MeshRouter @Inject constructor(
     internal fun observeIncoming() {
         if (incomingJob?.isActive == true) return
         incomingJob = applicationScope.launch {
-            bleTransport.incomingPackets.collect { (sender, packet) ->
-
-                try {
-                    handleIncomingPacket(sender, packet)
-                } catch (e: Exception) {
-                    MeshLogger.e(TAG, "Error handling BLE packet from $sender: ${e.message}")
+            launch {
+                bleTransport.incomingPackets.collect { (sender, packet) ->
+                    try {
+                        handleIncomingPacket(sender, packet)
+                    } catch (e: Exception) {
+                        MeshLogger.e(TAG, "Error handling BLE packet from $sender: ${e.message}")
+                    }
+                }
+            }
+            launch {
+                wifiTransport.incomingPackets.collect { (sender, packet) ->
+                    try {
+                        handleIncomingPacket(sender, packet)
+                    } catch (e: Exception) {
+                        MeshLogger.e(TAG, "Error handling Wi-Fi packet from $sender: ${e.message}")
+                    }
                 }
             }
         }
@@ -122,7 +135,7 @@ internal class MeshRouter @Inject constructor(
         val cachedPackets = relayDao.getAllRelayPackets()
         if (cachedPackets.isEmpty()) return
 
-        val connectedNodes = bleTransport.connectedPeers
+        val connectedNodes = bleTransport.connectedPeers + wifiTransport.connectedPeers
         if (connectedNodes.isEmpty()) {
             return
         }
@@ -162,20 +175,17 @@ internal class MeshRouter @Inject constructor(
             )
 
             routingEngine.markPacketProcessed(packet.packetId)
-
-            val json = MeshPacketParser.toJson(packet)
             
             // Re-evaluate next hop upon S&F un-queueing
             val nextHop = routingEngine.getNextHopForForwarding(packet, connectedNodes, "")
             
-            if (nextHop != null) {
-                bleTransport.broadcast(packet, includeAddress = nextHop)
+            val result = routingEngine.transportManager.sendPacket(packet, includeAddress = nextHop)
+            if (result is com.meshlink.domain.model.MeshResult.Success) {
+                relayDao.deletePacket(entity.packetId)
+                MeshLogger.d(TAG) { "S&F: delivered ${com.meshlink.util.MeshIdNormalizer.canonicalize(entity.packetId)}" }
             } else {
-                bleTransport.broadcast(packet)
+                MeshLogger.w(TAG, "S&F: failed to deliver cached packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(entity.packetId)}")
             }
-            
-            relayDao.deletePacket(entity.packetId)
-            MeshLogger.d(TAG) { "S&F: delivered ${com.meshlink.util.MeshIdNormalizer.canonicalize(entity.packetId)}" }
         }
     }
 
@@ -288,7 +298,7 @@ internal class MeshRouter @Inject constructor(
         )
 
         val forwardedJson = MeshPacketParser.toJson(relayPacket)
-        val connectedNodes = bleTransport.connectedPeers
+        val connectedNodes = bleTransport.connectedPeers + wifiTransport.connectedPeers
         val hasPeersToForward = connectedNodes.any { it != immediateSenderAddress }
 
         // Congestion Check
@@ -453,11 +463,8 @@ internal class MeshRouter @Inject constructor(
                     continue
                 }
 
-                val json = MeshPacketParser.toJson(packet)
-                val connectedNodes = bleTransport.connectedPeers
+                val connectedNodes = bleTransport.connectedPeers + wifiTransport.connectedPeers
                 val nextHop = routingEngine.getNextHopForForwarding(packet, connectedNodes, excludeHop = "")
-
-
 
                 try {
                     // Emit transmission started event
@@ -465,18 +472,25 @@ internal class MeshRouter @Inject constructor(
                         _packetEvents.emit(com.meshlink.routing.api.PacketTransmissionStarted(packet.packetId))
                     }
                     
-                    // Check Intelligent Transport (Wi-Fi vs BLE)
-                    val preferredTransport = routingEngine.transportManager.selectTransportForPayload(packet.targetId, packet.type)
+                    // Dispatch over Intelligent Transport Manager
+                    val dispatchResult = routingEngine.transportManager.sendPacket(
+                        packet = packet,
+                        includeAddress = nextHop
+                    )
 
-                    if (nextHop != null) {
-                        bleTransport.broadcast(packet, includeAddress = nextHop)
+                    if (dispatchResult is com.meshlink.domain.model.MeshResult.Success) {
+                        // Emit transmitted event if originating locally
+                        if (packet.senderId == localMeshId) {
+                            _packetEvents.emit(com.meshlink.routing.api.PacketTransmitted(packet.packetId))
+                        }
                     } else {
-                        bleTransport.broadcast(packet)
-                    }
-                    
-                    // Emit transmitted event if originating locally
-                    if (packet.senderId == localMeshId) {
-                        _packetEvents.emit(com.meshlink.routing.api.PacketTransmitted(packet.packetId))
+                        val error = (dispatchResult as? com.meshlink.domain.model.MeshResult.Error)?.error?.cause
+                            ?: Exception("Transport send failure")
+                        MeshLogger.e(TAG, "Failed to send packet: ${error.message}")
+                        if (packet.senderId == localMeshId) {
+                            _packetEvents.emit(com.meshlink.routing.api.PacketFailed(packet.packetId, error))
+                        }
+                        storeForLater(packet)
                     }
                 } catch (e: Exception) {
                     MeshLogger.e(TAG, "Failed to send packet: ${e.message}")

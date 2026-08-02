@@ -16,23 +16,39 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 
+import com.meshlink.domain.transport.TransportHealth
+import com.meshlink.wifi.api.WifiTransport
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 @Singleton
 internal class WifiTransportImpl @Inject constructor(
     private val wifiP2pManagerFacade: WifiP2pManagerFacade,
     private val wifiSocketTransport: WifiSocketTransport,
     @ApplicationScope private val applicationScope: CoroutineScope
-) : Transport {
+) : WifiTransport {
 
     companion object {
         private const val TAG = "WifiTransportImpl"
     }
+
+    private val _healthState = MutableStateFlow(TransportHealth.DISCONNECTED)
+    override val health: StateFlow<TransportHealth> = _healthState.asStateFlow()
+
+    private val _connectedPeersFlow = MutableStateFlow<Set<String>>(emptySet())
+    override val connectedPeersFlow: StateFlow<Set<String>>
+        get() {
+            _connectedPeersFlow.value = connectedPeers
+            return _connectedPeersFlow.asStateFlow()
+        }
 
     private val _incomingPackets = MutableSharedFlow<Pair<String, MeshPacket>>(extraBufferCapacity = 100)
     override val incomingPackets: SharedFlow<Pair<String, MeshPacket>> = _incomingPackets.asSharedFlow()
 
     override val connectedPeers: Set<String>
         get() {
-            return if (wifiSocketTransport.isConnected()) {
+            val peers = if (wifiSocketTransport.isConnected()) {
                 val p2pConnected = wifiP2pManagerFacade.discoveredPeers.value
                     .filter { it.status == android.net.wifi.p2p.WifiP2pDevice.CONNECTED }
                     .map { it.deviceAddress }
@@ -41,6 +57,13 @@ internal class WifiTransportImpl @Inject constructor(
             } else {
                 emptySet()
             }
+            _connectedPeersFlow.value = peers
+            if (peers.isNotEmpty() && wifiSocketTransport.isConnected()) {
+                _healthState.value = TransportHealth.CONNECTED
+            } else if (_healthState.value == TransportHealth.CONNECTED) {
+                _healthState.value = TransportHealth.DISCONNECTED
+            }
+            return peers
         }
 
     init {
@@ -58,6 +81,7 @@ internal class WifiTransportImpl @Inject constructor(
                 MeshLogger.d(TAG, "P2P State updated: $state")
                 when (state) {
                     is WifiP2pState.Connected -> {
+                        _healthState.value = TransportHealth.CONNECTING
                         if (state.isGroupOwner) {
                             MeshLogger.d(TAG, "Starting ServerSocket as Group Owner...")
                             wifiSocketTransport.startServer()
@@ -68,12 +92,13 @@ internal class WifiTransportImpl @Inject constructor(
                     }
 
                     is WifiP2pState.Disconnected -> {
+                        _healthState.value = TransportHealth.DISCONNECTED
                         MeshLogger.d(TAG, "Wi-Fi Direct disconnected. Stopping socket streams...")
                         wifiSocketTransport.disconnect()
                     }
 
                     else -> {
-                        // Discovering, Enabled, etc.
+                        _healthState.value = TransportHealth.AVAILABLE
                     }
                 }
             }

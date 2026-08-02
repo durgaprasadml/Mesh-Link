@@ -24,9 +24,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+import dagger.hilt.android.qualifiers.ApplicationContext
+
 @Singleton
 class WifiP2pManagerFacade @Inject constructor(
-    private val context: Context,
+    @ApplicationContext private val context: Context,
     private val wifiP2pManager: WifiP2pManager?,
     private val channel: WifiP2pManager.Channel?,
     private val permissionHandler: WifiP2pPermissionHandler,

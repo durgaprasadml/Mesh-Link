@@ -10,9 +10,11 @@ import androidx.core.content.ContextCompat
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import dagger.hilt.android.qualifiers.ApplicationContext
+
 @Singleton
 class WifiP2pPermissionHandler @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
 
     fun requiredPermissions(): List<String> {

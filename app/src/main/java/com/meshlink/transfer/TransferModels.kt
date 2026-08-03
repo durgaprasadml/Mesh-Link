@@ -79,5 +79,24 @@ data class TransferSession(
         if (speed <= 0f) return -1L
         return (getRemainingBytes() / speed).toLong()
     }
+
+    fun isTerminal(): Boolean = state.isTerminal()
+
+    fun isActive(): Boolean = state.isActive()
+
+    fun requiresCleanup(): Boolean = state.requiresCleanup()
 }
+
+fun TransferState.isTerminal(): Boolean {
+    return this == TransferState.COMPLETED || this == TransferState.FAILED || this == TransferState.CANCELLED
+}
+
+fun TransferState.isActive(): Boolean {
+    return !isTerminal()
+}
+
+fun TransferState.requiresCleanup(): Boolean {
+    return this == TransferState.FAILED || this == TransferState.CANCELLED
+}
+
 

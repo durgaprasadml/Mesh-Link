@@ -125,14 +125,19 @@ class TransferCache @Inject constructor(
             if (!sessionDir.exists()) return@withContext false
 
             java.io.BufferedOutputStream(outputFile.outputStream(), 64 * 1024).use { out ->
-                for (i in 0 until totalChunks) {
-                    val chunkFile = File(sessionDir, "$i.chk")
-                    if (!chunkFile.exists()) {
-                        MeshLogger.e(TAG, "Missing chunk $i during assembly of $transferId")
-                        return@withContext false
-                    }
-                    java.io.BufferedInputStream(chunkFile.inputStream(), 64 * 1024).use { input ->
-                        input.copyTo(out, bufferSize = 64 * 1024)
+                com.meshlink.common.pool.BufferPool.useBuffer(64 * 1024) { buffer ->
+                    for (i in 0 until totalChunks) {
+                        val chunkFile = File(sessionDir, "$i.chk")
+                        if (!chunkFile.exists()) {
+                            MeshLogger.e(TAG, "Missing chunk $i during assembly of $transferId")
+                            return@withContext false
+                        }
+                        java.io.BufferedInputStream(chunkFile.inputStream(), 64 * 1024).use { input ->
+                            var bytesRead: Int
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                out.write(buffer, 0, bytesRead)
+                            }
+                        }
                     }
                 }
                 out.flush()

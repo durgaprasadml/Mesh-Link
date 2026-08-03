@@ -175,7 +175,38 @@ class TransportDiagnostics @Inject constructor() {
         )
     }
 
+    // Phase 4 Resource & Cleanup Diagnostics
+    fun logResourceLeak(resourceId: String, reason: String) {
+        log(
+            DiagnosticLogLevel.WARN,
+            "RESOURCE_LEAK | ResID=$resourceId | Reason=$reason"
+        )
+    }
+
+    fun logCleanupEvent(type: String, details: String, success: Boolean) {
+        val level = if (success) DiagnosticLogLevel.INFO else DiagnosticLogLevel.WARN
+        log(
+            level,
+            "CLEANUP | Type=$type | Status=${if (success) "SUCCESS" else "FAILED"} | Details=$details"
+        )
+    }
+
+    fun logBufferUtilization(hits: Int, misses: Int, evictions: Int, activeBorrowed: Int) {
+        log(
+            DiagnosticLogLevel.DEBUG,
+            "BUFFER_POOL | Hits=$hits | Misses=$misses | Evictions=$evictions | ActiveBorrowed=$activeBorrowed"
+        )
+    }
+
+    fun logSessionStateTransition(transferId: String, oldState: String, newState: String) {
+        log(
+            DiagnosticLogLevel.DEBUG,
+            "SESSION_STATE | XferID=$transferId | State: $oldState -> $newState"
+        )
+    }
+
     private fun log(level: DiagnosticLogLevel, message: String) {
+
         if (!isEnabled || level.ordinal < minLogLevel.ordinal) return
 
         when (level) {

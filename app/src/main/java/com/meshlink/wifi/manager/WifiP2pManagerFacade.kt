@@ -37,8 +37,11 @@ class WifiP2pManagerFacade @Inject constructor(
     companion object {
         private const val TAG = "WifiP2pManagerFacade"
         private const val PEER_STALE_THRESHOLD_MS = 60_000L
-        private const val CONNECTION_TIMEOUT_MS = 15_000L
+        private const val CONNECTION_TIMEOUT_MS = 30_000L
         private const val DEFAULT_GO_INTENT = 7 // Mid-range for balanced Group Owner negotiation
+        private const val MAX_RECONNECT_ATTEMPTS = 5
+        private const val INITIAL_RECONNECT_DELAY_MS = 2_000L
+        private const val MAX_RECONNECT_DELAY_MS = 30_000L
     }
 
     private val _discoveredPeers = MutableStateFlow<List<WifiP2pDeviceModel>>(emptyList())
@@ -48,6 +51,8 @@ class WifiP2pManagerFacade @Inject constructor(
     val p2pState: StateFlow<WifiP2pState> = _p2pState.asStateFlow()
 
     private var connectionTimeoutJob: Job? = null
+    private var reconnectJob: Job? = null
+    private var reconnectAttemptCount = 0
     private var lastConnectedDeviceAddress: String? = null
     private var isAutoReconnectEnabled = true
 
@@ -160,6 +165,8 @@ class WifiP2pManagerFacade @Inject constructor(
 
         MeshLogger.d(TAG, "Disconnect requested")
         connectionTimeoutJob?.cancel()
+        reconnectJob?.cancel()
+        reconnectAttemptCount = 0
         removeGroup()
     }
 
@@ -298,6 +305,8 @@ class WifiP2pManagerFacade @Inject constructor(
         connectionTimeoutJob?.cancel()
 
         if (info != null && info.groupFormed) {
+            reconnectJob?.cancel()
+            reconnectAttemptCount = 0
             val goAddress = info.groupOwnerAddress?.hostAddress ?: ""
             val isGo = info.isGroupOwner
             MeshLogger.d(TAG, "Connected: GroupOwnerAddress=$goAddress, isGroupOwner=$isGo")
@@ -308,10 +317,20 @@ class WifiP2pManagerFacade @Inject constructor(
     }
 
     private fun triggerAutoReconnect(targetAddress: String) {
-        applicationScope.launch {
+        if (reconnectAttemptCount >= MAX_RECONNECT_ATTEMPTS) {
+            MeshLogger.w(TAG, "Max reconnect attempts ($MAX_RECONNECT_ATTEMPTS) reached for $targetAddress. Halting reconnect loop.")
+            _p2pState.value = WifiP2pState.Disconnected
+            return
+        }
+
+        reconnectJob?.cancel()
+        reconnectJob = applicationScope.launch {
+            reconnectAttemptCount++
+            val delayMs = (INITIAL_RECONNECT_DELAY_MS * (1 shl (reconnectAttemptCount - 1))).coerceAtMost(MAX_RECONNECT_DELAY_MS)
+            
             _p2pState.value = WifiP2pState.Recovering
-            delay(2000L)
-            MeshLogger.d(TAG, "Attempting auto-reconnect to $targetAddress...")
+            MeshLogger.d(TAG, "Attempting auto-reconnect ($reconnectAttemptCount/$MAX_RECONNECT_ATTEMPTS) to $targetAddress with backoff ${delayMs}ms...")
+            delay(delayMs)
             connect(targetAddress)
         }
     }

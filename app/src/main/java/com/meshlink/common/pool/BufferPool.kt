@@ -11,11 +11,16 @@ import java.util.concurrent.atomic.AtomicInteger
 object BufferPool {
     private val TAG = "BufferPool"
 
+    private class PoolHolder {
+        val queue = ConcurrentLinkedQueue<ByteArray>()
+        val sizeCounter = AtomicInteger(0)
+    }
+
     // Sub-pools categorized by exact buffer size
-    private val pools = ConcurrentHashMap<Int, ConcurrentLinkedQueue<ByteArray>>()
+    private val pools = ConcurrentHashMap<Int, PoolHolder>()
     
     // Configurable maximum buffers per size category
-    private val MAX_BUFFERS_PER_POOL = 100
+    private const val MAX_BUFFERS_PER_POOL = 100
 
     // Instrumentation metrics
     val hitCount = AtomicInteger(0)
@@ -28,10 +33,11 @@ object BufferPool {
      * If not, a new one is allocated.
      */
     fun borrowBuffer(size: Int): ByteArray {
-        val queue = pools[size]
-        if (queue != null) {
-            val buffer = queue.poll()
+        val holder = pools[size]
+        if (holder != null) {
+            val buffer = holder.queue.poll()
             if (buffer != null) {
+                holder.sizeCounter.decrementAndGet()
                 hitCount.incrementAndGet()
                 return buffer
             }
@@ -55,15 +61,19 @@ object BufferPool {
      */
     fun returnBuffer(buffer: ByteArray) {
         val size = buffer.size
-        val queue = pools.getOrPut(size) { ConcurrentLinkedQueue() }
+        val holder = pools.getOrPut(size) { PoolHolder() }
 
-        // Prevent unbounded memory growth
-        if (queue.size >= MAX_BUFFERS_PER_POOL) {
+        // Prevent unbounded memory growth with O(1) count tracking
+        if (holder.sizeCounter.get() >= MAX_BUFFERS_PER_POOL) {
             evictionCount.incrementAndGet()
             return // Let it be garbage collected
         }
 
-        queue.offer(buffer)
+        if (holder.queue.offer(buffer)) {
+            holder.sizeCounter.incrementAndGet()
+        } else {
+            evictionCount.incrementAndGet()
+        }
     }
 
     /**

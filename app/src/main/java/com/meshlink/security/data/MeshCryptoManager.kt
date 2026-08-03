@@ -51,12 +51,6 @@ class MeshCryptoManager @Inject constructor(
     private val derivedKeys = java.util.concurrent.ConcurrentHashMap<String, SecretKey>()
     private val previousDerivedKeys = java.util.concurrent.ConcurrentHashMap<String, SecretKey>()
 
-    private val encryptCipherLocal = object : ThreadLocal<Cipher>() {
-        override fun initialValue() = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
-    }
-    private val decryptCipherLocal = object : ThreadLocal<Cipher>() {
-        override fun initialValue() = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
-    }
 
     // EncryptedSharedPreferences for persistent peer public key storage
     private val peerKeyStore: SharedPreferences by lazy {
@@ -422,7 +416,7 @@ class MeshCryptoManager @Inject constructor(
     fun encrypt(plaintext: String, peerId: String, aad: ByteArray? = null): String {
         val key = deriveSharedKey(peerId)
 
-        val cipher = encryptCipherLocal.get()!!
+        val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
         val iv = ByteArray(SecurityConstants.GCM_IV_LENGTH_BYTES)
         java.security.SecureRandom().nextBytes(iv)
         val spec = GCMParameterSpec(SecurityConstants.GCM_TAG_LENGTH_BITS, iv)
@@ -457,7 +451,7 @@ class MeshCryptoManager @Inject constructor(
             val iv = combined.copyOfRange(0, SecurityConstants.GCM_IV_LENGTH_BYTES)
             val ciphertextWithTag = combined.copyOfRange(SecurityConstants.GCM_IV_LENGTH_BYTES, combined.size)
 
-            val cipher = decryptCipherLocal.get()!!
+            val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
             val spec = GCMParameterSpec(SecurityConstants.GCM_TAG_LENGTH_BITS, iv)
             cipher.init(Cipher.DECRYPT_MODE, key, spec)
 

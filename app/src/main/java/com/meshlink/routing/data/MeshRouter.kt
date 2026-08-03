@@ -253,9 +253,8 @@ internal class MeshRouter @Inject constructor(
                 routingEngine.routeManager.recordDeliverySuccess(packet.senderId, immediateSenderAddress, 100L)
             }
             
-            val emitted = _incomingPayloads.tryEmit(packet.senderId to packet)
-            if (!emitted) {
-                MeshLogger.w(TAG, "incomingPayloads buffer full — packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} dropped")
+            applicationScope.launch {
+                _incomingPayloads.emit(packet.senderId to packet)
             }
         }
 

@@ -69,7 +69,8 @@ class HomeViewModelTest {
         viewModel = HomeViewModel(userRepository, meshRepository, chatDao)
 
         viewModel.uiState.test {
-            val state = awaitItem()
+            val firstState = awaitItem()
+            val state = if (firstState.user == null) awaitItem() else firstState
             assertEquals(userEntity, state.user)
             assertEquals(1, state.nearbyDevices.size)
             assertEquals(device, state.nearbyDevices[0])

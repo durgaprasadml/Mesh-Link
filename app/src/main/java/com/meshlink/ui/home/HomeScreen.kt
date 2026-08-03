@@ -65,20 +65,11 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val chatsState by chatsViewModel.uiState.collectAsStateWithLifecycle()
     
-    var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
     val connectionState = when {
         uiState.nearbyDevices.isNotEmpty() -> ConnectionState.CONNECTED
         else -> ConnectionState.SEARCHING
-    }
-    
-    val filteredChats = remember(searchQuery, chatsState.chats) {
-        if (searchQuery.isBlank()) {
-            chatsState.chats
-        } else {
-            chatsState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
-        }
     }
 
     Scaffold(
@@ -137,16 +128,16 @@ fun HomeScreen(
                 SearchBar(
                     inputField = {
                         SearchBarDefaults.InputField(
-                            query = searchQuery,
-                            onQueryChange = { searchQuery = it },
+                            query = chatsState.searchQuery,
+                            onQueryChange = { chatsViewModel.onSearchQueryChanged(it) },
                             onSearch = { isSearchActive = false },
                             expanded = isSearchActive,
                             onExpandedChange = { isSearchActive = it },
                             placeholder = { Text("Search chats or devices") },
                             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                             trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
+                                if (chatsState.searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { chatsViewModel.onSearchQueryChanged("") }) {
                                         Icon(Icons.Default.Clear, contentDescription = "Clear")
                                     }
                                 }
@@ -165,7 +156,7 @@ fun HomeScreen(
             }
 
             AnimatedVisibility(
-                visible = !isSearchActive && searchQuery.isBlank(),
+                visible = !isSearchActive && chatsState.searchQuery.isBlank(),
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically()
             ) {
@@ -228,22 +219,22 @@ fun HomeScreen(
             )
 
             AnimatedContent<Boolean>(
-                targetState = filteredChats.isEmpty(),
+                targetState = chatsState.chats.isEmpty(),
                 label = "chat_list_empty_state_transition"
             ) { isEmpty ->
                 if (isEmpty) {
                     EmptyState(
                         icon = Icons.Outlined.ChatBubbleOutline,
-                        title = if (searchQuery.isNotBlank()) "No results found" else "No recent chats",
-                        description = if (searchQuery.isNotBlank()) "Try a different search term." else "Tap the + button to find nearby devices and start chatting.",
-                        primaryButtonText = if (searchQuery.isBlank()) "Find Nearby Devices" else null,
-                        onPrimaryButtonClick = if (searchQuery.isBlank()) onNavigateToNearby else null
+                        title = if (chatsState.searchQuery.isNotBlank()) "No results found" else "No recent chats",
+                        description = if (chatsState.searchQuery.isNotBlank()) "Try a different search term." else "Tap the + button to find nearby devices and start chatting.",
+                        primaryButtonText = if (chatsState.searchQuery.isBlank()) "Find Nearby Devices" else null,
+                        onPrimaryButtonClick = if (chatsState.searchQuery.isBlank()) onNavigateToNearby else null
                     )
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
+                        items(chatsState.chats, key = { it.id }, contentType = { "chat_item" }) { chat ->
                             ChatRowItem(
                                 chat = chat,
                                 onClick = {

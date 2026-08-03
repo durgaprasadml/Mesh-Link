@@ -43,16 +43,7 @@ fun ChatsListScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     
-    var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
-
-    val filteredChats = remember(searchQuery, uiState.chats) {
-        if (searchQuery.isBlank()) {
-            uiState.chats
-        } else {
-            uiState.chats.filter { it.name.contains(searchQuery, ignoreCase = true) }
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -76,16 +67,16 @@ fun ChatsListScreen(
                 SearchBar(
                     inputField = {
                         SearchBarDefaults.InputField(
-                            query = searchQuery,
-                            onQueryChange = { searchQuery = it },
+                            query = uiState.searchQuery,
+                            onQueryChange = { viewModel.onSearchQueryChanged(it) },
                             onSearch = { isSearchActive = false },
                             expanded = isSearchActive,
                             onExpandedChange = { isSearchActive = it },
                             placeholder = { Text("Search conversations") },
                             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                             trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
+                                if (uiState.searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
                                         Icon(Icons.Default.Clear, contentDescription = "Clear")
                                     }
                                 }
@@ -103,11 +94,11 @@ fun ChatsListScreen(
                 }
             }
 
-            if (filteredChats.isEmpty()) {
+            if (uiState.chats.isEmpty()) {
                 EmptyState(
                     icon = Icons.Outlined.ChatBubbleOutline,
-                    title = if (searchQuery.isBlank()) "No Messages" else "No results found",
-                    description = if (searchQuery.isBlank()) "You haven't started any conversations yet." else "Try a different search term.",
+                    title = if (uiState.searchQuery.isBlank()) "No Messages" else "No results found",
+                    description = if (uiState.searchQuery.isBlank()) "You haven't started any conversations yet." else "Try a different search term.",
                     modifier = Modifier.weight(1f)
                 )
             } else {
@@ -115,7 +106,7 @@ fun ChatsListScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = MeshTheme.spacing.medium)
                 ) {
-                    items(filteredChats, key = { it.id }, contentType = { "chat_item" }) { chat ->
+                    items(uiState.chats, key = { it.id }, contentType = { "chat_item" }) { chat ->
                         ChatRowItem(chat = chat, onClick = {
                             val safeName = chat.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(chat.id) }
                             onNavigateToChat(chat.id, safeName)

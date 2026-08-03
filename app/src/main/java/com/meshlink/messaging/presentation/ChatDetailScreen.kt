@@ -1,6 +1,8 @@
 package com.meshlink.messaging.presentation
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,13 +27,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.meshlink.common.logger.MeshLogger
 import com.meshlink.ui.components.chat.DateSeparator
 import com.meshlink.ui.components.chat.MessageBubble
 import com.meshlink.ui.components.chat.MessageComposer
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Calendar
 
@@ -43,6 +48,8 @@ fun ChatDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState(
@@ -62,11 +69,72 @@ fun ChatDetailScreen(
 
 
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
+
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
+        MeshLogger.d("ChatDetailScreen", "Camera result received: success=$success")
         if (success) {
-            cameraUri?.let { viewModel.sendImage(it) }
+            cameraUri?.let {
+                MeshLogger.d("ChatDetailScreen", "Sending captured image URI: $it")
+                viewModel.sendImage(it)
+            }
+        } else {
+            MeshLogger.d("ChatDetailScreen", "Camera capture cancelled or failed")
+        }
+    }
+
+    fun launchCameraInternal() {
+        try {
+            val dir = File(context.cacheDir, "images")
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
+            val tempFile = File(dir, "camera_${System.currentTimeMillis()}.jpg")
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                tempFile
+            )
+            cameraUri = uri
+            MeshLogger.d("ChatDetailScreen", "Launching camera with temp URI: $uri")
+            cameraLauncher.launch(uri)
+        } catch (e: Exception) {
+            MeshLogger.e("ChatDetailScreen", "Failed to launch camera: ${e.message}", e)
+            scope.launch {
+                snackbarHostState.showSnackbar("Unable to open camera application. Please try again.")
+            }
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        MeshLogger.d("ChatDetailScreen", "Camera permission result: granted=$isGranted")
+        if (isGranted) {
+            launchCameraInternal()
+        } else {
+            MeshLogger.w("ChatDetailScreen", "Camera permission denied by user")
+            scope.launch {
+                snackbarHostState.showSnackbar("Camera permission is required to capture photos.")
+            }
+        }
+    }
+
+    val onCameraClickAction = {
+        MeshLogger.d("ChatDetailScreen", "Camera button clicked")
+        showAttachmentSheet = false
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            MeshLogger.d("ChatDetailScreen", "Camera permission already granted")
+            launchCameraInternal()
+        } else {
+            MeshLogger.d("ChatDetailScreen", "Requesting camera permission")
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -134,19 +202,7 @@ fun ChatDetailScreen(
                     imagePickerLauncher.launch("image/*")
                 },
 
-                onCameraClick = {
-                    showAttachmentSheet = false
-                    val dir = File(context.cacheDir, "images")
-                    dir.mkdirs()
-                    val tempFile = File(dir, "camera_${System.currentTimeMillis()}.jpg")
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        tempFile
-                    )
-                    cameraUri = uri
-                    cameraLauncher.launch(uri)
-                },
+                onCameraClick = onCameraClickAction,
                 onLocationClick = {
                     showAttachmentSheet = false
                     viewModel.sendLocation()
@@ -156,6 +212,7 @@ fun ChatDetailScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {

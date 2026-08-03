@@ -212,22 +212,6 @@ fun NearbyDevicesScreen(
                     ) { }
                 }
 
-                // Interactive Topological Canvas Map (Weight 0.38)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.38f)
-                        .padding(horizontal = MeshTheme.spacing.mediumLarge)
-                ) {
-                    MeshTopologyCanvas(
-                        devices = uiState.devices,
-                        selectedAddress = selectedDeviceAddress,
-                        onNodeSelected = { device ->
-                            selectedDeviceAddress = device.address
-                        }
-                    )
-                }
-
                 // Device List or Empty State
                 if (uiState.devices.isEmpty()) {
                     MeshScanningEmptyState(

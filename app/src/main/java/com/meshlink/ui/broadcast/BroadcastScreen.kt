@@ -244,14 +244,6 @@ private fun BroadcastBubble(uiMsg: BroadcastUiMessage) {
                 .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
         ) {
             Text(
-                text = "📢 Broadcast",
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-
-            Text(
                 text = senderDisplayName,
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.titleSmall,

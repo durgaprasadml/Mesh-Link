@@ -41,6 +41,10 @@ class TransferManager @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope
 ) {
+    // Phase 2 extension points (architectural preparation only, ready for future phase injection)
+    var transferQueue: com.meshlink.transfer.scheduler.TransferQueue? = null
+    var slidingWindowBuffer: com.meshlink.transfer.scheduler.SlidingWindowBuffer? = null
+    var parallelWorkerPool: com.meshlink.transfer.scheduler.ParallelTransferWorkerPool? = null
     companion object {
         private const val TAG = "TransferManager"
         private const val BLE_INTER_CHUNK_DELAY_MS = 30L

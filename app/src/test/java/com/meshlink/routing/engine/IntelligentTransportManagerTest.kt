@@ -39,6 +39,7 @@ class IntelligentTransportManagerTest {
 
     @Before
     fun setUp() {
+        metrics.reset()
         every { settingsRepository.preferredTransport } returns flowOf("AUTOMATIC")
         every { bleTransport.health } returns bleHealthFlow
         every { wifiTransport.health } returns wifiHealthFlow
@@ -190,6 +191,7 @@ class IntelligentTransportManagerTest {
         coEvery { wifiTransport.broadcastPacket(any(), any(), any()) } returns MeshResult.Error(
             com.meshlink.domain.model.MeshError.TransportError("Socket Error")
         )
+        coEvery { bleTransport.broadcastPacket(any(), any(), any()) } returns MeshResult.Success(Unit)
 
         val smallMediaPacket = MeshPacket(
             packetId = "pkt_media_fail",
@@ -202,7 +204,7 @@ class IntelligentTransportManagerTest {
 
         val result = manager.sendPacket(smallMediaPacket)
 
-        assertTrue(result is MeshResult.Success)
+        assertTrue("Expected MeshResult.Success but was $result", result is MeshResult.Success)
         coVerify(exactly = 2) { wifiTransport.broadcastPacket(smallMediaPacket, excludeAddress = null, includeAddress = null) }
         coVerify(exactly = 1) { bleTransport.broadcastPacket(smallMediaPacket, excludeAddress = null, includeAddress = null) }
         assertEquals(1L, metrics.fallbackCount)

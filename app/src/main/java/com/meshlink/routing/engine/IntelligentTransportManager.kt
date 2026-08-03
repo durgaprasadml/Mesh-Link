@@ -1,7 +1,6 @@
 package com.meshlink.routing.engine
 
 import com.meshlink.ble.api.BleTransport
-import com.meshlink.common.logger.MeshLogger
 import com.meshlink.di.ApplicationScope
 import com.meshlink.domain.model.MeshError
 import com.meshlink.domain.model.MeshPacket
@@ -18,6 +17,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Intelligent transport manager orchestrating media and control traffic separation,
+ * transport health monitoring, metrics tracking, policy enforcement, and diagnostics.
+ */
 @Singleton
 class IntelligentTransportManager @Inject constructor(
     private val bleTransport: BleTransport,
@@ -25,7 +28,12 @@ class IntelligentTransportManager @Inject constructor(
     private val routeOptimizer: RouteOptimizer,
     private val settingsRepository: SettingsRepository,
     val metrics: TransportMetrics,
-    @ApplicationScope private val applicationScope: CoroutineScope
+    @ApplicationScope private val applicationScope: CoroutineScope,
+    val classifier: TransportPacketClassifier = TransportPacketClassifier(),
+    val policy: TransportPolicy = TransportPolicy(classifier),
+    val healthMonitor: TransportHealthMonitor = TransportHealthMonitor(),
+    val diagnostics: TransportDiagnostics = TransportDiagnostics(),
+    val queueManager: TransportQueueManager? = null
 ) {
 
     companion object {
@@ -56,8 +64,7 @@ class IntelligentTransportManager @Inject constructor(
     }
 
     /**
-     * Determines whether a packet should go over BLE or Wi-Fi Direct based on packet type,
-     * mime type, size, and settings.
+     * Determines whether a packet should go over BLE or Wi-Fi Direct based on classification policies.
      */
     fun selectTransportForPayload(
         destinationId: String,
@@ -68,14 +75,7 @@ class IntelligentTransportManager @Inject constructor(
         if (currentPreferredTransport == "WIFI_DIRECT") return RouteType.WIFI_DIRECT
         if (currentPreferredTransport == "BLE") return RouteType.BLE
 
-        // Explicit Wi-Fi Direct payloads: Images, Audio, Voice, Video, Documents, Files > 50KB, RESOURCE_SYNC
-        val isHighBandwidth = isHighBandwidthRequired(packetType, mimeType, payloadSizeBytes)
-
-        return if (isHighBandwidth) {
-            RouteType.WIFI_DIRECT
-        } else {
-            RouteType.BLE
-        }
+        return policy.getPreferredTransport(packetType, payloadSizeBytes, mimeType)
     }
 
     fun selectTransportForPacket(packet: MeshPacket): RouteType {
@@ -89,64 +89,111 @@ class IntelligentTransportManager @Inject constructor(
     }
 
     /**
-     * Sends/broadcasts a packet through the optimal transport layer with automatic retry & fallback.
+     * Sends/broadcasts a packet through the optimal transport layer with automatic retry & policy-driven fallback.
      */
     suspend fun sendPacket(
         packet: MeshPacket,
         includeAddress: String? = null,
         excludeAddress: String? = null
     ): MeshResult<Unit> {
+        val category = classifier.classify(packet)
         val preferredTransport = selectTransportForPacket(packet)
-        val payloadSize = packet.payload.toByteArray(Charsets.UTF_8).size
+        val payloadSize = packet.payload.toByteArray(Charsets.UTF_8).size.toLong()
+
+        diagnostics.logTransportSelection(
+            packetId = packet.packetId,
+            packetType = packet.type,
+            category = category,
+            selectedRoute = preferredTransport,
+            reason = "Classified as $category traffic (size=${payloadSize}B)"
+        )
 
         return if (preferredTransport == RouteType.WIFI_DIRECT) {
             if (isWifiAvailable()) {
-                MeshLogger.d(TAG, "Packet ID=${packet.packetId} Type=${packet.type} Size=${payloadSize}B -> Selected Transport: Wi-Fi Direct (Reason: High-bandwidth / Large Payload)")
                 val wifiResult = sendOverWifiWithRetry(packet, includeAddress, excludeAddress)
                 if (wifiResult is MeshResult.Success) {
-                    metrics.recordWifiPacket(payloadSize)
+                    metrics.recordWifiPacket(payloadSize.toInt())
+                    healthMonitor.recordWifiTxResult(true, bytes = payloadSize.toInt())
                     wifiResult
-                } else if (payloadSize <= LARGE_PAYLOAD_THRESHOLD) {
-                    MeshLogger.w(TAG, "Wi-Fi Direct send failed for small packet ${packet.packetId} (${payloadSize}B <= 50KB). Fallback -> BLE")
+                } else if (policy.shouldAllowBleFallback(packet, category)) {
+                    diagnostics.logTransportFallback(
+                        packetId = packet.packetId,
+                        packetType = packet.type,
+                        primaryRoute = RouteType.WIFI_DIRECT,
+                        fallbackRoute = RouteType.BLE,
+                        reason = "Wi-Fi Direct failed for small payload (${payloadSize}B)"
+                    )
                     metrics.recordFallback()
+                    healthMonitor.recordFallback()
                     val fallbackBleResult = sendOverBleWithRetry(packet, includeAddress, excludeAddress)
                     if (fallbackBleResult is MeshResult.Success) {
-                        metrics.recordBlePacket(payloadSize)
+                        metrics.recordBlePacket(payloadSize.toInt())
+                        healthMonitor.recordBleTxResult(true)
                     }
                     fallbackBleResult
                 } else {
-                    MeshLogger.w(TAG, "Wi-Fi Direct send failed for large packet ${packet.packetId} (${payloadSize}B > 50KB). Skipping BLE fallback.")
+                    diagnostics.logTransportUnavailable(
+                        packetId = packet.packetId,
+                        packetType = packet.type,
+                        requestedRoute = RouteType.WIFI_DIRECT,
+                        reason = "Wi-Fi Direct failed for large media payload (${payloadSize}B). Skipping BLE fallback."
+                    )
+                    healthMonitor.recordWifiTxResult(false)
                     wifiResult
                 }
-            } else if (payloadSize <= LARGE_PAYLOAD_THRESHOLD) {
-                MeshLogger.d(TAG, "Packet ID=${packet.packetId} Type=${packet.type} -> Preferred Wi-Fi Direct unavailable. Small payload (${payloadSize}B <= 50KB), Fallback -> BLE")
+            } else if (policy.shouldAllowBleFallback(packet, category)) {
+                diagnostics.logTransportFallback(
+                    packetId = packet.packetId,
+                    packetType = packet.type,
+                    primaryRoute = RouteType.WIFI_DIRECT,
+                    fallbackRoute = RouteType.BLE,
+                    reason = "Wi-Fi Direct unavailable for small payload (${payloadSize}B)"
+                )
                 metrics.recordFallback()
+                healthMonitor.recordFallback()
                 val fallbackBleResult = sendOverBleWithRetry(packet, includeAddress, excludeAddress)
                 if (fallbackBleResult is MeshResult.Success) {
-                    metrics.recordBlePacket(payloadSize)
+                    metrics.recordBlePacket(payloadSize.toInt())
+                    healthMonitor.recordBleTxResult(true)
                 }
                 fallbackBleResult
             } else {
-                MeshLogger.w(TAG, "Wi-Fi Direct unavailable for large packet ${packet.packetId} (${payloadSize}B > 50KB). Staying queued for Wi-Fi Direct.")
+                diagnostics.logTransportUnavailable(
+                    packetId = packet.packetId,
+                    packetType = packet.type,
+                    requestedRoute = RouteType.WIFI_DIRECT,
+                    reason = "Wi-Fi Direct unavailable for payload type ${packet.type} (${payloadSize}B). Remaining queued."
+                )
+                healthMonitor.recordWifiTxResult(false)
                 MeshResult.Error(MeshError.TransportError("Wi-Fi Direct unavailable for payload type ${packet.type} (${payloadSize}B)"))
             }
         } else {
-            MeshLogger.d(TAG, "Packet ID=${packet.packetId} Type=${packet.type} Size=${payloadSize}B -> Selected Transport: BLE (Reason: Lightweight / Signaling)")
             val bleResult = sendOverBleWithRetry(packet, includeAddress, excludeAddress)
             if (bleResult is MeshResult.Success) {
-                metrics.recordBlePacket(payloadSize)
+                metrics.recordBlePacket(payloadSize.toInt())
+                healthMonitor.recordBleTxResult(true)
                 bleResult
             } else if (isWifiAvailable()) {
-                MeshLogger.w(TAG, "BLE send failed for packet ${packet.packetId}. Fallback attempt -> Wi-Fi Direct")
+                diagnostics.logTransportFallback(
+                    packetId = packet.packetId,
+                    packetType = packet.type,
+                    primaryRoute = RouteType.BLE,
+                    fallbackRoute = RouteType.WIFI_DIRECT,
+                    reason = "BLE send failed. Fallback attempt over Wi-Fi Direct."
+                )
                 metrics.recordFallback()
+                healthMonitor.recordFallback()
                 val fallbackWifiResult = sendOverWifiWithRetry(packet, includeAddress, excludeAddress)
                 if (fallbackWifiResult is MeshResult.Success) {
-                    metrics.recordWifiPacket(payloadSize)
+                    metrics.recordWifiPacket(payloadSize.toInt())
+                    healthMonitor.recordWifiTxResult(true, bytes = payloadSize.toInt())
                     fallbackWifiResult
                 } else {
+                    healthMonitor.recordBleTxResult(false)
                     bleResult
                 }
             } else {
+                healthMonitor.recordBleTxResult(false)
                 bleResult
             }
         }
@@ -160,8 +207,15 @@ class IntelligentTransportManager @Inject constructor(
         var result = wifiTransport.broadcastPacket(packet, excludeAddress = excludeAddress, includeAddress = includeAddress)
         if (result is MeshResult.Success) return result
 
-        MeshLogger.w(TAG, "Retrying Wi-Fi Direct send for packet ${packet.packetId}...")
-        metrics.recordRetry()
+        diagnostics.logRetry(
+            packetId = packet.packetId,
+            packetType = packet.type,
+            attempt = 1,
+            transport = RouteType.WIFI_DIRECT,
+            reason = "Retrying Wi-Fi Direct send..."
+        )
+        metrics.recordWifiRetry()
+        healthMonitor.recordRetry()
         delay(RETRY_DELAY_MS)
         result = wifiTransport.broadcastPacket(packet, excludeAddress = excludeAddress, includeAddress = includeAddress)
         return result
@@ -175,44 +229,17 @@ class IntelligentTransportManager @Inject constructor(
         var result = bleTransport.broadcastPacket(packet, excludeAddress = excludeAddress, includeAddress = includeAddress)
         if (result is MeshResult.Success) return result
 
-        MeshLogger.w(TAG, "Retrying BLE send for packet ${packet.packetId}...")
-        metrics.recordRetry()
+        diagnostics.logRetry(
+            packetId = packet.packetId,
+            packetType = packet.type,
+            attempt = 1,
+            transport = RouteType.BLE,
+            reason = "Retrying BLE send..."
+        )
+        metrics.recordBleRetry()
+        healthMonitor.recordRetry()
         delay(RETRY_DELAY_MS)
         result = bleTransport.broadcastPacket(packet, excludeAddress = excludeAddress, includeAddress = includeAddress)
         return result
-    }
-
-    private fun isHighBandwidthRequired(
-        packetType: PacketType,
-        mimeType: String?,
-        payloadSizeBytes: Long
-    ): Boolean {
-        if (payloadSizeBytes > LARGE_PAYLOAD_THRESHOLD) return true
-
-        if (mimeType != null) {
-            val lower = mimeType.lowercase()
-            if (lower.startsWith("image/") ||
-                lower.startsWith("video/") ||
-                lower.startsWith("audio/") ||
-                lower.contains("pdf") ||
-                lower.contains("zip") ||
-                lower.contains("apk") ||
-                lower.contains("application/")
-            ) {
-                return true
-            }
-        }
-
-        return when (packetType) {
-            PacketType.VOICE_FRAME,
-            PacketType.VIDEO_FRAME,
-            PacketType.RESOURCE_SYNC -> true
-            PacketType.MEDIA_CHUNK,
-            PacketType.MEDIA_META -> {
-                // If mimeType is unknown, treat chunks/meta as high-bandwidth by default
-                true
-            }
-            else -> false
-        }
     }
 }

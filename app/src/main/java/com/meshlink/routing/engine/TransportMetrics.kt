@@ -41,6 +41,14 @@ class TransportMetrics @Inject constructor() {
     private val _ackLatencyMsSum = AtomicLong(0)
     private val _ackLatencyCount = AtomicLong(0)
 
+    // Phase 5 Enhanced Transport Metrics
+    private val _peakThroughputBps = AtomicLong(0)
+    private val _rttMsSum = AtomicLong(0)
+    private val _rttCount = AtomicLong(0)
+    private val _sessionDurationMsSum = AtomicLong(0)
+    private val _sessionCount = AtomicLong(0)
+    private val _maxQueueCapacity = AtomicInteger(100)
+
     // Public Getters (Backward Compatible)
     val blePacketCount: Long get() = _blePacketCount.get()
     val blePacketsReceived: Long get() = _blePacketsReceived.get()
@@ -65,11 +73,54 @@ class TransportMetrics @Inject constructor() {
     val workerUtilizationPct: Float get() = _workerUtilizationPct.get().toFloat()
     val queueDepth: Int get() = _queueDepth.get()
 
+    // Phase 5 Public Getters
+    val peakThroughputBps: Long get() = _peakThroughputBps.get()
+
     val averageAckLatencyMs: Double
         get() {
             val count = _ackLatencyCount.get()
             if (count <= 0) return 0.0
             return _ackLatencyMsSum.get().toDouble() / count.toDouble()
+        }
+
+    val averageRttMs: Double
+        get() {
+            val count = _rttCount.get()
+            if (count <= 0) return averageAckLatencyMs
+            return _rttMsSum.get().toDouble() / count.toDouble()
+        }
+
+    val averageThroughputBps: Double
+        get() {
+            val durationMs = _mediaTransferDurationMs.get()
+            val bytes = _totalBytesTransferred.get()
+            if (durationMs <= 0) return 0.0
+            return (bytes.toDouble() / (durationMs.toDouble() / 1000.0))
+        }
+
+    val packetSuccessRatePct: Float
+        get() {
+            val totalSent = _wifiPacketCount.get() + _blePacketCount.get()
+            val totalFailures = _wifiFailures.get() + _bleFailures.get()
+            if (totalSent <= 0) return 100f
+            return (((totalSent - totalFailures).coerceAtLeast(0)).toFloat() / totalSent.toFloat() * 100f).coerceIn(0f, 100f)
+        }
+
+    val packetLossRatePct: Float
+        get() = (100f - packetSuccessRatePct).coerceIn(0f, 100f)
+
+    val averageSessionDurationMs: Double
+        get() {
+            val count = _sessionCount.get()
+            if (count <= 0) return 0.0
+            return _sessionDurationMsSum.get().toDouble() / count.toDouble()
+        }
+
+    val queueUtilizationPct: Float
+        get() {
+            val cap = _maxQueueCapacity.get()
+            if (cap <= 0) return 0f
+            return (_queueDepth.get().toFloat() / cap.toFloat() * 100f).coerceIn(0f, 100f)
         }
 
     val transferEfficiencyPct: Float
@@ -155,14 +206,40 @@ class TransportMetrics @Inject constructor() {
         }
     }
 
-    fun recordQueueDepth(depth: Int) {
+    fun recordQueueDepth(depth: Int, maxCapacity: Int = 100) {
         _queueDepth.set(depth)
+        if (maxCapacity > 0) _maxQueueCapacity.set(maxCapacity)
     }
 
     fun recordAckLatency(latencyMs: Long) {
         if (latencyMs >= 0) {
             _ackLatencyMsSum.addAndGet(latencyMs)
             _ackLatencyCount.incrementAndGet()
+        }
+    }
+
+    // Phase 5 Metric Recorders
+    fun recordThroughput(bps: Long) {
+        if (bps > 0) {
+            var currentPeak = _peakThroughputBps.get()
+            while (bps > currentPeak) {
+                if (_peakThroughputBps.compareAndSet(currentPeak, bps)) break
+                currentPeak = _peakThroughputBps.get()
+            }
+        }
+    }
+
+    fun recordRtt(rttMs: Long) {
+        if (rttMs >= 0) {
+            _rttMsSum.addAndGet(rttMs)
+            _rttCount.incrementAndGet()
+        }
+    }
+
+    fun recordSessionDuration(durationMs: Long) {
+        if (durationMs >= 0) {
+            _sessionDurationMsSum.addAndGet(durationMs)
+            _sessionCount.incrementAndGet()
         }
     }
 
@@ -190,6 +267,13 @@ class TransportMetrics @Inject constructor() {
         _queueDepth.set(0)
         _ackLatencyMsSum.set(0)
         _ackLatencyCount.set(0)
+
+        _peakThroughputBps.set(0)
+        _rttMsSum.set(0)
+        _rttCount.set(0)
+        _sessionDurationMsSum.set(0)
+        _sessionCount.set(0)
+        _maxQueueCapacity.set(100)
     }
 
     fun getSummary(): Map<String, Any> {
@@ -203,6 +287,13 @@ class TransportMetrics @Inject constructor() {
             "workerUtilizationPct" to workerUtilizationPct,
             "queueDepth" to queueDepth,
             "avgAckLatencyMs" to averageAckLatencyMs,
+            "avgRttMs" to averageRttMs,
+            "peakThroughputBps" to peakThroughputBps,
+            "avgThroughputBps" to averageThroughputBps,
+            "packetSuccessRatePct" to packetSuccessRatePct,
+            "packetLossRatePct" to packetLossRatePct,
+            "queueUtilizationPct" to queueUtilizationPct,
+            "avgSessionDurationMs" to averageSessionDurationMs,
             "transferEfficiencyPct" to transferEfficiencyPct,
             "totalBytes" to totalBytesTransferred,
             "mediaBytes" to mediaBytesTransferred,

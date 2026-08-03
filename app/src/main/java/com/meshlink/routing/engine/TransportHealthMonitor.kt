@@ -108,7 +108,6 @@ class TransportHealthMonitor @Inject constructor() {
 
     fun recordBleTxResult(success: Boolean, latencyMs: Long = 0L) {
         val current = _healthStatus.value.bleMetrics
-        val newCount = if (success) current.lastActivityTimestamp + 1 else current.lastActivityTimestamp
         val updatedRate = if (success) (current.packetSuccessRate * 0.95f + 5.0f).coerceAtMost(100f) else (current.packetSuccessRate * 0.95f).coerceAtLeast(0f)
         _healthStatus.value = _healthStatus.value.copy(
             bleMetrics = current.copy(
@@ -176,5 +175,43 @@ class TransportHealthMonitor @Inject constructor() {
 
     private inline fun updateDiagnostics(update: TransportHealthDiagnostics.() -> TransportHealthDiagnostics) {
         _diagnostics.value = _diagnostics.value.update()
+    }
+
+    private val startTimeMs = System.currentTimeMillis()
+    private val wifiReconnectCount = AtomicLong(0)
+    private val bleReconnectCount = AtomicLong(0)
+
+    fun recordWifiReconnect() {
+        wifiReconnectCount.incrementAndGet()
+    }
+
+    fun recordBleReconnect() {
+        bleReconnectCount.incrementAndGet()
+    }
+
+    fun getUptimeMs(): Long = System.currentTimeMillis() - startTimeMs
+
+    fun getSummary(): Map<String, Any> {
+        val diag = _diagnostics.value
+        val health = _healthStatus.value
+        return mapOf(
+            "uptimeMs" to getUptimeMs(),
+            "overallHealth" to health.overallHealth.name,
+            "bleConnected" to health.bleMetrics.isConnected,
+            "bleRssi" to (health.bleMetrics.rssi ?: 0),
+            "bleMtu" to health.bleMetrics.mtu,
+            "bleAvgLatencyMs" to health.bleMetrics.averageLatencyMs,
+            "bleReconnectCount" to bleReconnectCount.get(),
+            "wifiConnected" to health.wifiMetrics.isConnected,
+            "wifiSocketState" to health.wifiMetrics.socketState,
+            "wifiThroughputBps" to health.wifiMetrics.estimatedThroughputBps,
+            "wifiRttMs" to health.wifiMetrics.rttMs,
+            "wifiReconnectCount" to wifiReconnectCount.get(),
+            "deliverySuccessRatePct" to diag.deliverySuccessRatePercentage,
+            "totalPacketsSent" to diag.totalPacketsSent,
+            "totalPacketsFailed" to diag.totalPacketsFailed,
+            "totalRetries" to diag.totalRetries,
+            "totalFallbacks" to diag.totalFallbacks
+        )
     }
 }

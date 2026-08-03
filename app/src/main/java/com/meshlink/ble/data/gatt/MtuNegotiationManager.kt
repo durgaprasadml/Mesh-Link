@@ -34,6 +34,7 @@ class MtuNegotiationManagerImpl @Inject constructor() : MtuNegotiationManager {
         deviceMtus[address] = mtu
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     override fun requestMtu(gatt: BluetoothGatt, requestedMtu: Int): Boolean {
         return gatt.requestMtu(requestedMtu)
     }

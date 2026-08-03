@@ -65,6 +65,7 @@ class GattNotificationManagerImpl(
         }
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private fun flushQueueLocked(device: BluetoothDevice) {
         if (activeNotifications.containsKey(device.address)) return
         

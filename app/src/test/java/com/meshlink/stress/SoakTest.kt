@@ -8,19 +8,48 @@ import kotlin.time.Duration.Companion.minutes
 class SoakTest {
 
     private fun assumeNightlyOrExtended() {
-        // Skip soak tests unless explicitly enabled via environment variable
+        // Skip long soak tests unless explicitly enabled via environment variable
         val runSoak = System.getenv("RUN_SOAK_TESTS") == "true"
         Assume.assumeTrue("Skipping soak test. Set RUN_SOAK_TESTS=true to run.", runSoak)
     }
 
     @Test
-    fun test1HourSoak() {
+    fun testFastSmokeSoak() {
+        assumeNightlyOrExtended()
+        // 5-minute simulated soak test
+        val scenario = stressTest {
+            nodes(10)
+            duration(5.minutes)
+            profile(NetworkFailureProfiles.TypicalBLE)
+            messages(0)
+            seed(499L)
+        }
+        val env = SoakTestEnvironment(scenario)
+        env.runSoakTest()
+    }
+
+    @Test
+    fun test30MinuteSoak() {
+        assumeNightlyOrExtended()
+        val scenario = stressTest {
+            nodes(30)
+            duration(30.minutes)
+            profile(NetworkFailureProfiles.TypicalBLE)
+            messages(0)
+            seed(500L)
+        }
+        val env = SoakTestEnvironment(scenario)
+        env.runSoakTest()
+    }
+
+    @Test
+    fun test2HourSoak() {
         assumeNightlyOrExtended()
         val scenario = stressTest {
             nodes(50)
-            duration(1.hours)
+            duration(2.hours)
             profile(NetworkFailureProfiles.TypicalBLE)
-            messages(0) // Messages are injected periodically by SoakTestEnvironment
+            messages(0)
             seed(501L)
         }
         val env = SoakTestEnvironment(scenario)
@@ -28,11 +57,11 @@ class SoakTest {
     }
 
     @Test
-    fun test6HourSoak() {
+    fun test8HourSoak() {
         assumeNightlyOrExtended()
         val scenario = stressTest {
             nodes(50)
-            duration(6.hours)
+            duration(8.hours)
             profile(NetworkFailureProfiles.TypicalBLE)
             messages(0)
             seed(502L)

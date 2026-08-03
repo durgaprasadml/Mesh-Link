@@ -188,13 +188,13 @@ fun AppNavigation(
                 
                 composable(Screen.Home.route) {
                     HomeScreen(
-                        onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                        onNavigateToNearby = { navController.navigate(Screen.Nearby.route) },
+                        onNavigateToSettings = { navController.navigateToTopLevel(Screen.Settings.route) },
+                        onNavigateToNearby = { navController.navigateToTopLevel(Screen.Nearby.route) },
                         onNavigateToChat = { address, name ->
                             navController.navigate(Screen.ChatDetail.createRoute(address, name))
                         },
                         onNavigateToBroadcast = { navController.navigate(Screen.Broadcast.route) },
-                        onNavigateToSos = { navController.navigate(Screen.Sos.route) }
+                        onNavigateToSos = { navController.navigateToTopLevel(Screen.Sos.route) }
                     )
                 }
 
@@ -254,6 +254,20 @@ fun AppNavigation(
     }
 }
 
+/**
+ * Shared helper function for navigating to top-level destinations (Home, Nearby, SOS, Settings).
+ * Ensures consistent back stack management, single-top behavior, and state preservation.
+ */
+fun NavHostController.navigateToTopLevel(route: String) {
+    if (currentDestination?.route != route) {
+        navigate(route) {
+            popUpTo(Screen.Home.route) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+}
+
 @Composable
 fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
     NavigationBar {
@@ -261,59 +275,27 @@ fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
             icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
             label = { Text("Home") },
             selected = currentRoute == Screen.Home.route,
-            onClick = {
-                if (currentRoute != Screen.Home.route) {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Home.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            }
+            onClick = { navController.navigateToTopLevel(Screen.Home.route) }
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
             label = { Text("Nearby") },
             selected = currentRoute == Screen.Nearby.route,
-            onClick = {
-                if (currentRoute != Screen.Nearby.route) {
-                    navController.navigate(Screen.Nearby.route) {
-                        popUpTo(Screen.Home.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            }
+            onClick = { navController.navigateToTopLevel(Screen.Nearby.route) }
         )
         
         NavigationBarItem(
             icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
             label = { Text("SOS") },
             selected = currentRoute == Screen.Sos.route,
-            onClick = {
-                if (currentRoute != Screen.Sos.route) {
-                    navController.navigate(Screen.Sos.route) {
-                        popUpTo(Screen.Home.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            }
+            onClick = { navController.navigateToTopLevel(Screen.Sos.route) }
         )
 
         NavigationBarItem(
             icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
             label = { Text("Settings") },
             selected = currentRoute == Screen.Settings.route,
-            onClick = {
-                if (currentRoute != Screen.Settings.route) {
-                    navController.navigate(Screen.Settings.route) {
-                        popUpTo(Screen.Home.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            }
+            onClick = { navController.navigateToTopLevel(Screen.Settings.route) }
         )
     }
 }
@@ -325,59 +307,27 @@ fun MeshNavigationRail(navController: NavHostController, currentRoute: String?) 
             icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
             label = { Text("Home") },
             selected = currentRoute == Screen.Home.route,
-            onClick = {
-                if (currentRoute != Screen.Home.route) {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Home.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            }
+            onClick = { navController.navigateToTopLevel(Screen.Home.route) }
         )
         NavigationRailItem(
             icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
             label = { Text("Nearby") },
             selected = currentRoute == Screen.Nearby.route,
-            onClick = {
-                if (currentRoute != Screen.Nearby.route) {
-                    navController.navigate(Screen.Nearby.route) {
-                        popUpTo(Screen.Home.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            }
+            onClick = { navController.navigateToTopLevel(Screen.Nearby.route) }
         )
         
         NavigationRailItem(
             icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
             label = { Text("SOS") },
             selected = currentRoute == Screen.Sos.route,
-            onClick = {
-                if (currentRoute != Screen.Sos.route) {
-                    navController.navigate(Screen.Sos.route) {
-                        popUpTo(Screen.Home.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            }
+            onClick = { navController.navigateToTopLevel(Screen.Sos.route) }
         )
 
         NavigationRailItem(
             icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
             label = { Text("Settings") },
             selected = currentRoute == Screen.Settings.route,
-            onClick = {
-                if (currentRoute != Screen.Settings.route) {
-                    navController.navigate(Screen.Settings.route) {
-                        popUpTo(Screen.Home.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            }
+            onClick = { navController.navigateToTopLevel(Screen.Settings.route) }
         )
     }
 }

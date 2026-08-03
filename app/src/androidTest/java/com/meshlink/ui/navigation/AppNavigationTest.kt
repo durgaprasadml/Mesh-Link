@@ -2,6 +2,7 @@ package com.meshlink.ui.navigation
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.navigation.testing.TestNavHostController
 import androidx.test.core.app.ApplicationProvider
@@ -91,5 +92,112 @@ class AppNavigationTest {
         // though graph start is Splash. Let's just ensure we haven't added on top of a deep stack.
         // Since we popUpTo(findStartDestination()), the stack should not keep growing infinitely.
         assertEquals(countAfterHome, countAfterNearby)
+    }
+
+    @Test
+    fun fabNavigation_opensNearby_andBottomNavHome_returnsToHome() {
+        composeTestRule.runOnUiThread {
+            navController.navigate(Screen.Home.route)
+        }
+        composeTestRule.waitForIdle()
+
+        // Tap FAB (+)
+        composeTestRule.onNodeWithContentDescription("New Chat").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(Screen.Nearby.route, navController.currentDestination?.route)
+
+        // Tap Home in Bottom Navigation
+        composeTestRule.onNodeWithContentDescription("Home").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(Screen.Home.route, navController.currentDestination?.route)
+    }
+
+    @Test
+    fun dashboardCardNavigation_returnsHome() {
+        composeTestRule.runOnUiThread {
+            navController.navigate(Screen.Home.route)
+        }
+        composeTestRule.waitForIdle()
+
+        // Tap Nearby Dashboard Card
+        composeTestRule.onNodeWithText("Nearby Devices").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(Screen.Nearby.route, navController.currentDestination?.route)
+
+        // Tap Home in Bottom Navigation
+        composeTestRule.onNodeWithContentDescription("Home").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(Screen.Home.route, navController.currentDestination?.route)
+    }
+
+    @Test
+    fun repeatedFabNavigation_doesNotDuplicateNearby() {
+        composeTestRule.runOnUiThread {
+            navController.navigate(Screen.Home.route)
+        }
+        composeTestRule.waitForIdle()
+
+        // Tap FAB (+) multiple times
+        composeTestRule.onNodeWithContentDescription("New Chat").performClick()
+        composeTestRule.waitForIdle()
+
+        val stackSizeFirstClick = navController.currentBackStack.value.size
+
+        assertEquals(Screen.Nearby.route, navController.currentDestination?.route)
+
+        // Press Home and tap FAB (+) again
+        composeTestRule.onNodeWithContentDescription("Home").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithContentDescription("New Chat").performClick()
+        composeTestRule.waitForIdle()
+
+        val stackSizeSecondClick = navController.currentBackStack.value.size
+        assertEquals(stackSizeFirstClick, stackSizeSecondClick)
+        assertEquals(Screen.Nearby.route, navController.currentDestination?.route)
+
+        // Press Home
+        composeTestRule.onNodeWithContentDescription("Home").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(Screen.Home.route, navController.currentDestination?.route)
+    }
+
+    @Test
+    fun allTopLevelNavigationUsesSharedBackStack() {
+        composeTestRule.runOnUiThread {
+            navController.navigate(Screen.Home.route)
+        }
+        composeTestRule.waitForIdle()
+
+        val baseStackSize = navController.currentBackStack.value.size
+
+        // Home -> Nearby (via FAB)
+        composeTestRule.onNodeWithContentDescription("New Chat").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(Screen.Nearby.route, navController.currentDestination?.route)
+
+        // Nearby -> SOS (via Bottom Nav)
+        composeTestRule.onNodeWithContentDescription("SOS").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(Screen.Sos.route, navController.currentDestination?.route)
+
+        // SOS -> Settings (via Bottom Nav)
+        composeTestRule.onNodeWithContentDescription("Settings").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(Screen.Settings.route, navController.currentDestination?.route)
+
+        // Settings -> Home (via Bottom Nav)
+        composeTestRule.onNodeWithContentDescription("Home").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(Screen.Home.route, navController.currentDestination?.route)
+
+        // Verify back stack remains stable
+        val finalStackSize = navController.currentBackStack.value.size
+        assertEquals(baseStackSize, finalStackSize)
     }
 }

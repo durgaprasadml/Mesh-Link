@@ -1,5 +1,10 @@
 # Mesh Link ProGuard / R8 Rules
 
+# Preserve stacktrace line numbers for mapping file crash de-obfuscation
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+-keepattributes *Annotation*,Signature,InnerClasses
+
 # Hilt / Dagger
 -keep class dagger.** { *; }
 -keep class dagger.hilt.** { *; }
@@ -26,7 +31,16 @@
 # AndroidX Navigation
 -keepnames class androidx.navigation.NavType { *; }
 
+# Image & Serialization Libraries
+-keep class io.coilkt.** { *; }
+-keepclassmembers class * implements kotlinx.serialization.KSerializer {
+    *** INSTANCE;
+}
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 
-# Ensure domain models used with Reflection or Serialization are kept
+# Domain models & entities used in Database/Serialization
 -keep class com.meshlink.domain.model.** { *; }
 -keep class com.meshlink.database.data.local.** { *; }
+

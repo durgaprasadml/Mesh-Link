@@ -4,6 +4,8 @@ object PrivacyLogInterceptor {
 
     private val MAC_ADDRESS_REGEX = Regex("([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})")
     private val IPV4_REGEX = Regex("\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b")
+    private val MESH_ID_REGEX = Regex("mesh_[0-9a-fA-F]{8,}")
+    private val HEX_KEY_REGEX = Regex("\\b[0-9a-fA-F]{32,64}\\b")
     
     fun redact(message: String): String {
         var redacted = message
@@ -13,6 +15,12 @@ object PrivacyLogInterceptor {
         
         // Redact IPv4 addresses
         redacted = IPV4_REGEX.replace(redacted, "[REDACTED_IP]")
+
+        // Redact Mesh IDs
+        redacted = MESH_ID_REGEX.replace(redacted, "[REDACTED_MESH_ID]")
+
+        // Redact Raw Hex Keys & Payloads
+        redacted = HEX_KEY_REGEX.replace(redacted, "[REDACTED_HEX_KEY]")
         
         return redacted
     }
@@ -22,7 +30,8 @@ object PrivacyLogInterceptor {
         val result = mutableMapOf<String, String>()
         for ((key, value) in metadata) {
             val lowerKey = key.lowercase()
-            if (lowerKey.contains("token") || lowerKey.contains("key") || lowerKey.contains("secret") || lowerKey.contains("password")) {
+            if (lowerKey.contains("token") || lowerKey.contains("key") || lowerKey.contains("secret") 
+                || lowerKey.contains("password") || lowerKey.contains("payload") || lowerKey.contains("meshid")) {
                 result[key] = "[REDACTED_SENSITIVE]"
             } else {
                 result[key] = redact(value)

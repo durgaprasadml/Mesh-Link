@@ -1,15 +1,6 @@
 package com.meshlink.security.data
 
-
-
-enum class TrustLevel {
-    UNKNOWN,
-    DISCOVERED,
-    VERIFIED,
-    TRUSTED,
-    BLOCKED,
-    REVOKED
-}
+typealias TrustLevel = com.meshlink.trust.TrustLevel
 
 enum class VerificationStatus {
     NOT_VERIFIED,

@@ -22,10 +22,13 @@ import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.meshlink.domain.model.BleDevice
 
+import androidx.compose.runtime.Immutable
+
 enum class SosStatus {
     SAFE, BROADCASTING, DELIVERED, FAILED
 }
 
+@Immutable
 data class SosUiState(
     val status: SosStatus = SosStatus.SAFE,
     val isFetchingLocation: Boolean = false,

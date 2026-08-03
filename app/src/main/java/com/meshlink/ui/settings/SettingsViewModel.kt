@@ -9,7 +9,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.Immutable
 
+@Immutable
 data class SettingsUiState(
     val user: User? = null,
     

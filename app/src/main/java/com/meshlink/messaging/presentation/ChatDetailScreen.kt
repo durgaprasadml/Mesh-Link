@@ -71,22 +71,24 @@ fun ChatDetailScreen(
     }
 
     var previousLastMessageId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(uiState.messages) {
-        val currentLast = uiState.messages.lastOrNull()?.messageId
-        if (currentLast != null && currentLast != previousLastMessageId) {
+    val lastMessageId = uiState.messages.lastOrNull()?.messageId
+    LaunchedEffect(lastMessageId) {
+        if (lastMessageId != null && lastMessageId != previousLastMessageId) {
             listState.animateScrollToItem(uiState.messages.size - 1)
         }
-        previousLastMessageId = currentLast
+        previousLastMessageId = lastMessageId
     }
 
-    LaunchedEffect(uiState.messages.lastOrNull()?.messageId) {
+    LaunchedEffect(lastMessageId) {
         if (uiState.messages.isNotEmpty()) {
             viewModel.markChatAsRead()
         }
     }
 
     if (fullscreenMessageId != null) {
-        val mediaMessages = uiState.messages.filter { it.messageType == com.meshlink.domain.model.MessageType.IMAGE }
+        val mediaMessages = remember(uiState.messages) {
+            uiState.messages.filter { it.messageType == com.meshlink.domain.model.MessageType.IMAGE }
+        }
         val initialIndex = mediaMessages.indexOfFirst { it.messageId == fullscreenMessageId }.coerceAtLeast(0)
         
         Dialog(
@@ -260,7 +262,7 @@ fun ChatDetailScreen(
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small)
         ) {
             itemsIndexed(uiState.messages, key = { _, it -> it.messageId }, contentType = { _, _ -> "message_item" }) { index, msg ->
-                val showDateSeparator = shouldShowDateSeparator(
+                val showDateSeparator = com.meshlink.ui.util.DateTimeUtils.shouldShowDateSeparator(
                     currentTimestamp = msg.timestamp,
                     previousTimestamp = if (index > 0) uiState.messages[index - 1].timestamp else null
                 )
@@ -307,15 +309,7 @@ fun ChatDetailScreen(
     }
 }
 
-private fun shouldShowDateSeparator(currentTimestamp: Long, previousTimestamp: Long?): Boolean {
-    if (previousTimestamp == null) return true
-    
-    val currentCalendar = Calendar.getInstance().apply { timeInMillis = currentTimestamp }
-    val previousCalendar = Calendar.getInstance().apply { timeInMillis = previousTimestamp }
-    
-    return currentCalendar.get(Calendar.YEAR) != previousCalendar.get(Calendar.YEAR) ||
-           currentCalendar.get(Calendar.DAY_OF_YEAR) != previousCalendar.get(Calendar.DAY_OF_YEAR)
-}
+
 
 @Composable
 fun AttachmentMenu(

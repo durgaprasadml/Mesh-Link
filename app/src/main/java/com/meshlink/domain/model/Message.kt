@@ -1,7 +1,8 @@
 package com.meshlink.domain.model
 
+import androidx.compose.runtime.Immutable
 
-
+@Immutable
 data class Message(
     val messageId: String,
     val chatId: String,

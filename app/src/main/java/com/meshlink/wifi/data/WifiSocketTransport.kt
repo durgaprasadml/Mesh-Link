@@ -332,8 +332,8 @@ class WifiSocketTransport @Inject constructor(
             val requirement = PacketEncryptionPolicy.getRequirement(packetToSend.type)
             if (requirement == EncryptionRequirement.REQUIRED || requirement == EncryptionRequirement.OPTIONAL) {
                 val aadResult = try { sessionManager.generateAad(packetToSend.targetId) } catch (_: Throwable) { null }
-                val aadBytes = (aadResult as? Pair<*, *>)?.first as? ByteArray
-                val aadPrefix = ((aadResult as? Pair<*, *>)?.second as? String) ?: ""
+                val aadBytes = if (aadResult is Pair<*, *>) aadResult.first as? ByteArray else null
+                val aadPrefix = if (aadResult is Pair<*, *>) (aadResult.second as? String) ?: "" else ""
                 val encryptedResult = try {
                     cryptoManager.encryptOrPassthrough(
                         packetToSend.payload,
@@ -344,9 +344,13 @@ class WifiSocketTransport @Inject constructor(
                         aadBytes
                     )
                 } catch (_: Throwable) { null }
-                if (encryptedResult != null && encryptedResult.second) {
-                    val finalPayload = if (aadPrefix.isNotEmpty()) "$aadPrefix${encryptedResult.first}" else encryptedResult.first
-                    packetToSend = packetToSend.copy(payload = finalPayload, encrypted = true)
+                val encryptedPair = encryptedResult as? Pair<*, *>
+                if (encryptedPair != null && encryptedPair.second == true) {
+                    val ciphertext = encryptedPair.first as? String
+                    if (ciphertext != null) {
+                        val finalPayload = if (aadPrefix.isNotEmpty()) "$aadPrefix$ciphertext" else ciphertext
+                        packetToSend = packetToSend.copy(payload = finalPayload, encrypted = true)
+                    }
                 }
             }
         }

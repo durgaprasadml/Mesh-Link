@@ -204,15 +204,17 @@ private fun BroadcastBubble(msg: Message) {
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
     
     val formattedTime = remember(msg.timestamp) {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(msg.timestamp))
+        com.meshlink.ui.util.DateTimeUtils.formatTimeHHMM(msg.timestamp)
     }
     val senderName = remember(msg.senderId) {
         com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId)
     }
 
-    val semanticDescription = buildString {
-        if (isMe) append("Your broadcast: ") else append("Broadcast from $senderName: ")
-        append("${msg.text}. Sent at $formattedTime.")
+    val semanticDescription = remember(isMe, senderName, msg.text, formattedTime) {
+        buildString {
+            if (isMe) append("Your broadcast: ") else append("Broadcast from $senderName: ")
+            append("${msg.text}. Sent at $formattedTime.")
+        }
     }
 
     val shape = if (isMe) {

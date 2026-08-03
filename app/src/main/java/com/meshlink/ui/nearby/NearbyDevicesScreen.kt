@@ -50,7 +50,6 @@ fun NearbyDevicesScreen(
             viewModel.startDiscovery()
         }
 
-        var searchQuery by remember { mutableStateOf("") }
         var isSearchActive by remember { mutableStateOf(false) }
         var connectingToAddress by remember { mutableStateOf<String?>(null) }
         var selectedDeviceAddress by remember { mutableStateOf<String?>(null) }
@@ -58,17 +57,6 @@ fun NearbyDevicesScreen(
         val haptic = LocalHapticFeedback.current
         val listState = rememberLazyListState()
         val coroutineScope = rememberCoroutineScope()
-
-        val filteredDevices = remember(searchQuery, uiState.devices) {
-            if (searchQuery.isBlank()) {
-                uiState.devices
-            } else {
-                uiState.devices.filter { 
-                    it.name.contains(searchQuery, ignoreCase = true) || 
-                    it.address.contains(searchQuery, ignoreCase = true)
-                }
-            }
-        }
 
         AnimatedErrorDialog(
             visible = uiState.errorMessage != null,
@@ -138,7 +126,7 @@ fun NearbyDevicesScreen(
                         onNodeSelected = { device ->
                             selectedDeviceAddress = if (selectedDeviceAddress == device.address) null else device.address
                             // Scroll list to selected device if present
-                            val index = filteredDevices.indexOfFirst { it.address == device.address }
+                            val index = uiState.devices.indexOfFirst { it.address == device.address }
                             if (index >= 0) {
                                 coroutineScope.launch {
                                     listState.animateScrollToItem(index)
@@ -165,8 +153,8 @@ fun NearbyDevicesScreen(
                     SearchBar(
                         inputField = {
                             SearchBarDefaults.InputField(
-                                query = searchQuery,
-                                onQueryChange = { searchQuery = it },
+                                query = uiState.searchQuery,
+                                onQueryChange = { viewModel.onSearchQueryChanged(it) },
                                 onSearch = { isSearchActive = false },
                                 expanded = isSearchActive,
                                 onExpandedChange = { isSearchActive = it },
@@ -174,8 +162,8 @@ fun NearbyDevicesScreen(
                                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search icon") },
                                 trailingIcon = {
                                     Row {
-                                        if (searchQuery.isNotEmpty()) {
-                                            IconButton(onClick = { searchQuery = "" }) {
+                                        if (uiState.searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
                                                 Icon(Icons.Default.Clear, contentDescription = "Clear search query")
                                             }
                                         }
@@ -220,20 +208,31 @@ fun NearbyDevicesScreen(
                         },
                         expanded = isSearchActive,
                         onExpandedChange = { isSearchActive = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = SearchBarDefaults.colors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
-                    ) {
-                        // Real-time results handled below in list
-                    }
+                        modifier = Modifier.fillMaxWidth()
+                    ) { }
+                }
+
+                // Interactive Topological Canvas Map (Weight 0.38)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.38f)
+                        .padding(horizontal = MeshTheme.spacing.mediumLarge)
+                ) {
+                    MeshTopologyCanvas(
+                        devices = uiState.devices,
+                        selectedAddress = selectedDeviceAddress,
+                        onNodeSelected = { device ->
+                            selectedDeviceAddress = device.address
+                        }
+                    )
                 }
 
                 // Device List or Empty State
-                if (filteredDevices.isEmpty()) {
+                if (uiState.devices.isEmpty()) {
                     MeshScanningEmptyState(
-                        title = if (searchQuery.isBlank()) "Scanning for Mesh Nodes" else "No matching peers",
-                        description = if (searchQuery.isBlank()) "Looking for active Mesh Link devices over BLE..." else "Try searching with a different device name or MAC address.",
+                        title = if (uiState.searchQuery.isBlank()) "Scanning for Mesh Nodes" else "No matching peers",
+                        description = if (uiState.searchQuery.isBlank()) "Looking for active Mesh Link devices over BLE..." else "Try searching with a different device name or MAC address.",
                         modifier = Modifier.weight(0.62f)
                     )
                 } else {
@@ -246,7 +245,7 @@ fun NearbyDevicesScreen(
                         verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                     ) {
                         items(
-                            items = filteredDevices, 
+                            items = uiState.devices, 
                             key = { it.address }, 
                             contentType = { "device_item" }
                         ) { device ->

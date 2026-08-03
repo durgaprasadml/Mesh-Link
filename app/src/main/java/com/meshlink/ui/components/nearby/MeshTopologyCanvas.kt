@@ -102,8 +102,8 @@ fun MeshTopologyCanvas(
     val dashEffect = remember { PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f) }
     val stroke2 = remember { Stroke(width = 2f) }
 
-    // Keep track of calculated positions for tap detection
-    val calculatedPositions = remember { mutableStateListOf<NodePosition>() }
+    // Keep track of calculated positions for tap detection without mutating Compose state during draw
+    val nodePositionsRef = remember { java.util.concurrent.atomic.AtomicReference<List<NodePosition>>(emptyList()) }
 
     Box(
         modifier = modifier
@@ -111,10 +111,10 @@ fun MeshTopologyCanvas(
             .semantics {
                 contentDescription = "Interactive Mesh Network Topology showing ${devices.size} nearby devices and active connections"
             }
-            .pointerInput(devices, calculatedPositions) {
+            .pointerInput(devices) {
                 detectTapGestures { tapOffset ->
-                    // Check if tap hit any node
-                    val tappedNode = calculatedPositions.firstOrNull { nodePos ->
+                    val currentPositions = nodePositionsRef.get()
+                    val tappedNode = currentPositions.firstOrNull { nodePos ->
                         val dx = tapOffset.x - nodePos.centerOffset.x
                         val dy = tapOffset.y - nodePos.centerOffset.y
                         sqrt(dx * dx + dy * dy) <= nodePos.radiusPx * 1.8f
@@ -130,9 +130,7 @@ fun MeshTopologyCanvas(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2, size.height / 2)
             val maxCanvasRadius = (size.width.coerceAtMost(size.height) / 2f) * 0.88f
-
-            // Clear previously calculated positions for hit testing
-            calculatedPositions.clear()
+            val localCalculatedPositions = ArrayList<NodePosition>()
 
             // 1. DRAW RADAR SCANNING RIPPLES
             val wave1Radius = maxCanvasRadius * radarProgress1
@@ -182,7 +180,7 @@ fun MeshTopologyCanvas(
                         val nodePos = Offset(posX, posY)
 
                         // Store position for tap gesture hit testing
-                        calculatedPositions.add(NodePosition(device, nodePos, baseNodeRadiusPx))
+                        localCalculatedPositions.add(NodePosition(device, nodePos, baseNodeRadiusPx))
 
                         // CONNECTION LINE VISUALIZATION
                         val isWeak = device.rssi < -85
@@ -308,6 +306,8 @@ fun MeshTopologyCanvas(
                 radius = centerBreathingRadius * 0.3f,
                 center = center
             )
+
+            nodePositionsRef.set(localCalculatedPositions)
         }
     }
 }

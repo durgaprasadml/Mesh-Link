@@ -87,28 +87,33 @@ fun MessageBubble(
         RoundedCornerShape(topStart = MeshTheme.spacing.small, topEnd = MeshTheme.spacing.large, bottomStart = MeshTheme.spacing.large, bottomEnd = MeshTheme.spacing.large)
     }
 
-    val semanticDescription = buildString {
-        append(if (isMe) "Sent message. " else "Received message. ")
-        when (message.messageType) {
-            MessageType.TEXT -> append(message.text)
-            MessageType.IMAGE -> append("Photo.")
-            MessageType.VOICE -> append("Voice note.")
-            MessageType.LOCATION -> append("Location shared.")
-            MessageType.SOS -> append("SOS Emergency alert.")
+    val formattedTimeText = remember(message.timestamp) {
+        com.meshlink.ui.util.DateTimeUtils.formatTimeHHMM(message.timestamp)
+    }
 
-        }
-        append(" at ${formatTime(message.timestamp)}. ")
-        if (isMe) {
-            val statusStr = when (message.status) {
-                DeliveryStatus.QUEUED, DeliveryStatus.PENDING, DeliveryStatus.SENDING, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.WAITING_FOR_ACK -> "sending"
-                DeliveryStatus.SENT -> "sent"
-                DeliveryStatus.DELIVERED, DeliveryStatus.RELAYED, DeliveryStatus.SEEN -> "delivered"
-                DeliveryStatus.FAILED, DeliveryStatus.EXPIRED, DeliveryStatus.CANCELLED, DeliveryStatus.PERMANENT_FAILURE -> "failed"
+    val semanticDescription = remember(message.messageId, message.status, message.timestamp, isMe, isSelected) {
+        buildString {
+            append(if (isMe) "Sent message. " else "Received message. ")
+            when (message.messageType) {
+                MessageType.TEXT -> append(message.text)
+                MessageType.IMAGE -> append("Photo.")
+                MessageType.VOICE -> append("Voice note.")
+                MessageType.LOCATION -> append("Location shared.")
+                MessageType.SOS -> append("SOS Emergency alert.")
             }
-            append("Status: $statusStr. ")
-        }
-        if (isSelected) {
-            append("Selected. ")
+            append(" at $formattedTimeText. ")
+            if (isMe) {
+                val statusStr = when (message.status) {
+                    DeliveryStatus.QUEUED, DeliveryStatus.PENDING, DeliveryStatus.SENDING, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.WAITING_FOR_ACK -> "sending"
+                    DeliveryStatus.SENT -> "sent"
+                    DeliveryStatus.DELIVERED, DeliveryStatus.RELAYED, DeliveryStatus.SEEN -> "delivered"
+                    DeliveryStatus.FAILED, DeliveryStatus.EXPIRED, DeliveryStatus.CANCELLED, DeliveryStatus.PERMANENT_FAILURE -> "failed"
+                }
+                append("Status: $statusStr. ")
+            }
+            if (isSelected) {
+                append("Selected. ")
+            }
         }
     }
 
@@ -361,7 +366,7 @@ fun MessageBubble(
 
             if (!isSos) {
                 val formattedTime = androidx.compose.runtime.remember(message.timestamp) {
-                    formatTime(message.timestamp)
+                    com.meshlink.ui.util.DateTimeUtils.formatTimeHHMM(message.timestamp)
                 }
 
                 // Timestamp + status row
@@ -372,7 +377,7 @@ fun MessageBubble(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = formattedTime,
+                        text = formattedTimeText,
                         style = MaterialTheme.typography.labelSmall,
                         color = textColor.copy(alpha = 0.7f)
                     )
@@ -433,9 +438,4 @@ fun MessageBubble(
             }
         }
     }
-}
-
-private fun formatTime(timeInMillis: Long): String {
-    val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-    return sdf.format(Date(timeInMillis))
 }

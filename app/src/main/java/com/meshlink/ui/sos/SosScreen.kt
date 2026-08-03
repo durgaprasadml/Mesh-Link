@@ -517,7 +517,7 @@ fun EmergencyInfoCard(state: SosUiState, onRefresh: () -> Unit) {
                 InfoItem(
                     icon = Icons.Default.Schedule,
                     title = "Timestamp",
-                    value = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date()),
+                    value = com.meshlink.ui.util.DateTimeUtils.formatTimeHHMMSS(System.currentTimeMillis()),
                     modifier = Modifier.weight(1f)
                 )
             }

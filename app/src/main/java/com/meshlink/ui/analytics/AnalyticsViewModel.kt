@@ -12,7 +12,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.Immutable
 
+@Immutable
 data class AnalyticsUiState(
     val stats: MeshStats = MeshStats(),
     val recentLog: List<RelayLogEntry> = emptyList(),

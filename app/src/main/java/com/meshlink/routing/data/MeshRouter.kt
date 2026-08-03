@@ -48,7 +48,10 @@ internal class MeshRouter @Inject constructor(
 
     override var localMeshId: String = ""
 
-    private val _incomingPayloads = MutableSharedFlow<Pair<String, MeshPacket>>(extraBufferCapacity = 200)
+    private val _incomingPayloads = MutableSharedFlow<Pair<String, MeshPacket>>(
+        extraBufferCapacity = 500,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+    )
     override val incomingPayloads: SharedFlow<Pair<String, MeshPacket>> = _incomingPayloads.asSharedFlow()
     
     private val _packetEvents = MutableSharedFlow<com.meshlink.routing.api.PacketStatusEvent>(
@@ -253,9 +256,7 @@ internal class MeshRouter @Inject constructor(
                 routingEngine.routeManager.recordDeliverySuccess(packet.senderId, immediateSenderAddress, 100L)
             }
             
-            applicationScope.launch {
-                _incomingPayloads.emit(packet.senderId to packet)
-            }
+            _incomingPayloads.tryEmit(packet.senderId to packet)
         }
 
         // Packets FOR US: do not forward or store

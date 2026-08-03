@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class BroadcastUiState(
     val messages: List<Message> = emptyList()
 )

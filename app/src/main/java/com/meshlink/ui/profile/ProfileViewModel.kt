@@ -12,7 +12,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.Immutable
 
+@Immutable
 data class ProfileUiState(
     val isLoading: Boolean = false,
     val user: User? = null,

@@ -174,7 +174,7 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = MeshTheme.spacing.mediumLarge),
                         horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
                     ) {
-                        item(contentType = "dashboard_card") {
+                        item(key = "dashboard_nearby", contentType = "dashboard_card") {
                             DashboardCard(
                                 icon = Icons.Default.Wifi,
                                 title = "Nearby Devices",
@@ -184,7 +184,7 @@ fun HomeScreen(
                                 iconTintColor = MaterialTheme.colorScheme.primary
                             )
                         }
-                        item(contentType = "dashboard_card") {
+                        item(key = "dashboard_broadcast", contentType = "dashboard_card") {
                             DashboardCard(
                                 icon = Icons.Default.Campaign,
                                 title = "Broadcasts",
@@ -194,7 +194,7 @@ fun HomeScreen(
                                 iconTintColor = MaterialTheme.colorScheme.tertiary
                             )
                         }
-                        item(contentType = "dashboard_card") {
+                        item(key = "dashboard_sos", contentType = "dashboard_card") {
                             DashboardCard(
                                 icon = Icons.Default.Warning,
                                 title = "SOS",

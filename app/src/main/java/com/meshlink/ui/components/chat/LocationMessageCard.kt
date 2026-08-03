@@ -95,8 +95,7 @@ fun LocationMessageCard(
     }
 
     val formattedTime = remember(message.timestamp) {
-        val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-        sdf.format(Date(message.timestamp))
+        com.meshlink.ui.util.DateTimeUtils.formatTimeHHMM(message.timestamp)
     }
 
     // Accessible screen reader narrative

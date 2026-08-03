@@ -19,6 +19,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class HomeUiState(
     val user: User? = null,
     val nearbyDevices: List<BleDevice> = emptyList(),
@@ -37,7 +40,7 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val uiState: StateFlow<HomeUiState> = combine(
-        user,
+        userRepository.localUser,
         meshRepository.scannedDevices,
         chatDao.getAllChats()
     ) { localUser, scannedDevices, chats ->

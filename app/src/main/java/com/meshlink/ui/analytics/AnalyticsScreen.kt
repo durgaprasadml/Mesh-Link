@@ -65,12 +65,12 @@ fun AnalyticsScreen(
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumLarge)
         ) {
             // ── Delivery Ring ──
-            item {
+            item(key = "delivery_rate_card", contentType = "delivery_card") {
                 DeliveryRateCard(uiState.stats)
             }
 
             // ── Stats Grid ──
-            item {
+            item(key = "stats_grid_sent_delivered", contentType = "stats_grid") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
@@ -92,7 +92,7 @@ fun AnalyticsScreen(
                 }
             }
 
-            item {
+            item(key = "stats_grid_relayed_dropped", contentType = "stats_grid") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
@@ -115,7 +115,7 @@ fun AnalyticsScreen(
             }
 
             // ── Avg Hop Count + Active Nodes ──
-            item {
+            item(key = "stats_grid_hops_nodes", contentType = "stats_grid") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
@@ -139,24 +139,24 @@ fun AnalyticsScreen(
 
             // ── Hop Distribution Chart ──
             if (uiState.hopDistribution.isNotEmpty()) {
-                item {
+                item(key = "hop_distribution_card", contentType = "distribution_card") {
                     HopDistributionCard(uiState.hopDistribution)
                 }
             }
 
             // ── Active Nodes List ──
             if (uiState.activeNodes.isNotEmpty()) {
-                item {
+                item(key = "active_nodes_card", contentType = "nodes_card") {
                     ActiveNodesCard(uiState.activeNodes)
                 }
             }
 
             // ── Relay Log ──
-            item {
+            item(key = "recent_activity_title", contentType = "title") {
                 Text("Recent Activity", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
             }
 
-            item {
+            item(key = "recent_activity_log", contentType = "log_list") {
                 AnimatedContent<Boolean>(
                     targetState = uiState.recentLog.isEmpty(),
                     label = "recent_log_empty_state_transition"
@@ -180,7 +180,7 @@ fun AnalyticsScreen(
                 }
             }
             // Bottom spacer
-            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
+            item(key = "bottom_spacer", contentType = "spacer") { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 }
@@ -513,6 +513,5 @@ fun RelayLogCard(entry: RelayLogEntry) {
 }
 
 private fun formatLogTime(ts: Long): String {
-    val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-    return sdf.format(Date(ts))
+    return com.meshlink.ui.util.DateTimeUtils.formatTimeHHMMSS(ts)
 }

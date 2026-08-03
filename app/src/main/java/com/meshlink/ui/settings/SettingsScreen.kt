@@ -147,6 +147,82 @@ fun SettingsHome(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
+    val allSettings = remember {
+        listOf(
+            SettingCategory(
+                title = "Profile & Identity",
+                items = listOf(
+                    SettingRowData("User Profile", "Display name, Node ID & status", Icons.Default.Person, SettingsDestination.PROFILE)
+                )
+            ),
+            SettingCategory(
+                title = "Network & Connectivity",
+                items = listOf(
+                    SettingRowData("Network & Transport", "BLE, Wi-Fi Direct, Relaying & Hops", Icons.Default.WifiTethering, SettingsDestination.NETWORK)
+                )
+            ),
+            SettingCategory(
+                title = "Messaging & Media",
+                items = listOf(
+                    SettingRowData("Messaging & Media", "Quality, Retry, Receipts & Retention", Icons.Default.Chat, SettingsDestination.MESSAGING)
+                )
+            ),
+            SettingCategory(
+                title = "Safety & Emergency",
+                items = listOf(
+                    SettingRowData("Emergency SOS", "Hotline (112), Broadcasts & Live Location", Icons.Default.WarningAmber, SettingsDestination.EMERGENCY)
+                )
+            ),
+            SettingCategory(
+                title = "Storage & Data",
+                items = listOf(
+                    SettingRowData("Storage & Data", "Database, Cache, Backup & Export", Icons.Default.Storage, SettingsDestination.STORAGE)
+                )
+            ),
+            SettingCategory(
+                title = "Appearance & Customization",
+                items = listOf(
+                    SettingRowData("Appearance", "Theme, Dynamic Color, Font Scale & Motion", Icons.Default.Palette, SettingsDestination.APPEARANCE)
+                )
+            ),
+            SettingCategory(
+                title = "Notifications & Alerts",
+                items = listOf(
+                    SettingRowData("Notifications", "Messages, SOS Alerts, Sounds & Vibration", Icons.Default.Notifications, SettingsDestination.NOTIFICATIONS)
+                )
+            ),
+            SettingCategory(
+                title = "Privacy & Security",
+                items = listOf(
+                    SettingRowData("Privacy & Security", "AES-256 E2EE, Biometrics & Trusted Keys", Icons.Default.Security, SettingsDestination.PRIVACY)
+                )
+            ),
+            SettingCategory(
+                title = "Diagnostics & Tools",
+                items = listOf(
+                    SettingRowData("Developer Options", "Mesh Topology Graph, Logs & BLE Specs", Icons.Default.BugReport, SettingsDestination.DEVELOPER)
+                )
+            ),
+            SettingCategory(
+                title = "App Info & Support",
+                items = listOf(
+                    SettingRowData("About Mesh Link", "Version 1.4.0, Open Source Licenses & GitHub", Icons.Default.Info, SettingsDestination.ABOUT)
+                )
+            )
+        )
+    }
+
+    val filteredCategories = remember(searchQuery, allSettings) {
+        allSettings.mapNotNull { category ->
+            val filteredItems = category.items.filter {
+                searchQuery.isEmpty() ||
+                        it.title.contains(searchQuery, ignoreCase = true) ||
+                        it.subtitle.contains(searchQuery, ignoreCase = true)
+            }
+            if (filteredItems.isNotEmpty()) category.copy(items = filteredItems) else null
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -283,103 +359,32 @@ fun SettingsHome(
             }
 
             // Categorized Settings Cards
-            val allSettings = listOf(
-                SettingCategory(
-                    title = "Profile & Identity",
-                    items = listOf(
-                        SettingRowData("User Profile", "Display name, Node ID & status", Icons.Default.Person, SettingsDestination.PROFILE)
+            filteredCategories.forEach { category ->
+                item(key = "setting_cat_${category.title}", contentType = "setting_category") {
+                    Text(
+                        text = category.title,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = MeshTheme.spacing.small)
                     )
-                ),
-                SettingCategory(
-                    title = "Network & Connectivity",
-                    items = listOf(
-                        SettingRowData("Network & Transport", "BLE, Wi-Fi Direct, Relaying & Hops", Icons.Default.WifiTethering, SettingsDestination.NETWORK)
-                    )
-                ),
-                SettingCategory(
-                    title = "Messaging & Media",
-                    items = listOf(
-                        SettingRowData("Messaging & Media", "Quality, Retry, Receipts & Retention", Icons.Default.Chat, SettingsDestination.MESSAGING)
-                    )
-                ),
-                SettingCategory(
-                    title = "Safety & Emergency",
-                    items = listOf(
-                        SettingRowData("Emergency SOS", "Hotline (112), Broadcasts & Live Location", Icons.Default.WarningAmber, SettingsDestination.EMERGENCY)
-                    )
-                ),
-                SettingCategory(
-                    title = "Storage & Data",
-                    items = listOf(
-                        SettingRowData("Storage & Data", "Database, Cache, Backup & Export", Icons.Default.Storage, SettingsDestination.STORAGE)
-                    )
-                ),
-                SettingCategory(
-                    title = "Appearance & Customization",
-                    items = listOf(
-                        SettingRowData("Appearance", "Theme, Dynamic Color, Font Scale & Motion", Icons.Default.Palette, SettingsDestination.APPEARANCE)
-                    )
-                ),
-                SettingCategory(
-                    title = "Notifications & Alerts",
-                    items = listOf(
-                        SettingRowData("Notifications", "Messages, SOS Alerts, Sounds & Vibration", Icons.Default.Notifications, SettingsDestination.NOTIFICATIONS)
-                    )
-                ),
-                SettingCategory(
-                    title = "Privacy & Security",
-                    items = listOf(
-                        SettingRowData("Privacy & Security", "AES-256 E2EE, Biometrics & Trusted Keys", Icons.Default.Security, SettingsDestination.PRIVACY)
-                    )
-                ),
-                SettingCategory(
-                    title = "Diagnostics & Tools",
-                    items = listOf(
-                        SettingRowData("Developer Options", "Mesh Topology Graph, Logs & BLE Specs", Icons.Default.BugReport, SettingsDestination.DEVELOPER)
-                    )
-                ),
-                SettingCategory(
-                    title = "App Info & Support",
-                    items = listOf(
-                        SettingRowData("About Mesh Link", "Version 1.4.0, Open Source Licenses & GitHub", Icons.Default.Info, SettingsDestination.ABOUT)
-                    )
-                )
-            )
-
-            allSettings.forEach { category ->
-                val filteredItems = category.items.filter {
-                    searchQuery.isEmpty() ||
-                            it.title.contains(searchQuery, ignoreCase = true) ||
-                            it.subtitle.contains(searchQuery, ignoreCase = true)
-                }
-
-                if (filteredItems.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = category.title,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = MeshTheme.spacing.small)
-                        )
-                        Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-                        ElevatedCard(
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            shape = MeshTheme.shapes.large
-                        ) {
-                            Column {
-                                filteredItems.forEachIndexed { index, itemData ->
-                                    SettingsItemRow(
-                                        title = itemData.title,
-                                        subtitle = itemData.subtitle,
-                                        icon = itemData.icon,
-                                        onClick = { onNavigate(itemData.destination) }
-                                    )
-                                    if (index < filteredItems.size - 1) {
-                                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                                    }
+                    Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
+                    ElevatedCard(
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = MeshTheme.shapes.large
+                    ) {
+                        Column {
+                            category.items.forEachIndexed { index, itemData ->
+                                SettingsItemRow(
+                                    title = itemData.title,
+                                    subtitle = itemData.subtitle,
+                                    icon = itemData.icon,
+                                    onClick = { onNavigate(itemData.destination) }
+                                )
+                                if (index < category.items.size - 1) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.background)
                                 }
                             }
                         }
@@ -387,7 +392,7 @@ fun SettingsHome(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
+            item(key = "bottom_spacer", contentType = "spacer") { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 }

@@ -97,6 +97,15 @@ class IntelligentTransportManagerTest {
 
     @Test
     fun `sendPacket automatically falls back to BLE when Wi-Fi Direct is unavailable for small non-media payloads`() = runTest {
+        every { settingsRepository.preferredTransport } returns flowOf("WIFI_DIRECT")
+        manager = IntelligentTransportManager(
+            bleTransport = bleTransport,
+            wifiTransport = wifiTransport,
+            routeOptimizer = routeOptimizer,
+            settingsRepository = settingsRepository,
+            metrics = metrics,
+            applicationScope = testScope
+        )
         val smallTextPacket = MeshPacket(
             packetId = "pkt_small_text",
             senderId = "me",
@@ -115,17 +124,18 @@ class IntelligentTransportManagerTest {
     }
 
     @Test
-    fun `sendPacket does not fall back to BLE when Wi-Fi Direct is unavailable for media packets`() = runTest {
-        val smallMediaPacket = MeshPacket(
-            packetId = "pkt_small_media",
+    fun `sendPacket does not fall back to BLE when Wi-Fi Direct is unavailable for large media packets`() = runTest {
+        val largeBytes = ByteArray(60_000) { 0x01 }
+        val largeMediaPacket = MeshPacket(
+            packetId = "pkt_large_media_no_fallback",
             senderId = "me",
             targetId = "peer",
-            payload = "Small Image Data Bytes",
+            payload = String(largeBytes, Charsets.ISO_8859_1),
             type = PacketType.MEDIA_CHUNK,
             mimeType = "image/png"
         )
 
-        val result = manager.sendPacket(smallMediaPacket)
+        val result = manager.sendPacket(largeMediaPacket)
 
         assertTrue(result is MeshResult.Error)
         coVerify(exactly = 0) { bleTransport.broadcastPacket(any(), any(), any()) }

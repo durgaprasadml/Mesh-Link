@@ -80,8 +80,7 @@ fun SosEmergencyCard(
     )
 
     val formattedTime = remember(message.timestamp) {
-        val sdf = SimpleDateFormat("h:mm a", Locale.getDefault())
-        sdf.format(Date(message.timestamp))
+        com.meshlink.ui.util.DateTimeUtils.formatTime12Hour(message.timestamp)
     }
 
     val hasLocation = message.latitude != null && message.longitude != null

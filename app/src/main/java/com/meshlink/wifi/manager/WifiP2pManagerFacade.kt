@@ -37,7 +37,7 @@ class WifiP2pManagerFacade @Inject constructor(
     companion object {
         private const val TAG = "WifiP2pManagerFacade"
         private const val PEER_STALE_THRESHOLD_MS = 60_000L
-        private const val CONNECTION_TIMEOUT_MS = 30_000L
+        private const val CONNECTION_TIMEOUT_MS = 45_000L
         private const val DEFAULT_GO_INTENT = 7 // Mid-range for balanced Group Owner negotiation
         private const val MAX_RECONNECT_ATTEMPTS = 5
         private const val INITIAL_RECONNECT_DELAY_MS = 2_000L
@@ -117,6 +117,7 @@ class WifiP2pManagerFacade @Inject constructor(
         MeshLogger.d(TAG, "Connecting to peer: $deviceAddress with GO intent $groupOwnerIntent")
         _p2pState.value = WifiP2pState.Connecting(deviceAddress)
         lastConnectedDeviceAddress = deviceAddress
+        isAutoReconnectEnabled = true
 
         val config = WifiP2pConfig().apply {
             this.deviceAddress = deviceAddress
@@ -164,6 +165,7 @@ class WifiP2pManagerFacade @Inject constructor(
         if (wifiP2pManager == null || channel == null) return
 
         MeshLogger.d(TAG, "Disconnect requested")
+        isAutoReconnectEnabled = false
         connectionTimeoutJob?.cancel()
         reconnectJob?.cancel()
         reconnectAttemptCount = 0

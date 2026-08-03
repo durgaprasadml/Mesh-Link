@@ -1,9 +1,12 @@
 package com.meshlink.domain.model
 
+import androidx.compose.runtime.Immutable
+
 enum class TransportType {
     BLE
 }
 
+@Immutable
 data class BleDevice(
     val meshId: String,
     val name: String,

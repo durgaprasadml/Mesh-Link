@@ -34,7 +34,9 @@ fun ChatRowItem(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    val formattedTime = remember(chat.lastMessageAt) { formatTime(chat.lastMessageAt) }
+    val formattedTime = remember(chat.lastMessageAt) {
+        com.meshlink.ui.util.DateTimeUtils.formatChatRowDate(chat.lastMessageAt)
+    }
     val displayName = remember(chat.name, chat.id) {
         chat.name.ifBlank { MeshIdNormalizer.canonicalize(chat.id) }
     }
@@ -42,16 +44,18 @@ fun ChatRowItem(
         chat.name.firstOrNull()?.toString()?.uppercase() ?: "?"
     }
 
-    val semanticDescription = buildString {
-        append("Chat with $displayName. ")
-        if (!chat.lastMessage.isNullOrBlank()) {
-            append("Last message: ${chat.lastMessage}. ")
-        }
-        if (formattedTime.isNotBlank()) {
-            append("At $formattedTime. ")
-        }
-        if (chat.unreadCount > 0) {
-            append("${chat.unreadCount} unread messages.")
+    val semanticDescription = remember(displayName, chat.lastMessage, formattedTime, chat.unreadCount) {
+        buildString {
+            append("Chat with $displayName. ")
+            if (!chat.lastMessage.isNullOrBlank()) {
+                append("Last message: ${chat.lastMessage}. ")
+            }
+            if (formattedTime.isNotBlank()) {
+                append("At $formattedTime. ")
+            }
+            if (chat.unreadCount > 0) {
+                append("${chat.unreadCount} unread messages.")
+            }
         }
     }
 
@@ -133,10 +137,4 @@ fun ChatRowItem(
             }
         }
     }
-}
-
-private fun formatTime(timeInMillis: Long): String {
-    if (timeInMillis == 0L) return ""
-    val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
-    return sdf.format(Date(timeInMillis))
 }

@@ -16,10 +16,21 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import androidx.compose.runtime.Immutable
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.withContext
+
 enum class SortOption { RSSI, NAME, STATUS }
 
+@Immutable
 data class NearbyUiState(
     val devices: List<BleDevice> = emptyList(),
+    val searchQuery: String = "",
     val sortOption: SortOption = SortOption.RSSI,
     val isScanning: Boolean = false,
     val errorMessage: String? = null
@@ -32,54 +43,73 @@ class NearbyViewModel @Inject constructor(
     private val topologyManager: MeshTopologyManager
 ) : ViewModel() {
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
     private val _sortOption = MutableStateFlow(SortOption.RSSI)
     private val _isScanning = MutableStateFlow(false)
     private val _errorMessage = MutableStateFlow<String?>(null)
 
+    @OptIn(FlowPreview::class)
     val uiState: StateFlow<NearbyUiState> = combine(
         meshRepository.scannedDevices,
         topologyManager.reachableNodes,
+        _searchQuery.debounce { if (it.isEmpty()) 0L else 250L }.distinctUntilChanged(),
         _sortOption,
-        _isScanning,
-        _errorMessage
-    ) { bleMap, reachableNodes, sortOption, isScanning, errorMessage ->
-        
-        val mergedDevices = mutableMapOf<String, BleDevice>()
-        
-        // Direct physical devices
-        bleMap.values.forEach { device ->
-            mergedDevices[device.address] = device
-        }
+        combine(_isScanning, _errorMessage) { scanning, err -> Pair(scanning, err) }
+    ) { bleMap, reachableNodes, query, sortOption, scanStatus ->
+        val isScanning = scanStatus.first
+        val errorMessage = scanStatus.second
+        withContext(Dispatchers.Default) {
+            val mergedDevices = mutableMapOf<String, BleDevice>()
 
-        // Indirect multi-hop mesh nodes
-        reachableNodes.forEach { node ->
-            if (!mergedDevices.containsKey(node.nodeId)) {
-                mergedDevices[node.nodeId] = BleDevice(
-                    meshId = node.nodeId,
-                    name = node.nodeId,
-                    address = node.nodeId,
-                    rssi = node.rssi,
-                    hopCount = node.hopCount,
-                    isMeshNode = true,
-                    viaRelayId = node.viaRelayId
-                )
+            // Direct physical devices
+            bleMap.values.forEach { device ->
+                mergedDevices[device.address] = device
             }
-        }
 
-        val sortedList = when (sortOption) {
-            SortOption.RSSI -> mergedDevices.values.toList().sortedByDescending { it.rssi }
-            SortOption.NAME -> mergedDevices.values.toList().sortedBy { it.name.ifBlank { "~" } }
-            SortOption.STATUS -> mergedDevices.values.toList().sortedBy { it.hopCount }
+            // Indirect multi-hop mesh nodes
+            reachableNodes.forEach { node ->
+                if (!mergedDevices.containsKey(node.nodeId)) {
+                    mergedDevices[node.nodeId] = BleDevice(
+                        meshId = node.nodeId,
+                        name = node.nodeId,
+                        address = node.nodeId,
+                        rssi = node.rssi,
+                        hopCount = node.hopCount,
+                        isMeshNode = true,
+                        viaRelayId = node.viaRelayId
+                    )
+                }
+            }
+
+            var sortedList = when (sortOption) {
+                SortOption.RSSI -> mergedDevices.values.toList().sortedByDescending { it.rssi }
+                SortOption.NAME -> mergedDevices.values.toList().sortedBy { it.name.ifBlank { "~" } }
+                SortOption.STATUS -> mergedDevices.values.toList().sortedBy { it.hopCount }
+            }
+
+            if (query.isNotBlank()) {
+                sortedList = sortedList.filter {
+                    it.name.contains(query, ignoreCase = true) ||
+                    it.address.contains(query, ignoreCase = true)
+                }
+            }
+
+            NearbyUiState(
+                devices = sortedList,
+                searchQuery = query,
+                sortOption = sortOption,
+                isScanning = isScanning,
+                errorMessage = errorMessage
+            )
         }
-        
-        NearbyUiState(
-            devices = sortedList, 
-            sortOption = sortOption,
-            isScanning = isScanning,
-            errorMessage = errorMessage
-        )
     }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NearbyUiState())
+
+    fun onSearchQueryChanged(query: String) {
+        _searchQuery.value = query
+    }
 
     fun setSortOption(option: SortOption) {
         _sortOption.value = option

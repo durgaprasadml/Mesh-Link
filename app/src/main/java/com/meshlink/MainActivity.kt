@@ -8,7 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
             val windowSizeClass = @OptIn(ExperimentalMaterial3WindowSizeClassApi::class) calculateWindowSizeClass(this)
             
             val settingsViewModel: com.meshlink.ui.settings.SettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
-            val uiState by settingsViewModel.uiState.collectAsState()
+            val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
             MeshTheme(
                 themeMode = uiState.themeMode,

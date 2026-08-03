@@ -26,6 +26,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.meshlink.ui.profile.AvatarAssets
 
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import coil.request.ImageRequest
+
 @Composable
 fun UserAvatarImage(
     avatarUri: String?,
@@ -34,10 +38,13 @@ fun UserAvatarImage(
     size: Dp = 48.dp,
     contentDescriptionText: String? = null
 ) {
-    val description = contentDescriptionText
-        ?: if (!displayName.isNullOrBlank()) "Profile picture of $displayName" else "User profile picture"
+    val description = remember(contentDescriptionText, displayName) {
+        contentDescriptionText
+            ?: if (!displayName.isNullOrBlank()) "Profile picture of $displayName" else "User profile picture"
+    }
 
-    val avatarResId = AvatarAssets.getAvatarResId(avatarUri)
+    val avatarResId = remember(avatarUri) { AvatarAssets.getAvatarResId(avatarUri) }
+    val context = LocalContext.current
 
     Box(
         modifier = modifier
@@ -56,8 +63,14 @@ fun UserAvatarImage(
                 )
             }
             !avatarUri.isNullOrBlank() -> {
+                val imageRequest = remember(avatarUri, context) {
+                    ImageRequest.Builder(context)
+                        .data(avatarUri)
+                        .crossfade(true)
+                        .build()
+                }
                 AsyncImage(
-                    model = avatarUri,
+                    model = imageRequest,
                     contentDescription = description,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()

@@ -79,4 +79,15 @@ class UserRepositoryImpl @Inject constructor(
             localDataSource.insertUser(userEntity.copy(name = name, aboutMe = aboutMe, avatarUri = avatarUri))
         }
     }
+
+    override suspend fun getUserDisplayName(meshId: String): String {
+        val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
+        val localUser = getLocalUser()
+        if (localUser != null && com.meshlink.util.MeshIdNormalizer.canonicalize(localUser.meshId) == canonicalTargetId) {
+            return localUser.name.trim().ifBlank { "Unknown User" }
+        }
+        val userEntity = localDataSource.getUser(meshId) ?: localDataSource.getUser(canonicalTargetId)
+        val name = userEntity?.name?.trim()
+        return if (!name.isNullOrBlank()) name else "Unknown User"
+    }
 }

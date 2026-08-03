@@ -40,4 +40,6 @@ interface UserRepository {
     
     val meshMode: Flow<String>
     suspend fun setMeshMode(mode: String)
+
+    suspend fun getUserDisplayName(meshId: String): String
 }

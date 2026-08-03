@@ -4,6 +4,7 @@ import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
 import com.meshlink.domain.repository.MeshRepository
+import com.meshlink.domain.repository.UserRepository
 import com.meshlink.domain.usecase.messaging.GetBroadcastMessagesUseCase
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,7 @@ class BroadcastViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val meshRepository = mockk<MeshRepository>(relaxed = true)
+    private val userRepository = mockk<UserRepository>(relaxed = true)
     private val getBroadcastMessagesUseCase = mockk<GetBroadcastMessagesUseCase>(relaxed = true)
 
     private lateinit var viewModel: BroadcastViewModel
@@ -32,8 +34,9 @@ class BroadcastViewModelTest {
             Message("b1", "BROADCAST", "Emergency Alert", "s1", System.currentTimeMillis(), true, DeliveryStatus.SENT, MessageType.TEXT)
         )
         every { getBroadcastMessagesUseCase() } returns flowOf(messages)
+        coEvery { userRepository.getUserDisplayName("s1") } returns "Durga Prasad"
 
-        viewModel = BroadcastViewModel(meshRepository, getBroadcastMessagesUseCase)
+        viewModel = BroadcastViewModel(meshRepository, userRepository, getBroadcastMessagesUseCase)
     }
 
     @After
@@ -51,13 +54,14 @@ class BroadcastViewModelTest {
     }
 
     @Test
-    fun `uiState maps broadcast messages flow`() = runTest(testDispatcher) {
+    fun `uiState maps broadcast messages flow with resolved sender name`() = runTest(testDispatcher) {
         backgroundScope.launch { viewModel.uiState.collect {} }
         testScheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(1, state.messages.size)
-        assertEquals("b1", state.messages.first().messageId)
-        assertEquals("Emergency Alert", state.messages.first().text)
+        assertEquals("b1", state.messages.first().message.messageId)
+        assertEquals("Emergency Alert", state.messages.first().message.text)
+        assertEquals("Durga Prasad", state.messages.first().senderName)
     }
 }

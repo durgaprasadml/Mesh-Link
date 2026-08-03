@@ -19,11 +19,15 @@ import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import com.meshlink.database.data.local.UserDao
+import com.meshlink.database.data.local.UserEntity
+
 @Singleton
 class BroadcastHandler @Inject constructor(
     @ApplicationContext private val context: Context,
     private val userRepository: UserRepository,
     private val chatDao: ChatDao,
+    private val userDao: UserDao,
     private val locationProvider: LocationProvider,
     private val router: Router
 ) {
@@ -39,12 +43,14 @@ class BroadcastHandler @Inject constructor(
         val lng = location?.longitude ?: 0.0
         val battery = location?.batteryPercent ?: locationProvider.getBatteryPercent()
 
+        val displayName = user.name.trim().ifBlank { "Unknown User" }
+
         val payloadJson = JSONObject().apply {
             put("lat", lat)
             put("lng", lng)
             put("battery", battery)
             put("timestamp", System.currentTimeMillis())
-            put("senderName", user.name)
+            put("senderName", displayName)
         }.toString()
 
         val packet = MeshPacket(
@@ -65,7 +71,22 @@ class BroadcastHandler @Inject constructor(
         val lat = json.optDouble("lat", 0.0)
         val lng = json.optDouble("lng", 0.0)
         val battery = json.optInt("battery", -1)
-        val senderName = json.optString("senderName", MeshIdNormalizer.canonicalize(packet.senderId))
+        val payloadSenderName = json.optString("senderName", "").trim()
+
+        val existingUser = userDao.getUser(packet.senderId)
+        val resolvedSenderName = when {
+            existingUser != null && existingUser.name.isNotBlank() && existingUser.name != "Unknown User" -> existingUser.name
+            payloadSenderName.isNotBlank() -> payloadSenderName
+            else -> "Unknown User"
+        }
+
+        if (resolvedSenderName != "Unknown User") {
+            if (existingUser == null) {
+                userDao.insertUser(UserEntity(meshId = packet.senderId, name = resolvedSenderName))
+            } else if (existingUser.name.isBlank() || existingUser.name == "Unknown User" || existingUser.name == packet.senderId) {
+                userDao.insertUser(existingUser.copy(name = resolvedSenderName))
+            }
+        }
 
         val chatId = MeshIdNormalizer.canonicalize(packet.senderId)
 
@@ -73,7 +94,7 @@ class BroadcastHandler @Inject constructor(
             messageId = packet.packetId,
             chatId = chatId,
             senderId = packet.senderId,
-            text = "🚨 SOS EMERGENCY from $senderName — Lat: $lat, Lng: $lng — Battery: $battery%",
+            text = "🚨 SOS EMERGENCY from $resolvedSenderName — Lat: $lat, Lng: $lng — Battery: $battery%",
             timestamp = System.currentTimeMillis(),
             isFromMe = false,
             status = DeliveryStatus.DELIVERED,
@@ -82,7 +103,7 @@ class BroadcastHandler @Inject constructor(
             longitude = lng,
             batteryPercent = battery
         )
-        chatDao.insertMessageAndUpdateChat(message, "🚨 $senderName")
+        chatDao.insertMessageAndUpdateChat(message, "🚨 $resolvedSenderName")
     }
 
     suspend fun broadcastMessage(messageText: String) {
@@ -90,9 +111,12 @@ class BroadcastHandler @Inject constructor(
         val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
         router.localMeshId = localPeerId
 
+        val displayName = user.name.trim().ifBlank { "Unknown User" }
+        val cleanText = messageText.trim()
+
         val payloadJson = JSONObject().apply {
-            put("text", "[BROADCAST] $messageText")
-            put("senderName", user.name)
+            put("text", cleanText)
+            put("senderName", displayName)
             put("timestamp", System.currentTimeMillis())
         }.toString()
 
@@ -110,7 +134,7 @@ class BroadcastHandler @Inject constructor(
             messageId = packet.packetId,
             chatId = "BROADCAST",
             senderId = localPeerId,
-            text = "[BROADCAST] $messageText",
+            text = cleanText,
             timestamp = System.currentTimeMillis(),
             isFromMe = true,
             status = DeliveryStatus.SENT,
@@ -125,35 +149,57 @@ class BroadcastHandler @Inject constructor(
         val rawPayload = packet.payload
         val internalKeywords = setOf("KEY_EXCHANGE", "ACK", "RELAY", "ROUTING", "HANDSHAKE")
 
-        val (plaintext, senderName) = try {
+        val (rawText, payloadSenderName) = try {
             val json = JSONObject(rawPayload)
             if (json.has("text")) {
-                json.getString("text") to json.optString("senderName", MeshIdNormalizer.canonicalize(packet.senderId))
+                json.getString("text") to json.optString("senderName", "").trim()
             } else {
                 MeshLogger.w(TAG, "Filtering out JSON protocol packet masquerading as broadcast text: $rawPayload")
                 return
             }
         } catch (_: Exception) {
-            rawPayload to MeshIdNormalizer.canonicalize(packet.senderId)
+            rawPayload to ""
         }
 
-        val trimmedPlaintext = plaintext.trim()
-        if (trimmedPlaintext.startsWith("v2|") || internalKeywords.contains(trimmedPlaintext)) {
-            MeshLogger.w(TAG, "Filtering out internal protocol packet from broadcast UI (after JSON extraction): $plaintext")
+        val cleanText = if (rawText.startsWith("[BROADCAST]")) {
+            rawText.removePrefix("[BROADCAST]").trim()
+        } else {
+            rawText.trim()
+        }
+
+        if (cleanText.startsWith("v2|") || internalKeywords.contains(cleanText)) {
+            MeshLogger.w(TAG, "Filtering out internal protocol packet from broadcast UI (after JSON extraction): $cleanText")
             return
+        }
+
+        val existingUser = userDao.getUser(packet.senderId)
+        val canonicalSenderId = MeshIdNormalizer.canonicalize(packet.senderId)
+
+        val resolvedSenderName = when {
+            existingUser != null && existingUser.name.isNotBlank() && existingUser.name != "Unknown User" -> existingUser.name
+            payloadSenderName.isNotBlank() && payloadSenderName != canonicalSenderId -> payloadSenderName
+            else -> "Unknown User"
+        }
+
+        if (resolvedSenderName != "Unknown User") {
+            if (existingUser == null) {
+                userDao.insertUser(UserEntity(meshId = packet.senderId, name = resolvedSenderName))
+            } else if (existingUser.name.isBlank() || existingUser.name == "Unknown User" || existingUser.name == canonicalSenderId) {
+                userDao.insertUser(existingUser.copy(name = resolvedSenderName))
+            }
         }
 
         val message = MessageEntity(
             messageId = packet.packetId,
             chatId = "BROADCAST",
             senderId = packet.senderId,
-            text = plaintext,
+            text = cleanText,
             timestamp = System.currentTimeMillis(),
             isFromMe = false,
             status = DeliveryStatus.DELIVERED,
             messageType = MessageType.TEXT
         )
         chatDao.insertMessage(message)
-        NotificationHelper.showMessageNotification(context, packet.senderId, "📢 $senderName", plaintext)
+        NotificationHelper.showMessageNotification(context, packet.senderId, "📢 Broadcast from $resolvedSenderName", cleanText)
     }
 }

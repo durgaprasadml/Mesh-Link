@@ -19,6 +19,9 @@ interface UserDao {
     @Query("SELECT * FROM users LIMIT 1")
     fun observeLocalUser(): kotlinx.coroutines.flow.Flow<UserEntity?>
 
+    @Query("SELECT * FROM users WHERE meshId = :meshId LIMIT 1")
+    fun observeUser(meshId: String): kotlinx.coroutines.flow.Flow<UserEntity?>
+
     @Query("DELETE FROM users")
     suspend fun clearUsers()
 }

@@ -1,9 +1,11 @@
 package com.meshlink.ui.broadcast
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.repository.MeshRepository
+import com.meshlink.domain.repository.UserRepository
 import com.meshlink.domain.usecase.messaging.GetBroadcastMessagesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -13,16 +15,21 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-import androidx.compose.runtime.Immutable
+@Immutable
+data class BroadcastUiMessage(
+    val message: Message,
+    val senderName: String
+)
 
 @Immutable
 data class BroadcastUiState(
-    val messages: List<Message> = emptyList()
+    val messages: List<BroadcastUiMessage> = emptyList()
 )
 
 @HiltViewModel
 class BroadcastViewModel @Inject constructor(
     private val meshRepository: MeshRepository,
+    private val userRepository: UserRepository,
     private val getBroadcastMessagesUseCase: GetBroadcastMessagesUseCase
 ) : ViewModel() {
 
@@ -34,6 +41,20 @@ class BroadcastViewModel @Inject constructor(
 
     val uiState: StateFlow<BroadcastUiState> =
         getBroadcastMessagesUseCase()
-            .map { BroadcastUiState(messages = it) }
+            .map { messages ->
+                val uiMessages = messages.map { msg ->
+                    val resolvedName = userRepository.getUserDisplayName(msg.senderId)
+                    val cleanText = if (msg.text.startsWith("[BROADCAST]")) {
+                        msg.text.removePrefix("[BROADCAST]").trim()
+                    } else {
+                        msg.text
+                    }
+                    BroadcastUiMessage(
+                        message = msg.copy(text = cleanText),
+                        senderName = resolvedName
+                    )
+                }
+                BroadcastUiState(messages = uiMessages)
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BroadcastUiState())
 }

@@ -180,14 +180,14 @@ fun BroadcastScreen(
                 ) {
                     items(
                         items = uiState.messages,
-                        key = { it.messageId },
+                        key = { it.message.messageId },
                         contentType = { "broadcast_message" }
-                    ) { msg ->
+                    ) { uiMsg ->
                         AnimatedVisibility(
                             visible = true,
                             enter = fadeIn() + slideInVertically { it / 2 }
                         ) {
-                            BroadcastBubble(msg)
+                            BroadcastBubble(uiMsg)
                         }
                     }
                 }
@@ -197,7 +197,8 @@ fun BroadcastScreen(
 }
 
 @Composable
-private fun BroadcastBubble(msg: Message) {
+private fun BroadcastBubble(uiMsg: BroadcastUiMessage) {
+    val msg = uiMsg.message
     val isMe = msg.isFromMe
     val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
@@ -206,13 +207,11 @@ private fun BroadcastBubble(msg: Message) {
     val formattedTime = remember(msg.timestamp) {
         com.meshlink.ui.util.DateTimeUtils.formatTimeHHMM(msg.timestamp)
     }
-    val senderName = remember(msg.senderId) {
-        com.meshlink.util.MeshIdNormalizer.canonicalize(msg.senderId)
-    }
+    val senderDisplayName = uiMsg.senderName.trim().ifBlank { "Unknown User" }
 
-    val semanticDescription = remember(isMe, senderName, msg.text, formattedTime) {
+    val semanticDescription = remember(isMe, senderDisplayName, msg.text, formattedTime) {
         buildString {
-            if (isMe) append("Your broadcast: ") else append("Broadcast from $senderName: ")
+            if (isMe) append("Your broadcast: ") else append("Broadcast from $senderDisplayName: ")
             append("${msg.text}. Sent at $formattedTime.")
         }
     }
@@ -244,22 +243,22 @@ private fun BroadcastBubble(msg: Message) {
                 }
                 .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
         ) {
-            if (!isMe) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    com.meshlink.ui.components.UserAvatarImage(
-                        avatarUri = null,
-                        displayName = senderName,
-                        size = 24.dp
-                    )
-                    Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-                    Text(
-                        text = senderName,
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
-            }
+            Text(
+                text = "📢 Broadcast",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
+
+            Text(
+                text = senderDisplayName,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
+
             Text(text = msg.text, color = textColor, style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(MeshTheme.spacing.extraSmall))
             Text(

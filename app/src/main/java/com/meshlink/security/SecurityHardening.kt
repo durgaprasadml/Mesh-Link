@@ -71,14 +71,21 @@ object SecurityHardening {
      * Detects if running inside an Android emulator (QEMU / Genymotion / SDK emulator).
      */
     fun isEmulator(): Boolean {
-        return (Build.FINGERPRINT.startsWith("generic")
-                || Build.FINGERPRINT.startsWith("unknown")
-                || Build.MODEL.contains("google_sdk")
-                || Build.MODEL.contains("Emulator")
-                || Build.MODEL.contains("Android SDK built for x86")
-                || Build.MANUFACTURER.contains("Genymotion")
-                || Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic")
-                || "google_sdk" == Build.PRODUCT)
+        val fingerprint = Build.FINGERPRINT ?: ""
+        val model = Build.MODEL ?: ""
+        val manufacturer = Build.MANUFACTURER ?: ""
+        val brand = Build.BRAND ?: ""
+        val device = Build.DEVICE ?: ""
+        val product = Build.PRODUCT ?: ""
+
+        return (fingerprint.startsWith("generic")
+                || fingerprint.startsWith("unknown")
+                || model.contains("google_sdk")
+                || model.contains("Emulator")
+                || model.contains("Android SDK built for x86")
+                || manufacturer.contains("Genymotion")
+                || brand.startsWith("generic") && device.startsWith("generic")
+                || "google_sdk" == product)
     }
 
     /**

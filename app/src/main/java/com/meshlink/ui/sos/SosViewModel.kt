@@ -21,6 +21,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.meshlink.domain.model.BleDevice
+import com.meshlink.alarm.EmergencyAlarmManager
 
 import androidx.compose.runtime.Immutable
 
@@ -60,10 +61,7 @@ class SosViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SosUiState())
     val uiState: StateFlow<SosUiState> = _uiState.asStateFlow()
 
-    private var mediaPlayer: MediaPlayer? = null
     private var cameraId: String? = null
-    private var audioFocusRequest: AudioFocusRequest? = null
-    private val audioManager by lazy { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     init {
         refreshLocation()
@@ -71,6 +69,12 @@ class SosViewModel @Inject constructor(
         viewModelScope.launch {
             meshRepository.scannedDevices.collect { devices ->
                 _uiState.update { it.copy(nearbyResponders = devices.values.toList()) }
+            }
+        }
+
+        viewModelScope.launch {
+            EmergencyAlarmManager.isAlarmPlaying.collect { isPlaying ->
+                _uiState.update { it.copy(isAlarmPlaying = isPlaying) }
             }
         }
     }
@@ -157,41 +161,7 @@ class SosViewModel @Inject constructor(
 
     fun toggleAlarm() {
         try {
-            if (mediaPlayer?.isPlaying == true) {
-                mediaPlayer?.stop()
-                mediaPlayer?.release()
-                mediaPlayer = null
-                
-                audioFocusRequest?.let { request ->
-                    audioManager.abandonAudioFocusRequest(request)
-                    audioFocusRequest = null
-                }
-                
-                _uiState.update { it.copy(isAlarmPlaying = false) }
-            } else {
-                val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-                    
-                val audioAttributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-                    
-                audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-                    .setAudioAttributes(audioAttributes)
-                    .build()
-                    
-                audioManager.requestAudioFocus(audioFocusRequest!!)
-                
-                mediaPlayer = MediaPlayer().apply {
-                    setDataSource(context, alarmUri)
-                    setAudioAttributes(audioAttributes)
-                    isLooping = true
-                    prepare()
-                    start()
-                }
-                _uiState.update { it.copy(isAlarmPlaying = true) }
-            }
+            EmergencyAlarmManager.toggleAlarm(context)
         } catch (e: Exception) {
             _uiState.update { it.copy(errorMessage = "Alarm unavailable: ${e.message}") }
         }
@@ -200,17 +170,6 @@ class SosViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         try {
-            if (mediaPlayer?.isPlaying == true) {
-                mediaPlayer?.stop()
-            }
-            mediaPlayer?.release()
-            mediaPlayer = null
-            
-            audioFocusRequest?.let { request ->
-                audioManager.abandonAudioFocusRequest(request)
-                audioFocusRequest = null
-            }
-            
             if (uiState.value.isFlashlightOn) {
                 val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
                 cameraId?.let { id -> cameraManager.setTorchMode(id, false) }

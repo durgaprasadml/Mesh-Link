@@ -1,11 +1,13 @@
 package com.meshlink.routing.engine
 
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Thread-safe metrics collector for network operations.
+ * Extended in Phase 2 for Sliding Window and Pipeline metrics.
  */
 @Singleton
 class TransportMetrics @Inject constructor() {
@@ -31,6 +33,14 @@ class TransportMetrics @Inject constructor() {
     private val _mediaBytesTransferred = AtomicLong(0)
     private val _mediaTransferDurationMs = AtomicLong(0)
 
+    // Phase 2 Pipeline & Window Metrics
+    private val _activeWindowSize = AtomicInteger(16)
+    private val _retransmissionCount = AtomicLong(0)
+    private val _workerUtilizationPct = AtomicLong(0) // Stored as scaled long percentage 0-100
+    private val _queueDepth = AtomicInteger(0)
+    private val _ackLatencyMsSum = AtomicLong(0)
+    private val _ackLatencyCount = AtomicLong(0)
+
     // Public Getters (Backward Compatible)
     val blePacketCount: Long get() = _blePacketCount.get()
     val blePacketsReceived: Long get() = _blePacketsReceived.get()
@@ -48,6 +58,27 @@ class TransportMetrics @Inject constructor() {
 
     val mediaBytesTransferred: Long get() = _mediaBytesTransferred.get()
     val mediaTransferDurationMs: Long get() = _mediaTransferDurationMs.get()
+
+    // Phase 2 Public Getters
+    val activeWindowSize: Int get() = _activeWindowSize.get()
+    val retransmissions: Long get() = _retransmissionCount.get()
+    val workerUtilizationPct: Float get() = _workerUtilizationPct.get().toFloat()
+    val queueDepth: Int get() = _queueDepth.get()
+
+    val averageAckLatencyMs: Double
+        get() {
+            val count = _ackLatencyCount.get()
+            if (count <= 0) return 0.0
+            return _ackLatencyMsSum.get().toDouble() / count.toDouble()
+        }
+
+    val transferEfficiencyPct: Float
+        get() {
+            val totalSent = _wifiPacketCount.get() + _blePacketCount.get()
+            val retries = _retransmissionCount.get() + _retryCount.get()
+            if (totalSent <= 0) return 100f
+            return ((totalSent - retries).toFloat() / totalSent.toFloat() * 100f).coerceIn(0f, 100f)
+        }
 
     val averageMediaThroughputBps: Double
         get() {
@@ -75,6 +106,7 @@ class TransportMetrics @Inject constructor() {
     fun recordBleRetry() {
         _bleRetries.incrementAndGet()
         _retryCount.incrementAndGet()
+        _retransmissionCount.incrementAndGet()
     }
 
     fun recordWifiPacket(bytes: Int = 0) {
@@ -94,6 +126,7 @@ class TransportMetrics @Inject constructor() {
     fun recordWifiRetry() {
         _wifiRetries.incrementAndGet()
         _retryCount.incrementAndGet()
+        _retransmissionCount.incrementAndGet()
     }
 
     fun recordFallback() {
@@ -102,11 +135,35 @@ class TransportMetrics @Inject constructor() {
 
     fun recordRetry() {
         _retryCount.incrementAndGet()
+        _retransmissionCount.incrementAndGet()
     }
 
     fun recordMediaTransfer(bytes: Long, durationMs: Long) {
         if (bytes > 0) _mediaBytesTransferred.addAndGet(bytes)
         if (durationMs > 0) _mediaTransferDurationMs.addAndGet(durationMs)
+    }
+
+    // Phase 2 Metric Recorders
+    fun recordWindowSize(windowSize: Int) {
+        _activeWindowSize.set(windowSize)
+    }
+
+    fun recordWorkerUtilization(activeWorkers: Int, totalWorkers: Int) {
+        if (totalWorkers > 0) {
+            val pct = (activeWorkers.toDouble() / totalWorkers.toDouble() * 100.0).toLong()
+            _workerUtilizationPct.set(pct)
+        }
+    }
+
+    fun recordQueueDepth(depth: Int) {
+        _queueDepth.set(depth)
+    }
+
+    fun recordAckLatency(latencyMs: Long) {
+        if (latencyMs >= 0) {
+            _ackLatencyMsSum.addAndGet(latencyMs)
+            _ackLatencyCount.incrementAndGet()
+        }
     }
 
     fun reset() {
@@ -126,6 +183,13 @@ class TransportMetrics @Inject constructor() {
 
         _mediaBytesTransferred.set(0)
         _mediaTransferDurationMs.set(0)
+
+        _activeWindowSize.set(16)
+        _retransmissionCount.set(0)
+        _workerUtilizationPct.set(0)
+        _queueDepth.set(0)
+        _ackLatencyMsSum.set(0)
+        _ackLatencyCount.set(0)
     }
 
     fun getSummary(): Map<String, Any> {
@@ -134,6 +198,12 @@ class TransportMetrics @Inject constructor() {
             "wifiPackets" to wifiPacketCount,
             "fallbacks" to fallbackCount,
             "retries" to retryCount,
+            "retransmissions" to retransmissions,
+            "activeWindowSize" to activeWindowSize,
+            "workerUtilizationPct" to workerUtilizationPct,
+            "queueDepth" to queueDepth,
+            "avgAckLatencyMs" to averageAckLatencyMs,
+            "transferEfficiencyPct" to transferEfficiencyPct,
             "totalBytes" to totalBytesTransferred,
             "mediaBytes" to mediaBytesTransferred,
             "avgMediaThroughputBps" to averageMediaThroughputBps

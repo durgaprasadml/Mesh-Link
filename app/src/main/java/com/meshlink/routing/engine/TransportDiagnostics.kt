@@ -118,6 +118,63 @@ class TransportDiagnostics @Inject constructor() {
         )
     }
 
+    // Phase 2 Pipeline Diagnostics
+    fun logWindowCreated(transferId: String, windowSize: Int) {
+        log(
+            DiagnosticLogLevel.DEBUG,
+            "WINDOW_CREATED | XferID=$transferId | WindowSize=$windowSize"
+        )
+    }
+
+    fun logWindowAdvanced(transferId: String, oldBase: Int, newBase: Int) {
+        log(
+            DiagnosticLogLevel.DEBUG,
+            "WINDOW_ADVANCED | XferID=$transferId | Base: $oldBase -> $newBase"
+        )
+    }
+
+    fun logWorkerStarted(workerId: Int) {
+        log(
+            DiagnosticLogLevel.DEBUG,
+            "WORKER_STARTED | WorkerID=$workerId"
+        )
+    }
+
+    fun logWorkerIdle(workerId: Int) {
+        log(
+            DiagnosticLogLevel.DEBUG,
+            "WORKER_IDLE | WorkerID=$workerId"
+        )
+    }
+
+    fun logAckReceived(transferId: String, chunkIndex: Int) {
+        log(
+            DiagnosticLogLevel.DEBUG,
+            "ACK_RX | XferID=$transferId | Chunk=$chunkIndex"
+        )
+    }
+
+    fun logTimeout(transferId: String, chunkIndex: Int) {
+        log(
+            DiagnosticLogLevel.WARN,
+            "TIMEOUT | XferID=$transferId | Chunk=$chunkIndex"
+        )
+    }
+
+    fun logRetransmission(transferId: String, chunkIndex: Int, reason: String) {
+        log(
+            DiagnosticLogLevel.WARN,
+            "RETRANSMIT | XferID=$transferId | Chunk=$chunkIndex | Reason=$reason"
+        )
+    }
+
+    fun logQueueDepth(transferId: String, depth: Int) {
+        log(
+            DiagnosticLogLevel.DEBUG,
+            "QUEUE_DEPTH | XferID=$transferId | Depth=$depth"
+        )
+    }
+
     private fun log(level: DiagnosticLogLevel, message: String) {
         if (!isEnabled || level.ordinal < minLogLevel.ordinal) return
 

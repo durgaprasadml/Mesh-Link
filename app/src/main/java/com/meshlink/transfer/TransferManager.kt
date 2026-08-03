@@ -1,29 +1,29 @@
 package com.meshlink.transfer
-import com.meshlink.domain.model.RouteType
 
 import android.content.Context
 import android.util.Base64
-import com.meshlink.domain.model.MeshPacket
-import com.meshlink.domain.model.PacketType
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.common.pool.BufferPool
 import com.meshlink.di.IoDispatcher
+import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
+import com.meshlink.domain.model.RouteType
 import com.meshlink.routing.engine.IntelligentTransportManager
+import com.meshlink.routing.engine.TransportDiagnostics
+import com.meshlink.routing.engine.TransportMetrics
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
@@ -39,16 +39,25 @@ class TransferManager @Inject constructor(
     private val intelligentTransportManager: IntelligentTransportManager,
     private val wifiSocketTransport: com.meshlink.wifi.data.WifiSocketTransport,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-    @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope
+    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope,
+    // Phase 2 Pipeline Components (Default parameters for 100% backward compatibility)
+    val config: TransferConfiguration = TransferConfiguration(),
+    val metrics: TransportMetrics = TransportMetrics(),
+    val diagnostics: TransportDiagnostics = TransportDiagnostics(),
+    val runtimeStateRegistry: TransferRuntimeStateRegistry = TransferRuntimeStateRegistry(),
+    val slidingWindowManager: SlidingWindowManager = SlidingWindowManager(config, runtimeStateRegistry),
+    val workerPool: ParallelTransferWorkerPool = ParallelTransferWorkerPool(config, ioDispatcher, applicationScope),
+    val chunkDispatcher: ChunkDispatcher = ChunkDispatcher(chunkManager, slidingWindowManager, workerPool, runtimeStateRegistry, diagnostics, ioDispatcher),
+    val ackManager: TransferAckManager = TransferAckManager(slidingWindowManager, runtimeStateRegistry, metrics, diagnostics),
+    val retransmissionScheduler: ChunkRetransmissionScheduler = ChunkRetransmissionScheduler(config, slidingWindowManager, runtimeStateRegistry, chunkDispatcher, metrics, diagnostics, ioDispatcher, applicationScope)
 ) {
-    // Phase 2 extension points (architectural preparation only, ready for future phase injection)
+    // Phase 2 extension points (implementing architectural stubs)
     var transferQueue: com.meshlink.transfer.scheduler.TransferQueue? = null
-    var slidingWindowBuffer: com.meshlink.transfer.scheduler.SlidingWindowBuffer? = null
-    var parallelWorkerPool: com.meshlink.transfer.scheduler.ParallelTransferWorkerPool? = null
+    var slidingWindowBuffer: com.meshlink.transfer.scheduler.SlidingWindowBuffer? = slidingWindowManager
+    var parallelWorkerPool: com.meshlink.transfer.scheduler.ParallelTransferWorkerPool? = workerPool
+
     companion object {
         private const val TAG = "TransferManager"
-        private const val BLE_INTER_CHUNK_DELAY_MS = 30L
-        private const val WIFI_INTER_CHUNK_DELAY_MS = 2L
         private const val TRANSFER_TIMEOUT_MS = 120_000L
         private const val MAX_NACK_PAYLOAD_BYTES = 150
     }
@@ -91,7 +100,7 @@ class TransferManager @Inject constructor(
         }
     }
 
-    // ─────────────────── Sender ───────────────────
+    // ─────────────────── Sender (Pipeline Pipeline) ───────────────────
 
     fun sendFile(
         file: File,
@@ -142,7 +151,8 @@ class TransferManager @Inject constructor(
         onTransferStateChanged?.invoke(transferId, TransferState.QUEUED)
         applicationScope.launch(ioDispatcher) { cache.persistSession(session) }
         analytics.recordTransferStarted(session)
-        
+        diagnostics.logTransferStart(transferId, file.name, fileLength, selectedRoute)
+
         applicationScope.launch(ioDispatcher) {
             startOutgoingTransfer(session)
         }
@@ -173,47 +183,22 @@ class TransferManager @Inject constructor(
         // Give receiver time to init cache
         delay(50L)
 
-        val delayMs = if (session.transportUsed == TransportType.WIFI_DIRECT) WIFI_INTER_CHUNK_DELAY_MS else BLE_INTER_CHUNK_DELAY_MS
+        // Initialize Sliding Window
+        val windowSize = slidingWindowManager.initializeSessionWindow(
+            session.transferId, session.transportUsed, session.totalChunks
+        )
+        diagnostics.logWindowCreated(session.transferId, windowSize)
 
-        // Send Chunks
-        var i = session.chunksTransferred
-        while (i < session.totalChunks && applicationScope.isActive) {
-            val currentState = scheduler.getSession(session.transferId)?.state
-            if (currentState != TransferState.STREAMING && currentState != TransferState.SENDING) {
-                MeshLogger.d(TAG, "Stopping outgoing loop for ${session.transferId}. State: $currentState")
-                return@withContext
-            }
-            
-            if (!scheduler.canSendNextChunk(session.transferId)) {
-                delay(20L)
-                continue
-            }
+        // Start Selective Retransmission Monitoring
+        retransmissionScheduler.startMonitoring(
+            session = session,
+            file = file,
+            onSendPacket = onSendPacket,
+            onFailure = { reason -> failSession(session.transferId, reason) }
+        )
 
-            val chunkSize = chunkManager.calculateChunkSize(session.transportUsed)
-            val chunkBytes = chunkManager.readChunkFromFile(file, i, chunkSize)
-            
-            if (chunkBytes == null) {
-                failSession(session.transferId, "Failed to read chunk $i from disk")
-                return@withContext
-            }
-
-            try {
-                val b64 = Base64.encodeToString(chunkBytes, Base64.NO_WRAP)
-                sendPacket(
-                    session.senderId, session.targetId, session.transferId,
-                    b64, PacketType.MEDIA_CHUNK, i, session.totalChunks, session.mimeType
-                )
-            } finally {
-                BufferPool.returnBuffer(chunkBytes)
-            }
-
-            val bytesSentSoFar = (i + 1).toLong() * chunkSize
-            updateProgressThrottled(session.transferId, i + 1, session.totalChunks, bytesSentSoFar.coerceAtMost(session.totalBytes))
-            i++
-            
-            if (delayMs > 0) delay(delayMs)
-            kotlinx.coroutines.yield()
-        }
+        // Issue initial sliding window chunk dispatches to ParallelWorkerPool
+        chunkDispatcher.dispatchAvailableChunks(session, file, onSendPacket)
     }
 
     private val lastProgressEmitMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -237,7 +222,7 @@ class TransferManager @Inject constructor(
 
     fun handleIncomingPacket(packet: MeshPacket) {
         val transferId = packet.transferId ?: return
-        
+
         applicationScope.launch(ioDispatcher) {
             when (packet.type) {
                 PacketType.MEDIA_META -> handleMeta(packet, transferId)
@@ -275,18 +260,18 @@ class TransferManager @Inject constructor(
             state = TransferState.RECEIVING,
             startTimeMs = System.currentTimeMillis()
         )
-        
+
         scheduler.addSession(session)
         onTransferStateChanged?.invoke(transferId, TransferState.RECEIVING)
         applicationScope.launch(ioDispatcher) { cache.persistSession(session) }
         analytics.recordTransferStarted(session)
-        
+
         startTimeoutMonitor(transferId)
     }
 
     private suspend fun handleChunk(packet: MeshPacket, transferId: String) {
         var session = scheduler.getSession(transferId)
-        
+
         if (session == null) {
             val mime = packet.mimeType ?: "application/octet-stream"
             cache.initSessionCache(transferId)
@@ -307,7 +292,7 @@ class TransferManager @Inject constructor(
             applicationScope.launch(ioDispatcher) { cache.persistSession(session) }
             startTimeoutMonitor(transferId)
         }
-        
+
         val chunkBytes = try {
             Base64.decode(packet.payload, Base64.NO_WRAP)
         } catch (e: Exception) {
@@ -319,10 +304,10 @@ class TransferManager @Inject constructor(
         if (success) {
             val count = cache.getReceivedChunkIndices(transferId).size
             updateProgressThrottled(transferId, count, packet.totalChunks, count.toLong() * chunkBytes.size)
-            
-            // Send ACK
+
+            // Send ACK packet (preserving 100% existing packet format and semantics)
             sendPacket(
-                packet.targetId, packet.senderId, transferId, 
+                packet.targetId, packet.senderId, transferId,
                 packet.chunkIndex.toString(), PacketType.MEDIA_ACK, packet.chunkIndex, packet.totalChunks, session.mimeType
             )
 
@@ -336,12 +321,12 @@ class TransferManager @Inject constructor(
         scheduler.updateSessionState(session.transferId, TransferState.VERIFYING)
         onTransferStateChanged?.invoke(session.transferId, TransferState.VERIFYING)
         cache.persistSession(session)
-        
+
         val mediaDir = File(context.filesDir, "mesh_media").also { if (!it.exists()) it.mkdirs() }
         val outputFile = File(mediaDir, session.fileName)
-        
+
         val assembled = cache.assembleFile(session.transferId, session.totalChunks, outputFile)
-        
+
         if (assembled) {
             if (verifier.verifyFileChecksum(outputFile, session.sha256Checksum)) {
                 session.filePath = outputFile.absolutePath
@@ -350,6 +335,11 @@ class TransferManager @Inject constructor(
                 cache.persistSession(session)
                 cache.cleanUpSession(session.transferId)
                 analytics.recordTransferCompleted(session)
+                
+                val durationMs = System.currentTimeMillis() - session.startTimeMs
+                metrics.recordMediaTransfer(session.totalBytes, durationMs)
+                diagnostics.logTransferCompletion(session.transferId, session.totalBytes, durationMs, session.getAverageSpeedBytesPerSec().toDouble())
+
                 onTransferCompleted?.invoke(session)
             } else {
                 MeshLogger.w(TAG, "Checksum verification failed for ${session.transferId}. Requesting chunk recovery.")
@@ -358,12 +348,12 @@ class TransferManager @Inject constructor(
                     outputFile.delete()
                     scheduler.updateSessionState(session.transferId, TransferState.RETRYING)
                     onTransferStateChanged?.invoke(session.transferId, TransferState.RETRYING)
-                    // Request all missing / corrupted chunks using range-compressed MTU-safe NACK batches
+                    
                     val received = cache.getReceivedChunkIndices(session.transferId)
                     val missing = (0 until session.totalChunks).filter { !received.contains(it) }
                     val indicesToRequest = if (missing.isNotEmpty()) missing else (0 until session.totalChunks).toList()
                     val nackBatches = formatMissingIndicesToRanges(indicesToRequest)
-                    
+
                     for (batch in nackBatches) {
                         sendPacket(
                             session.targetId, session.senderId, session.transferId,
@@ -384,12 +374,37 @@ class TransferManager @Inject constructor(
 
     private fun handleAck(packet: MeshPacket, transferId: String) {
         val session = scheduler.getSession(transferId) ?: return
-        if (session.direction == TransferDirection.OUTGOING && packet.chunkIndex == session.totalChunks - 1) {
-            scheduler.updateSessionState(transferId, TransferState.COMPLETED)
-            onTransferStateChanged?.invoke(transferId, TransferState.COMPLETED)
-            applicationScope.launch(ioDispatcher) { cache.persistSession(session) }
-            analytics.recordTransferCompleted(session)
-            onOutgoingTransferCompleted?.invoke(session)
+
+        if (session.direction == TransferDirection.OUTGOING) {
+            val ackResult = ackManager.processAck(packet, session.totalChunks) ?: return
+
+            val chunkSize = chunkManager.calculateChunkSize(session.transportUsed)
+            val bytesDone = ackResult.newWindowBase.toLong() * chunkSize
+            updateProgressThrottled(transferId, ackResult.newWindowBase, session.totalChunks, bytesDone.coerceAtMost(session.totalBytes))
+
+            if (ackResult.windowAdvancedCount > 0 && session.state == TransferState.STREAMING) {
+                val file = File(session.filePath ?: "")
+                if (file.exists()) {
+                    chunkDispatcher.dispatchAvailableChunks(session, file, onSendPacket)
+                }
+            }
+
+            if (ackResult.isTransferComplete) {
+                scheduler.updateSessionState(transferId, TransferState.COMPLETED)
+                retransmissionScheduler.stopMonitoring(transferId)
+                slidingWindowManager.closeWindow(transferId)
+                chunkDispatcher.clearSession(transferId)
+
+                onTransferStateChanged?.invoke(transferId, TransferState.COMPLETED)
+                applicationScope.launch(ioDispatcher) { cache.persistSession(session) }
+                analytics.recordTransferCompleted(session)
+
+                val durationMs = System.currentTimeMillis() - session.startTimeMs
+                metrics.recordMediaTransfer(session.totalBytes, durationMs)
+                diagnostics.logTransferCompletion(transferId, session.totalBytes, durationMs, session.getAverageSpeedBytesPerSec().toDouble())
+
+                onOutgoingTransferCompleted?.invoke(session)
+            }
         }
     }
 
@@ -403,10 +418,12 @@ class TransferManager @Inject constructor(
             missing.forEach { idx ->
                 scheduler.incrementRetry(transferId)
                 analytics.recordChunkRetransmission(transferId, idx)
-                
+                metrics.recordRetry()
+                diagnostics.logRetransmission(transferId, idx, "NACK received")
+
                 val chunkSize = chunkManager.calculateChunkSize(session.transportUsed)
                 val chunkBytes = chunkManager.readChunkFromFile(file, idx, chunkSize) ?: return@forEach
-                
+
                 try {
                     val b64 = Base64.encodeToString(chunkBytes, Base64.NO_WRAP)
                     sendPacket(
@@ -416,7 +433,7 @@ class TransferManager @Inject constructor(
                 } finally {
                     BufferPool.returnBuffer(chunkBytes)
                 }
-                
+
                 kotlinx.coroutines.yield()
             }
         }
@@ -429,7 +446,7 @@ class TransferManager @Inject constructor(
             if (session.state == TransferState.RECEIVING || session.state == TransferState.STREAMING) {
                 val received = cache.getReceivedChunkIndices(transferId)
                 val missing = (0 until session.totalChunks).filter { !received.contains(it) }
-                
+
                 if (missing.isNotEmpty()) {
                     MeshLogger.w(TAG, "Transfer $transferId timed out. Requesting missing ${missing.size} chunks.")
                     val nackBatches = formatMissingIndicesToRanges(missing)
@@ -439,7 +456,7 @@ class TransferManager @Inject constructor(
                             batch, PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType
                         )
                     }
-                    
+
                     delay(30_000L)
                     val newReceived = cache.getReceivedChunkIndices(transferId)
                     if (newReceived.size < session.totalChunks) {
@@ -456,7 +473,7 @@ class TransferManager @Inject constructor(
         if (missing.isEmpty()) return emptyList()
         val sorted = missing.sorted()
         val rawRanges = mutableListOf<String>()
-        
+
         var start = sorted[0]
         var prev = sorted[0]
 
@@ -520,6 +537,7 @@ class TransferManager @Inject constructor(
         val session = scheduler.getSession(transferId) ?: return
         if (session.state == TransferState.SENDING || session.state == TransferState.STREAMING || session.state == TransferState.RECEIVING) {
             scheduler.updateSessionState(transferId, TransferState.PAUSED)
+            retransmissionScheduler.stopMonitoring(transferId)
             onTransferStateChanged?.invoke(transferId, TransferState.PAUSED)
             applicationScope.launch(ioDispatcher) { cache.persistSession(session) }
             MeshLogger.d(TAG, "Paused transfer $transferId")
@@ -557,15 +575,18 @@ class TransferManager @Inject constructor(
 
     fun cancelTransfer(transferId: String) {
         scheduler.updateSessionState(transferId, TransferState.CANCELLED)
+        retransmissionScheduler.stopMonitoring(transferId)
+        slidingWindowManager.closeWindow(transferId)
+        chunkDispatcher.clearSession(transferId)
         onTransferStateChanged?.invoke(transferId, TransferState.CANCELLED)
         val session = scheduler.getSession(transferId)
-        applicationScope.launch(ioDispatcher) { 
+        applicationScope.launch(ioDispatcher) {
             if (session != null) cache.persistSession(session)
-            cache.cleanUpSession(transferId) 
+            cache.cleanUpSession(transferId)
         }
     }
 
-    // Optional Stats API for Components 3 & 10
+    // Optional Stats API for Components
     fun getSession(transferId: String): TransferSession? = scheduler.getSession(transferId)
 
     fun getTransferSpeedBytesPerSec(transferId: String): Float = scheduler.getSession(transferId)?.getAverageSpeedBytesPerSec() ?: 0f
@@ -577,6 +598,9 @@ class TransferManager @Inject constructor(
     private suspend fun failSession(transferId: String, reason: String) {
         val session = scheduler.getSession(transferId)
         scheduler.updateSessionState(transferId, TransferState.FAILED)
+        retransmissionScheduler.stopMonitoring(transferId)
+        slidingWindowManager.closeWindow(transferId)
+        chunkDispatcher.clearSession(transferId)
         onTransferStateChanged?.invoke(transferId, TransferState.FAILED)
         if (session != null) {
             analytics.recordTransferFailed(session, reason)

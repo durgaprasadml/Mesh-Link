@@ -74,6 +74,16 @@ object MeshDatabaseMigrations {
         }
     }
 
+    val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE users ADD COLUMN publicKey TEXT")
+            db.execSQL("ALTER TABLE users ADD COLUMN lastSeen INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE users ADD COLUMN rssi INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE users ADD COLUMN trustLevel TEXT")
+            db.execSQL("ALTER TABLE users ADD COLUMN capabilities INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     val ALL_MIGRATIONS = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -84,6 +94,7 @@ object MeshDatabaseMigrations {
         MIGRATION_7_8,
         MIGRATION_8_9,
         MIGRATION_9_10,
-        MIGRATION_10_11
+        MIGRATION_10_11,
+        MIGRATION_11_12
     )
 }

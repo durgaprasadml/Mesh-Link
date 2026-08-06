@@ -35,7 +35,8 @@ class KeyExchangeHandler @Inject constructor(
     private val connectionManager: BleConnectionManager,
     private val userRepository: UserRepository,
     private val packetDispatcher: PacketDispatcher,
-    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope
+    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope,
+    private val userDao: com.meshlink.database.data.local.UserDao? = null
 ) {
     private val TAG = "KeyExchangeHandler"
 
@@ -148,6 +149,31 @@ class KeyExchangeHandler @Inject constructor(
         if (address != null) {
             connectionManager.updatePeerState(address, PeerConnectionState.SESSION_ESTABLISHED)
             applicationScope.launch { onKeyExchangeComplete?.invoke() }
+        }
+
+        // Extract registered display name from post-discovery handshake payload
+        var peerDisplayName = ""
+        for (i in 10 until parts.size) {
+            val part = parts[i].trim()
+            if (part.isNotBlank() && part != "resp" && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(part, packet.senderId)) {
+                peerDisplayName = part
+                break
+            }
+        }
+        if (userDao != null && peerDisplayName.isNotBlank()) {
+            val now = System.currentTimeMillis()
+            applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val existing = userDao.getUser(packet.senderId)
+                    if (existing == null) {
+                        userDao.insertUser(com.meshlink.database.data.local.UserEntity(meshId = packet.senderId, name = peerDisplayName, publicKey = signingPublicKey, lastSeen = now))
+                    } else if (existing.name != peerDisplayName || existing.publicKey != signingPublicKey || existing.lastSeen != now) {
+                        userDao.insertUser(existing.copy(name = peerDisplayName, publicKey = signingPublicKey, lastSeen = now))
+                    }
+                } catch (e: Exception) {
+                    MeshLogger.w(TAG, "Failed to persist identity in KeyExchangeHandler: ${e.message}")
+                }
+            }
         }
 
         var isResponse = false
@@ -291,7 +317,13 @@ class KeyExchangeHandler @Inject constructor(
         val signatureBase64 = Base64.encodeToString(signature, Base64.NO_WRAP)
 
         val respTag = if (isResponse) "|resp" else ""
-        val payload = "v3|$minProtocol|$maxProtocol|$cryptoVersion|$supportedFeatures|$ecdhPublicKey|$timestamp|$nonce|$signatureBase64|$signingPublicKey$respTag"
+        val localUserName = kotlinx.coroutines.runBlocking {
+            try { userRepository.getLocalUser()?.name?.trim() ?: "" } catch (_: Exception) { "" }
+        }
+        val nameTag = if (localUserName.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(localUserName, localPeerId)) {
+            "|$localUserName"
+        } else ""
+        val payload = "v3|$minProtocol|$maxProtocol|$cryptoVersion|$supportedFeatures|$ecdhPublicKey|$timestamp|$nonce|$signatureBase64|$signingPublicKey$respTag$nameTag"
         
         return MeshPacket(
             packetId = uuid,

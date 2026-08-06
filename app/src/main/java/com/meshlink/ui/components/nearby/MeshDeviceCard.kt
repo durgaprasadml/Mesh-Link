@@ -82,7 +82,12 @@ fun MeshDeviceCard(
         }
     }
 
-    val displayName = device.name.ifBlank { "Nearby Node" }
+    val rawName = device.name.trim()
+    val displayName = if (com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(rawName, device.meshId.ifBlank { device.address })) {
+        "Unknown User"
+    } else {
+        rawName
+    }
     val canonicalId = remember(device.address, device.meshId) {
         MeshIdNormalizer.canonicalize(device.meshId.ifBlank { device.address })
     }

@@ -10,6 +10,10 @@ import com.meshlink.routing.engine.RoutingTable
 import com.meshlink.util.MeshIdNormalizer
 import org.json.JSONArray
 import org.json.JSONObject
+import com.meshlink.database.data.local.UserDao
+import com.meshlink.database.data.local.UserEntity
+import com.meshlink.domain.repository.UserRepository
+import com.meshlink.core.data.UserRepositoryImpl
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,15 +21,17 @@ import javax.inject.Singleton
 class BeaconHandler @Inject constructor(
     private val topologyManager: MeshTopologyManager,
     private val routeManager: RouteManager,
-    private val routingTable: RoutingTable
+    private val routingTable: RoutingTable,
+    private val userDao: UserDao? = null,
+    private val userRepository: UserRepository? = null
 ) {
     companion object {
         private const val TAG = "BeaconHandler"
     }
 
     /**
-     * Generates a topology advertisement BEACON packet containing the local mesh ID
-     * and a list of reachable multi-hop nodes and direct neighbors.
+     * Generates a topology advertisement BEACON packet containing the local mesh ID,
+     * local registered display name, and a list of reachable multi-hop nodes and direct neighbors.
      */
     fun generateBeaconPacket(localMeshId: String): MeshPacket {
         val canonicalLocalId = MeshIdNormalizer.canonicalize(localMeshId)
@@ -43,8 +49,17 @@ class BeaconHandler @Inject constructor(
             }
         }
 
+        val localUserName = kotlinx.coroutines.runBlocking {
+            try {
+                userRepository?.getLocalUser()?.name?.trim() ?: ""
+            } catch (_: Exception) { "" }
+        }
+
         val payloadObj = JSONObject().apply {
             put("nodeId", canonicalLocalId)
+            if (localUserName.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(localUserName, canonicalLocalId)) {
+                put("senderName", localUserName)
+            }
             put("reachable", jsonArray)
             put("timestamp", System.currentTimeMillis())
         }
@@ -63,7 +78,7 @@ class BeaconHandler @Inject constructor(
     /**
      * Handles an incoming BEACON topology advertisement packet.
      */
-    fun handleBeaconPacket(packet: MeshPacket) {
+    suspend fun handleBeaconPacket(packet: MeshPacket) {
         try {
             val senderId = MeshIdNormalizer.canonicalize(packet.senderId)
             if (senderId.isBlank()) return
@@ -78,8 +93,28 @@ class BeaconHandler @Inject constructor(
                 type = packet.transport
             )
 
-            // 2. Parse advertised reachable topology
+            // 2. Parse advertised reachable topology & display name
             val json = JSONObject(packet.payload)
+            val senderName = json.optString("senderName", "").trim()
+            val now = System.currentTimeMillis()
+
+            if (userDao != null) {
+                try {
+                    val existingUser = userDao.getUser(senderId)
+                    if (senderName.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(senderName, senderId)) {
+                        if (existingUser == null) {
+                            userDao.insertUser(UserEntity(meshId = senderId, name = senderName, lastSeen = now))
+                        } else if (existingUser.name != senderName || existingUser.lastSeen != now) {
+                            userDao.insertUser(existingUser.copy(name = senderName, lastSeen = now))
+                        }
+                    } else if (existingUser != null) {
+                        userDao.updateLastSeen(senderId, now, -65)
+                    }
+                } catch (e: Exception) {
+                    MeshLogger.w(TAG, "Failed to update UserDao from BEACON: ${e.message}")
+                }
+            }
+
             val reachableArray = json.optJSONArray("reachable") ?: JSONArray()
             val advertisedNodeIds = mutableListOf<String>()
 

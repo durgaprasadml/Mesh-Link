@@ -177,28 +177,21 @@ class BleScannerManager @Inject constructor(
         val rssi = result.rssi
         val serviceData = record.getManufacturerSpecificData(BleConstants.MANUFACTURER_ID)
         
-        if (serviceData == null || serviceData.size < 12) {
-            // Ignore if missing data or old format
+        if (serviceData == null || serviceData.size < 8) {
             return
         }
 
-        // New payload format:
+        // Payload format:
         // 0-7: Mesh ID bytes
-        // 8: Capabilities byte
-        // 9-11: Name preview bytes
+        // 8: Capabilities byte (optional)
         val meshIdBytes = ByteArray(8)
         System.arraycopy(serviceData, 0, meshIdBytes, 0, 8)
         val meshId = String(meshIdBytes, Charsets.UTF_8).replace("\u0000", "").trim()
         
-        val capabilities = serviceData[8]
+        val capabilities = if (serviceData.size > 8) serviceData[8] else 0
         
-        val nameBytes = ByteArray(3)
-        System.arraycopy(serviceData, 9, nameBytes, 0, 3)
-        var name = String(nameBytes, Charsets.UTF_8).replace("\u0000", "").trim()
-        
-        if (name.isBlank()) {
-            name = record.deviceName ?: try { result.device.name } catch (_: SecurityException) { null } ?: "Peer"
-        }
+        // Pass to Discovery Engine (name will be resolved post-discovery via protocol identity sync)
+        val name = ""
         
         // Pass to Discovery Engine
         discoveryEngine.onDeviceDiscovered(

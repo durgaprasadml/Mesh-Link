@@ -65,15 +65,28 @@ class NearbyViewModel @Inject constructor(
 
             // Direct physical devices
             bleMap.values.forEach { device ->
-                mergedDevices[device.address] = device
+                val targetId = device.meshId.ifBlank { device.address }
+                val resolvedName = userRepository.getUserDisplayName(targetId)
+                val finalName = if (com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(resolvedName, targetId)) {
+                    "Unknown User"
+                } else {
+                    resolvedName
+                }
+                mergedDevices[device.address] = device.copy(name = finalName)
             }
 
             // Indirect multi-hop mesh nodes
             reachableNodes.forEach { node ->
                 if (!mergedDevices.containsKey(node.nodeId)) {
+                    val resolvedName = userRepository.getUserDisplayName(node.nodeId)
+                    val finalName = if (com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(resolvedName, node.nodeId)) {
+                        "Unknown User"
+                    } else {
+                        resolvedName
+                    }
                     mergedDevices[node.nodeId] = BleDevice(
                         meshId = node.nodeId,
-                        name = node.nodeId,
+                        name = finalName,
                         address = node.nodeId,
                         rssi = node.rssi,
                         hopCount = node.hopCount,

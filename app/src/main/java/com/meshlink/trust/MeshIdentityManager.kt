@@ -67,7 +67,8 @@ class MeshIdentityManager @Inject constructor(
             identityCache.get()?.let { return it }
 
             val savedMeshId = prefs.getString(KEY_MESH_ID, null)
-            val savedDisplayName = prefs.getString(KEY_DISPLAY_NAME, "User") ?: "User"
+            val rawDisplayName = prefs.getString(KEY_DISPLAY_NAME, "") ?: ""
+            val savedDisplayName = if (rawDisplayName == "User" || rawDisplayName == "Device" || rawDisplayName == "Man" || rawDisplayName == "Peer") "" else rawDisplayName
             val savedCreationTime = prefs.getLong(KEY_CREATION_TIME, 0L)
             val savedVersion = prefs.getInt(KEY_IDENTITY_VERSION, 1)
             val savedSignature = prefs.getString(KEY_SIGNATURE, "") ?: ""

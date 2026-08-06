@@ -22,6 +22,9 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE meshId = :meshId LIMIT 1")
     fun observeUser(meshId: String): kotlinx.coroutines.flow.Flow<UserEntity?>
 
+    @Query("UPDATE users SET lastSeen = :lastSeen, rssi = :rssi WHERE meshId = :meshId")
+    suspend fun updateLastSeen(meshId: String, lastSeen: Long, rssi: Int)
+
     @Query("DELETE FROM users")
     suspend fun clearUsers()
 }

@@ -72,7 +72,9 @@ class BeaconHandlerTest {
             type = PacketType.BEACON
         )
 
-        beaconHandler.handleBeaconPacket(packet)
+        kotlinx.coroutines.runBlocking {
+            beaconHandler.handleBeaconPacket(packet)
+        }
 
         verify { topologyManager.updateNeighbor(nodeB, rssi = -65, transport = RouteType.BLE) }
         verify { routeManager.updateRoute(nodeB, nodeB, 1, rssi = -65, trustScore = 50, type = RouteType.BLE) }

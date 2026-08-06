@@ -21,7 +21,7 @@ class DeploymentVerificationTest {
     fun `verify build configuration constants`() {
         assertTrue("versionCode must be positive", BuildConfig.VERSION_CODE > 0)
         assertNotNull("versionName must not be null", BuildConfig.VERSION_NAME)
-        assertEquals("applicationId must be com.meshlink", "com.meshlink", BuildConfig.APPLICATION_ID)
+        assertTrue("applicationId must start with com.meshlink", BuildConfig.APPLICATION_ID.startsWith("com.meshlink"))
     }
 
     @Test

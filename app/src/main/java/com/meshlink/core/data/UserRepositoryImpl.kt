@@ -4,13 +4,32 @@ import com.meshlink.core.data.source.UserLocalDataSource
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.domain.model.User
 import com.meshlink.database.data.local.UserEntity
+import com.meshlink.trust.MeshIdentityManager
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class UserRepositoryImpl @Inject constructor(
-    private val localDataSource: UserLocalDataSource
+    private val localDataSource: UserLocalDataSource,
+    private val identityManager: MeshIdentityManager
 ) : UserRepository {
+
+    companion object {
+        private val GENERIC_NAMES = setOf(
+            "man", "device", "peer", "nearby node", "unknown", "unknown user", "android", "null", "-", "user"
+        )
+
+        fun isGenericOrInvalidName(name: String?, meshIdOrAddress: String? = null): Boolean {
+            if (name.isNullOrBlank()) return true
+            val trimmed = name.trim().lowercase()
+            if (GENERIC_NAMES.contains(trimmed)) return true
+            if (meshIdOrAddress != null) {
+                val canonicalTarget = com.meshlink.util.MeshIdNormalizer.canonicalize(meshIdOrAddress).lowercase()
+                if (trimmed == canonicalTarget || trimmed == meshIdOrAddress.trim().lowercase()) return true
+            }
+            return false
+        }
+    }
 
     override val hasProfile: Flow<Boolean> = localDataSource.hasProfile
 
@@ -25,6 +44,7 @@ class UserRepositoryImpl @Inject constructor(
             val user = UserEntity(meshId = meshId, name = name, avatarUri = avatarUri)
             localDataSource.insertUser(user)
             localDataSource.setProfileCreated(true)
+            identityManager.updateDisplayName(name)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -37,6 +57,7 @@ class UserRepositoryImpl @Inject constructor(
             val user = UserEntity(meshId = meshId, name = name, avatarUri = avatarUri)
             localDataSource.insertUser(user)
             localDataSource.setProfileCreated(true)
+            identityManager.updateDisplayName(name)
             com.meshlink.domain.model.MeshResult.Success(Unit)
         } catch (e: Exception) {
             com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.UnknownError("Failed to setup profile", e))
@@ -70,6 +91,7 @@ class UserRepositoryImpl @Inject constructor(
         val userEntity = localDataSource.getLocalUser()
         if (userEntity != null) {
             localDataSource.insertUser(userEntity.copy(name = name))
+            identityManager.updateDisplayName(name)
         }
     }
 
@@ -77,17 +99,20 @@ class UserRepositoryImpl @Inject constructor(
         val userEntity = localDataSource.getLocalUser()
         if (userEntity != null) {
             localDataSource.insertUser(userEntity.copy(name = name, aboutMe = aboutMe, avatarUri = avatarUri))
+            identityManager.updateDisplayName(name)
         }
     }
 
     override suspend fun getUserDisplayName(meshId: String): String {
+        if (meshId.isBlank()) return "Unknown User"
         val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
         val localUser = getLocalUser()
         if (localUser != null && com.meshlink.util.MeshIdNormalizer.canonicalize(localUser.meshId) == canonicalTargetId) {
-            return localUser.name.trim().ifBlank { "Unknown User" }
+            val localName = localUser.name.trim()
+            return if (!isGenericOrInvalidName(localName, canonicalTargetId)) localName else "Unknown User"
         }
         val userEntity = localDataSource.getUser(meshId) ?: localDataSource.getUser(canonicalTargetId)
         val name = userEntity?.name?.trim()
-        return if (!name.isNullOrBlank()) name else "Unknown User"
+        return if (!isGenericOrInvalidName(name, canonicalTargetId)) name!! else "Unknown User"
     }
 }

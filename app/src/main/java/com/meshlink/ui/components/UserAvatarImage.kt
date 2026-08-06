@@ -32,15 +32,28 @@ import coil.request.ImageRequest
 
 @Composable
 fun UserAvatarImage(
-    avatarUri: String?,
-    displayName: String?,
+    meshId: String? = null,
+    displayName: String? = null,
+    profilePhotoPath: String? = null,
     modifier: Modifier = Modifier,
     size: Dp = 48.dp,
-    contentDescriptionText: String? = null
+    contentDescriptionText: String? = null,
+    avatarUri: String? = null
 ) {
     val description = remember(contentDescriptionText, displayName) {
         contentDescriptionText
             ?: if (!displayName.isNullOrBlank()) "Profile picture of $displayName" else "User profile picture"
+    }
+
+    val photoTarget = remember(profilePhotoPath, avatarUri) {
+        when {
+            !profilePhotoPath.isNullOrBlank() -> {
+                val file = java.io.File(profilePhotoPath)
+                if (file.exists() && file.length() > 0) file else profilePhotoPath
+            }
+            !avatarUri.isNullOrBlank() -> avatarUri
+            else -> null
+        }
     }
 
     val avatarResId = remember(avatarUri) { AvatarAssets.getAvatarResId(avatarUri) }
@@ -62,10 +75,10 @@ fun UserAvatarImage(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            !avatarUri.isNullOrBlank() -> {
-                val imageRequest = remember(avatarUri, context) {
+            photoTarget != null -> {
+                val imageRequest = remember(photoTarget, context) {
                     ImageRequest.Builder(context)
-                        .data(avatarUri)
+                        .data(photoTarget)
                         .crossfade(true)
                         .build()
                 }

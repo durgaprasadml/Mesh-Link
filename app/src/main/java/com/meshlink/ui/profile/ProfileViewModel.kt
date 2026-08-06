@@ -24,7 +24,9 @@ data class ProfileUiState(
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val profilePhotoManager: com.meshlink.profile.ProfilePhotoManager,
+    private val profileSyncManager: com.meshlink.profile.ProfileSyncManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -46,7 +48,32 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, saveError = null) }
             try {
+                val localUser = userRepository.getLocalUser()
+                var processedPhotoPath: String? = localUser?.profilePhotoPath
+                var processedPhotoHash: String? = localUser?.profilePhotoHash
+
+                if (!avatarUri.isNullOrBlank() && localUser != null) {
+                    val uri = android.net.Uri.parse(avatarUri)
+                    if (uri.scheme == "content" || uri.scheme == "file") {
+                        val result = profilePhotoManager.processAndSavePhoto(localUser.meshId, uri)
+                        if (result != null) {
+                            processedPhotoPath = result.first.absolutePath
+                            processedPhotoHash = result.second
+                            profileSyncManager.notifyProfilePhotoUpdated(result.first, result.second)
+                        }
+                    }
+                }
+
                 userRepository.updateProfile(name, aboutMe, avatarUri)
+                if (localUser != null && processedPhotoPath != null && processedPhotoHash != null) {
+                    userRepository.updateProfilePhoto(
+                        meshId = localUser.meshId,
+                        photoPath = processedPhotoPath,
+                        photoHash = processedPhotoHash,
+                        version = System.currentTimeMillis(),
+                        lastUpdated = System.currentTimeMillis()
+                    )
+                }
                 _uiState.update { it.copy(isSaving = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSaving = false, saveError = e.message ?: "Failed to save profile") }

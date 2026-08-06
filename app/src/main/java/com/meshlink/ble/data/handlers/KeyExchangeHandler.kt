@@ -36,7 +36,8 @@ class KeyExchangeHandler @Inject constructor(
     private val userRepository: UserRepository,
     private val packetDispatcher: PacketDispatcher,
     @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope,
-    private val userDao: com.meshlink.database.data.local.UserDao? = null
+    private val userDao: com.meshlink.database.data.local.UserDao? = null,
+    private val profileSyncManagerProvider: javax.inject.Provider<com.meshlink.profile.ProfileSyncManager>? = null
 ) {
     private val TAG = "KeyExchangeHandler"
 
@@ -151,15 +152,23 @@ class KeyExchangeHandler @Inject constructor(
             applicationScope.launch { onKeyExchangeComplete?.invoke() }
         }
 
-        // Extract registered display name from post-discovery handshake payload
+        // Extract registered display name and photo hash from post-discovery handshake payload
         var peerDisplayName = ""
+        var peerPhotoHash: String? = null
+
         for (i in 10 until parts.size) {
             val part = parts[i].trim()
-            if (part.isNotBlank() && part != "resp" && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(part, packet.senderId)) {
+            if (part.startsWith("hash:")) {
+                peerPhotoHash = part.substringAfter("hash:").trim()
+            } else if (part.isNotBlank() && part != "resp" && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(part, packet.senderId)) {
                 peerDisplayName = part
-                break
             }
         }
+
+        if (peerPhotoHash != null) {
+            profileSyncManagerProvider?.get()?.onPeerProfileHashDiscovered(packet.senderId, peerPhotoHash)
+        }
+
         if (userDao != null && peerDisplayName.isNotBlank()) {
             val now = System.currentTimeMillis()
             applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -317,13 +326,20 @@ class KeyExchangeHandler @Inject constructor(
         val signatureBase64 = Base64.encodeToString(signature, Base64.NO_WRAP)
 
         val respTag = if (isResponse) "|resp" else ""
-        val localUserName = kotlinx.coroutines.runBlocking {
-            try { userRepository.getLocalUser()?.name?.trim() ?: "" } catch (_: Exception) { "" }
+        val localUser = kotlinx.coroutines.runBlocking {
+            try { userRepository.getLocalUser() } catch (_: Exception) { null }
         }
+        val localUserName = localUser?.name?.trim() ?: ""
+        val localPhotoHash = localUser?.profilePhotoHash?.trim() ?: ""
+
         val nameTag = if (localUserName.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(localUserName, localPeerId)) {
             "|$localUserName"
         } else ""
-        val payload = "v3|$minProtocol|$maxProtocol|$cryptoVersion|$supportedFeatures|$ecdhPublicKey|$timestamp|$nonce|$signatureBase64|$signingPublicKey$respTag$nameTag"
+        val hashTag = if (localPhotoHash.isNotBlank()) {
+            "|hash:$localPhotoHash"
+        } else ""
+
+        val payload = "v3|$minProtocol|$maxProtocol|$cryptoVersion|$supportedFeatures|$ecdhPublicKey|$timestamp|$nonce|$signatureBase64|$signingPublicKey$respTag$nameTag$hashTag"
         
         return MeshPacket(
             packetId = uuid,

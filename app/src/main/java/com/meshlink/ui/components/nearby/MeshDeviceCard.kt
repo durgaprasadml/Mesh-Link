@@ -142,8 +142,10 @@ fun MeshDeviceCard(
                 // Avatar with Connection Dot
                 Box(contentAlignment = Alignment.BottomEnd) {
                         com.meshlink.ui.components.UserAvatarImage(
-                            avatarUri = device.avatarUri,
+                            meshId = device.meshId,
                             displayName = displayName,
+                            profilePhotoPath = device.profilePhotoPath,
+                            avatarUri = device.avatarUri,
                             size = 52.dp
                         )
 

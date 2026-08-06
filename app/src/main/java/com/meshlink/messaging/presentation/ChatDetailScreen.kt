@@ -221,8 +221,9 @@ fun ChatDetailScreen(
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             com.meshlink.ui.components.UserAvatarImage(
-                                avatarUri = null,
+                                meshId = viewModel.address,
                                 displayName = viewModel.name,
+                                profilePhotoPath = uiState.peerProfilePhotoPath,
                                 size = 36.dp
                             )
                             Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))

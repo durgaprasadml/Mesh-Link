@@ -12,7 +12,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class MessagingRepositoryImpl @Inject constructor(
-    private val chatLocalDataSource: ChatLocalDataSource
+    private val chatLocalDataSource: ChatLocalDataSource,
+    private val userDao: com.meshlink.database.data.local.UserDao
 ) : ChatRepository {
 
     override fun getMessagesForChat(chatId: String): Flow<List<Message>> {
@@ -33,7 +34,10 @@ class MessagingRepositoryImpl @Inject constructor(
 
     override fun getAllChats(): Flow<List<Chat>> {
         return chatLocalDataSource.getAllChats().map { list ->
-            list.map { it.toDomain() }
+            list.map { entity ->
+                val user = userDao.getUser(entity.id)
+                entity.toDomain().copy(profilePhotoPath = user?.profilePhotoPath)
+            }
         }
     }
 

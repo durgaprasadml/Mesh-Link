@@ -34,7 +34,18 @@ class UserRepositoryImpl @Inject constructor(
     override val hasProfile: Flow<Boolean> = localDataSource.hasProfile
 
     override val localUser: Flow<User?> = localDataSource.observeLocalUser().map { entity ->
-        entity?.let { User(meshId = it.meshId, name = it.name, avatarUri = it.avatarUri, aboutMe = it.aboutMe) }
+        entity?.let {
+            User(
+                meshId = it.meshId,
+                name = it.name,
+                avatarUri = it.avatarUri,
+                aboutMe = it.aboutMe,
+                profilePhotoPath = it.profilePhotoPath,
+                profilePhotoHash = it.profilePhotoHash,
+                profilePhotoVersion = it.profilePhotoVersion,
+                profileLastUpdated = it.profileLastUpdated
+            )
+        }
     }
     
     @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name, avatarUri)"))
@@ -84,7 +95,18 @@ class UserRepositoryImpl @Inject constructor(
 
     override suspend fun getLocalUser(): User? {
         val userEntity = localDataSource.getLocalUser()
-        return userEntity?.let { User(meshId = it.meshId, name = it.name, avatarUri = it.avatarUri, aboutMe = it.aboutMe) }
+        return userEntity?.let {
+            User(
+                meshId = it.meshId,
+                name = it.name,
+                avatarUri = it.avatarUri,
+                aboutMe = it.aboutMe,
+                profilePhotoPath = it.profilePhotoPath,
+                profilePhotoHash = it.profilePhotoHash,
+                profilePhotoVersion = it.profilePhotoVersion,
+                profileLastUpdated = it.profileLastUpdated
+            )
+        }
     }
 
     override suspend fun updateUserName(name: String) {
@@ -114,5 +136,59 @@ class UserRepositoryImpl @Inject constructor(
         val userEntity = localDataSource.getUser(meshId) ?: localDataSource.getUser(canonicalTargetId)
         val name = userEntity?.name?.trim()
         return if (!isGenericOrInvalidName(name, canonicalTargetId)) name!! else "Unknown User"
+    }
+
+    override suspend fun getUserProfile(meshId: String): User? {
+        if (meshId.isBlank()) return null
+        val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
+        val entity = localDataSource.getUser(meshId) ?: localDataSource.getUser(canonicalTargetId)
+        return entity?.let {
+            User(
+                meshId = it.meshId,
+                name = it.name,
+                avatarUri = it.avatarUri,
+                aboutMe = it.aboutMe,
+                profilePhotoPath = it.profilePhotoPath,
+                profilePhotoHash = it.profilePhotoHash,
+                profilePhotoVersion = it.profilePhotoVersion,
+                profileLastUpdated = it.profileLastUpdated
+            )
+        }
+    }
+
+    override fun observeUserProfile(meshId: String): Flow<User?> {
+        val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
+        return localDataSource.observeUser(canonicalTargetId).map { entity ->
+            entity?.let {
+                User(
+                    meshId = it.meshId,
+                    name = it.name,
+                    avatarUri = it.avatarUri,
+                    aboutMe = it.aboutMe,
+                    profilePhotoPath = it.profilePhotoPath,
+                    profilePhotoHash = it.profilePhotoHash,
+                    profilePhotoVersion = it.profilePhotoVersion,
+                    profileLastUpdated = it.profileLastUpdated
+                )
+            }
+        }
+    }
+
+    override suspend fun updateProfilePhoto(meshId: String, photoPath: String, photoHash: String, version: Long, lastUpdated: Long) {
+        val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
+        val existingUser = localDataSource.getUser(canonicalTargetId) ?: localDataSource.getUser(meshId)
+        if (existingUser != null) {
+            localDataSource.updateProfilePhoto(existingUser.meshId, photoPath, photoHash, version, lastUpdated)
+        } else {
+            val newUser = UserEntity(
+                meshId = canonicalTargetId,
+                name = "User",
+                profilePhotoPath = photoPath,
+                profilePhotoHash = photoHash,
+                profilePhotoVersion = version,
+                profileLastUpdated = lastUpdated
+            )
+            localDataSource.insertUser(newUser)
+        }
     }
 }

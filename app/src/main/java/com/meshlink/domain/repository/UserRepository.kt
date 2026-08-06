@@ -42,4 +42,7 @@ interface UserRepository {
     suspend fun setMeshMode(mode: String)
 
     suspend fun getUserDisplayName(meshId: String): String
+    suspend fun getUserProfile(meshId: String): User?
+    fun observeUserProfile(meshId: String): Flow<User?>
+    suspend fun updateProfilePhoto(meshId: String, photoPath: String, photoHash: String, version: Long = System.currentTimeMillis(), lastUpdated: Long = System.currentTimeMillis())
 }

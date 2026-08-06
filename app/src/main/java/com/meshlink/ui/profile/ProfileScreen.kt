@@ -182,8 +182,10 @@ fun ProfileScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         UserAvatarImage(
-                            avatarUri = avatarUriString,
+                            meshId = uiState.user?.meshId,
                             displayName = name,
+                            profilePhotoPath = uiState.user?.profilePhotoPath,
+                            avatarUri = avatarUriString,
                             size = 120.dp,
                             contentDescriptionText = "Profile Picture"
                         )

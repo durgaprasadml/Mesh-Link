@@ -19,5 +19,6 @@ interface UserLocalDataSource {
     suspend fun getLocalUser(): UserEntity?
     fun observeLocalUser(): Flow<UserEntity?>
     fun observeUser(meshId: String): Flow<UserEntity?>
+    suspend fun updateProfilePhoto(meshId: String, photoPath: String, photoHash: String, version: Long, lastUpdated: Long)
     suspend fun clearLocalData()
 }

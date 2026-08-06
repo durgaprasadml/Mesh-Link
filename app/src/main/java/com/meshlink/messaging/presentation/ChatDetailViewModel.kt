@@ -36,13 +36,15 @@ data class ChatDetailUiState(
     val currentlyPlaying: String? = null,
     val playbackProgress: Float = 0f,
     val selectedMessageIds: Set<String> = emptySet(),
-    val isSelectionMode: Boolean = false
+    val isSelectionMode: Boolean = false,
+    val peerProfilePhotoPath: String? = null
 )
 
 @HiltViewModel
 class ChatDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val meshRepository: MeshRepository,
+    private val userRepository: com.meshlink.domain.repository.UserRepository,
     private val getChatMessagesUseCase: com.meshlink.domain.usecase.messaging.GetChatMessagesUseCase,
     private val deleteMessagesUseCase: com.meshlink.domain.usecase.messaging.DeleteMessagesUseCase,
     private val deleteChatUseCase: com.meshlink.domain.usecase.messaging.DeleteChatUseCase,
@@ -112,6 +114,14 @@ class ChatDetailViewModel @Inject constructor(
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val peerProfilePhotoPath: StateFlow<String?> = if (address.isNotBlank()) {
+        userRepository.observeUserProfile(address)
+            .map { it?.profilePhotoPath }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    } else {
+        MutableStateFlow(null)
+    }
+
     val uiState: StateFlow<ChatDetailUiState> = combine(
         combine(messages, connectionStatus, transferProgress) { msgs, conn, transfer ->
             Triple(msgs, conn, transfer)
@@ -119,8 +129,10 @@ class ChatDetailViewModel @Inject constructor(
         combine(isRecording, recordingElapsedMs, currentlyPlaying, playbackProgress) { isRec, recMs, playing, prog ->
             listOf(isRec, recMs, playing, prog)
         },
-        _selectedMessageIds
-    ) { (msgs, conn, transfer), mediaState, selectedIds ->
+        combine(_selectedMessageIds, peerProfilePhotoPath) { selectedIds, photoPath ->
+            Pair(selectedIds, photoPath)
+        }
+    ) { (msgs, conn, transfer), mediaState, (selectedIds, photoPath) ->
         val (isRec, recMs, playing, prog) = mediaState
         ChatDetailUiState(
             messages = msgs,
@@ -131,7 +143,8 @@ class ChatDetailViewModel @Inject constructor(
             currentlyPlaying = playing as String?,
             playbackProgress = prog as Float,
             selectedMessageIds = selectedIds,
-            isSelectionMode = selectedIds.isNotEmpty()
+            isSelectionMode = selectedIds.isNotEmpty(),
+            peerProfilePhotoPath = photoPath
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatDetailUiState())
 

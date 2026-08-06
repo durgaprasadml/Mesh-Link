@@ -18,7 +18,8 @@ import kotlinx.coroutines.launch
 @Immutable
 data class BroadcastUiMessage(
     val message: Message,
-    val senderName: String
+    val senderName: String,
+    val senderProfilePhotoPath: String? = null
 )
 
 @Immutable
@@ -43,6 +44,7 @@ class BroadcastViewModel @Inject constructor(
         getBroadcastMessagesUseCase()
             .map { messages ->
                 val uiMessages = messages.map { msg ->
+                    val userProfile = userRepository.getUserProfile(msg.senderId)
                     val resolvedName = userRepository.getUserDisplayName(msg.senderId)
                     val cleanText = if (msg.text.startsWith("[BROADCAST]")) {
                         msg.text.removePrefix("[BROADCAST]").trim()
@@ -51,7 +53,8 @@ class BroadcastViewModel @Inject constructor(
                     }
                     BroadcastUiMessage(
                         message = msg.copy(text = cleanText),
-                        senderName = resolvedName
+                        senderName = resolvedName,
+                        senderProfilePhotoPath = userProfile?.profilePhotoPath
                     )
                 }
                 BroadcastUiState(messages = uiMessages)

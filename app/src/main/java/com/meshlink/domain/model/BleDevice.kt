@@ -19,6 +19,8 @@ data class BleDevice(
     val distanceMeters: Double? = null,
     val distanceConfidence: String? = null,
     val avatarUri: String? = null,
+    val profilePhotoPath: String? = null,
+    val profilePhotoHash: String? = null,
     val hopCount: Int = 0,
     val isMeshNode: Boolean = false,
     val viaRelayId: String? = null

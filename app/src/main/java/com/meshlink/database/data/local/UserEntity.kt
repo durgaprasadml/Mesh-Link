@@ -13,5 +13,9 @@ data class UserEntity(
     val lastSeen: Long = System.currentTimeMillis(),
     val rssi: Int = 0,
     val trustLevel: String? = null,
-    val capabilities: Byte = 0
+    val capabilities: Byte = 0,
+    val profilePhotoPath: String? = null,
+    val profilePhotoHash: String? = null,
+    val profilePhotoVersion: Long = 0L,
+    val profileLastUpdated: Long = 0L
 )

@@ -78,8 +78,10 @@ fun ChatRowItem(
     ) {
         // Avatar
         com.meshlink.ui.components.UserAvatarImage(
-            avatarUri = chat.avatarUri,
+            meshId = chat.id,
             displayName = displayName,
+            profilePhotoPath = chat.profilePhotoPath,
+            avatarUri = chat.avatarUri,
             size = 52.dp
         )
 

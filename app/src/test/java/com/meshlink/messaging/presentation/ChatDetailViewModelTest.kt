@@ -32,6 +32,7 @@ class ChatDetailViewModelTest {
 
     private lateinit var savedStateHandle: SavedStateHandle
     private lateinit var meshRepository: MeshRepository
+    private lateinit var userRepository: com.meshlink.domain.repository.UserRepository
     private lateinit var getChatMessagesUseCase: GetChatMessagesUseCase
     private lateinit var deleteMessagesUseCase: DeleteMessagesUseCase
     private lateinit var deleteChatUseCase: DeleteChatUseCase
@@ -48,6 +49,7 @@ class ChatDetailViewModelTest {
     fun setup() {
         savedStateHandle = SavedStateHandle(mapOf("address" to "peer_1", "name" to "John"))
         meshRepository = mockk(relaxed = true)
+        userRepository = mockk(relaxed = true)
         getChatMessagesUseCase = mockk(relaxed = true)
         deleteMessagesUseCase = mockk(relaxed = true)
         deleteChatUseCase = mockk(relaxed = true)
@@ -58,6 +60,7 @@ class ChatDetailViewModelTest {
         sendMessageUseCase = mockk(relaxed = true)
         transferManager = mockk(relaxed = true)
 
+        every { userRepository.observeUserProfile(any()) } returns flowOf(null)
         every { meshRepository.resolveChatId(any()) } returns "peer_1"
         every { getChatMessagesUseCase("peer_1") } returns flowOf(emptyList())
         every { meshRepository.scannedDevices } returns MutableStateFlow(emptyMap())
@@ -70,7 +73,7 @@ class ChatDetailViewModelTest {
 
     private fun createViewModel() {
         viewModel = ChatDetailViewModel(
-            savedStateHandle, meshRepository, getChatMessagesUseCase, deleteMessagesUseCase,
+            savedStateHandle, meshRepository, userRepository, getChatMessagesUseCase, deleteMessagesUseCase,
             deleteChatUseCase, markChatAsReadUseCase, getMessageUseCase, voiceRecorder,
             voicePlayer, sendMessageUseCase, transferManager
         )

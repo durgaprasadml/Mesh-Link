@@ -22,6 +22,15 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE meshId = :meshId LIMIT 1")
     fun observeUser(meshId: String): kotlinx.coroutines.flow.Flow<UserEntity?>
 
+    @Query("SELECT * FROM users WHERE meshId = :meshId LIMIT 1")
+    suspend fun getUserProfile(meshId: String): UserEntity?
+
+    @Query("SELECT * FROM users WHERE meshId = :meshId LIMIT 1")
+    fun observeUserProfile(meshId: String): kotlinx.coroutines.flow.Flow<UserEntity?>
+
+    @Query("UPDATE users SET profilePhotoPath = :photoPath, profilePhotoHash = :photoHash, profilePhotoVersion = :version, profileLastUpdated = :lastUpdated WHERE meshId = :meshId")
+    suspend fun updateProfilePhoto(meshId: String, photoPath: String, photoHash: String, version: Long, lastUpdated: Long)
+
     @Query("UPDATE users SET lastSeen = :lastSeen, rssi = :rssi WHERE meshId = :meshId")
     suspend fun updateLastSeen(meshId: String, lastSeen: Long, rssi: Int)
 

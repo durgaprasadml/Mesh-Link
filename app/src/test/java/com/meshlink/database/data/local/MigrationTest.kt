@@ -20,7 +20,7 @@ class MigrationTest {
     @Test
     fun `test migration array continuity and completeness`() {
         val migrations = MeshDatabaseMigrations.ALL_MIGRATIONS
-        assertEquals(11, migrations.size)
+        assertEquals(12, migrations.size)
         
         var currentVersion = 1
         for (migration in migrations) {
@@ -28,6 +28,6 @@ class MigrationTest {
             assertEquals(currentVersion + 1, migration.endVersion)
             currentVersion = migration.endVersion
         }
-        assertEquals(12, currentVersion)
+        assertEquals(13, currentVersion)
     }
 }

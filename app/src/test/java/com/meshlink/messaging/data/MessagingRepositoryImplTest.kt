@@ -20,12 +20,14 @@ import org.junit.Test
 class MessagingRepositoryImplTest {
 
     private lateinit var chatLocalDataSource: ChatLocalDataSource
+    private lateinit var userDao: com.meshlink.database.data.local.UserDao
     private lateinit var repository: MessagingRepositoryImpl
 
     @Before
     fun setup() {
         chatLocalDataSource = mockk(relaxed = true)
-        repository = MessagingRepositoryImpl(chatLocalDataSource)
+        userDao = mockk(relaxed = true)
+        repository = MessagingRepositoryImpl(chatLocalDataSource, userDao)
     }
 
     @Test

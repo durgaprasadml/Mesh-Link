@@ -28,7 +28,9 @@ sealed class ProfileSetupEvent {
 
 @HiltViewModel
 class ProfileSetupViewModel @Inject constructor(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val profilePhotoManager: com.meshlink.profile.ProfilePhotoManager,
+    private val profileSyncManager: com.meshlink.profile.ProfileSyncManager
 ) : ViewModel() {
 
     val hasProfile: StateFlow<Boolean?> = userRepository.hasProfile
@@ -68,6 +70,23 @@ class ProfileSetupViewModel @Inject constructor(
             val result = userRepository.setupProfile(trimmedName, avatar)
             when (result) {
                 is MeshResult.Success -> {
+                    val localUser = userRepository.getLocalUser()
+                    if (localUser != null && !avatar.isNullOrBlank()) {
+                        val uri = android.net.Uri.parse(avatar)
+                        if (uri.scheme == "content" || uri.scheme == "file") {
+                            val photoResult = profilePhotoManager.processAndSavePhoto(localUser.meshId, uri)
+                            if (photoResult != null) {
+                                userRepository.updateProfilePhoto(
+                                    meshId = localUser.meshId,
+                                    photoPath = photoResult.first.absolutePath,
+                                    photoHash = photoResult.second,
+                                    version = System.currentTimeMillis(),
+                                    lastUpdated = System.currentTimeMillis()
+                                )
+                                profileSyncManager.notifyProfilePhotoUpdated(photoResult.first, photoResult.second)
+                            }
+                        }
+                    }
                     _uiState.value = ProfileSetupUiState.Idle
                     _uiEvent.emit(ProfileSetupEvent.SetupSuccess)
                 }

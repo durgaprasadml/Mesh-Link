@@ -18,7 +18,9 @@ object PacketEncryptionPolicy {
         return when (type) {
             PacketType.KEY_EXCHANGE,
             PacketType.SOS,
-            PacketType.BEACON -> EncryptionRequirement.BOOTSTRAP_ONLY
+            PacketType.BEACON,
+            PacketType.PROFILE_IMAGE_REQUEST,
+            PacketType.PROFILE_IMAGE_RESPONSE -> EncryptionRequirement.BOOTSTRAP_ONLY
             
             PacketType.SESSION_REKEY -> EncryptionRequirement.OPTIONAL
             

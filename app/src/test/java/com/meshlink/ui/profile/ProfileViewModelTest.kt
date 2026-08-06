@@ -23,6 +23,8 @@ class ProfileViewModelTest {
     val mainDispatcherRule = MainDispatcherRule(testDispatcher)
 
     private val userRepository = mockk<UserRepository>(relaxed = true)
+    private val profilePhotoManager = mockk<com.meshlink.profile.ProfilePhotoManager>(relaxed = true)
+    private val profileSyncManager = mockk<com.meshlink.profile.ProfileSyncManager>(relaxed = true)
 
     private lateinit var viewModel: ProfileViewModel
 
@@ -36,7 +38,7 @@ class ProfileViewModelTest {
         val user = User(meshId = "u_100", name = "Alice", aboutMe = "Developer")
         every { userRepository.localUser } returns kotlinx.coroutines.flow.flowOf(user)
 
-        viewModel = ProfileViewModel(userRepository)
+        viewModel = ProfileViewModel(userRepository, profilePhotoManager, profileSyncManager)
         testScheduler.advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.isLoading)
@@ -54,7 +56,7 @@ class ProfileViewModelTest {
             userFlow.value = updatedUser
         }
 
-        viewModel = ProfileViewModel(userRepository)
+        viewModel = ProfileViewModel(userRepository, profilePhotoManager, profileSyncManager)
         testScheduler.advanceUntilIdle()
 
         viewModel.saveProfile("Alice Wonder", "Architect", null)
@@ -72,7 +74,7 @@ class ProfileViewModelTest {
         every { userRepository.localUser } returns kotlinx.coroutines.flow.flowOf(initialUser)
         coEvery { userRepository.updateProfile(any(), any(), any()) } throws RuntimeException("Database write failed")
 
-        viewModel = ProfileViewModel(userRepository)
+        viewModel = ProfileViewModel(userRepository, profilePhotoManager, profileSyncManager)
         testScheduler.advanceUntilIdle()
 
         viewModel.saveProfile("Alice", "Bio", null)
@@ -86,7 +88,7 @@ class ProfileViewModelTest {
     fun `dismissError clears saveError state`() = runTest(testDispatcher) {
         every { userRepository.localUser } returns kotlinx.coroutines.flow.flowOf(null)
         coEvery { userRepository.updateProfile(any(), any(), any()) } throws RuntimeException("Error")
-        viewModel = ProfileViewModel(userRepository)
+        viewModel = ProfileViewModel(userRepository, profilePhotoManager, profileSyncManager)
         testScheduler.advanceUntilIdle()
 
         viewModel.saveProfile("Bob", null, null)

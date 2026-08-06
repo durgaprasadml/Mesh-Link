@@ -42,7 +42,8 @@ class IncomingPacketDispatcher @Inject constructor(
     private val voiceMessageHandler: VoiceMessageHandler,
     private val broadcastHandler: BroadcastHandler,
     private val ackManager: AckManager,
-    private val beaconHandler: BeaconHandler
+    private val beaconHandler: BeaconHandler,
+    private val profileSyncManagerProvider: javax.inject.Provider<com.meshlink.profile.ProfileSyncManager>
 ) {
     private val TAG = "IncomingPacketDispatcher"
 
@@ -147,6 +148,12 @@ class IncomingPacketDispatcher @Inject constructor(
                 }
                 PacketType.BEACON -> {
                     beaconHandler.handleBeaconPacket(processedPacket)
+                }
+                PacketType.PROFILE_IMAGE_REQUEST -> {
+                    profileSyncManagerProvider.get().handleProfileImageRequest(processedPacket)
+                }
+                PacketType.PROFILE_IMAGE_RESPONSE -> {
+                    profileSyncManagerProvider.get().handleProfileImageResponse(processedPacket)
                 }
                 PacketType.VIDEO_SIGNAL,
                 PacketType.VIDEO_FRAME,

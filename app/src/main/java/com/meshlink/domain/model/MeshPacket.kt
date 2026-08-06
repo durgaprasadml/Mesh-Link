@@ -23,7 +23,9 @@ enum class PacketType {
     CHECK_IN,
     FORM_SYNC,
     RESOURCE_SYNC,
-    MAP_SYNC
+    MAP_SYNC,
+    PROFILE_IMAGE_REQUEST,
+    PROFILE_IMAGE_RESPONSE
 }
 
 enum class PacketPriority(val level: Int) {

@@ -77,6 +77,10 @@ class UserLocalDataSourceImpl @Inject constructor(
         return userDao.observeUser(meshId)
     }
 
+    override suspend fun updateProfilePhoto(meshId: String, photoPath: String, photoHash: String, version: Long, lastUpdated: Long) {
+        userDao.updateProfilePhoto(meshId, photoPath, photoHash, version, lastUpdated)
+    }
+
     override suspend fun clearLocalData() {
         dataStore.edit { preferences ->
             preferences.clear()

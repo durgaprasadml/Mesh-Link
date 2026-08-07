@@ -79,5 +79,26 @@ class MeshLifecycleManager @Inject constructor(
         meshSupervisor.startAllSubsystems()
     }
 
+    fun initializeAfterOnboarding() {
+        MeshLogger.d(TAG, "[MeshStartup] ONBOARDING_COMPLETED: Explicitly initializing mesh engine post-onboarding")
+        initialize()
+        _isMeshRunning.value = true
+        _isPaused.value = false
+        meshSupervisor.forceRestartAllSubsystems()
+        meshWatchdog.start()
+    }
+
+    fun forceInitialize() {
+        MeshLogger.d(TAG, "[MeshStartup] Force initializing mesh engine")
+        _isMeshRunning.value = true
+        _isPaused.value = false
+        meshSupervisor.forceRestartAllSubsystems()
+        meshWatchdog.start()
+    }
+
+    fun isFullyOperational(): Boolean {
+        return _isMeshRunning.value && meshSupervisor.isFullyOperational()
+    }
+
     fun isMeshRunning(): Boolean = _isMeshRunning.value
 }

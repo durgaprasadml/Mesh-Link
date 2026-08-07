@@ -27,6 +27,7 @@ class HomeViewModelTest {
     private lateinit var userRepository: UserRepository
     private lateinit var meshRepository: MeshRepository
     private lateinit var chatDao: ChatDao
+    private lateinit var meshLifecycleManager: com.meshlink.service.MeshLifecycleManager
     private lateinit var viewModel: HomeViewModel
 
     @Before
@@ -34,6 +35,7 @@ class HomeViewModelTest {
         userRepository = mockk(relaxed = true)
         meshRepository = mockk(relaxed = true)
         chatDao = mockk(relaxed = true)
+        meshLifecycleManager = mockk(relaxed = true)
     }
 
     @Test
@@ -43,7 +45,7 @@ class HomeViewModelTest {
         every { meshRepository.scannedDevices } returns MutableStateFlow(emptyMap())
         every { chatDao.getAllChats() } returns flowOf(emptyList())
 
-        viewModel = HomeViewModel(userRepository, meshRepository, chatDao)
+        viewModel = HomeViewModel(userRepository, meshRepository, chatDao, meshLifecycleManager)
 
         viewModel.user.test {
             val user = awaitItem()
@@ -66,7 +68,7 @@ class HomeViewModelTest {
         every { meshRepository.scannedDevices } returns devicesFlow
         every { chatDao.getAllChats() } returns flowOf(listOf(chatEntity))
 
-        viewModel = HomeViewModel(userRepository, meshRepository, chatDao)
+        viewModel = HomeViewModel(userRepository, meshRepository, chatDao, meshLifecycleManager)
 
         viewModel.uiState.test {
             val firstState = awaitItem()

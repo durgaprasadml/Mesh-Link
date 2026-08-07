@@ -322,18 +322,27 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun autoStartMesh() {
         if (!startupState.compareAndSet(MeshStartupState.STOPPED, MeshStartupState.STARTING)) {
-            MeshLogger.d(TAG, "autoStartMesh ignored: already ${startupState.get()}")
+            MeshLogger.d(TAG, "[MeshStartup] autoStartMesh ignored: current state is ${startupState.get()}")
             return
         }
 
         try {
-            val user = userRepository.getLocalUser() ?: return
+            val user = userRepository.getLocalUser()
+            if (user == null) {
+                MeshLogger.w(TAG, "[MeshStartup] STARTUP_ABORTED_NO_PROFILE: No local profile found. Rolling back startupState to STOPPED.")
+                startupState.set(MeshStartupState.STOPPED)
+                return
+            }
+
+            MeshLogger.i(TAG, "[MeshStartup] PROFILE_FOUND: User=${user.name}, MeshID=${user.meshId}")
             val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
             meshRouter.localMeshId = localPeerId
             
             discoveryManager.startAdvertising(user.name, user.meshId, 0x01)
+            MeshLogger.i(TAG, "[MeshStartup] BLE_ADVERTISER_STARTED")
             startServer()
             startScanning()
+            MeshLogger.i(TAG, "[MeshStartup] BLE_SCANNER_STARTED")
 
             delay(2000)
             connectToAllScannedDevices()
@@ -342,6 +351,7 @@ class MeshMessagingManager @Inject constructor(
             dispatchSinglePacket("BROADCAST", keyExchangePacket)
 
             startupState.set(MeshStartupState.RUNNING)
+            MeshLogger.i(TAG, "[MeshStartup] MESH_READY")
 
             beaconJob?.cancel()
             beaconJob = applicationScope.launch {
@@ -359,15 +369,19 @@ class MeshMessagingManager @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            MeshLogger.e(TAG, "autoStartMesh failed: ${e.message}")
+            MeshLogger.e(TAG, "[MeshStartup] autoStartMesh failed: ${e.message}", e)
+            startupState.set(MeshStartupState.STOPPED)
             stopMesh()
             throw e
         }
     }
 
+    fun isOperational(): Boolean = startupState.get() == MeshStartupState.RUNNING
+
     suspend fun refreshMesh() {
         if (startupState.get() != MeshStartupState.RUNNING) {
-            MeshLogger.d(TAG, "refreshMesh: Mesh not fully running. Invoking full autoStartMesh.")
+            MeshLogger.d(TAG, "[MeshStartup] refreshMesh: Mesh not running (${startupState.get()}). Resetting state to STOPPED and starting.")
+            startupState.set(MeshStartupState.STOPPED)
             autoStartMesh()
             return
         }

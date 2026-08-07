@@ -33,8 +33,20 @@ class HomeViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val meshRepository: MeshRepository,
     chatDao: ChatDao,
+    private val meshLifecycleManager: com.meshlink.service.MeshLifecycleManager,
     @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : ViewModel() {
+
+    init {
+        viewModelScope.launch {
+            userRepository.localUser.collect { localUser ->
+                if (localUser != null && !meshLifecycleManager.isFullyOperational()) {
+                    com.meshlink.common.logger.MeshLogger.d("HomeViewModel", "[MeshStartup] Profile exists but mesh engine is not fully operational. Auto-recovering mesh engine.")
+                    meshLifecycleManager.startMesh()
+                }
+            }
+        }
+    }
 
     val user: StateFlow<User?> = userRepository.localUser
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

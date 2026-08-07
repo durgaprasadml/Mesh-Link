@@ -127,6 +127,7 @@ class MeshBackgroundService : Service() {
                 meshLifecycleManager.initialize()
                 meshLifecycleManager.startMesh()
                 _serviceState.value = ServiceState.RUNNING
+                MeshLogger.d(TAG, "[MeshStartup] BACKGROUND_SERVICE_ACTIVE")
 
                 // Observe nearby count to dynamically update notification
                 serviceScope.launch {

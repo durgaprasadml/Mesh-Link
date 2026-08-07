@@ -30,7 +30,8 @@ sealed class ProfileSetupEvent {
 class ProfileSetupViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val profilePhotoManager: com.meshlink.profile.ProfilePhotoManager,
-    private val profileSyncManager: com.meshlink.profile.ProfileSyncManager
+    private val profileSyncManager: com.meshlink.profile.ProfileSyncManager,
+    private val meshLifecycleManager: com.meshlink.service.MeshLifecycleManager
 ) : ViewModel() {
 
     val hasProfile: StateFlow<Boolean?> = userRepository.hasProfile
@@ -87,6 +88,7 @@ class ProfileSetupViewModel @Inject constructor(
                             }
                         }
                     }
+                    meshLifecycleManager.initializeAfterOnboarding()
                     _uiState.value = ProfileSetupUiState.Idle
                     _uiEvent.emit(ProfileSetupEvent.SetupSuccess)
                 }

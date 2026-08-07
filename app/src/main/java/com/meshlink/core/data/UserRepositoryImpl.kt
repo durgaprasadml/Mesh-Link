@@ -51,11 +51,11 @@ class UserRepositoryImpl @Inject constructor(
     @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name, avatarUri)"))
     override suspend fun createProfile(name: String, avatarUri: String?): Result<Unit> {
         return try {
-            val meshId = java.util.UUID.randomUUID().toString()
-            val user = UserEntity(meshId = meshId, name = name, avatarUri = avatarUri)
+            val identity = identityManager.getOrCreateIdentity()
+            identityManager.updateDisplayName(name)
+            val user = UserEntity(meshId = identity.meshId, name = name, avatarUri = avatarUri)
             localDataSource.insertUser(user)
             localDataSource.setProfileCreated(true)
-            identityManager.updateDisplayName(name)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -64,11 +64,12 @@ class UserRepositoryImpl @Inject constructor(
 
     override suspend fun setupProfile(name: String, avatarUri: String?): com.meshlink.domain.model.MeshResult<Unit> {
         return try {
-            val meshId = java.util.UUID.randomUUID().toString()
-            val user = UserEntity(meshId = meshId, name = name, avatarUri = avatarUri)
+            val identity = identityManager.getOrCreateIdentity()
+            identityManager.updateDisplayName(name)
+            val user = UserEntity(meshId = identity.meshId, name = name, avatarUri = avatarUri)
             localDataSource.insertUser(user)
             localDataSource.setProfileCreated(true)
-            identityManager.updateDisplayName(name)
+            com.meshlink.common.logger.MeshLogger.i("UserRepository", "[MeshStartup] IDENTITY_READY: MeshID=${identity.meshId}, Name=$name")
             com.meshlink.domain.model.MeshResult.Success(Unit)
         } catch (e: Exception) {
             com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.UnknownError("Failed to setup profile", e))

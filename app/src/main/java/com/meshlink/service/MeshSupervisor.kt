@@ -49,9 +49,12 @@ class MeshSupervisor @Inject constructor(
     }
 
     fun startAllSubsystems() {
-        if (isSupervising) return
+        if (isSupervising && isFullyOperational()) {
+            MeshLogger.d(TAG, "[MeshStartup] All subsystems already supervising and operational. Skipping duplicate startup.")
+            return
+        }
         isSupervising = true
-        MeshLogger.d(TAG, "Initializing and starting all mesh subsystems under supervisor supervision")
+        MeshLogger.d(TAG, "[MeshStartup] Initializing and starting all mesh subsystems under supervisor supervision")
 
         externalScope.launch(Dispatchers.IO) {
             try {
@@ -77,11 +80,18 @@ class MeshSupervisor @Inject constructor(
                 updateSubsystemState(RadioSubsystem.ROUTING_ENGINE, RadioState.RUNNING)
                 updateSubsystemState(RadioSubsystem.PACKET_DISPATCHER, RadioState.RUNNING)
 
-                MeshLogger.d(TAG, "All mesh subsystems successfully initialized and RUNNING")
+                MeshLogger.d(TAG, "[MeshStartup] All mesh subsystems successfully initialized and RUNNING")
             } catch (e: Exception) {
-                MeshLogger.e(TAG, "Error starting mesh subsystems: ${e.message}", e)
+                MeshLogger.e(TAG, "[MeshStartup] Error starting mesh subsystems: ${e.message}", e)
+                isSupervising = false
             }
         }
+    }
+
+    fun forceRestartAllSubsystems() {
+        MeshLogger.d(TAG, "[MeshStartup] Force restart requested for all mesh subsystems")
+        isSupervising = false
+        startAllSubsystems()
     }
 
     fun stopAllSubsystems() {

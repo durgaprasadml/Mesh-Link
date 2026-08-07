@@ -29,7 +29,7 @@ class MessageStateMachineTest {
     @Test
     fun `transitionToQueued updates status to QUEUED`() = runTest {
         messageStateMachine.transitionToQueued("msg_1")
-        coVerify { chatDao.updateMessageStatus("msg_1", DeliveryStatus.QUEUED) }
+        coVerify { chatDao.updateMessageStatusConditional("msg_1", DeliveryStatus.QUEUED, any()) }
     }
 
     @Test
@@ -40,7 +40,7 @@ class MessageStateMachineTest {
 
         messageStateMachine.transitionToSent("msg_1")
 
-        coVerify { chatDao.updateMessageStatus("msg_1", DeliveryStatus.SENT) }
+        coVerify { chatDao.updateMessageStatusConditional("msg_1", DeliveryStatus.SENT, any()) }
     }
 
     @Test
@@ -51,19 +51,19 @@ class MessageStateMachineTest {
 
         messageStateMachine.transitionToSent("msg_1")
 
-        coVerify(exactly = 0) { chatDao.updateMessageStatus("msg_1", any()) }
+        coVerify(exactly = 0) { chatDao.updateMessageStatusConditional("msg_1", any(), any()) }
     }
 
     @Test
     fun `transitionToDelivered updates status to DELIVERED`() = runTest {
         messageStateMachine.transitionToDelivered("msg_1")
-        coVerify { chatDao.updateMessageStatus("msg_1", DeliveryStatus.DELIVERED) }
+        coVerify { chatDao.updateMessageStatusConditional("msg_1", DeliveryStatus.DELIVERED, any()) }
     }
 
     @Test
     fun `transitionToSeen updates status to SEEN`() = runTest {
         messageStateMachine.transitionToSeen("msg_1")
-        coVerify { chatDao.updateMessageStatus("msg_1", DeliveryStatus.SEEN) }
+        coVerify { chatDao.updateMessageStatusConditional("msg_1", DeliveryStatus.SEEN, any()) }
     }
 
     @Test
@@ -74,6 +74,6 @@ class MessageStateMachineTest {
 
         messageStateMachine.transitionToFailed("msg_1")
 
-        coVerify(exactly = 0) { chatDao.updateMessageStatus("msg_1", any()) }
+        coVerify(exactly = 0) { chatDao.updateMessageStatusConditional("msg_1", any(), any()) }
     }
 }

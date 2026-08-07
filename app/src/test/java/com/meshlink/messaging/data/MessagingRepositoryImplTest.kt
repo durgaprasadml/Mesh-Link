@@ -21,13 +21,15 @@ class MessagingRepositoryImplTest {
 
     private lateinit var chatLocalDataSource: ChatLocalDataSource
     private lateinit var userDao: com.meshlink.database.data.local.UserDao
+    private lateinit var stateMachine: MessageStateMachine
     private lateinit var repository: MessagingRepositoryImpl
 
     @Before
     fun setup() {
         chatLocalDataSource = mockk(relaxed = true)
         userDao = mockk(relaxed = true)
-        repository = MessagingRepositoryImpl(chatLocalDataSource, userDao)
+        stateMachine = mockk(relaxed = true)
+        repository = MessagingRepositoryImpl(chatLocalDataSource, userDao, stateMachine)
     }
 
     @Test
@@ -78,11 +80,11 @@ class MessagingRepositoryImplTest {
     }
 
     @Test
-    fun `updateMessageStatus should convert status and call source`() = runTest {
+    fun `updateMessageStatus should delegate to stateMachine`() = runTest {
         repository.updateMessageStatus("msg_1", DeliveryStatus.DELIVERED)
 
         coVerify(exactly = 1) { 
-            chatLocalDataSource.updateMessageStatus("msg_1", com.meshlink.database.data.local.DeliveryStatus.DELIVERED) 
+            stateMachine.transitionToDelivered("msg_1") 
         }
     }
 

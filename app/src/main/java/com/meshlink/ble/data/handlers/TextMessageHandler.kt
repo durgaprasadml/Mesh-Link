@@ -23,7 +23,8 @@ class TextMessageHandler @Inject constructor(
     @ApplicationContext private val context: Context,
     private val userRepository: UserRepository,
     private val chatDao: ChatDao,
-    private val packetDispatcher: PacketDispatcher
+    private val packetDispatcher: PacketDispatcher,
+    private val stateMachine: com.meshlink.messaging.data.MessageStateMachine
 ) {
     private val TAG = "TextMessageHandler"
 
@@ -56,7 +57,7 @@ class TextMessageHandler @Inject constructor(
             is com.meshlink.domain.model.DispatchResult.QueueFull,
             is com.meshlink.domain.model.DispatchResult.Rejected,
             is com.meshlink.domain.model.DispatchResult.Error -> {
-                chatDao.updateMessageStatus(messageId, DeliveryStatus.WAITING_FOR_ROUTE)
+                stateMachine.transitionToWaitingForRoute(messageId)
             }
         }
     }

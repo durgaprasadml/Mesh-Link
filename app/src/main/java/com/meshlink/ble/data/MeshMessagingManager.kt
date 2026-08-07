@@ -61,7 +61,8 @@ class MeshMessagingManager @Inject constructor(
     private val broadcastHandler: BroadcastHandler,
     private val ackManager: AckManager,
     private val beaconHandler: com.meshlink.ble.data.handlers.BeaconHandler,
-    private val retryCoordinator: com.meshlink.common.recovery.RetryCoordinator
+    private val retryCoordinator: com.meshlink.common.recovery.RetryCoordinator,
+    private val stateMachine: com.meshlink.messaging.data.MessageStateMachine
 ) : MessageProcessor, PacketDispatcher by corePacketDispatcher {
 
     enum class MeshStartupState { STOPPED, STARTING, RUNNING }
@@ -181,7 +182,7 @@ class MeshMessagingManager @Inject constructor(
                             is com.meshlink.domain.model.DispatchResult.QueueFull,
                             is com.meshlink.domain.model.DispatchResult.Rejected,
                             is com.meshlink.domain.model.DispatchResult.Error -> {
-                                chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.WAITING_FOR_ROUTE)
+                                stateMachine.transitionToWaitingForRoute(msg.messageId)
                             }
                         }
                     }
@@ -223,7 +224,7 @@ class MeshMessagingManager @Inject constructor(
                             is com.meshlink.domain.model.DispatchResult.QueueFull,
                             is com.meshlink.domain.model.DispatchResult.Rejected,
                             is com.meshlink.domain.model.DispatchResult.Error -> {
-                                chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.WAITING_FOR_ROUTE)
+                                stateMachine.transitionToWaitingForRoute(msg.messageId)
                             }
                         }
                     }

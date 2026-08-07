@@ -73,6 +73,7 @@ class BleRepositoryImpl @Inject constructor(
     private val meshMessagingManager: MeshMessagingManager,
     private val voiceTransport: VoiceTransport,
     private val gattManager: BleGattManager,
+    private val stateMachine: com.meshlink.messaging.data.MessageStateMachine,
     @ApplicationContext private val context: Context,
     @com.meshlink.di.ApplicationScope private val applicationScope: kotlinx.coroutines.CoroutineScope
 ) : MeshRepository {
@@ -140,25 +141,22 @@ class BleRepositoryImpl @Inject constructor(
 
         transferManager.onOutgoingTransferCompleted = { session ->
             applicationScope.launch {
-                chatDao.updateMessageStatus(session.transferId, DeliveryStatus.SENT)
+                stateMachine.transitionToSent(session.transferId)
             }
         }
 
         transferManager.onTransferStateChanged = { transferId, state ->
             applicationScope.launch {
-                val dbStatus = when (state) {
-                    com.meshlink.transfer.TransferState.QUEUED -> DeliveryStatus.QUEUED
+                when (state) {
+                    com.meshlink.transfer.TransferState.QUEUED -> stateMachine.transitionToQueued(transferId)
                     com.meshlink.transfer.TransferState.STREAMING,
                     com.meshlink.transfer.TransferState.SENDING,
                     com.meshlink.transfer.TransferState.RECEIVING,
-                    com.meshlink.transfer.TransferState.RESUMING -> DeliveryStatus.SENDING
-                    com.meshlink.transfer.TransferState.FAILED -> DeliveryStatus.FAILED
-                    com.meshlink.transfer.TransferState.CANCELLED -> DeliveryStatus.FAILED
-                    com.meshlink.transfer.TransferState.COMPLETED -> DeliveryStatus.SENT
-                    else -> null
-                }
-                if (dbStatus != null) {
-                    chatDao.updateMessageStatus(transferId, dbStatus)
+                    com.meshlink.transfer.TransferState.RESUMING -> stateMachine.transitionToSending(transferId)
+                    com.meshlink.transfer.TransferState.FAILED,
+                    com.meshlink.transfer.TransferState.CANCELLED -> stateMachine.transitionToFailed(transferId)
+                    com.meshlink.transfer.TransferState.COMPLETED -> stateMachine.transitionToSent(transferId)
+                    else -> {}
                 }
             }
         }

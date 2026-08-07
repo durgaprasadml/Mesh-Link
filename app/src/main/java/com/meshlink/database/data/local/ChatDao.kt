@@ -30,6 +30,9 @@ interface ChatDao {
     @Query("UPDATE messages SET status = :status WHERE messageId = :messageId")
     suspend fun updateMessageStatus(messageId: String, status: DeliveryStatus)
 
+    @Query("UPDATE messages SET status = :newStatus WHERE messageId = :messageId AND status IN (:allowedPreviousStatuses)")
+    suspend fun updateMessageStatusConditional(messageId: String, newStatus: DeliveryStatus, allowedPreviousStatuses: List<DeliveryStatus>): Int
+
     @Query("SELECT * FROM messages WHERE status = :status")
     suspend fun getMessagesByStatus(status: DeliveryStatus): List<MessageEntity>
 

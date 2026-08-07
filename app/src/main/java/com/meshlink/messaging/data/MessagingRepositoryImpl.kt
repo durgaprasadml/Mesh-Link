@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.map
 
 class MessagingRepositoryImpl @Inject constructor(
     private val chatLocalDataSource: ChatLocalDataSource,
-    private val userDao: com.meshlink.database.data.local.UserDao
+    private val userDao: com.meshlink.database.data.local.UserDao,
+    private val stateMachine: MessageStateMachine
 ) : ChatRepository {
 
     override fun getMessagesForChat(chatId: String): Flow<List<Message>> {
@@ -51,12 +52,20 @@ class MessagingRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateMessageStatus(messageId: String, status: DeliveryStatus) {
-        val deliveryStatus = try {
-            com.meshlink.database.data.local.DeliveryStatus.valueOf(status.name)
-        } catch (e: Exception) {
-            return
+        when (status) {
+            DeliveryStatus.PENDING -> stateMachine.transitionToPending(messageId)
+            DeliveryStatus.QUEUED -> stateMachine.transitionToQueued(messageId)
+            DeliveryStatus.SENDING -> stateMachine.transitionToSending(messageId)
+            DeliveryStatus.SENT -> stateMachine.transitionToSent(messageId)
+            DeliveryStatus.WAITING_FOR_ACK -> stateMachine.transitionToWaitingForAck(messageId)
+            DeliveryStatus.RETRYING -> stateMachine.transitionToRetrying(messageId)
+            DeliveryStatus.WAITING_FOR_ROUTE -> stateMachine.transitionToWaitingForRoute(messageId)
+            DeliveryStatus.DELIVERED, DeliveryStatus.RELAYED -> stateMachine.transitionToDelivered(messageId)
+            DeliveryStatus.SEEN -> stateMachine.transitionToSeen(messageId)
+            DeliveryStatus.EXPIRED -> stateMachine.transitionToExpired(messageId)
+            DeliveryStatus.CANCELLED -> stateMachine.transitionToCancelled(messageId)
+            DeliveryStatus.PERMANENT_FAILURE, DeliveryStatus.FAILED -> stateMachine.transitionToPermanentFailure(messageId)
         }
-        chatLocalDataSource.updateMessageStatus(messageId, deliveryStatus)
     }
 
     override suspend fun deleteMessages(messageIds: List<String>) {

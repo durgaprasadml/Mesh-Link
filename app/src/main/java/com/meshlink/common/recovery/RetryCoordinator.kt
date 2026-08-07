@@ -155,6 +155,14 @@ class RetryCoordinator @Inject constructor(
                 delay(delayMs)
             }
 
+            // Re-verify DB status after delay/waking to ensure ACK did not arrive during delay
+            val latestMsg = chatDao.getMessageByUuid(messageId)
+            if (latestMsg == null || !isPendingDeliveryStatus(latestMsg.status)) {
+                MeshLogger.d(TAG, "Aborting retry for $messageId: current status is ${latestMsg?.status}")
+                cancelRetryForPacket(messageId)
+                return@launch
+            }
+
             if (!intelligentRetryEngine.shouldRetryNow()) {
                 MeshLogger.d(TAG, "Skipping retry attempt $attempt for $messageId due to battery/congestion")
                 return@launch
@@ -162,9 +170,14 @@ class RetryCoordinator @Inject constructor(
 
             try {
                 MeshLogger.d(TAG, "Attempting delivery attempt $attempt for message $messageId to ${msg.chatId}")
-                stateMachine.transitionToSending(messageId)
+                val transitioned = stateMachine.transitionToSending(messageId)
+                if (!transitioned) {
+                    MeshLogger.w(TAG, "Aborting retry for $messageId: failed to transition to SENDING")
+                    cancelRetryForPacket(messageId)
+                    return@launch
+                }
                 
-                val domainMsg = msg.toDomain()
+                val domainMsg = latestMsg.toDomain()
                 meshRepositoryProvider.get().sendMessage(msg.chatId, domainMsg)
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Retry attempt $attempt failed for message $messageId: ${e.message}")

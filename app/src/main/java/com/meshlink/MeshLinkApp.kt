@@ -1,6 +1,8 @@
 package com.meshlink
 
 import android.app.Application
+import android.content.Intent
+import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -10,6 +12,8 @@ import com.meshlink.service.work.BackgroundTaskScheduler
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.common.power.AdaptiveMeshPowerManager
 import com.meshlink.common.logger.MeshCrashReporter
+import com.meshlink.service.MeshBackgroundService
+import com.meshlink.service.MeshLifecycleManager
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -28,6 +32,9 @@ class MeshLinkApp : Application(), Configuration.Provider {
 
     @Inject
     lateinit var meshCrashReporter: MeshCrashReporter
+
+    @Inject
+    lateinit var meshLifecycleManager: MeshLifecycleManager
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -52,6 +59,25 @@ class MeshLinkApp : Application(), Configuration.Provider {
         meshCrashReporter.setUserId("durgaprasadmadikeri@gmail.com")
         meshCrashReporter.logBreadcrumb("MeshLinkApp initialized")
         
+        // Initialize Mesh Engine Lifecycle Manager
+        meshLifecycleManager.initialize()
+
+        // Start MeshBackgroundService
+        val serviceIntent = Intent(this, MeshBackgroundService::class.java).apply {
+            action = MeshBackgroundService.ACTION_START
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+            MeshLogger.e("MeshLinkApp", "ForegroundServiceStartNotAllowedException on app start: ${e.message}")
+        } catch (e: Exception) {
+            MeshLogger.e("MeshLinkApp", "Failed to start MeshBackgroundService on app start: ${e.message}")
+        }
+
         applicationScope.launch {
             // Schedule periodic background maintenance off the main thread
             backgroundTaskScheduler.schedulePeriodicWork()
@@ -64,7 +90,7 @@ class MeshLinkApp : Application(), Configuration.Provider {
             }
 
             override fun onStop(owner: LifecycleOwner) {
-                MeshLogger.d("Lifecycle", "Application moved to BACKGROUND")
+                MeshLogger.d("Lifecycle", "Application moved to BACKGROUND — Mesh engine continues running persistent background service")
                 // Adaptive manager stays alive to listen for Doze/Battery intents
             }
         })

@@ -168,4 +168,10 @@ class BleAdvertiserManager @Inject constructor(
             MeshLogger.e(TAG, "Error stopping advertising: ${e.message}", e)
         }
     }
+
+    fun restartAdvertising(name: String, meshId: String, capabilities: Byte = 0) {
+        MeshLogger.d(TAG, "Restarting BLE advertising")
+        stopAdvertising()
+        startAdvertising(name, meshId, capabilities)
+    }
 }

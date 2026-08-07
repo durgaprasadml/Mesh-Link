@@ -27,6 +27,10 @@ class TransportDiagnostics @Inject constructor() {
         private const val TAG = "TransportDiagnostics"
         var isEnabled: Boolean = true
         var minLogLevel: DiagnosticLogLevel = DiagnosticLogLevel.DEBUG
+
+        var foregroundServiceStartTimeMs: Long = 0L
+        var watchdogRecoveryCount: Int = 0
+        var backgroundPacketCount: Long = 0L
     }
 
     fun logTransportSelection(

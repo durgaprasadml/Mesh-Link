@@ -72,6 +72,11 @@
             android:foregroundServiceType="connectedDevice" />
 
         <service
+            android:name=".service.MeshBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <service
             android:name=".alarm.EmergencyAlarmService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />

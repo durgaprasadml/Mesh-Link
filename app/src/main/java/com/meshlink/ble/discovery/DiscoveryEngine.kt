@@ -85,8 +85,8 @@ class DiscoveryEngine @Inject constructor(
                     MeshLogger.e(TAG, "Failed to stop hardware scan: ${e.message}")
                 }
                 
-                // Cleanup stale peers and duplicate filters during idle
-                val evicted = cache.evictStale(timeoutMillis = 30000L) // 30 seconds stale
+                // Cleanup stale peers and duplicate filters during idle (60s configurable timeout to prevent Nearby flickering)
+                val evicted = cache.evictStale(timeoutMillis = 60000L)
                 if (evicted > 0) publishCache()
                 duplicateFilter.prune()
                 

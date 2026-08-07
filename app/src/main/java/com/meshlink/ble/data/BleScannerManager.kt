@@ -64,6 +64,12 @@ class BleScannerManager @Inject constructor(
         discoveryEngine.stop()
     }
 
+    fun restartScanning() {
+        MeshLogger.d(TAG, "Restarting BLE scanner")
+        stopScanning()
+        startScanning()
+    }
+
     private fun startHardwareScan() {
         applicationScope.launch {
             if (!settingsRepository.bleScanningEnabled.first() || !settingsRepository.isBleEnabled.first()) {

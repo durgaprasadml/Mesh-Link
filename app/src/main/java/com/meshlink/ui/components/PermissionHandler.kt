@@ -22,6 +22,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
+import android.net.wifi.WifiManager
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import androidx.compose.material3.OutlinedButton
+
 @Composable
 fun PermissionHandler(
     onPermissionsGranted: @Composable () -> Unit
@@ -36,6 +41,25 @@ fun PermissionHandler(
 
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
     var isLocationEnabled by remember { mutableStateOf(locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) }
+
+    val wifiManager = remember(context) { context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager }
+    var isWifiEnabled by remember { mutableStateOf(wifiManager?.isWifiEnabled == true) }
+    var isWifiSkipped by remember { mutableStateOf(false) }
+
+    DisposableEffect(context, wifiManager) {
+        val filter = IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                isWifiEnabled = wifiManager?.isWifiEnabled == true
+            }
+        }
+        context.registerReceiver(receiver, filter)
+        onDispose {
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (_: Exception) {}
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -79,6 +103,12 @@ fun PermissionHandler(
         isLocationEnabled = locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
     }
 
+    val wifiEnableLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        isWifiEnabled = wifiManager?.isWifiEnabled == true
+    }
+
     val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
@@ -86,7 +116,8 @@ fun PermissionHandler(
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.POST_NOTIFICATIONS
+            Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.NEARBY_WIFI_DEVICES
         )
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
@@ -186,6 +217,48 @@ fun PermissionHandler(
                 Text("Turn on Location")
             }
         }
+    } else if (!isWifiEnabled && !isWifiSkipped) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(MeshTheme.spacing.extraLarge),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "Wi-Fi is turned off",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+            Text(
+                "Mesh-Link uses Wi-Fi Direct for high-speed media and file transfers.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
+            Button(onClick = {
+                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    Intent(android.provider.Settings.Panel.ACTION_WIFI)
+                } else {
+                    Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)
+                }
+                try {
+                    wifiEnableLauncher.launch(intent)
+                } catch (_: Exception) {
+                    val fallbackIntent = Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)
+                    wifiEnableLauncher.launch(fallbackIntent)
+                }
+            }) {
+                Text("Turn on Wi-Fi")
+            }
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+            OutlinedButton(onClick = { isWifiSkipped = true }) {
+                Text("Continue with BLE only")
+            }
+        }
     } else {
         onPermissionsGranted()
     }
@@ -199,7 +272,8 @@ fun hasRequiredPermissions(context: Context): Boolean {
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.POST_NOTIFICATIONS
+            Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.NEARBY_WIFI_DEVICES
         )
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         listOf(

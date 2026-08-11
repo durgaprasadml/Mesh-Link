@@ -41,6 +41,14 @@ class MeshSupervisor @Inject constructor(
 
     private var isSupervising = false
 
+    init {
+        externalScope.launch {
+            wifiDirectManager.radioState.collect { state ->
+                updateSubsystemState(RadioSubsystem.WIFI_DIRECT, state)
+            }
+        }
+    }
+
     fun updateSubsystemState(subsystem: RadioSubsystem, state: RadioState) {
         val current = _subsystemStates.value.toMutableMap()
         current[subsystem] = state
@@ -56,7 +64,7 @@ class MeshSupervisor @Inject constructor(
         isSupervising = true
         MeshLogger.d(TAG, "[MeshStartup] Initializing and starting all mesh subsystems under supervisor supervision")
 
-        externalScope.launch(Dispatchers.IO) {
+        externalScope.launch {
             try {
                 updateSubsystemState(RadioSubsystem.BLE_SCANNER, RadioState.INITIALIZING)
                 updateSubsystemState(RadioSubsystem.BLE_ADVERTISER, RadioState.INITIALIZING)
@@ -75,12 +83,12 @@ class MeshSupervisor @Inject constructor(
                 updateSubsystemState(RadioSubsystem.BLE_SCANNER, RadioState.RUNNING)
                 updateSubsystemState(RadioSubsystem.BLE_ADVERTISER, RadioState.RUNNING)
                 updateSubsystemState(RadioSubsystem.GATT_SERVER, RadioState.RUNNING)
-                updateSubsystemState(RadioSubsystem.WIFI_DIRECT, RadioState.RUNNING)
+                updateSubsystemState(RadioSubsystem.WIFI_DIRECT, wifiDirectManager.radioState.value)
                 updateSubsystemState(RadioSubsystem.DISCOVERY_ENGINE, RadioState.RUNNING)
                 updateSubsystemState(RadioSubsystem.ROUTING_ENGINE, RadioState.RUNNING)
                 updateSubsystemState(RadioSubsystem.PACKET_DISPATCHER, RadioState.RUNNING)
 
-                MeshLogger.d(TAG, "[MeshStartup] All mesh subsystems successfully initialized and RUNNING")
+                MeshLogger.d(TAG, "[MeshStartup] All mesh subsystems successfully initialized and operational")
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "[MeshStartup] Error starting mesh subsystems: ${e.message}", e)
                 isSupervising = false
@@ -97,7 +105,7 @@ class MeshSupervisor @Inject constructor(
     fun stopAllSubsystems() {
         isSupervising = false
         MeshLogger.d(TAG, "Stopping all supervised mesh subsystems")
-        externalScope.launch(Dispatchers.IO) {
+        externalScope.launch {
             try {
                 wifiDirectManager.stopWifiDirect()
                 meshRepository.stopMesh()
@@ -114,7 +122,7 @@ class MeshSupervisor @Inject constructor(
     fun restartSubsystem(subsystem: RadioSubsystem) {
         MeshLogger.w(TAG, "Targeted restart requested for subsystem: $subsystem")
         updateSubsystemState(subsystem, RadioState.RECOVERING)
-        externalScope.launch(Dispatchers.IO) {
+        externalScope.launch {
             try {
                 when (subsystem) {
                     RadioSubsystem.BLE_SCANNER -> {
@@ -143,8 +151,9 @@ class MeshSupervisor @Inject constructor(
                         meshRepository.refreshMesh()
                     }
                 }
-                updateSubsystemState(subsystem, RadioState.RUNNING)
-                MeshLogger.d(TAG, "Subsystem $subsystem successfully recovered to RUNNING")
+                val newState = if (subsystem == RadioSubsystem.WIFI_DIRECT) wifiDirectManager.radioState.value else RadioState.RUNNING
+                updateSubsystemState(subsystem, newState)
+                MeshLogger.d(TAG, "Subsystem $subsystem successfully recovered to $newState")
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Failed to recover subsystem $subsystem: ${e.message}")
                 updateSubsystemState(subsystem, RadioState.FAILED)
@@ -153,6 +162,12 @@ class MeshSupervisor @Inject constructor(
     }
 
     fun isFullyOperational(): Boolean {
-        return isSupervising && _subsystemStates.value.values.all { it == RadioState.RUNNING }
+        return isSupervising && _subsystemStates.value.entries.all { (subsystem, state) ->
+            if (subsystem == RadioSubsystem.WIFI_DIRECT) {
+                state == RadioState.RUNNING || state == RadioState.STOPPED
+            } else {
+                state == RadioState.RUNNING
+            }
+        }
     }
 }

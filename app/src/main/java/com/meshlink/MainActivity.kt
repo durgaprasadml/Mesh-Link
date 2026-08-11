@@ -124,8 +124,13 @@ class MainActivity : ComponentActivity() {
         NotificationHelper.setAppForeground(false)
     }
     
+    override fun onResume() {
+        super.onResume()
+        checkAndStartMesh()
+    }
+
     private fun checkAndStartMesh() {
-        if (hasRequiredPermissions(this)) {
+        if (com.meshlink.ui.components.areRadiosAndPermissionsReady(this)) {
             startRelayService()
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
@@ -134,6 +139,8 @@ class MainActivity : ComponentActivity() {
                     com.meshlink.common.logger.MeshLogger.e("MainActivity", "Error starting mesh: ${e.message}")
                 }
             }
+        } else {
+            com.meshlink.common.logger.MeshLogger.d("MainActivity", "Bluetooth and/or Wi-Fi or permissions not ready yet; deferring mesh startup")
         }
     }
 

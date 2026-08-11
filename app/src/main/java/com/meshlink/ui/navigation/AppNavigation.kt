@@ -102,14 +102,15 @@ fun AppNavigation(
     val showNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && isTopLevelScreen
     val showNavigationBar = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact && isTopLevelScreen
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        bottomBar = {
-            if (showNavigationBar) {
-                MeshNavigationBar(navController, currentRoute)
+    com.meshlink.ui.components.PermissionHandler {
+        Scaffold(
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            bottomBar = {
+                if (showNavigationBar) {
+                    MeshNavigationBar(navController, currentRoute)
+                }
             }
-        }
-    ) { paddingValues ->
+        ) { paddingValues ->
         Row(modifier = Modifier.fillMaxSize()) {
             if (showNavigationRail) {
                 MeshNavigationRail(navController, currentRoute)
@@ -252,6 +253,7 @@ fun AppNavigation(
             }
         }
     }
+}
 }
 
 /**

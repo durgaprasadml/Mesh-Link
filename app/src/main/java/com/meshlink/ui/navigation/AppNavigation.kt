@@ -1,5 +1,7 @@
 package com.meshlink.ui.navigation
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -46,7 +48,9 @@ import com.meshlink.ui.settings.SettingsScreen
 import com.meshlink.ui.broadcast.BroadcastScreen
 import com.meshlink.ui.sos.SosScreen
 import com.meshlink.util.NotificationHelper
-
+import com.meshlink.ui.components.PermissionHandler
+import com.meshlink.ui.components.rememberRadioAndPermissionState
+import com.meshlink.ui.components.findActivity
 
 import com.meshlink.ui.landing.LandingScreen
 
@@ -55,6 +59,7 @@ sealed class Screen(val route: String) {
     object Landing : Screen("landing/{isWelcome}") {
         fun createRoute(isWelcome: Boolean = false) = "landing/$isWelcome"
     }
+    object Permission : Screen("permission")
     object Home : Screen("home")
     object ChatsList : Screen("chats")
     object Nearby : Screen("nearby")
@@ -75,11 +80,7 @@ fun AppNavigation(
     viewModel: AppNavigationViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
     val hasProfile by viewModel.hasProfile.collectAsStateWithLifecycle(initialValue = null)
-
-    if (hasProfile == null) {
-        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())
-        return
-    }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -92,6 +93,16 @@ fun AppNavigation(
     val currentBackStackEntry = navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry.value?.destination?.route
 
+    // Global radio and permission state observed across entire application
+    val isRadiosAndPermissionsReady = rememberRadioAndPermissionState(context)
+    val isLandingScreen = currentRoute?.startsWith("landing") == true
+    val showGlobalPermissionGate = !isLandingScreen && !isRadiosAndPermissionsReady
+
+    // Prevent bypassing the mandatory radio requirement via system back button
+    BackHandler(enabled = showGlobalPermissionGate) {
+        context.findActivity()?.moveTaskToBack(true)
+    }
+
     val isTopLevelScreen = currentRoute in listOf(
         Screen.Home.route,
         Screen.Nearby.route,
@@ -99,83 +110,101 @@ fun AppNavigation(
         Screen.Settings.route
     )
 
-    val showNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && isTopLevelScreen
-    val showNavigationBar = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact && isTopLevelScreen
+    val showNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && isTopLevelScreen && !showGlobalPermissionGate
+    val showNavigationBar = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact && isTopLevelScreen && !showGlobalPermissionGate
 
-    com.meshlink.ui.components.PermissionHandler {
-        Scaffold(
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            bottomBar = {
-                if (showNavigationBar) {
-                    MeshNavigationBar(navController, currentRoute)
-                }
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        bottomBar = {
+            if (showNavigationBar) {
+                MeshNavigationBar(navController, currentRoute)
             }
-        ) { paddingValues ->
-        Row(modifier = Modifier.fillMaxSize()) {
-            if (showNavigationRail) {
-                MeshNavigationRail(navController, currentRoute)
-            }
-            val topLevelRoutes = listOf(Screen.Home.route, Screen.Nearby.route, Screen.Sos.route, Screen.Settings.route)
-            NavHost(
-                modifier = Modifier.padding(paddingValues),
-                navController = navController,
-                startDestination = if (hasProfile == true) Screen.Landing.createRoute(isWelcome = false) else Screen.ProfileSetup.route,
-                enterTransition = {
-                    if (initialState.destination.route?.startsWith("landing") == true && targetState.destination.route == Screen.Home.route) {
-                        androidx.compose.animation.EnterTransition.None
-                    } else if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeIn(tween(210, delayMillis = 90))
-                    } else {
-                        slideInHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeIn(tween(300))
-                    }
-                },
-                exitTransition = {
-                    if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeOut(tween(90))
-                    } else {
-                        fadeOut(tween(300))
-                    }
-                },
-                popEnterTransition = {
-                    if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeIn(tween(210, delayMillis = 90))
-                    } else {
-                        slideInHorizontally(tween(300)) { -(it * 0.2f).toInt() } + fadeIn(tween(300))
-                    }
-                },
-                popExitTransition = {
-                    if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeOut(tween(90))
-                    } else {
-                        slideOutHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeOut(tween(300))
-                    }
+        }
+    ) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                if (showNavigationRail) {
+                    MeshNavigationRail(navController, currentRoute)
                 }
-            ) {
-                
-                composable(
-                    route = Screen.Landing.route,
-                    arguments = listOf(
-                        navArgument("isWelcome") {
-                            type = NavType.BoolType
-                            defaultValue = false
+                val topLevelRoutes = listOf(Screen.Home.route, Screen.Nearby.route, Screen.Sos.route, Screen.Settings.route)
+                NavHost(
+                    modifier = Modifier.padding(paddingValues),
+                    navController = navController,
+                    startDestination = Screen.Landing.createRoute(isWelcome = false),
+                    enterTransition = {
+                        if (initialState.destination.route?.startsWith("landing") == true && targetState.destination.route == Screen.Home.route) {
+                            androidx.compose.animation.EnterTransition.None
+                        } else if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                            fadeIn(tween(210, delayMillis = 90))
+                        } else {
+                            slideInHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeIn(tween(300))
                         }
-                    ),
+                    },
                     exitTransition = {
-                        if (targetState.destination.route == Screen.Home.route) {
-                            fadeOut(tween(450, easing = androidx.compose.animation.core.LinearEasing))
+                        if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                            fadeOut(tween(90))
                         } else {
                             fadeOut(tween(300))
                         }
+                    },
+                    popEnterTransition = {
+                        if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                            fadeIn(tween(210, delayMillis = 90))
+                        } else {
+                            slideInHorizontally(tween(300)) { -(it * 0.2f).toInt() } + fadeIn(tween(300))
+                        }
+                    },
+                    popExitTransition = {
+                        if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                            fadeOut(tween(90))
+                        } else {
+                            slideOutHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeOut(tween(300))
+                        }
                     }
                 ) {
-                    LandingScreen(
-                        onAnimationComplete = {
-                            navController.navigate(Screen.Home.route) {
-                                popUpTo(Screen.Landing.route) { inclusive = true }
+                    
+                    composable(
+                        route = Screen.Landing.route,
+                        arguments = listOf(
+                            navArgument("isWelcome") {
+                                type = NavType.BoolType
+                                defaultValue = false
+                            }
+                        ),
+                        exitTransition = {
+                            if (targetState.destination.route == Screen.Home.route) {
+                                fadeOut(tween(450, easing = androidx.compose.animation.core.LinearEasing))
+                            } else {
+                                fadeOut(tween(300))
                             }
                         }
-                    )
-                }
+                    ) {
+                        LandingScreen(
+                            onAnimationComplete = {
+                                val targetRoute = if (hasProfile == false) Screen.ProfileSetup.route else Screen.Home.route
+                                navController.navigate(targetRoute) {
+                                    popUpTo(Screen.Landing.route) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Screen.Permission.route,
+                        enterTransition = { fadeIn(tween(300)) },
+                        exitTransition = { fadeOut(tween(300)) },
+                        popEnterTransition = { fadeIn(tween(300)) },
+                        popExitTransition = { fadeOut(tween(300)) }
+                    ) {
+                        PermissionHandler(
+                            onPermissionsGranted = {
+                                val targetRoute = if (hasProfile == false) Screen.ProfileSetup.route else Screen.Home.route
+                                navController.navigate(targetRoute) {
+                                    popUpTo(Screen.Landing.route) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
                 
                 composable(Screen.ProfileSetup.route) {
                     ProfileSetupScreen(
@@ -251,6 +280,10 @@ fun AppNavigation(
                     )
                 }
             }
+        }
+
+        if (showGlobalPermissionGate) {
+            PermissionHandler()
         }
     }
 }

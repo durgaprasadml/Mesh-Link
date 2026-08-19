@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshlink.ui.components.AnimatedErrorDialog
-import com.meshlink.ui.components.PermissionHandler
 import com.meshlink.ui.components.nearby.MeshDeviceCard
 import com.meshlink.ui.components.nearby.MeshNetworkStatsBar
 import com.meshlink.ui.components.nearby.MeshScanningEmptyState
@@ -43,8 +42,7 @@ fun NearbyDevicesScreen(
     onNavigateToChat: (String, String) -> Unit,
     viewModel: NearbyViewModel = hiltViewModel()
 ) {
-    PermissionHandler {
-        val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
         LaunchedEffect(Unit) {
             viewModel.startDiscovery()
@@ -257,4 +255,3 @@ fun NearbyDevicesScreen(
             }
         }
     }
-}

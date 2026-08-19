@@ -56,8 +56,48 @@ import android.content.BroadcastReceiver
 import android.content.IntentFilter
 
 @Composable
+fun rememberRadioAndPermissionState(context: Context = LocalContext.current): Boolean {
+    var isReady by remember { mutableStateOf(areRadiosAndPermissionsReady(context)) }
+
+    // Real-time broadcast listener for immediate Bluetooth & Wi-Fi radio state changes
+    DisposableEffect(context) {
+        val filter = IntentFilter().apply {
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                isReady = areRadiosAndPermissionsReady(context)
+            }
+        }
+        context.registerReceiver(receiver, filter)
+        onDispose {
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Re-check state on ON_RESUME when returning from Android System Settings or Dialogs
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isReady = areRadiosAndPermissionsReady(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    return isReady
+}
+
+@Composable
 fun PermissionHandler(
-    onPermissionsGranted: @Composable () -> Unit
+    onPermissionsGranted: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -65,8 +105,13 @@ fun PermissionHandler(
     var permanentlyDenied by remember { mutableStateOf(false) }
     var isBluetoothEnabled by remember { mutableStateOf(isBluetoothEnabled(context)) }
 
-    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-    var isLocationEnabled by remember { mutableStateOf(locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) }
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+    var isLocationEnabled by remember { 
+        mutableStateOf(
+            locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true ||
+            locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
+        ) 
+    }
 
     var isWifiEnabled by remember { mutableStateOf(isWifiEnabled(context)) }
 
@@ -78,8 +123,22 @@ fun PermissionHandler(
         }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
-                isBluetoothEnabled = isBluetoothEnabled(context)
-                isWifiEnabled = isWifiEnabled(context)
+                val action = intent?.action
+                if (action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                    val btState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    isBluetoothEnabled = when (btState) {
+                        BluetoothAdapter.STATE_ON -> true
+                        BluetoothAdapter.STATE_OFF -> false
+                        else -> isBluetoothEnabled(context)
+                    }
+                } else if (action == WifiManager.WIFI_STATE_CHANGED_ACTION) {
+                    val wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
+                    isWifiEnabled = when (wifiState) {
+                        WifiManager.WIFI_STATE_ENABLED -> true
+                        WifiManager.WIFI_STATE_DISABLED -> false
+                        else -> isWifiEnabled(context)
+                    }
+                }
             }
         }
         context.registerReceiver(receiver, filter)
@@ -98,7 +157,8 @@ fun PermissionHandler(
                 hasPermissions = hasRequiredPermissions(context)
                 isBluetoothEnabled = isBluetoothEnabled(context)
                 isWifiEnabled = isWifiEnabled(context)
-                isLocationEnabled = locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
+                isLocationEnabled = locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true ||
+                                    locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -143,7 +203,8 @@ fun PermissionHandler(
     val locationEnableLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) {
-        isLocationEnabled = locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
+        isLocationEnabled = locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true ||
+                            locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
     }
 
     val wifiEnableLauncher = rememberLauncherForActivityResult(
@@ -272,16 +333,13 @@ private fun RadioRequirementSetupScreen(
     onTurnOnBluetooth: () -> Unit,
     onTurnOnWifi: () -> Unit
 ) {
-    Scaffold(
-        containerColor = Color.White,
-        bottomBar = {
-            MeshSetupBottomNavigationBar()
-        }
-    ) { paddingValues ->
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.White
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -593,56 +651,6 @@ private fun RadioRequirementSetupScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
-}
-
-@Composable
-private fun MeshSetupBottomNavigationBar() {
-    NavigationBar(
-        containerColor = Color.White,
-        tonalElevation = 0.dp
-    ) {
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-            label = { Text("Home") },
-            selected = false,
-            onClick = { /* Radios are mandatory */ },
-            colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color(0xFF6B7280),
-                unselectedTextColor = Color(0xFF6B7280)
-            )
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
-            label = { Text("Nearby") },
-            selected = true,
-            onClick = { /* Current setup destination */ },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = Color(0xFF1E3A8A),
-                selectedTextColor = Color(0xFF1E3A8A),
-                indicatorColor = Color(0xFFDBEAFE)
-            )
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
-            label = { Text("SOS") },
-            selected = false,
-            onClick = { /* Radios are mandatory */ },
-            colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color(0xFF6B7280),
-                unselectedTextColor = Color(0xFF6B7280)
-            )
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-            label = { Text("Settings") },
-            selected = false,
-            onClick = { /* Radios are mandatory */ },
-            colors = NavigationBarItemDefaults.colors(
-                unselectedIconColor = Color(0xFF6B7280),
-                unselectedTextColor = Color(0xFF6B7280)
-            )
-        )
     }
 }
 

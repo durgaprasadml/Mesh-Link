@@ -46,4 +46,8 @@ class LandingViewModel @Inject constructor(
     fun onSkipClicked() {
         _uiState.value = _uiState.value.copy(isCompleted = true)
     }
+
+    fun resetCompletion() {
+        _uiState.value = _uiState.value.copy(isCompleted = false)
+    }
 }

@@ -64,6 +64,7 @@ fun LandingScreen(
     // Master Animation Clock
     LaunchedEffect(uiState.isCompleted) {
         if (uiState.isCompleted) {
+            viewModel.resetCompletion()
             onAnimationComplete()
             return@LaunchedEffect
         }

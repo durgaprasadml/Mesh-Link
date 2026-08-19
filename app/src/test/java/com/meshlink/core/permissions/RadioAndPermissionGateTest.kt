@@ -78,4 +78,33 @@ class RadioAndPermissionGateTest {
         every { wifiManager.isWifiEnabled } returns false
         assertFalse(areRadiosAndPermissionsReady(context))
     }
+
+    @Test
+    fun testIndividualRadios_BothOn() {
+        every { bluetoothAdapter.isEnabled } returns true
+        every { wifiManager.isWifiEnabled } returns true
+        assertTrue(isBluetoothEnabled(context))
+        assertTrue(isWifiEnabled(context))
+    }
+
+    @Test
+    fun testMatrixState_BothOn_returnsReady() {
+        every { bluetoothAdapter.isEnabled } returns true
+        every { wifiManager.isWifiEnabled } returns true
+        // Mock permission check to return granted
+        every { context.checkPermission(any(), any(), any()) } returns android.content.pm.PackageManager.PERMISSION_GRANTED
+        assertTrue(areRadiosAndPermissionsReady(context))
+    }
+
+    @Test
+    fun testNullServiceManagers_handlesGracefully() {
+        val emptyContext: Context = mockk(relaxed = true)
+        every { emptyContext.getSystemService(Context.BLUETOOTH_SERVICE) } returns null
+        every { emptyContext.applicationContext } returns emptyContext
+        every { emptyContext.getSystemService(Context.WIFI_SERVICE) } returns null
+
+        assertFalse(isBluetoothEnabled(emptyContext))
+        assertFalse(isWifiEnabled(emptyContext))
+        assertFalse(areRadiosAndPermissionsReady(emptyContext))
+    }
 }

@@ -30,6 +30,27 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+
 import android.net.wifi.WifiManager
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
@@ -251,153 +272,376 @@ private fun RadioRequirementSetupScreen(
     onTurnOnBluetooth: () -> Unit,
     onTurnOnWifi: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(MeshTheme.spacing.extraLarge),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        val titleText = when {
-            !isBluetoothEnabled && !isWifiEnabled -> "Bluetooth & Wi-Fi are required"
-            !isBluetoothEnabled -> "Bluetooth is required"
-            else -> "Wi-Fi is required"
+    Scaffold(
+        containerColor = Color.White,
+        bottomBar = {
+            MeshSetupBottomNavigationBar()
         }
-
-        val descriptionText = when {
-            !isBluetoothEnabled && !isWifiEnabled -> "Mesh-Link requires both Bluetooth and Wi-Fi to discover nearby devices and provide complete mesh connectivity."
-            !isBluetoothEnabled -> "Bluetooth is required to discover and connect with nearby devices."
-            else -> "Wi-Fi is required for Wi-Fi Direct and high-speed mesh connections."
-        }
-
-        Text(
-            text = titleText,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-        Text(
-            text = descriptionText,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-
-        // Status Card
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.fillMaxWidth()
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // 3. Top Icon Area: Two circular containers side-by-side
+            Row(
+                modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Bluetooth Circle Container
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE8F1FD)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bluetooth,
+                        contentDescription = "Bluetooth",
+                        tint = Color(0xFF2563EB),
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+
+                // Wi-Fi Circle Container
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE6F7ED)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Wifi,
+                        contentDescription = "Wi-Fi",
+                        tint = Color(0xFF16A34A),
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+            }
+
+            // 4. Main Heading
+            Text(
+                text = "Bluetooth & Wi-Fi are required",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 28.sp,
+                    lineHeight = 34.sp
+                ),
+                color = Color(0xFF111827),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 5. Description
+            Text(
+                text = "Mesh Link needs both Bluetooth and Wi-Fi\nto connect with nearby devices and provide\nbest performance.",
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 18.sp,
+                    lineHeight = 25.sp
+                ),
+                color = Color(0xFF6B7280),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 6. Divider
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 52.dp),
+                thickness = 1.dp,
+                color = Color(0xFFE5E7EB)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 7. Bluetooth Section
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFE8F1FD)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bluetooth,
+                            contentDescription = "Bluetooth",
+                            tint = Color(0xFF2563EB),
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Bluetooth",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 22.sp
+                                ),
+                                color = Color(0xFF111827)
+                            )
+                            Text(
+                                text = if (isBluetoothEnabled) "ON" else "OFF",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                ),
+                                color = if (isBluetoothEnabled) Color(0xFF16A34A) else Color(0xFFDC2626)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Required to discover and\nconnect to nearby devices.",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 17.sp,
+                                lineHeight = 22.sp
+                            ),
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+                }
+
+                if (!isBluetoothEnabled) {
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Button(
+                        onClick = onTurnOnBluetooth,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(58.dp)
+                            .padding(horizontal = 56.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2563EB),
+                            contentColor = Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                    ) {
+                        Text(
+                            text = "Turn on Bluetooth",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp
+                            )
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 8. Section Divider
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 52.dp),
+                thickness = 1.dp,
+                color = Color(0xFFE5E7EB)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 9. Wi-Fi Section
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFE6F7ED)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Wifi,
+                            contentDescription = "Wi-Fi",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Wi-Fi",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 22.sp
+                                ),
+                                color = Color(0xFF111827)
+                            )
+                            Text(
+                                text = if (isWifiEnabled) "ON" else "OFF",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                ),
+                                color = if (isWifiEnabled) Color(0xFF16A34A) else Color(0xFFDC2626)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Required for Wi-Fi Direct and\nhigh-speed connections.",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 17.sp,
+                                lineHeight = 22.sp
+                            ),
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+                }
+
+                if (!isWifiEnabled) {
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Button(
+                        onClick = onTurnOnWifi,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(58.dp)
+                            .padding(horizontal = 56.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF16A34A),
+                            contentColor = Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                    ) {
+                        Text(
+                            text = "Turn on Wi-Fi",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp
+                            )
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // 10. Security / Information Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(MeshTheme.spacing.medium),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RadioStatusBadge(label = "Bluetooth", isEnabled = isBluetoothEnabled)
-                RadioStatusBadge(label = "Wi-Fi", isEnabled = isWifiEnabled)
+                Icon(
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = "Mesh Link Security",
+                    tint = Color(0xFF6B7280),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Both will be used only for\nMesh Link connectivity.",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 16.sp,
+                        lineHeight = 20.sp
+                    ),
+                    color = Color(0xFF6B7280)
+                )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
-
-        Spacer(modifier = Modifier.height(MeshTheme.spacing.extraLarge))
-
-        if (!isBluetoothEnabled) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (!isWifiEnabled) {
-                    Text(
-                        text = "Bluetooth",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Required to discover and connect to nearby devices.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                }
-                Button(
-                    onClick = onTurnOnBluetooth,
-                    modifier = Modifier.fillMaxWidth(0.85f)
-                ) {
-                    Text("Turn on Bluetooth")
-                }
-            }
-        }
-
-        if (!isBluetoothEnabled && !isWifiEnabled) {
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-        }
-
-        if (!isWifiEnabled) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (!isBluetoothEnabled) {
-                    Text(
-                        text = "Wi-Fi",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Required for Wi-Fi Direct and high-speed connections.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                }
-                Button(
-                    onClick = onTurnOnWifi,
-                    modifier = Modifier.fillMaxWidth(0.85f)
-                ) {
-                    Text("Turn on Wi-Fi")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(MeshTheme.spacing.extraLarge))
-
-        Text(
-            text = "Both Bluetooth and Wi-Fi are required for Mesh-Link.",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
 @Composable
-private fun RadioStatusBadge(label: String, isEnabled: Boolean) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically
+private fun MeshSetupBottomNavigationBar() {
+    NavigationBar(
+        containerColor = Color.White,
+        tonalElevation = 0.dp
     ) {
-        Text(
-            text = "$label: ",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+            label = { Text("Home") },
+            selected = false,
+            onClick = { /* Radios are mandatory */ },
+            colors = NavigationBarItemDefaults.colors(
+                unselectedIconColor = Color(0xFF6B7280),
+                unselectedTextColor = Color(0xFF6B7280)
+            )
         )
-        Text(
-            text = if (isEnabled) "ON" else "OFF",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
+            label = { Text("Nearby") },
+            selected = true,
+            onClick = { /* Current setup destination */ },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = Color(0xFF1E3A8A),
+                selectedTextColor = Color(0xFF1E3A8A),
+                indicatorColor = Color(0xFFDBEAFE)
+            )
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
+            label = { Text("SOS") },
+            selected = false,
+            onClick = { /* Radios are mandatory */ },
+            colors = NavigationBarItemDefaults.colors(
+                unselectedIconColor = Color(0xFF6B7280),
+                unselectedTextColor = Color(0xFF6B7280)
+            )
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+            label = { Text("Settings") },
+            selected = false,
+            onClick = { /* Radios are mandatory */ },
+            colors = NavigationBarItemDefaults.colors(
+                unselectedIconColor = Color(0xFF6B7280),
+                unselectedTextColor = Color(0xFF6B7280)
+            )
         )
     }
 }

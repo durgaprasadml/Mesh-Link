@@ -1,5 +1,6 @@
 package com.meshlink.wifi.data
 
+import android.content.Context
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.common.util.MeshPacketParser
 import com.meshlink.config.WifiConfig
@@ -9,16 +10,20 @@ import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.security.data.SessionManager
 import com.meshlink.security.policy.EncryptionRequirement
 import com.meshlink.security.policy.PacketEncryptionPolicy
-
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -56,6 +61,7 @@ data class WifiSocketMetrics(
 
 @Singleton
 class WifiSocketTransport @Inject constructor(
+    @ApplicationContext private val context: Context,
     @ApplicationScope private val applicationScope: CoroutineScope,
     private val cryptoManager: MeshCryptoManager,
     private val sessionManager: SessionManager
@@ -69,6 +75,11 @@ class WifiSocketTransport @Inject constructor(
         private const val HEARTBEAT_WATCHDOG_TIMEOUT_MS = 30_000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val MAX_FRAME_SIZE_BYTES = 50 * 1024 * 1024 // 50MB safety limit
+
+        // High-Speed Binary Streaming Magic Protocol Constants
+        const val MAGIC_MEDIA_STREAM_START = -0x5354524D // "STRM" (-1398035021)
+        const val MAGIC_MEDIA_STREAM_END = -0x454E445F   // "END_" (-1162757217)
+        const val STREAM_BUFFER_SIZE = 128 * 1024        // 128 KB high-throughput buffer
     }
 
     private var serverSocket: ServerSocket? = null
@@ -96,6 +107,12 @@ class WifiSocketTransport @Inject constructor(
     // Callbacks
     var onPacketReceived: ((MeshPacket) -> Unit)? = null
     var onSocketConnected: (() -> Unit)? = null
+
+    // High-speed Media Stream Callbacks
+    var onMediaStreamStarted: ((transferId: String, fileName: String, mimeType: String, totalBytes: Long, checksum: String, senderId: String) -> Unit)? = null
+    var onMediaStreamProgress: ((transferId: String, bytesTransferred: Long, totalBytes: Long) -> Unit)? = null
+    var onMediaStreamCompleted: ((transferId: String, filePath: String, mimeType: String, senderId: String, totalBytes: Long) -> Unit)? = null
+    var onMediaStreamFailed: ((transferId: String, reason: String) -> Unit)? = null
 
     // Metric Counters
     private val packetsSentCounter = AtomicLong(0L)
@@ -185,8 +202,8 @@ class WifiSocketTransport @Inject constructor(
             socket.sendBufferSize = 2 * 1024 * 1024 // 2 MB buffer
             socket.receiveBufferSize = 2 * 1024 * 1024 // 2 MB buffer
 
-            val bufferedOut = BufferedOutputStream(socket.getOutputStream(), 128 * 1024)
-            val bufferedIn = BufferedInputStream(socket.getInputStream(), 128 * 1024)
+            val bufferedOut = BufferedOutputStream(socket.getOutputStream(), STREAM_BUFFER_SIZE)
+            val bufferedIn = BufferedInputStream(socket.getInputStream(), STREAM_BUFFER_SIZE)
 
             val currentOut = DataOutputStream(bufferedOut)
             val currentIn = DataInputStream(bufferedIn)
@@ -229,34 +246,111 @@ class WifiSocketTransport @Inject constructor(
                             break
                         }
 
-                        if (length == 0) {
-                            // Length = 0 is Heartbeat Ping
-                            clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
-                            val hbCount = heartbeatCounter.incrementAndGet()
-                            updateMetrics { it.copy(heartbeatCount = hbCount) }
-                            MeshLogger.d(TAG, "Received Binary Heartbeat Ping from $clientHost")
-                        } else if (length > 0) {
-                            if (length > MAX_FRAME_SIZE_BYTES) {
-                                MeshLogger.e(TAG, "Frame size $length exceeds maximum allowed limit ($MAX_FRAME_SIZE_BYTES). Closing connection to $clientHost")
-                                break
+                        when (length) {
+                            0 -> {
+                                // Length = 0 is Heartbeat Ping
+                                clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
+                                val hbCount = heartbeatCounter.incrementAndGet()
+                                updateMetrics { it.copy(heartbeatCount = hbCount) }
+                                MeshLogger.d(TAG, "Received Binary Heartbeat Ping from $clientHost")
                             }
-                            val payloadBytes = ByteArray(length)
-                            currentIn.readFully(payloadBytes)
+                            MAGIC_MEDIA_STREAM_START -> {
+                                // High-Speed Binary Media Stream Received
+                                clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
+                                val transferId = currentIn.readUTF()
+                                val fileName = currentIn.readUTF()
+                                val mimeType = currentIn.readUTF()
+                                val totalBytes = currentIn.readLong()
+                                val expectedChecksum = currentIn.readUTF()
+                                val senderId = currentIn.readUTF()
 
-                            clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
-                            val rxBytes = bytesReceivedCounter.addAndGet(length.toLong() + 4L)
-                            val rxPkts = packetsReceivedCounter.incrementAndGet()
-                            updateMetrics { it.copy(bytesReceived = rxBytes, packetsReceived = rxPkts) }
+                                MeshLogger.i(TAG, "MEDIA_STREAM_START: transferId=$transferId, file=$fileName, size=${totalBytes}B, mime=$mimeType, sender=$senderId from $clientHost")
+                                onMediaStreamStarted?.invoke(transferId, fileName, mimeType, totalBytes, expectedChecksum, senderId)
 
-                            val jsonString = String(payloadBytes, Charsets.UTF_8)
-                            val packet = MeshPacketParser.fromJson(jsonString)
-                            if (packet != null) {
-                                MeshLogger.d(TAG, "Packet Received over Wi-Fi Direct from $clientHost: ${packet.packetId} (${length}B)")
-                                onPacketReceived?.invoke(packet)
+                                val tempDir = File(context.cacheDir, "wifi_media_temp").apply { if (!exists()) mkdirs() }
+                                val tempFile = File(tempDir, "stream_${transferId}.tmp")
+                                val digest = MessageDigest.getInstance("SHA-256")
+                                var receivedBytes = 0L
+
+                                try {
+                                    FileOutputStream(tempFile).use { fos ->
+                                        val bos = BufferedOutputStream(fos, STREAM_BUFFER_SIZE)
+                                        val buffer = ByteArray(STREAM_BUFFER_SIZE)
+
+                                        while (receivedBytes < totalBytes) {
+                                            val blockLen = currentIn.readInt()
+                                            if (blockLen <= 0) break
+                                            var blockRead = 0
+                                            while (blockRead < blockLen) {
+                                                val r = currentIn.read(buffer, blockRead, blockLen - blockRead)
+                                                if (r < 0) throw EOFException("Unexpected EOF during binary media stream")
+                                                blockRead += r
+                                            }
+                                            bos.write(buffer, 0, blockLen)
+                                            digest.update(buffer, 0, blockLen)
+                                            receivedBytes += blockLen
+                                            clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
+                                            val rxBytes = bytesReceivedCounter.addAndGet(blockLen.toLong() + 4L)
+                                            updateMetrics { it.copy(bytesReceived = rxBytes) }
+                                            onMediaStreamProgress?.invoke(transferId, receivedBytes, totalBytes)
+                                        }
+                                        bos.flush()
+                                    }
+
+                                    val endMarker = currentIn.readInt()
+                                    if (endMarker == MAGIC_MEDIA_STREAM_END) {
+                                        val senderChecksum = currentIn.readUTF()
+                                        val localChecksum = digest.digest().joinToString("") { "%02x".format(it) }
+
+                                        if (localChecksum.equals(expectedChecksum, ignoreCase = true) || localChecksum.equals(senderChecksum, ignoreCase = true)) {
+                                            val mediaDir = File(context.filesDir, "mesh_media").apply { if (!exists()) mkdirs() }
+                                            val finalFile = File(mediaDir, fileName)
+                                            tempFile.copyTo(finalFile, overwrite = true)
+                                            tempFile.delete()
+
+                                            MeshLogger.i(TAG, "MEDIA_STREAM_COMPLETED: transferId=$transferId, path=${finalFile.absolutePath}, size=${finalFile.length()}B, checksum=$localChecksum (MATCH)")
+                                            onMediaStreamCompleted?.invoke(transferId, finalFile.absolutePath, mimeType, senderId, totalBytes)
+                                        } else {
+                                            MeshLogger.e(TAG, "MEDIA_STREAM_CHECKSUM_MISMATCH: transferId=$transferId, expected=$expectedChecksum, got=$localChecksum")
+                                            tempFile.delete()
+                                            onMediaStreamFailed?.invoke(transferId, "Checksum mismatch: expected=$expectedChecksum, got=$localChecksum")
+                                        }
+                                    } else {
+                                        MeshLogger.e(TAG, "MEDIA_STREAM_INVALID_END_MARKER: $endMarker")
+                                        tempFile.delete()
+                                        onMediaStreamFailed?.invoke(transferId, "Invalid stream end marker")
+                                    }
+                                } catch (e: Exception) {
+                                    MeshLogger.e(TAG, "Error receiving binary media stream for $transferId: ${e.message}", e)
+                                    tempFile.delete()
+                                    onMediaStreamFailed?.invoke(transferId, "Stream error: ${e.message}")
+                                }
                             }
-                        } else {
-                            MeshLogger.e(TAG, "Invalid negative packet length $length from $clientHost")
-                            break
+                            else -> {
+                                if (length > 0) {
+                                    if (length > MAX_FRAME_SIZE_BYTES) {
+                                        MeshLogger.e(TAG, "Frame size $length exceeds maximum allowed limit ($MAX_FRAME_SIZE_BYTES). Closing connection to $clientHost")
+                                        break
+                                    }
+                                    val payloadBytes = ByteArray(length)
+                                    currentIn.readFully(payloadBytes)
+
+                                    clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
+                                    val rxBytes = bytesReceivedCounter.addAndGet(length.toLong() + 4L)
+                                    val rxPkts = packetsReceivedCounter.incrementAndGet()
+                                    updateMetrics { it.copy(bytesReceived = rxBytes, packetsReceived = rxPkts) }
+
+                                    val jsonString = String(payloadBytes, Charsets.UTF_8)
+                                    val packet = MeshPacketParser.fromJson(jsonString)
+                                    if (packet != null) {
+                                        MeshLogger.d(TAG, "Packet Received over Wi-Fi Direct from $clientHost: ${packet.packetId} (${length}B)")
+                                        onPacketReceived?.invoke(packet)
+                                    }
+                                } else {
+                                    MeshLogger.e(TAG, "Invalid negative packet length $length from $clientHost")
+                                    break
+                                }
+                            }
                         }
                     }
                 } finally {
@@ -324,6 +418,105 @@ class WifiSocketTransport @Inject constructor(
             backoffDelayMs = (backoffDelayMs * 2).coerceAtMost(MAX_BACKOFF_MS)
             connectAsClient(targetHost)
         }
+    }
+
+    suspend fun streamFile(
+        transferId: String,
+        file: File,
+        mimeType: String,
+        expectedChecksum: String,
+        senderId: String,
+        targetPeerAddress: String? = null,
+        onProgress: ((bytesTransferred: Long, totalBytes: Long) -> Unit)? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!file.exists() || !file.canRead()) {
+            MeshLogger.e(TAG, "Cannot stream file: ${file.absolutePath} does not exist or cannot be read")
+            return@withContext false
+        }
+
+        if (clientStreamsOut.isEmpty()) {
+            MeshLogger.w(TAG, "Cannot stream file $transferId: No active socket streams available")
+            return@withContext false
+        }
+
+        val totalBytes = file.length()
+        val fileName = file.name
+
+        val targetStreams = if (targetPeerAddress != null && clientStreamsOut.containsKey(targetPeerAddress)) {
+            listOf(targetPeerAddress to clientStreamsOut[targetPeerAddress]!!)
+        } else {
+            clientStreamsOut.entries.map { it.key to it.value }
+        }
+
+        if (targetStreams.isEmpty()) {
+            MeshLogger.w(TAG, "Cannot stream file $transferId: Target streams empty")
+            return@withContext false
+        }
+
+        var overallSuccess = true
+
+        targetStreams.forEach { (host, stream) ->
+            try {
+                MeshLogger.i(TAG, "MEDIA_STREAM_OUT: Starting stream of ${file.name} ($totalBytes bytes) to $host for transferId=$transferId")
+                val digest = MessageDigest.getInstance("SHA-256")
+
+                synchronized(stream) {
+                    stream.writeInt(MAGIC_MEDIA_STREAM_START)
+                    stream.writeUTF(transferId)
+                    stream.writeUTF(fileName)
+                    stream.writeUTF(mimeType)
+                    stream.writeLong(totalBytes)
+                    stream.writeUTF(expectedChecksum)
+                    stream.writeUTF(senderId)
+                    stream.flush()
+                }
+
+                FileInputStream(file).use { fis ->
+                    val bis = BufferedInputStream(fis, STREAM_BUFFER_SIZE)
+                    val buffer = ByteArray(STREAM_BUFFER_SIZE)
+                    var bytesTransferred = 0L
+
+                    while (bytesTransferred < totalBytes) {
+                        val toRead = minOf(buffer.size.toLong(), totalBytes - bytesTransferred).toInt()
+                        val read = bis.read(buffer, 0, toRead)
+                        if (read <= 0) break
+
+                        digest.update(buffer, 0, read)
+
+                        synchronized(stream) {
+                            stream.writeInt(read)
+                            stream.write(buffer, 0, read)
+                            stream.flush()
+                        }
+
+                        bytesTransferred += read
+                        val txBytes = bytesSentCounter.addAndGet(read.toLong() + 4L)
+                        updateMetrics { it.copy(bytesSent = txBytes) }
+
+                        onProgress?.invoke(bytesTransferred, totalBytes)
+                    }
+                }
+
+                val computedChecksum = digest.digest().joinToString("") { "%02x".format(it) }
+
+                synchronized(stream) {
+                    stream.writeInt(MAGIC_MEDIA_STREAM_END)
+                    stream.writeUTF(computedChecksum)
+                    stream.flush()
+                }
+
+                val txPkts = packetsSentCounter.incrementAndGet()
+                updateMetrics { it.copy(packetsSent = txPkts) }
+
+                MeshLogger.i(TAG, "MEDIA_STREAM_OUT_COMPLETED: Successfully streamed $fileName ($totalBytes bytes) to $host, checksum=$computedChecksum")
+            } catch (e: Exception) {
+                MeshLogger.e(TAG, "Failed to stream media file to $host: ${e.message}", e)
+                cleanupPeer(host)
+                overallSuccess = false
+            }
+        }
+
+        return@withContext overallSuccess
     }
 
     suspend fun sendPacket(packet: MeshPacket) = withContext(Dispatchers.IO) {
@@ -425,3 +618,4 @@ class WifiSocketTransport @Inject constructor(
         MeshLogger.d(TAG, "Cleaned up socket resources for peer: $clientHost")
     }
 }
+

@@ -133,6 +133,9 @@ android {
     }
 
     sourceSets {
+        getByName("main") {
+            res.srcDirs("src/main/res")
+        }
         val sharedTestDir = "src/sharedTest/java"
         getByName("test") {
             java.srcDir(sharedTestDir)
@@ -256,7 +259,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.json)
-    testImplementation(libs.mockk)
+    testImplementation(libs.mockk.core)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation("com.lemonappdev:konsist:0.15.1")

@@ -114,6 +114,83 @@ class TransferManager @Inject constructor(
                 }
             }
         }
+
+        // Wire high-speed media stream reception callbacks
+        wifiSocketTransport.onMediaStreamStarted = { transferId, fileName, mimeType, totalBytes, expectedChecksum, senderId ->
+            applicationScope.launch(ioDispatcher + exceptionHandler) {
+                var session = scheduler.getSession(transferId)
+                if (session == null) {
+                    session = TransferSession(
+                        transferId = transferId,
+                        senderId = senderId,
+                        targetId = "LOCAL",
+                        fileName = fileName,
+                        mimeType = mimeType,
+                        totalBytes = totalBytes,
+                        totalChunks = 1,
+                        direction = TransferDirection.INCOMING,
+                        transportUsed = TransportType.WIFI_DIRECT,
+                        sha256Checksum = expectedChecksum,
+                        state = TransferState.RECEIVING,
+                        startTimeMs = System.currentTimeMillis()
+                    )
+                    scheduler.addSession(session)
+                    sessionRegistry.registerSession(session)
+                } else {
+                    session.state = TransferState.RECEIVING
+                    session.transportUsed = TransportType.WIFI_DIRECT
+                }
+                onTransferStateChanged?.invoke(transferId, TransferState.RECEIVING)
+                cache.persistSession(session)
+            }
+        }
+
+        wifiSocketTransport.onMediaStreamProgress = { transferId, bytesTransferred, totalBytes ->
+            updateProgressThrottled(transferId, 1, 1, bytesTransferred)
+        }
+
+        wifiSocketTransport.onMediaStreamCompleted = { transferId, filePath, mimeType, senderId, totalBytes ->
+            applicationScope.launch(ioDispatcher + exceptionHandler) {
+                val session = scheduler.getSession(transferId) ?: TransferSession(
+                    transferId = transferId,
+                    senderId = senderId,
+                    targetId = "LOCAL",
+                    fileName = File(filePath).name,
+                    mimeType = mimeType,
+                    totalBytes = totalBytes,
+                    totalChunks = 1,
+                    direction = TransferDirection.INCOMING,
+                    transportUsed = TransportType.WIFI_DIRECT,
+                    filePath = filePath,
+                    state = TransferState.COMPLETED,
+                    startTimeMs = System.currentTimeMillis()
+                )
+                session.filePath = filePath
+                session.state = TransferState.COMPLETED
+                updateProgressThrottled(transferId, 1, 1, totalBytes)
+                updateState(transferId, TransferState.COMPLETED)
+                cache.persistSession(session)
+                resourceManager.releaseSessionResources(transferId)
+                sessionRegistry.unregisterSession(transferId)
+
+                analytics.recordTransferCompleted(session)
+                val durationMs = (System.currentTimeMillis() - session.startTimeMs).coerceAtLeast(1L)
+                val durationSec = durationMs / 1000.0
+                val mbps = (totalBytes / (1024.0 * 1024.0)) / durationSec.coerceAtLeast(0.001)
+                MeshLogger.i("MEDIA_TRANSFER", "file=${session.fileName}, size=${totalBytes}B, transport=WIFI_DIRECT, duration=${"%.2f".format(durationSec)}s, throughput=${"%.2f".format(mbps)}MB/s, retries=0, status=SUCCESS")
+                metrics.recordMediaTransfer(totalBytes, durationMs)
+                diagnostics.logTransferCompletion(transferId, totalBytes, durationMs, session.getAverageSpeedBytesPerSec().toDouble())
+
+                onTransferCompleted?.invoke(session)
+            }
+        }
+
+        wifiSocketTransport.onMediaStreamFailed = { transferId, reason ->
+            applicationScope.launch(ioDispatcher + exceptionHandler) {
+                MeshLogger.w(TAG, "Incoming Wi-Fi media stream failed for $transferId: $reason")
+                failSession(transferId, reason)
+            }
+        }
     }
 
     // ─────────────────── Sender (Pipeline Pipeline) ───────────────────
@@ -134,12 +211,17 @@ class TransferManager @Inject constructor(
 
         val mimeType = metaManager.getMimeTypeForFile(file)
         val fileLength = runBlocking(ioDispatcher) { file.length() }
-        val selectedRoute = intelligentTransportManager.selectTransportForPayload(
-            destinationId = targetId,
-            packetType = PacketType.MEDIA_CHUNK,
-            payloadSizeBytes = fileLength,
-            mimeType = mimeType
-        )
+        val isWifi = wifiSocketTransport.isConnected() || intelligentTransportManager.isWifiAvailable()
+        val selectedRoute = if (isWifi) {
+            RouteType.WIFI_DIRECT
+        } else {
+            intelligentTransportManager.selectTransportForPayload(
+                destinationId = targetId,
+                packetType = PacketType.MEDIA_CHUNK,
+                payloadSizeBytes = fileLength,
+                mimeType = mimeType
+            )
+        }
 
         val transport = if (selectedRoute == RouteType.WIFI_DIRECT) TransportType.WIFI_DIRECT else TransportType.BLE
         val checksum = runBlocking(ioDispatcher) { verifier.calculateFileChecksum(file) }
@@ -185,10 +267,7 @@ class TransferManager @Inject constructor(
             return@withContext
         }
 
-        updateState(session.transferId, TransferState.STREAMING)
-        applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
-
-        // Send META packet
+        // Send META packet (control plane) over mesh so receiver has file metadata and thumbnail preview immediately
         val metaPayload = metaManager.generateMetaPayload(
             FileMetadata(session.fileName, session.mimeType, session.totalBytes, session.sha256Checksum, session.thumbnailBase64)
         )
@@ -197,12 +276,89 @@ class TransferManager @Inject constructor(
             metaPayload, PacketType.MEDIA_META, 0, session.totalChunks, session.mimeType
         )
 
+        // Determine if Wi-Fi Direct streaming can be used
+        val isWifi = session.transportUsed == TransportType.WIFI_DIRECT ||
+                     wifiSocketTransport.isConnected() ||
+                     intelligentTransportManager.isWifiAvailable()
+
+        if (isWifi) {
+            updateState(session.transferId, TransferState.STREAMING)
+            applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
+
+            // Ensure Wi-Fi Direct socket is ready (await with short timeout if connecting)
+            var socketReady = wifiSocketTransport.isConnected()
+            if (!socketReady) {
+                val connectStartTime = System.currentTimeMillis()
+                while (System.currentTimeMillis() - connectStartTime < 3000L) {
+                    if (wifiSocketTransport.isConnected()) {
+                        socketReady = true
+                        break
+                    }
+                    delay(100L)
+                }
+            }
+
+            if (socketReady) {
+                session.transportUsed = TransportType.WIFI_DIRECT
+                val streamStartTime = System.currentTimeMillis()
+
+                val success = wifiSocketTransport.streamFile(
+                    transferId = session.transferId,
+                    file = file,
+                    mimeType = session.mimeType,
+                    expectedChecksum = session.sha256Checksum ?: "",
+                    senderId = session.senderId,
+                    targetPeerAddress = session.targetId,
+                    onProgress = { bytesTransferred, totalBytes ->
+                        updateProgressThrottled(session.transferId, 1, 1, bytesTransferred)
+                    }
+                )
+
+                if (success) {
+                    updateProgressThrottled(session.transferId, 1, 1, session.totalBytes)
+                    updateState(session.transferId, TransferState.COMPLETED)
+                    resourceManager.releaseSessionResources(session.transferId)
+                    sessionRegistry.unregisterSession(session.transferId)
+                    applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
+
+                    val durationMs = (System.currentTimeMillis() - streamStartTime).coerceAtLeast(1L)
+                    val durationSec = durationMs / 1000.0
+                    val mbps = (session.totalBytes / (1024.0 * 1024.0)) / durationSec.coerceAtLeast(0.001)
+
+                    MeshLogger.i("MEDIA_TRANSFER", "file=${file.name}, size=${session.totalBytes}B, transport=WIFI_DIRECT, duration=${"%.2f".format(durationSec)}s, throughput=${"%.2f".format(mbps)}MB/s, retries=0, status=SUCCESS")
+                    metrics.recordMediaTransfer(session.totalBytes, durationMs)
+                    diagnostics.logTransferCompletion(session.transferId, session.totalBytes, durationMs, session.getAverageSpeedBytesPerSec().toDouble())
+
+                    onOutgoingTransferCompleted?.invoke(session)
+                    return@withContext
+                } else {
+                    MeshLogger.w(TAG, "Wi-Fi Direct stream failed for ${session.transferId}. Falling back to BLE.")
+                    session.transportUsed = TransportType.BLE
+                    diagnostics.logTransportFallback(
+                        packetId = session.transferId,
+                        packetType = PacketType.MEDIA_CHUNK,
+                        primaryRoute = RouteType.WIFI_DIRECT,
+                        fallbackRoute = RouteType.BLE,
+                        reason = "Wi-Fi Direct socket stream failed, falling back to BLE"
+                    )
+                }
+            } else {
+                MeshLogger.w(TAG, "Wi-Fi Direct socket not connected. Falling back to BLE for ${session.transferId}")
+                session.transportUsed = TransportType.BLE
+            }
+        }
+
+        // BLE Path / Fallback Path:
+        updateState(session.transferId, TransferState.STREAMING)
+        session.totalChunks = chunkManager.getTotalChunks(session.totalBytes, TransportType.BLE)
+        applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
+
         // Give receiver time to init cache
         delay(50L)
 
-        // Initialize Sliding Window
+        // Initialize Sliding Window for BLE chunking
         val windowSize = slidingWindowManager.initializeSessionWindow(
-            session.transferId, session.transportUsed, session.totalChunks
+            session.transferId, TransportType.BLE, session.totalChunks
         )
         diagnostics.logWindowCreated(session.transferId, windowSize)
 

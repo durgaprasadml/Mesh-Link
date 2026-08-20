@@ -35,6 +35,17 @@ class WifiDirectManager @Inject constructor(
     val isWifiEnabled: Boolean
         get() = wifiManager?.isWifiEnabled == true
 
+    val isConnected: Boolean
+        get() = wifiP2pManagerFacade.isConnected()
+
+    suspend fun ensureConnected(targetDeviceAddress: String? = null, timeoutMs: Long = 5000L): Boolean {
+        if (!isWifiEnabled) return false
+        if (_radioState.value != RadioState.RUNNING && _radioState.value != RadioState.INITIALIZING) {
+            startWifiDirect()
+        }
+        return wifiP2pManagerFacade.ensureConnected(targetDeviceAddress, timeoutMs)
+    }
+
     private val wifiStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             when (intent.action) {

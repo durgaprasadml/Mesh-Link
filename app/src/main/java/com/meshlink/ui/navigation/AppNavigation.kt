@@ -110,8 +110,8 @@ fun AppNavigation(
         Screen.Settings.route
     )
 
-    val showNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && isTopLevelScreen && !showGlobalPermissionGate
-    val showNavigationBar = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact && isTopLevelScreen && !showGlobalPermissionGate
+    val showNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && (isTopLevelScreen || showGlobalPermissionGate)
+    val showNavigationBar = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact && (isTopLevelScreen || showGlobalPermissionGate)
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -121,14 +121,18 @@ fun AppNavigation(
             }
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
             Row(modifier = Modifier.fillMaxSize()) {
                 if (showNavigationRail) {
                     MeshNavigationRail(navController, currentRoute)
                 }
                 val topLevelRoutes = listOf(Screen.Home.route, Screen.Nearby.route, Screen.Sos.route, Screen.Settings.route)
                 NavHost(
-                    modifier = Modifier.padding(paddingValues),
+                    modifier = Modifier.fillMaxSize(),
                     navController = navController,
                     startDestination = Screen.Landing.createRoute(isWelcome = false),
                     enterTransition = {

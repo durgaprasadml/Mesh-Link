@@ -21,10 +21,12 @@ import java.util.UUID
 @OptIn(ExperimentalCoroutinesApi::class)
 class WifiSocketTransportTest {
 
+    private val mockContext = mockk<android.content.Context>(relaxed = true)
     private val mockCryptoManager = mockk<MeshCryptoManager>(relaxed = true)
     private val mockSessionManager = mockk<SessionManager>(relaxed = true)
 
     private fun createTransport() = WifiSocketTransport(
+        context = mockContext,
         applicationScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO),
         cryptoManager = mockCryptoManager,
         sessionManager = mockSessionManager

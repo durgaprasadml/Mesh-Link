@@ -39,17 +39,29 @@ class MediaMessageHandler @Inject constructor(
         val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
         val targetPeerId = MeshIdNormalizer.canonicalize(targetMeshId)
 
-        val compressedBytes = withContext(Dispatchers.IO) {
-            ImageCompressor.compress(context, imageUri)
-        }
-        if (compressedBytes == null) {
-            MeshLogger.e(TAG, "sendImage: compression failed for $imageUri")
-            return
-        }
-        MeshLogger.d(TAG, "sendImage: compressed to ${compressedBytes.size / 1000}KB")
-
         val thumbnailBase64 = withContext(Dispatchers.IO) {
             ImageCompressor.generateThumbnailBase64(context, imageUri)
+        }
+
+        val mimeType = withContext(Dispatchers.IO) {
+            context.contentResolver.getType(imageUri) ?: "image/jpeg"
+        }
+
+        val localFile = withContext(Dispatchers.IO) {
+            val mediaDir = File(context.filesDir, "mesh_media").apply { if (!exists()) mkdirs() }
+            val extension = when {
+                mimeType.contains("png") -> "png"
+                mimeType.contains("webp") -> "webp"
+                mimeType.contains("gif") -> "gif"
+                else -> "jpg"
+            }
+            val targetFile = File(mediaDir, "img_${System.currentTimeMillis()}.$extension")
+            context.contentResolver.openInputStream(imageUri)?.use { input ->
+                java.io.FileOutputStream(targetFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            targetFile
         }
 
         if (imageUri.scheme == "content" && imageUri.authority?.contains("fileprovider") == true) {
@@ -58,14 +70,6 @@ class MediaMessageHandler @Inject constructor(
                 if (tempFile.exists()) tempFile.delete()
             } catch (e: Exception) {
                 MeshLogger.w(TAG, "Failed to delete temp camera file")
-            }
-        }
-
-        val localFile = withContext(Dispatchers.IO) {
-            val mediaDir = File(context.filesDir, "mesh_media")
-            if (!mediaDir.exists()) mediaDir.mkdirs()
-            File(mediaDir, "img_${System.currentTimeMillis()}.jpg").apply {
-                writeBytes(compressedBytes)
             }
         }
 
@@ -81,7 +85,7 @@ class MediaMessageHandler @Inject constructor(
             status          = DeliveryStatus.QUEUED,
             messageType     = MessageType.IMAGE,
             mediaPath       = localFile.absolutePath,
-            mimeType        = "image/jpeg",
+            mimeType        = mimeType,
             mediaSize       = localFile.length(),
             thumbnailBase64 = thumbnailBase64
         )

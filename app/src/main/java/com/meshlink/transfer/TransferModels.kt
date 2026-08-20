@@ -45,7 +45,7 @@ data class TransferSession(
     val fileName: String,
     val mimeType: String,
     val totalBytes: Long,
-    val totalChunks: Int,
+    var totalChunks: Int,
     val direction: TransferDirection,
     var state: TransferState = TransferState.QUEUED,
     var priority: TransferPriority = TransferPriority.MEDIUM,

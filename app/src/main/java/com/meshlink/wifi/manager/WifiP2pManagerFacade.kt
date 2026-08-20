@@ -109,10 +109,53 @@ class WifiP2pManagerFacade @Inject constructor(
         })
     }
 
+    fun isConnected(): Boolean {
+        return _p2pState.value is WifiP2pState.Connected
+    }
+
+    suspend fun ensureConnected(targetDeviceAddress: String? = null, timeoutMs: Long = 5000L): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (isConnected()) return@withContext true
+
+        val current = _p2pState.value
+        if (current is WifiP2pState.Connecting) {
+            // Already connecting, wait for connection
+            val startTime = System.currentTimeMillis()
+            while (System.currentTimeMillis() - startTime < timeoutMs) {
+                if (isConnected()) return@withContext true
+                if (_p2pState.value is WifiP2pState.Error || _p2pState.value is WifiP2pState.Disconnected) break
+                kotlinx.coroutines.delay(100)
+            }
+            return@withContext isConnected()
+        }
+
+        val target = targetDeviceAddress ?: _discoveredPeers.value.firstOrNull { it.status == android.net.wifi.p2p.WifiP2pDevice.AVAILABLE }?.deviceAddress
+        if (target != null) {
+            connect(target)
+            val startTime = System.currentTimeMillis()
+            while (System.currentTimeMillis() - startTime < timeoutMs) {
+                if (isConnected()) return@withContext true
+                if (_p2pState.value is WifiP2pState.Error || _p2pState.value is WifiP2pState.Disconnected) break
+                kotlinx.coroutines.delay(100)
+            }
+        }
+        return@withContext isConnected()
+    }
+
     @SuppressLint("MissingPermission")
     fun connect(deviceAddress: String, groupOwnerIntent: Int = DEFAULT_GO_INTENT) {
         if (wifiP2pManager == null || channel == null) return
         if (!permissionHandler.hasPermissions()) return
+
+        // Prevent duplicate connection attempts
+        val currentState = _p2pState.value
+        if (currentState is WifiP2pState.Connected) {
+            MeshLogger.d(TAG, "Already connected to Wi-Fi P2P. Reusing existing link.")
+            return
+        }
+        if (currentState is WifiP2pState.Connecting && currentState.deviceAddress == deviceAddress) {
+            MeshLogger.d(TAG, "Already connecting to peer: $deviceAddress. Skipping duplicate request.")
+            return
+        }
 
         MeshLogger.d(TAG, "Connecting to peer: $deviceAddress with GO intent $groupOwnerIntent")
         _p2pState.value = WifiP2pState.Connecting(deviceAddress)

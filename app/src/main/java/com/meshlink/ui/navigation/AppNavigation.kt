@@ -1,59 +1,61 @@
 package com.meshlink.ui.navigation
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.meshlink.common.logger.MeshLogger
 import com.meshlink.messaging.presentation.ChatDetailScreen
 import com.meshlink.messaging.presentation.ChatsListScreen
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.meshlink.ui.home.HomeScreen
-import com.meshlink.ui.profile.ProfileSetupScreen
-import com.meshlink.ui.nearby.NearbyDevicesScreen
-import com.meshlink.ui.settings.SettingsScreen
 import com.meshlink.ui.broadcast.BroadcastScreen
+import com.meshlink.ui.components.PermissionHandler
+import com.meshlink.ui.components.areRadiosAndPermissionsReady
+import com.meshlink.ui.components.findActivity
+import com.meshlink.ui.components.rememberRadioAndPermissionState
+import com.meshlink.ui.home.HomeScreen
+import com.meshlink.ui.landing.LandingScreen
+import com.meshlink.ui.nearby.NearbyDevicesScreen
+import com.meshlink.ui.profile.ProfileSetupScreen
+import com.meshlink.ui.settings.SettingsScreen
 import com.meshlink.ui.sos.SosScreen
 import com.meshlink.util.NotificationHelper
-import com.meshlink.ui.components.PermissionHandler
-import com.meshlink.ui.components.rememberRadioAndPermissionState
-import com.meshlink.ui.components.findActivity
-
-import com.meshlink.ui.landing.LandingScreen
-
 
 sealed class Screen(val route: String) {
     object Landing : Screen("landing/{isWelcome}") {
@@ -73,6 +75,13 @@ sealed class Screen(val route: String) {
     object Broadcast : Screen("broadcast")
 }
 
+enum class StartupState {
+    LANDING,
+    PROFILE_SETUP,
+    PERMISSIONS,
+    MAIN_APP
+}
+
 @Composable
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
@@ -81,7 +90,90 @@ fun AppNavigation(
 ) {
     val hasProfile by viewModel.hasProfile.collectAsStateWithLifecycle(initialValue = null)
     val context = androidx.compose.ui.platform.LocalContext.current
+    val isRadiosAndPermissionsReady = rememberRadioAndPermissionState(context)
 
+    var startupState by rememberSaveable { mutableStateOf(StartupState.LANDING) }
+
+    MeshLogger.d("AppNavigation", "STARTUP_STATE = $startupState, hasProfile = $hasProfile, radiosReady = $isRadiosAndPermissionsReady")
+
+    when (startupState) {
+        StartupState.LANDING -> {
+            LandingScreen(
+                onAnimationComplete = {
+                    val userHasProfile = hasProfile ?: false
+                    val nextState = when {
+                        !userHasProfile -> StartupState.PROFILE_SETUP
+                        !isRadiosAndPermissionsReady -> StartupState.PERMISSIONS
+                        else -> StartupState.MAIN_APP
+                    }
+                    MeshLogger.d("AppNavigation", "Landing complete (hasProfile=$userHasProfile, radiosReady=$isRadiosAndPermissionsReady) -> transition to $nextState")
+                    startupState = nextState
+                }
+            )
+        }
+
+        StartupState.PROFILE_SETUP -> {
+            BackHandler {
+                MeshLogger.d("AppNavigation", "Back pressed on PROFILE_SETUP -> return to LANDING")
+                startupState = StartupState.LANDING
+            }
+            ProfileSetupScreen(
+                onSetupSuccess = {
+                    val nextState = if (areRadiosAndPermissionsReady(context)) {
+                        StartupState.MAIN_APP
+                    } else {
+                        StartupState.PERMISSIONS
+                    }
+                    MeshLogger.d("AppNavigation", "Profile created -> transition to $nextState")
+                    startupState = nextState
+                }
+            )
+        }
+
+        StartupState.PERMISSIONS -> {
+            BackHandler {
+                if (hasProfile == false) {
+                    MeshLogger.d("AppNavigation", "Back pressed on PERMISSIONS -> return to PROFILE_SETUP")
+                    startupState = StartupState.PROFILE_SETUP
+                } else {
+                    // Cannot bypass mandatory radio requirement
+                    context.findActivity()?.moveTaskToBack(true)
+                }
+            }
+            PermissionHandler(
+                onPermissionsGranted = {
+                    MeshLogger.d("AppNavigation", "Permissions granted -> transition to MAIN_APP")
+                    startupState = StartupState.MAIN_APP
+                }
+            )
+        }
+
+        StartupState.MAIN_APP -> {
+            if (!isRadiosAndPermissionsReady) {
+                // Radio turned off or permissions revoked at runtime while in Main App
+                BackHandler {
+                    context.findActivity()?.moveTaskToBack(true)
+                }
+                PermissionHandler(
+                    onPermissionsGranted = {
+                        MeshLogger.d("AppNavigation", "Radios re-enabled at runtime -> gate dismissed, showing MAIN_APP")
+                    }
+                )
+            } else {
+                MainAppScaffold(
+                    navController = navController,
+                    windowSizeClass = windowSizeClass
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MainAppScaffold(
+    navController: NavHostController,
+    windowSizeClass: WindowSizeClass
+) {
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(snackbarHostState) {
@@ -90,18 +182,8 @@ fun AppNavigation(
         }
     }
 
-    val currentBackStackEntry = navController.currentBackStackEntryAsState()
-    val currentRoute = currentBackStackEntry.value?.destination?.route
-
-    // Global radio and permission state observed across entire application
-    val isRadiosAndPermissionsReady = rememberRadioAndPermissionState(context)
-    val isLandingScreen = currentRoute?.startsWith("landing") == true
-    val showGlobalPermissionGate = !isLandingScreen && !isRadiosAndPermissionsReady
-
-    // Prevent bypassing the mandatory radio requirement via system back button
-    BackHandler(enabled = showGlobalPermissionGate) {
-        context.findActivity()?.moveTaskToBack(true)
-    }
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = currentBackStackEntry?.destination?.route
 
     val isTopLevelScreen = currentRoute in listOf(
         Screen.Home.route,
@@ -110,8 +192,15 @@ fun AppNavigation(
         Screen.Settings.route
     )
 
-    val showNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && (isTopLevelScreen || showGlobalPermissionGate)
-    val showNavigationBar = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact && (isTopLevelScreen || showGlobalPermissionGate)
+    val showNavigationRail = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && isTopLevelScreen
+    val showNavigationBar = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact && isTopLevelScreen
+
+    val topLevelRoutes = listOf(
+        Screen.Home.route,
+        Screen.Nearby.route,
+        Screen.Sos.route,
+        Screen.Settings.route
+    )
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -121,105 +210,47 @@ fun AppNavigation(
             }
         }
     ) { paddingValues ->
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            Row(modifier = Modifier.fillMaxSize()) {
-                if (showNavigationRail) {
-                    MeshNavigationRail(navController, currentRoute)
+            if (showNavigationRail) {
+                MeshNavigationRail(navController, currentRoute)
+            }
+            NavHost(
+                modifier = Modifier.fillMaxSize(),
+                navController = navController,
+                startDestination = Screen.Home.route,
+                enterTransition = {
+                    if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                        fadeIn(tween(210, delayMillis = 90))
+                    } else {
+                        slideInHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeIn(tween(300))
+                    }
+                },
+                exitTransition = {
+                    if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                        fadeOut(tween(90))
+                    } else {
+                        fadeOut(tween(300))
+                    }
+                },
+                popEnterTransition = {
+                    if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                        fadeIn(tween(210, delayMillis = 90))
+                    } else {
+                        slideInHorizontally(tween(300)) { -(it * 0.2f).toInt() } + fadeIn(tween(300))
+                    }
+                },
+                popExitTransition = {
+                    if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
+                        fadeOut(tween(90))
+                    } else {
+                        slideOutHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeOut(tween(300))
+                    }
                 }
-                val topLevelRoutes = listOf(Screen.Home.route, Screen.Nearby.route, Screen.Sos.route, Screen.Settings.route)
-                NavHost(
-                    modifier = Modifier.fillMaxSize(),
-                    navController = navController,
-                    startDestination = Screen.Landing.createRoute(isWelcome = false),
-                    enterTransition = {
-                        if (initialState.destination.route?.startsWith("landing") == true && targetState.destination.route == Screen.Home.route) {
-                            androidx.compose.animation.EnterTransition.None
-                        } else if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                            fadeIn(tween(210, delayMillis = 90))
-                        } else {
-                            slideInHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeIn(tween(300))
-                        }
-                    },
-                    exitTransition = {
-                        if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                            fadeOut(tween(90))
-                        } else {
-                            fadeOut(tween(300))
-                        }
-                    },
-                    popEnterTransition = {
-                        if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                            fadeIn(tween(210, delayMillis = 90))
-                        } else {
-                            slideInHorizontally(tween(300)) { -(it * 0.2f).toInt() } + fadeIn(tween(300))
-                        }
-                    },
-                    popExitTransition = {
-                        if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                            fadeOut(tween(90))
-                        } else {
-                            slideOutHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeOut(tween(300))
-                        }
-                    }
-                ) {
-                    
-                    composable(
-                        route = Screen.Landing.route,
-                        arguments = listOf(
-                            navArgument("isWelcome") {
-                                type = NavType.BoolType
-                                defaultValue = false
-                            }
-                        ),
-                        exitTransition = {
-                            if (targetState.destination.route == Screen.Home.route) {
-                                fadeOut(tween(450, easing = androidx.compose.animation.core.LinearEasing))
-                            } else {
-                                fadeOut(tween(300))
-                            }
-                        }
-                    ) {
-                        LandingScreen(
-                            onAnimationComplete = {
-                                val targetRoute = if (hasProfile == false) Screen.ProfileSetup.route else Screen.Home.route
-                                navController.navigate(targetRoute) {
-                                    popUpTo(Screen.Landing.route) { inclusive = true }
-                                }
-                            }
-                        )
-                    }
-
-                    composable(
-                        route = Screen.Permission.route,
-                        enterTransition = { fadeIn(tween(300)) },
-                        exitTransition = { fadeOut(tween(300)) },
-                        popEnterTransition = { fadeIn(tween(300)) },
-                        popExitTransition = { fadeOut(tween(300)) }
-                    ) {
-                        PermissionHandler(
-                            onPermissionsGranted = {
-                                val targetRoute = if (hasProfile == false) Screen.ProfileSetup.route else Screen.Home.route
-                                navController.navigate(targetRoute) {
-                                    popUpTo(Screen.Landing.route) { inclusive = true }
-                                }
-                            }
-                        )
-                    }
-                
-                composable(Screen.ProfileSetup.route) {
-                    ProfileSetupScreen(
-                        onSetupSuccess = {
-                            navController.navigate(Screen.Landing.createRoute(isWelcome = true)) {
-                                popUpTo(Screen.ProfileSetup.route) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-                
+            ) {
                 composable(Screen.Home.route) {
                     HomeScreen(
                         onNavigateToSettings = { navController.navigateToTopLevel(Screen.Settings.route) },
@@ -285,12 +316,7 @@ fun AppNavigation(
                 }
             }
         }
-
-        if (showGlobalPermissionGate) {
-            PermissionHandler()
-        }
     }
-}
 }
 
 /**

@@ -99,7 +99,7 @@ fun rememberRadioAndPermissionState(context: Context = LocalContext.current): Bo
 
 @Composable
 fun PermissionHandler(
-    onPermissionsGranted: @Composable () -> Unit = {}
+    onPermissionsGranted: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -324,7 +324,9 @@ fun PermissionHandler(
             }
         )
     } else {
-        onPermissionsGranted()
+        LaunchedEffect(Unit) {
+            onPermissionsGranted()
+        }
     }
 }
 

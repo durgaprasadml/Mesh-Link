@@ -62,35 +62,52 @@ class NearbyViewModel @Inject constructor(
         val errorMessage = scanStatus.second
         withContext(Dispatchers.Default) {
             val mergedDevices = mutableMapOf<String, BleDevice>()
+            val localUser = userRepository.getLocalUser()
+            val localCanonicalId = localUser?.let { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) }
 
             // Direct physical devices
             bleMap.values.forEach { device ->
-                val targetId = device.meshId.ifBlank { device.address }
-                val profile = userRepository.getUserProfile(targetId)
-                val resolvedName = userRepository.getUserDisplayName(targetId)
-                val finalName = if (com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(resolvedName, targetId)) {
-                    "Unknown User"
-                } else {
-                    resolvedName
+                val canonicalId = com.meshlink.util.MeshIdNormalizer.canonicalize(device.meshId.ifBlank { device.address })
+                // Do not display own device in discovery
+                if (localCanonicalId != null && canonicalId == localCanonicalId) {
+                    return@forEach
                 }
-                mergedDevices[device.address] = device.copy(
+
+                val profile = userRepository.getUserProfile(canonicalId)
+                val resolvedName = userRepository.getUserDisplayName(canonicalId)
+                val finalName = if (!com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(resolvedName, canonicalId)) {
+                    resolvedName
+                } else if (device.name.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(device.name, canonicalId)) {
+                    device.name
+                } else {
+                    "Mesh Node $canonicalId"
+                }
+                mergedDevices[canonicalId] = device.copy(
                     name = finalName,
                     profilePhotoPath = profile?.profilePhotoPath,
-                    profilePhotoHash = profile?.profilePhotoHash
+                    profilePhotoHash = profile?.profilePhotoHash,
+                    hopCount = 0,
+                    isMeshNode = false
                 )
             }
 
             // Indirect multi-hop mesh nodes
             reachableNodes.forEach { node ->
-                if (!mergedDevices.containsKey(node.nodeId)) {
-                    val profile = userRepository.getUserProfile(node.nodeId)
-                    val resolvedName = userRepository.getUserDisplayName(node.nodeId)
-                    val finalName = if (com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(resolvedName, node.nodeId)) {
-                        "Unknown User"
-                    } else {
+                val canonicalId = com.meshlink.util.MeshIdNormalizer.canonicalize(node.nodeId)
+                // Do not display own device
+                if (localCanonicalId != null && canonicalId == localCanonicalId) {
+                    return@forEach
+                }
+
+                if (!mergedDevices.containsKey(canonicalId)) {
+                    val profile = userRepository.getUserProfile(canonicalId)
+                    val resolvedName = userRepository.getUserDisplayName(canonicalId)
+                    val finalName = if (!com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(resolvedName, canonicalId)) {
                         resolvedName
+                    } else {
+                        "Mesh Node $canonicalId"
                     }
-                    mergedDevices[node.nodeId] = BleDevice(
+                    mergedDevices[canonicalId] = BleDevice(
                         meshId = node.nodeId,
                         name = finalName,
                         address = node.nodeId,
@@ -113,9 +130,12 @@ class NearbyViewModel @Inject constructor(
             if (query.isNotBlank()) {
                 sortedList = sortedList.filter {
                     it.name.contains(query, ignoreCase = true) ||
-                    it.address.contains(query, ignoreCase = true)
+                    it.address.contains(query, ignoreCase = true) ||
+                    it.meshId.contains(query, ignoreCase = true)
                 }
             }
+
+            com.meshlink.common.logger.MeshLogger.d("NearbyViewModel", "[NearbyDiscovery] UI State updated: ${sortedList.size} devices visible")
 
             NearbyUiState(
                 devices = sortedList,
@@ -148,9 +168,9 @@ class NearbyViewModel @Inject constructor(
             if (user != null) {
                 try {
                     meshRepository.autoStartMesh()
+                    _isScanning.value = meshRepository.getMeshStatus().isBleScanning
                 } catch (e: Exception) {
                     _errorMessage.value = e.message ?: "Failed to start discovery"
-                } finally {
                     _isScanning.value = false
                 }
             } else {
@@ -162,10 +182,21 @@ class NearbyViewModel @Inject constructor(
     
     fun connectToDevice(device: BleDevice, onConnected: () -> Unit) {
         viewModelScope.launch {
-
-            if (device.transport == TransportType.BLE) {
-                meshRepository.connectToPeer(device.address)
+            when (device.transport) {
+                TransportType.BLE -> {
+                    meshRepository.connectToPeer(device.address)
+                }
+                TransportType.WIFI_DIRECT -> {
+                    // Initiate Wi-Fi Direct connection via the peer ID or MAC address
+                    meshRepository.connectPeer(device.address)
+                }
+                else -> {
+                    // Fallback: attempt BLE connection for unknown transport types
+                    meshRepository.connectToPeer(device.address)
+                }
             }
+            // Signal UI that connection was attempted. Real confirmation comes via
+            // GATT/Wi-Fi state callbacks in the transport layer.
             onConnected()
         }
     }

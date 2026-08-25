@@ -128,16 +128,11 @@ class BleRepositoryImpl @Inject constructor(
             }
         }
 
-        // Wire TransferManager so it can dispatch ACK/NACK/retried chunks via MeshRouter
-        transferManager.onSendPacket = { packet ->
-            meshRouter.sendMediaPacket(packet)
-        }
-        
-        transferManager.onTransferCompleted = { session ->
-            applicationScope.launch {
-                meshMessagingManager.receiveMediaMessage(session.transferId, session.filePath!!, session.mimeType, session.senderId)
-            }
-        }
+        // NOTE: transferManager.onSendPacket is wired by MeshMessagingManager.setupTransferManager()
+        // with encryption support. Do NOT override it here — doing so would bypass MeshCryptoManager.
+        // NOTE: transferManager.onTransferCompleted is also wired by MeshMessagingManager.setupTransferManager().
+        // Both callbacks are intentionally owned by MeshMessagingManager.
+
 
         transferManager.onOutgoingTransferCompleted = { session ->
             applicationScope.launch {
@@ -184,10 +179,18 @@ class BleRepositoryImpl @Inject constructor(
             }
         }
 
+        // Scan-triggered retry: debounced to at most once per 30s to prevent retry storms.
+        // The periodic 15s loop above is the primary retry mechanism; this is a secondary
+        // trigger for when new peers appear after a long idle period.
         applicationScope.launch {
+            var lastScanRetryMs = 0L
             scannedDevices.collect { devices ->
                 if (devices.isNotEmpty()) {
-                    meshMessagingManager.retryPendingMessages()
+                    val now = System.currentTimeMillis()
+                    if (now - lastScanRetryMs >= 30_000L) {
+                        lastScanRetryMs = now
+                        meshMessagingManager.retryPendingMessages()
+                    }
                 }
             }
         }
@@ -269,7 +272,9 @@ class BleRepositoryImpl @Inject constructor(
             type = com.meshlink.domain.model.PacketType.TEXT,
             encrypted = encrypted
         )
-        kotlinx.coroutines.runBlocking {
+        // Deprecated path: launch non-blocking rather than using runBlocking
+        // (callers only check the Boolean return; they do not await delivery)
+        applicationScope.launch {
             meshMessagingManager.dispatchSinglePacket(targetPeerId, packet)
         }
         return true

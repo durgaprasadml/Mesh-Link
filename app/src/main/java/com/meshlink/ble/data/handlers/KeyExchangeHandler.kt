@@ -309,7 +309,7 @@ class KeyExchangeHandler @Inject constructor(
         connectionManager.updatePeerState(address, PeerConnectionState.DISCONNECTED)
     }
 
-    fun generateSignedKeyExchange(localPeerId: String, isResponse: Boolean = false): MeshPacket {
+    suspend fun generateSignedKeyExchange(localPeerId: String, isResponse: Boolean = false): MeshPacket {
         val ecdhPublicKey = cryptoManager.getOrCreatePublicKey()
         val signingPublicKey = cryptoManager.getOrCreateSigningKey()
         val timestamp = System.currentTimeMillis()
@@ -326,9 +326,8 @@ class KeyExchangeHandler @Inject constructor(
         val signatureBase64 = Base64.encodeToString(signature, Base64.NO_WRAP)
 
         val respTag = if (isResponse) "|resp" else ""
-        val localUser = kotlinx.coroutines.runBlocking {
-            try { userRepository.getLocalUser() } catch (_: Exception) { null }
-        }
+        // Fetch local user in suspend context — no runBlocking needed
+        val localUser = try { userRepository.getLocalUser() } catch (_: Exception) { null }
         val localUserName = localUser?.name?.trim() ?: ""
         val localPhotoHash = localUser?.profilePhotoHash?.trim() ?: ""
 

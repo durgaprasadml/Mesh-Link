@@ -3,14 +3,14 @@ package com.meshlink.ui.components.nearby
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -85,11 +85,9 @@ fun MeshScanningEmptyState(
                 )
             }
 
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.BluetoothSearching,
-                contentDescription = null,
-                tint = primaryColor,
-                modifier = Modifier.size(48.dp)
+            TargetScanningIcon(
+                modifier = Modifier.size(48.dp),
+                tint = primaryColor
             )
         }
 
@@ -111,6 +109,75 @@ fun MeshScanningEmptyState(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = MeshTheme.spacing.large)
+        )
+    }
+}
+
+/**
+ * Modern target/crosshair discovery radar icon featuring:
+ * - Concentric circular target rings
+ * - A small center dot
+ * - A thin diagonal crosshair pointer extending toward the upper-right
+ * - Clean rounded line strokes
+ */
+@Composable
+fun TargetScanningIcon(
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.primary
+) {
+    Canvas(
+        modifier = modifier.semantics {
+            contentDescription = "Target scanning radar icon"
+        }
+    ) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val strokeWidth = 2.5.dp.toPx()
+        val ringStroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+        val maxR = (size.minDimension / 2f) - strokeWidth
+
+        // Outer Ring
+        drawCircle(
+            color = tint,
+            radius = maxR * 0.90f,
+            center = center,
+            style = ringStroke
+        )
+
+        // Middle Concentric Ring
+        drawCircle(
+            color = tint,
+            radius = maxR * 0.52f,
+            center = center,
+            style = ringStroke
+        )
+
+        // Small Center Dot/Circle
+        drawCircle(
+            color = tint,
+            radius = maxR * 0.16f,
+            center = center
+        )
+
+        // Diagonal crosshair / target pointer extending toward the upper-right (45 degrees)
+        val cos45 = 0.70710678f
+        val sin45 = 0.70710678f
+
+        // Main upper-right target pointer extending past outer ring
+        drawLine(
+            color = tint,
+            start = Offset(center.x + cos45 * (maxR * 0.20f), center.y - sin45 * (maxR * 0.20f)),
+            end = Offset(center.x + cos45 * (maxR * 1.08f), center.y - sin45 * (maxR * 1.08f)),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+
+        // Symmetrical lower-left crosshair notch aligning the crosshair axis
+        drawLine(
+            color = tint,
+            start = Offset(center.x - cos45 * (maxR * 0.20f), center.y + sin45 * (maxR * 0.20f)),
+            end = Offset(center.x - cos45 * (maxR * 0.52f), center.y + sin45 * (maxR * 0.52f)),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
         )
     }
 }

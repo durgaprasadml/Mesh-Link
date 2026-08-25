@@ -123,7 +123,11 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun retryPendingMessages() {
         retryMutex.withLock {
-            val pending = chatDao.getMessagesByStatus(DeliveryStatus.QUEUED)
+            // Also retry WAITING_FOR_ROUTE messages: previously only QUEUED was retried,
+            // causing indefinitely stuck messages whenever a route was not found on first attempt.
+            val queued = chatDao.getMessagesByStatus(DeliveryStatus.QUEUED)
+            val waitingForRoute = chatDao.getMessagesByStatus(DeliveryStatus.WAITING_FOR_ROUTE)
+            val pending = (queued + waitingForRoute).distinctBy { it.messageId }
             if (pending.isEmpty()) return
 
             connectToAllScannedDevices()
@@ -238,7 +242,7 @@ class MeshMessagingManager @Inject constructor(
         return connectionManager.connectedServers.isNotEmpty() || connectionManager.activeClients.isNotEmpty()
     }
 
-    fun generateSignedKeyExchange(localPeerId: String, isResponse: Boolean = false): MeshPacket {
+    suspend fun generateSignedKeyExchange(localPeerId: String, isResponse: Boolean = false): MeshPacket {
         return keyExchangeHandler.generateSignedKeyExchange(localPeerId, isResponse)
     }
 
@@ -263,11 +267,18 @@ class MeshMessagingManager @Inject constructor(
         }
     }
 
+    /**
+     * @deprecated Prefer using [TransferManager.sendFile] which routes through the encryption-aware
+     * [setupTransferManager] wiring. This method does NOT encrypt packets and will be removed.
+     */
+    @Deprecated("Use TransferManager.sendFile() instead, which applies encryption via onSendPacket wiring")
     fun dispatchMediaPackets(targetPeerId: String, packets: List<MeshPacket>): Boolean {
         connectToPeer(targetPeerId)
         connectToAllScannedDevices()
+        // Do NOT force encrypted=false — respect the existing encrypted flag on each packet.
+        // The proper encryption path is via transferManager.onSendPacket (set in setupTransferManager).
         packets.forEach { pkt ->
-            meshRouter.sendMediaPacket(pkt.copy(encrypted = false))
+            meshRouter.sendMediaPacket(pkt)
         }
         return true
     }
@@ -344,7 +355,9 @@ class MeshMessagingManager @Inject constructor(
             startScanning()
             MeshLogger.i(TAG, "[MeshStartup] BLE_SCANNER_STARTED")
 
-            delay(2000)
+            // Allow scan results to populate before attempting connections.
+            // Use a shorter structured delay; refreshMesh() handles recovery if needed.
+            delay(1500)
             connectToAllScannedDevices()
 
             val keyExchangePacket = keyExchangeHandler.generateSignedKeyExchange(localPeerId).copy(targetId = "BROADCAST")
@@ -360,7 +373,11 @@ class MeshMessagingManager @Inject constructor(
                     try {
                         val current = userRepository.getLocalUser()
                         if (current != null && isAnyPeerConnected()) {
-                            val beaconPkt = beaconHandler.generateBeaconPacket(current.meshId)
+                            // Pass user name directly so BeaconHandler doesn't need runBlocking
+                            val beaconPkt = beaconHandler.generateBeaconPacket(
+                                localMeshId = current.meshId,
+                                localUserName = current.name?.trim() ?: ""
+                            )
                             dispatchSinglePacket("BROADCAST", beaconPkt)
                         }
                     } catch (e: Exception) {
@@ -368,11 +385,13 @@ class MeshMessagingManager @Inject constructor(
                     }
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Catch Throwable (not just Exception) so that CancellationException also triggers
+            // state reset. Without this, a cancelled coroutine leaves startupState stuck at STARTING.
             MeshLogger.e(TAG, "[MeshStartup] autoStartMesh failed: ${e.message}", e)
             startupState.set(MeshStartupState.STOPPED)
             stopMesh()
-            throw e
+            throw e   // Re-throw so callers (MeshRelayService etc.) can handle/log accordingly
         }
     }
 

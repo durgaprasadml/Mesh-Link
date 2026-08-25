@@ -90,9 +90,14 @@ class BleScannerManager @Inject constructor(
                 return@launch
             }
         
-        val filter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(BleConstants.MESH_SERVICE_UUID))
-            .build()
+        val filters = listOf(
+            ScanFilter.Builder()
+                .setManufacturerData(BleConstants.MANUFACTURER_ID, byteArrayOf())
+                .build(),
+            ScanFilter.Builder()
+                .setServiceUuid(ParcelUuid(BleConstants.MESH_SERVICE_UUID))
+                .build()
+        )
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val isPowerSave = powerManager.isPowerSaveMode
 
@@ -108,6 +113,8 @@ class BleScannerManager @Inject constructor(
             .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
             .build()
 
+        MeshLogger.i(TAG, "[NearbyDiscovery] BLE scan START: scanMode=$scanMode")
+
         scanCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 processResult(result)
@@ -118,7 +125,7 @@ class BleScannerManager @Inject constructor(
             }
 
             override fun onScanFailed(errorCode: Int) {
-                MeshLogger.e(TAG, "BLE scan failed with error code: $errorCode")
+                MeshLogger.e(TAG, "[NearbyDiscovery] BLE scan FAILED: errorCode=$errorCode")
                 val cause = if (errorCode == ScanCallback.SCAN_FAILED_ALREADY_STARTED || errorCode == ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED) {
                     BleNonRetryableException("Scan failed", errorCode)
                 } else {
@@ -137,14 +144,14 @@ class BleScannerManager @Inject constructor(
         
         try {
             @SuppressLint("MissingPermission") // Safe: checked via permissionChecker at start of method
-            val ignored = scanner.startScan(listOf(filter), settings, scanCallback)
+            val ignored = scanner.startScan(filters, settings, scanCallback)
             applicationScope.launch {
                 restartCoordinator.resetRetry(RestartComponent.SCANNER)
             }
         } catch (e: SecurityException) {
-            MeshLogger.e(TAG, "SecurityException: Missing BLE scan permission", e)
+            MeshLogger.e(TAG, "[NearbyDiscovery] SecurityException: Missing BLE scan permission", e)
         } catch (e: Exception) {
-            MeshLogger.e(TAG, "Exception starting hardware scan: ${e.message}", e)
+            MeshLogger.e(TAG, "[NearbyDiscovery] Exception starting hardware scan: ${e.message}", e)
             applicationScope.launch {
                 if (settingsRepository.bleAutoRestart.first()) {
                     restartCoordinator.scheduleRestart(applicationScope, RestartComponent.SCANNER, e) {
@@ -167,43 +174,63 @@ class BleScannerManager @Inject constructor(
                 @SuppressLint("MissingPermission") // Safe: checked via permissionChecker at start of method
                 val ignored = scanner.stopScan(it)
                 scanCallback = null
+                MeshLogger.i(TAG, "[NearbyDiscovery] BLE scan STOPPED")
             }
         } catch (e: Exception) {
-            MeshLogger.e(TAG, "Error stopping hardware scan: ${e.message}", e)
+            MeshLogger.e(TAG, "[NearbyDiscovery] Error stopping hardware scan: ${e.message}", e)
         }
     }
 
     @SuppressLint("MissingPermission")
     private fun processResult(result: ScanResult) {
-        val record = result.scanRecord ?: return
-        val uuids = record.serviceUuids ?: emptyList()
-        if (!uuids.contains(ParcelUuid(BleConstants.MESH_SERVICE_UUID))) return
-
-        val deviceAddress = result.device.address
+        val record = result.scanRecord
+        val deviceAddress = result.device?.address ?: "UNKNOWN"
         val rssi = result.rssi
-        val serviceData = record.getManufacturerSpecificData(BleConstants.MANUFACTURER_ID)
-        
-        if (serviceData == null || serviceData.size < 8) {
+
+        if (record == null) {
+            MeshLogger.d(TAG, "[NearbyDiscovery] Mesh peer rejected: scanRecord is null (device=$deviceAddress)")
             return
         }
 
-        // Payload format:
-        // 0-7: Mesh ID bytes
-        // 8: Capabilities byte (optional)
-        val meshIdBytes = ByteArray(8)
-        System.arraycopy(serviceData, 0, meshIdBytes, 0, 8)
-        val meshId = String(meshIdBytes, Charsets.UTF_8).replace("\u0000", "").trim()
-        
-        val capabilities = if (serviceData.size > 8) serviceData[8] else 0
-        
-        // Pass to Discovery Engine (name will be resolved post-discovery via protocol identity sync)
-        val name = ""
-        
-        // Pass to Discovery Engine
+        val uuids = record.serviceUuids ?: emptyList()
+        val hasMeshServiceUuid = uuids.contains(ParcelUuid(BleConstants.MESH_SERVICE_UUID))
+        val manufacturerData = record.getManufacturerSpecificData(BleConstants.MANUFACTURER_ID)
+        val mfgDataLength = manufacturerData?.size ?: 0
+
+        MeshLogger.d(TAG, "[NearbyDiscovery] BLE scan result received: device=$deviceAddress, rssi=$rssi, hasServiceUuid=$hasMeshServiceUuid, mfgDataLength=$mfgDataLength")
+
+        if (manufacturerData == null || manufacturerData.size < 8) {
+            MeshLogger.d(TAG, "[NearbyDiscovery] Mesh peer rejected: missing/invalid manufacturer payload (device=$deviceAddress, mfgDataLength=$mfgDataLength, hasServiceUuid=$hasMeshServiceUuid)")
+            return
+        }
+
+        // Advertiser embeds a stable 8-byte short-ID = first 8 bytes of SHA-256(canonicalMeshId).
+        // Represent it as a hex string for use as a short discovery identifier.
+        // The full canonical meshId is resolved after connection via key exchange / beacon.
+        val shortIdBytes = ByteArray(8)
+        System.arraycopy(manufacturerData, 0, shortIdBytes, 0, 8)
+        val shortMeshId = shortIdBytes.joinToString("") { "%02x".format(it) }
+
+        if (shortMeshId.isBlank() || shortMeshId.all { it == '0' }) {
+            MeshLogger.d(TAG, "[NearbyDiscovery] Mesh peer rejected: empty short meshId (device=$deviceAddress)")
+            return
+        }
+
+        val capabilities = if (manufacturerData.size > 8) manufacturerData[8] else 0
+
+        // Extract the human-readable device name from scan record or BT device (best-effort).
+        val advertisedName = record.deviceName
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: result.device?.name?.trim()?.takeIf { it.isNotBlank() }
+            ?: ""
+
+        MeshLogger.i(TAG, "[NearbyDiscovery] Mesh peer accepted: device=$deviceAddress, shortMeshId=$shortMeshId, name='$advertisedName', rssi=$rssi, capabilities=$capabilities")
+
         discoveryEngine.onDeviceDiscovered(
             macAddress = deviceAddress,
-            meshId = meshId,
-            name = name,
+            meshId = shortMeshId,
+            name = advertisedName,
             rssi = rssi,
             capabilities = capabilities
         )

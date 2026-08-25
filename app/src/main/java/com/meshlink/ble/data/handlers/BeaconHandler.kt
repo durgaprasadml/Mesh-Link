@@ -32,8 +32,12 @@ class BeaconHandler @Inject constructor(
     /**
      * Generates a topology advertisement BEACON packet containing the local mesh ID,
      * local registered display name, and a list of reachable multi-hop nodes and direct neighbors.
+     *
+     * @param localMeshId  The canonical mesh ID of this device.
+     * @param localUserName The display name to embed in the beacon (optional). The caller should
+     *                      supply this from a suspend context to avoid any blocking I/O here.
      */
-    fun generateBeaconPacket(localMeshId: String): MeshPacket {
+    fun generateBeaconPacket(localMeshId: String, localUserName: String = ""): MeshPacket {
         val canonicalLocalId = MeshIdNormalizer.canonicalize(localMeshId)
 
         val jsonArray = JSONArray()
@@ -47,12 +51,6 @@ class BeaconHandler @Inject constructor(
                     put("transport", route.routeType.name)
                 })
             }
-        }
-
-        val localUserName = kotlinx.coroutines.runBlocking {
-            try {
-                userRepository?.getLocalUser()?.name?.trim() ?: ""
-            } catch (_: Exception) { "" }
         }
 
         val payloadObj = JSONObject().apply {

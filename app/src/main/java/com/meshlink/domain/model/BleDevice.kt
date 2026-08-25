@@ -3,7 +3,8 @@ package com.meshlink.domain.model
 import androidx.compose.runtime.Immutable
 
 enum class TransportType {
-    BLE
+    BLE,
+    WIFI_DIRECT
 }
 
 @Immutable

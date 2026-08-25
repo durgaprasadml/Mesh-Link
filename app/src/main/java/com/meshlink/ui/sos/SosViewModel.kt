@@ -104,14 +104,27 @@ class SosViewModel @Inject constructor(
                 ) 
             }
             try {
-                meshRepository.sendSos()
-                _uiState.update { 
-                    it.copy(
-                        isSending = false, 
-                        sosSent = true,
-                        status = SosStatus.DELIVERED,
-                        relaysReached = 5 // Mock value for visual completion
-                    ) 
+                // Use the non-deprecated dispatchSos() API
+                val result = meshRepository.dispatchSos()
+                // Derive relay count from actually reachable peers at the time of dispatch
+                val reachableRelays = meshRepository.scannedDevices.value.size
+                if (result is com.meshlink.domain.model.MeshResult.Success) {
+                    _uiState.update { 
+                        it.copy(
+                            isSending = false, 
+                            sosSent = true,
+                            status = SosStatus.DELIVERED,
+                            relaysReached = reachableRelays
+                        ) 
+                    }
+                } else {
+                    _uiState.update { 
+                        it.copy(
+                            isSending = false,
+                            status = SosStatus.FAILED,
+                            errorMessage = "Failed to broadcast SOS"
+                        ) 
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.update { 

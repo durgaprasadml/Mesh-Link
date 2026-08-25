@@ -12,6 +12,7 @@ import com.meshlink.security.data.MeshSecurityMonitor
 import com.meshlink.security.data.SessionManager
 import com.meshlink.security.data.TrustManager
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -62,7 +63,7 @@ class KeyExchangeHandlerTest {
     }
 
     @Test
-    fun `generateSignedKeyExchange returns valid MeshPacket with expected payload format`() {
+    fun `generateSignedKeyExchange returns valid MeshPacket with expected payload format`() = runTest {
         every { cryptoManager.getOrCreatePublicKey() } returns "base64PublicKeyString="
         every { cryptoManager.getOrCreateSigningKey() } returns "base64SigningKeyString="
         every { cryptoManager.sign(any()) } returns ByteArray(64)

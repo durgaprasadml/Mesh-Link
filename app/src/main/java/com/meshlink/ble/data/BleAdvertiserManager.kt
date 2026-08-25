@@ -93,31 +93,42 @@ class BleAdvertiserManager @Inject constructor(
                 .setConnectable(true)
                 .build()
 
-        // Lightweight BLE advertising (9 bytes payload: 8 bytes Mesh ID, 1 byte Capabilities)
-        val meshIdBytes = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId).toByteArray(Charsets.UTF_8).copyOf(8)
+        // Stable 8-byte short-ID: first 8 bytes of SHA-256(canonicalMeshId).
+        // Using a hash rather than a naive truncation prevents identity collisions
+        // when two mesh IDs share the same first 8 UTF-8 bytes.
+        val canonicalMeshId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val hashBytes = digest.digest(canonicalMeshId.toByteArray(Charsets.UTF_8))
+        val meshIdBytes = hashBytes.copyOf(8)   // first 8 bytes of SHA-256
         val combinedData = ByteArray(9)
         System.arraycopy(meshIdBytes, 0, combinedData, 0, 8)
         combinedData[8] = capabilities
 
+        MeshLogger.i(TAG, "[NearbyDiscovery] BLE advertise START: meshId=$meshId, canonical=$canonicalMeshId, txPower=$txPower, mode=$advMode")
+
+        // Primary advertising packet: contains manufacturer data with Mesh ID payload (13 bytes total)
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .addServiceUuid(ParcelUuid(BleConstants.MESH_SERVICE_UUID))
+            .setIncludeTxPowerLevel(false)
+            .addManufacturerData(BleConstants.MANUFACTURER_ID, combinedData)
             .build()
 
+        // Scan response packet: contains Service UUID
         val scanResponse = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .addManufacturerData(BleConstants.MANUFACTURER_ID, combinedData)
+            .setIncludeTxPowerLevel(false)
+            .addServiceUuid(ParcelUuid(BleConstants.MESH_SERVICE_UUID))
             .build()
 
         advertiseCallback = object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                MeshLogger.d(TAG, "Advertising started")
+                MeshLogger.i(TAG, "[NearbyDiscovery] BLE advertise SUCCESS: active with meshId=$canonicalMeshId")
                 applicationScope.launch {
                     restartCoordinator.resetRetry(RestartComponent.ADVERTISER)
                 }
             }
             override fun onStartFailure(errorCode: Int) {
-                MeshLogger.e(TAG, "Advertising failed with error code: $errorCode")
+                MeshLogger.e(TAG, "[NearbyDiscovery] BLE advertise FAILED with error code: $errorCode")
                 val cause = if (errorCode == AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED || errorCode == AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED) {
                     BleNonRetryableException("Advertise failed", errorCode)
                 } else {
@@ -137,9 +148,9 @@ class BleAdvertiserManager @Inject constructor(
             @SuppressLint("MissingPermission") // Safe: checked via permissionChecker at start of method
             val ignored = advertiser.startAdvertising(settings, data, scanResponse, advertiseCallback)
         } catch (e: SecurityException) {
-            MeshLogger.e(TAG, "SecurityException: Missing BLE advertise permission", e)
+            MeshLogger.e(TAG, "[NearbyDiscovery] SecurityException: Missing BLE advertise permission", e)
         } catch (e: Exception) {
-            MeshLogger.e(TAG, "Exception starting advertising: ${e.message}", e)
+            MeshLogger.e(TAG, "[NearbyDiscovery] Exception starting advertising: ${e.message}", e)
             applicationScope.launch {
                 if (settingsRepository.bleAutoRestart.first()) {
                     restartCoordinator.scheduleRestart(applicationScope, RestartComponent.ADVERTISER, e) {
@@ -162,10 +173,10 @@ class BleAdvertiserManager @Inject constructor(
                 @SuppressLint("MissingPermission") // Safe: checked via permissionChecker at start of method
                 val ignored = advertiser.stopAdvertising(it)
                 advertiseCallback = null
-                MeshLogger.d(TAG, "Advertising stopped")
+                MeshLogger.i(TAG, "[NearbyDiscovery] BLE advertise STOPPED")
             }
         } catch (e: Exception) {
-            MeshLogger.e(TAG, "Error stopping advertising: ${e.message}", e)
+            MeshLogger.e(TAG, "[NearbyDiscovery] Error stopping advertising: ${e.message}", e)
         }
     }
 

@@ -41,24 +41,31 @@ class DiscoveryEngine @Inject constructor(
     private val _scannedDevices = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
     val scannedDevices: StateFlow<Map<String, BleDevice>> = _scannedDevices.asStateFlow()
 
+    val isScanning: Boolean
+        get() = scanJob?.isActive == true
+
     private fun publishCache() {
         val map = cache.getAll().associate { record ->
-            record.meshId to BleDevice(
+            val key = record.meshId.ifBlank { record.macAddress }
+            key to BleDevice(
                 meshId = record.meshId,
                 name = record.name,
                 address = record.macAddress,
                 rssi = record.smoothedRssi,
+                lastSeen = record.lastSeenMillis,
+                capabilities = record.capabilities,
                 distanceMeters = record.distanceMeters,
                 distanceConfidence = record.distanceConfidence
             )
         }
         _scannedDevices.value = map
+        MeshLogger.d(TAG, "[NearbyDiscovery] Published cache: ${map.size} devices (${map.keys})")
     }
 
     fun start() {
         if (scanJob?.isActive == true) return
         
-        MeshLogger.d(TAG, "Starting Intelligent Discovery Engine")
+        MeshLogger.d(TAG, "[NearbyDiscovery] Starting Discovery Engine")
         
         scanJob = engineScope.launch {
             while (isActive) {
@@ -66,14 +73,14 @@ class DiscoveryEngine @Inject constructor(
                 val hasConnections = analytics.metrics.value.activeConnections > 0
                 val window = scheduler.getNextWindowConfig(hasConnections)
                 
-                MeshLogger.d(TAG, "Scan Window: ${window.scanDurationMs}ms, Idle: ${window.idleDurationMs}ms")
+                MeshLogger.d(TAG, "[NearbyDiscovery] Scan Window: ${window.scanDurationMs}ms, Idle: ${window.idleDurationMs}ms")
                 
                 // Active Scan Phase
                 try {
                     startScanAction?.invoke()
                     analytics.recordScanCycle()
                 } catch (e: Exception) {
-                    MeshLogger.e(TAG, "Failed to start hardware scan: ${e.message}")
+                    MeshLogger.e(TAG, "[NearbyDiscovery] Failed to start hardware scan: ${e.message}")
                 }
                 
                 delay(window.scanDurationMs)
@@ -82,7 +89,7 @@ class DiscoveryEngine @Inject constructor(
                 try {
                     stopScanAction?.invoke()
                 } catch (e: Exception) {
-                    MeshLogger.e(TAG, "Failed to stop hardware scan: ${e.message}")
+                    MeshLogger.e(TAG, "[NearbyDiscovery] Failed to stop hardware scan: ${e.message}")
                 }
                 
                 // Cleanup stale peers and duplicate filters during idle (60s configurable timeout to prevent Nearby flickering)
@@ -96,10 +103,9 @@ class DiscoveryEngine @Inject constructor(
     }
 
     fun stop() {
-        MeshLogger.d(TAG, "Stopping Discovery Engine")
+        MeshLogger.d(TAG, "[NearbyDiscovery] Stopping Discovery Engine")
         scanJob?.cancel()
         scanJob = null
-        engineScope.cancel()
         try { stopScanAction?.invoke() } catch (_: Exception) {}
         duplicateFilter.clear()
     }

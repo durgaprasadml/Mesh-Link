@@ -228,7 +228,7 @@ fun NearbyDevicesScreen(
                     ) {
                         items(
                             items = uiState.devices, 
-                            key = { it.address }, 
+                            key = { it.meshId.ifBlank { it.address } }, 
                             contentType = { "device_item" }
                         ) { device ->
                             MeshDeviceCard(

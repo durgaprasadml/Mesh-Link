@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+
 import kotlinx.coroutines.withContext
 
 @Singleton
@@ -195,7 +195,7 @@ class TransferManager @Inject constructor(
 
     // ─────────────────── Sender (Pipeline Pipeline) ───────────────────
 
-    fun sendFile(
+    suspend fun sendFile(
         file: File,
         senderId: String,
         targetId: String,
@@ -203,14 +203,14 @@ class TransferManager @Inject constructor(
         transferId: String = UUID.randomUUID().toString(),
         thumbnailBase64: String? = null
     ): String {
-        val exists = runBlocking(ioDispatcher) { file.exists() }
+        val exists = withContext(ioDispatcher) { file.exists() }
         if (!exists) {
             MeshLogger.e(TAG, "Cannot send non-existent file: ${file.absolutePath}")
             return transferId
         }
 
         val mimeType = metaManager.getMimeTypeForFile(file)
-        val fileLength = runBlocking(ioDispatcher) { file.length() }
+        val fileLength = withContext(ioDispatcher) { file.length() }
         val isWifi = wifiSocketTransport.isConnected() || intelligentTransportManager.isWifiAvailable()
         val selectedRoute = if (isWifi) {
             RouteType.WIFI_DIRECT
@@ -224,7 +224,7 @@ class TransferManager @Inject constructor(
         }
 
         val transport = if (selectedRoute == RouteType.WIFI_DIRECT) TransportType.WIFI_DIRECT else TransportType.BLE
-        val checksum = runBlocking(ioDispatcher) { verifier.calculateFileChecksum(file) }
+        val checksum = withContext(ioDispatcher) { verifier.calculateFileChecksum(file) }
         val totalChunks = chunkManager.getTotalChunks(fileLength, transport)
 
         val session = TransferSession(

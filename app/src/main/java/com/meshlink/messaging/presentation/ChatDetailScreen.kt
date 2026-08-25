@@ -140,14 +140,14 @@ fun ChatDetailScreen(
 
     var previousLastMessageId by remember { mutableStateOf<String?>(null) }
     val lastMessageId = uiState.messages.lastOrNull()?.messageId
+    // Merged into a single LaunchedEffect to avoid duplicate-key ambiguity.
+    // Previously two separate LaunchedEffect(lastMessageId) blocks were used,
+    // causing non-deterministic ordering and redundant markChatAsRead() calls.
     LaunchedEffect(lastMessageId) {
         if (lastMessageId != null && lastMessageId != previousLastMessageId) {
             listState.animateScrollToItem(uiState.messages.size - 1)
         }
         previousLastMessageId = lastMessageId
-    }
-
-    LaunchedEffect(lastMessageId) {
         if (uiState.messages.isNotEmpty()) {
             viewModel.markChatAsRead()
         }

@@ -199,24 +199,20 @@ class BleScannerManager @Inject constructor(
 
         MeshLogger.d(TAG, "[NearbyDiscovery] BLE scan result received: device=$deviceAddress, rssi=$rssi, hasServiceUuid=$hasMeshServiceUuid, mfgDataLength=$mfgDataLength")
 
-        if (manufacturerData == null || manufacturerData.size < 8) {
-            MeshLogger.d(TAG, "[NearbyDiscovery] Mesh peer rejected: missing/invalid manufacturer payload (device=$deviceAddress, mfgDataLength=$mfgDataLength, hasServiceUuid=$hasMeshServiceUuid)")
+        val shortMeshId = if (manufacturerData != null && manufacturerData.size >= 8) {
+            val shortIdBytes = ByteArray(8)
+            System.arraycopy(manufacturerData, 0, shortIdBytes, 0, 8)
+            val extracted = shortIdBytes.joinToString("") { "%02x".format(it) }
+            if (extracted.isNotBlank() && !extracted.all { it == '0' }) extracted else deviceAddress
+        } else if (hasMeshServiceUuid) {
+            // Identified via Mesh Service UUID (e.g., Scan Response packet)
+            deviceAddress
+        } else {
+            MeshLogger.d(TAG, "[NearbyDiscovery] Mesh peer rejected: missing manufacturer payload & Mesh Service UUID (device=$deviceAddress, mfgDataLength=$mfgDataLength, hasServiceUuid=$hasMeshServiceUuid)")
             return
         }
 
-        // Advertiser embeds a stable 8-byte short-ID = first 8 bytes of SHA-256(canonicalMeshId).
-        // Represent it as a hex string for use as a short discovery identifier.
-        // The full canonical meshId is resolved after connection via key exchange / beacon.
-        val shortIdBytes = ByteArray(8)
-        System.arraycopy(manufacturerData, 0, shortIdBytes, 0, 8)
-        val shortMeshId = shortIdBytes.joinToString("") { "%02x".format(it) }
-
-        if (shortMeshId.isBlank() || shortMeshId.all { it == '0' }) {
-            MeshLogger.d(TAG, "[NearbyDiscovery] Mesh peer rejected: empty short meshId (device=$deviceAddress)")
-            return
-        }
-
-        val capabilities = if (manufacturerData.size > 8) manufacturerData[8] else 0
+        val capabilities = if (manufacturerData != null && manufacturerData.size > 8) manufacturerData[8] else 0
 
         // Extract the human-readable device name from scan record or BT device (best-effort).
         val advertisedName = record.deviceName

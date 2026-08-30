@@ -80,6 +80,27 @@ class TransferManager @Inject constructor(
     var onOutgoingTransferCompleted: ((TransferSession) -> Unit)? = null
     var onTransferStateChanged: ((String, TransferState) -> Unit)? = null
 
+    private val transferCompletedListeners = java.util.concurrent.CopyOnWriteArrayList<(TransferSession) -> Unit>()
+
+    fun addTransferCompletedListener(listener: (TransferSession) -> Unit) {
+        transferCompletedListeners.add(listener)
+    }
+
+    fun removeTransferCompletedListener(listener: (TransferSession) -> Unit) {
+        transferCompletedListeners.remove(listener)
+    }
+
+    private fun notifyTransferCompleted(session: TransferSession) {
+        transferCompletedListeners.forEach { listener ->
+            try {
+                listener.invoke(session)
+            } catch (e: Exception) {
+                MeshLogger.e(TAG, "Error in transferCompletedListener: ${e.message}", e)
+            }
+        }
+        onTransferCompleted?.invoke(session)
+    }
+
     val transferProgress: StateFlow<Map<String, Float>> = scheduler.activeSessions
         .map { sessions ->
             sessions.associate { it.transferId to it.getProgress() }
@@ -181,7 +202,7 @@ class TransferManager @Inject constructor(
                 metrics.recordMediaTransfer(totalBytes, durationMs)
                 diagnostics.logTransferCompletion(transferId, totalBytes, durationMs, session.getAverageSpeedBytesPerSec().toDouble())
 
-                onTransferCompleted?.invoke(session)
+                notifyTransferCompleted(session)
             }
         }
 
@@ -520,7 +541,7 @@ class TransferManager @Inject constructor(
                 metrics.recordMediaTransfer(session.totalBytes, durationMs)
                 diagnostics.logTransferCompletion(session.transferId, session.totalBytes, durationMs, session.getAverageSpeedBytesPerSec().toDouble())
 
-                onTransferCompleted?.invoke(session)
+                notifyTransferCompleted(session)
             } else {
                 MeshLogger.w(TAG, "Checksum verification failed for ${session.transferId}. Requesting chunk recovery.")
                 if (session.retries < 3) {

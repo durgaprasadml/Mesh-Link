@@ -88,10 +88,12 @@ class MeshSupervisor @Inject constructor(
                 updateSubsystemState(RadioSubsystem.ROUTING_ENGINE, RadioState.RUNNING)
                 updateSubsystemState(RadioSubsystem.PACKET_DISPATCHER, RadioState.RUNNING)
 
-                MeshLogger.d(TAG, "[MeshStartup] All mesh subsystems successfully initialized and operational")
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "[MeshStartup] Error starting mesh subsystems: ${e.message}", e)
                 isSupervising = false
+                RadioSubsystem.values().forEach { sub ->
+                    updateSubsystemState(sub, RadioState.STOPPED)
+                }
             }
         }
     }

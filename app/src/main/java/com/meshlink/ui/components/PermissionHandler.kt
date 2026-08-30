@@ -66,10 +66,28 @@ fun rememberRadioAndPermissionState(context: Context = LocalContext.current): Bo
         val filter = IntentFilter().apply {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+            addAction(android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
+            addAction(android.location.LocationManager.PROVIDERS_CHANGED_ACTION)
+            addAction(android.location.LocationManager.MODE_CHANGED_ACTION)
         }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
-                isReady = areRadiosAndPermissionsReady(context)
+                val action = intent?.action
+                val isBtReady = if (action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                    val btState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    btState == BluetoothAdapter.STATE_ON
+                } else {
+                    isBluetoothEnabled(context)
+                }
+
+                val isWifiReady = if (action == WifiManager.WIFI_STATE_CHANGED_ACTION) {
+                    val wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
+                    wifiState == WifiManager.WIFI_STATE_ENABLED
+                } else {
+                    isWifiEnabled(context)
+                }
+
+                isReady = hasRequiredPermissions(context) && isBtReady && isWifiReady
             }
         }
         context.registerReceiver(receiver, filter)
@@ -122,6 +140,9 @@ fun PermissionHandler(
         val filter = IntentFilter().apply {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+            addAction(android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
+            addAction(android.location.LocationManager.PROVIDERS_CHANGED_ACTION)
+            addAction(android.location.LocationManager.MODE_CHANGED_ACTION)
         }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -130,16 +151,26 @@ fun PermissionHandler(
                     val btState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
                     isBluetoothEnabled = when (btState) {
                         BluetoothAdapter.STATE_ON -> true
-                        BluetoothAdapter.STATE_OFF -> false
+                        BluetoothAdapter.STATE_OFF, BluetoothAdapter.STATE_TURNING_OFF -> false
                         else -> isBluetoothEnabled(context)
                     }
                 } else if (action == WifiManager.WIFI_STATE_CHANGED_ACTION) {
                     val wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
                     isWifiEnabled = when (wifiState) {
                         WifiManager.WIFI_STATE_ENABLED -> true
-                        WifiManager.WIFI_STATE_DISABLED -> false
+                        WifiManager.WIFI_STATE_DISABLED, WifiManager.WIFI_STATE_DISABLING -> false
                         else -> isWifiEnabled(context)
                     }
+                } else if (action == android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION) {
+                    val p2pState = intent.getIntExtra(android.net.wifi.p2p.WifiP2pManager.EXTRA_WIFI_STATE, -1)
+                    if (p2pState == android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_DISABLED) {
+                        isWifiEnabled = isWifiEnabled(context)
+                    } else if (p2pState == android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_ENABLED) {
+                        isWifiEnabled = true
+                    }
+                } else if (action == android.location.LocationManager.PROVIDERS_CHANGED_ACTION || action == android.location.LocationManager.MODE_CHANGED_ACTION) {
+                    isLocationEnabled = locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true ||
+                                        locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
                 }
             }
         }

@@ -239,13 +239,19 @@ fun NearbyDevicesScreen(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     selectedDeviceAddress = device.address
                                     connectingToAddress = device.address
-                                    viewModel.connectToDevice(device) {
-                                        onNavigateToChat(
-                                            device.meshId.ifBlank { device.address },
-                                            device.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(device.address) }
-                                        )
-                                        connectingToAddress = null
-                                    }
+                                    viewModel.connectToDevice(
+                                        device = device,
+                                        onSuccess = {
+                                            connectingToAddress = null
+                                            onNavigateToChat(
+                                                device.meshId.ifBlank { device.address },
+                                                device.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(device.address) }
+                                            )
+                                        },
+                                        onError = {
+                                            connectingToAddress = null
+                                        }
+                                    )
                                 }
                             )
                         }

@@ -54,6 +54,7 @@ class DiscoveryEngine @Inject constructor(
                 rssi = record.smoothedRssi,
                 lastSeen = record.lastSeenMillis,
                 capabilities = record.capabilities,
+                isConnected = record.state == PeerLifecycleState.CONNECTED,
                 distanceMeters = record.distanceMeters,
                 distanceConfidence = record.distanceConfidence
             )
@@ -129,14 +130,19 @@ class DiscoveryEngine @Inject constructor(
         analytics.recordRssi(rssi)
         
         val record = cache.getOrPut(macAddress, meshId, name)
+        if (meshId != macAddress && meshId.isNotBlank()) {
+            record.meshId = meshId
+        }
         
         // If the peer was suspended but we are receiving new advertisements, resume it
         if (connectionPolicy.getRetryState(macAddress) == com.meshlink.ble.discovery.RetryState.SUSPENDED) {
             connectionPolicy.resetPeer(macAddress)
         }
         
-        // Ensure name is updated if changed
-        record.name = name
+        // Ensure name is updated if non-blank
+        if (name.isNotBlank()) {
+            record.name = name
+        }
         record.capabilities = capabilities
         record.lastSeenMillis = System.currentTimeMillis()
         

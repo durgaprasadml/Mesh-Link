@@ -35,10 +35,7 @@ class ProfileSyncManager @Inject constructor(
 
     init {
         // Register completion listener with TransferManager for incoming profile image transfers
-        val originalCompletedListener = transferManager.onTransferCompleted
-        transferManager.onTransferCompleted = { session ->
-            originalCompletedListener?.invoke(session)
-
+        transferManager.addTransferCompletedListener { session ->
             if (session.mimeType == "image/webp" && session.filePath != null) {
                 applicationScope.launch(Dispatchers.IO) {
                     val peerMeshId = MeshIdNormalizer.canonicalize(session.senderId)

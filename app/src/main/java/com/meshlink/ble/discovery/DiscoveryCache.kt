@@ -4,7 +4,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 data class PeerDiscoveryRecord(
     val macAddress: String,
-    val meshId: String,
+    var meshId: String,
     var name: String,
     val rssiFilter: KalmanFilter = KalmanFilter(),
     var smoothedRssi: Int = -100,

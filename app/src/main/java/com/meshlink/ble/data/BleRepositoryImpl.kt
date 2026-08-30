@@ -388,6 +388,7 @@ class BleRepositoryImpl @Inject constructor(
      * Stop all BLE operations.
      */
     override fun stopMesh() {
+        meshMessagingManager.stopMesh()
         stopAdvertising()
         stopScanning()
         stopServer()

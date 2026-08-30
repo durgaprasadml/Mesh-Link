@@ -9,6 +9,7 @@ import com.meshlink.domain.repository.UserRepository
 import com.meshlink.routing.engine.MeshTopologyManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import com.meshlink.common.logger.MeshLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -64,12 +65,17 @@ class NearbyViewModel @Inject constructor(
             val mergedDevices = mutableMapOf<String, BleDevice>()
             val localUser = userRepository.getLocalUser()
             val localCanonicalId = localUser?.let { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) }
+            val localShortId = localUser?.let {
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                val hashBytes = digest.digest(com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId).toByteArray(Charsets.UTF_8))
+                hashBytes.copyOf(8).joinToString("") { b -> "%02x".format(b) }
+            }
 
             // Direct physical devices
             bleMap.values.forEach { device ->
                 val canonicalId = com.meshlink.util.MeshIdNormalizer.canonicalize(device.meshId.ifBlank { device.address })
                 // Do not display own device in discovery
-                if (localCanonicalId != null && canonicalId == localCanonicalId) {
+                if (localCanonicalId != null && (canonicalId == localCanonicalId || (localShortId != null && canonicalId == localShortId))) {
                     return@forEach
                 }
 
@@ -95,7 +101,7 @@ class NearbyViewModel @Inject constructor(
             reachableNodes.forEach { node ->
                 val canonicalId = com.meshlink.util.MeshIdNormalizer.canonicalize(node.nodeId)
                 // Do not display own device
-                if (localCanonicalId != null && canonicalId == localCanonicalId) {
+                if (localCanonicalId != null && (canonicalId == localCanonicalId || (localShortId != null && canonicalId == localShortId))) {
                     return@forEach
                 }
 
@@ -180,24 +186,42 @@ class NearbyViewModel @Inject constructor(
         }
     }
     
-    fun connectToDevice(device: BleDevice, onConnected: () -> Unit) {
+    fun connectToDevice(
+        device: BleDevice,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
         viewModelScope.launch {
-            when (device.transport) {
-                TransportType.BLE -> {
-                    meshRepository.connectToPeer(device.address)
-                }
-                TransportType.WIFI_DIRECT -> {
-                    // Initiate Wi-Fi Direct connection via the peer ID or MAC address
-                    meshRepository.connectPeer(device.address)
-                }
-                else -> {
-                    // Fallback: attempt BLE connection for unknown transport types
-                    meshRepository.connectToPeer(device.address)
-                }
+            if (device.isConnected) {
+                onSuccess()
+                return@launch
             }
-            // Signal UI that connection was attempted. Real confirmation comes via
-            // GATT/Wi-Fi state callbacks in the transport layer.
-            onConnected()
+            try {
+                val result = when (device.transport) {
+                    TransportType.BLE -> {
+                        meshRepository.connectDevice(device.address)
+                    }
+                    TransportType.WIFI_DIRECT -> {
+                        meshRepository.connectPeer(device.address)
+                    }
+                }
+                when (result) {
+                    is com.meshlink.domain.model.MeshResult.Success -> {
+                        MeshLogger.i("NearbyViewModel", "Successfully initiated connection to ${device.address}")
+                        onSuccess()
+                    }
+                    is com.meshlink.domain.model.MeshResult.Error -> {
+                        val msg = result.error.message
+                        MeshLogger.w("NearbyViewModel", "Failed to connect to ${device.address}: $msg")
+                        _errorMessage.value = "Failed to connect to ${device.name.ifBlank { device.address }}: $msg"
+                        onError(msg)
+                    }
+                }
+            } catch (e: Exception) {
+                MeshLogger.e("NearbyViewModel", "Exception connecting to ${device.address}: ${e.message}", e)
+                _errorMessage.value = "Connection error: ${e.message}"
+                onError(e.message ?: "Unknown connection error")
+            }
         }
     }
 }

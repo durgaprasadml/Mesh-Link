@@ -21,6 +21,8 @@ import com.meshlink.domain.repository.UserRepository
 import com.meshlink.messaging.api.MessageProcessor
 import com.meshlink.routing.api.Router
 import com.meshlink.security.data.MeshCryptoManager
+import com.meshlink.security.policy.EncryptionRequirement
+import com.meshlink.security.policy.PacketEncryptionPolicy
 import com.meshlink.transfer.TransferManager
 import com.meshlink.util.MeshIdNormalizer
 import kotlinx.coroutines.CoroutineScope
@@ -71,6 +73,7 @@ class MeshMessagingManager @Inject constructor(
     private val TAG = "MeshMessagingManager"
 
     private val retryMutex = Mutex()
+    private val startupMutex = Mutex()
     private val lastKeyExchangeRequest = ConcurrentHashMap<String, Long>()
     private var beaconJob: kotlinx.coroutines.Job? = null
 
@@ -86,9 +89,14 @@ class MeshMessagingManager @Inject constructor(
     private fun setupTransferManager() {
         transferManager.onSendPacket = { packet ->
             val reqEnc = userRepository.isEncryptionEnabled.first()
-            val isDirect = routingCoordinator.isDirectlyConnected(packet.targetId)
-            
-            if (reqEnc && !isDirect) {
+            val requirement = PacketEncryptionPolicy.getRequirement(packet.type)
+            val shouldEncrypt = when (requirement) {
+                EncryptionRequirement.REQUIRED -> true
+                EncryptionRequirement.OPTIONAL -> reqEnc
+                EncryptionRequirement.BOOTSTRAP_ONLY -> false
+            }
+
+            if (shouldEncrypt) {
                 val result = corePacketDispatcher.encryptAndWrapPayload(packet.payload, packet.targetId, true, packet.packetId)
                 if (result != null) {
                     val (encryptedPayload, isEncrypted) = result
@@ -98,14 +106,14 @@ class MeshMessagingManager @Inject constructor(
                     )
                     meshRouter.sendMediaPacket(securePacket)
                 } else {
-                    MeshLogger.e(TAG, "Failed to encrypt media packet ${packet.packetId}")
+                    MeshLogger.e(TAG, "Failed to encrypt media packet ${packet.packetId} of type ${packet.type}")
                 }
             } else {
                 meshRouter.sendMediaPacket(packet)
             }
         }
 
-        transferManager.onTransferCompleted = { session ->
+        transferManager.addTransferCompletedListener { session ->
             applicationScope.launch {
                 mediaMessageHandler.receiveMediaMessage(
                     session.transferId,
@@ -123,11 +131,13 @@ class MeshMessagingManager @Inject constructor(
 
     suspend fun retryPendingMessages() {
         retryMutex.withLock {
-            // Also retry WAITING_FOR_ROUTE messages: previously only QUEUED was retried,
-            // causing indefinitely stuck messages whenever a route was not found on first attempt.
-            val queued = chatDao.getMessagesByStatus(DeliveryStatus.QUEUED)
-            val waitingForRoute = chatDao.getMessagesByStatus(DeliveryStatus.WAITING_FOR_ROUTE)
-            val pending = (queued + waitingForRoute).distinctBy { it.messageId }
+            val retryableStatuses = listOf(
+                DeliveryStatus.QUEUED,
+                DeliveryStatus.PENDING,
+                DeliveryStatus.WAITING_FOR_ROUTE,
+                DeliveryStatus.RETRYING
+            )
+            val pending = chatDao.getMessagesByStatuses(retryableStatuses).distinctBy { it.messageId }
             if (pending.isEmpty()) return
 
             connectToAllScannedDevices()
@@ -332,77 +342,92 @@ class MeshMessagingManager @Inject constructor(
     }
 
     suspend fun autoStartMesh() {
-        if (!startupState.compareAndSet(MeshStartupState.STOPPED, MeshStartupState.STARTING)) {
-            MeshLogger.d(TAG, "[MeshStartup] autoStartMesh ignored: current state is ${startupState.get()}")
-            return
-        }
-
-        try {
-            val user = userRepository.getLocalUser()
-            if (user == null) {
-                MeshLogger.w(TAG, "[MeshStartup] STARTUP_ABORTED_NO_PROFILE: No local profile found. Rolling back startupState to STOPPED.")
-                startupState.set(MeshStartupState.STOPPED)
+        startupMutex.withLock {
+            if (!startupState.compareAndSet(MeshStartupState.STOPPED, MeshStartupState.STARTING)) {
+                MeshLogger.d(TAG, "[MeshStartup] autoStartMesh ignored: current state is ${startupState.get()}")
                 return
             }
 
-            MeshLogger.i(TAG, "[MeshStartup] PROFILE_FOUND: User=${user.name}, MeshID=${user.meshId}")
-            val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
-            meshRouter.localMeshId = localPeerId
-            
-            discoveryManager.startAdvertising(user.name, user.meshId, 0x01)
-            MeshLogger.i(TAG, "[MeshStartup] BLE_ADVERTISER_STARTED")
-            startServer()
-            startScanning()
-            MeshLogger.i(TAG, "[MeshStartup] BLE_SCANNER_STARTED")
+            try {
+                val user = userRepository.getLocalUser()
+                if (user == null) {
+                    MeshLogger.w(TAG, "[MeshStartup] STARTUP_ABORTED_NO_PROFILE: No local profile found. Rolling back startupState to STOPPED.")
+                    startupState.set(MeshStartupState.STOPPED)
+                    return
+                }
 
-            // Allow scan results to populate before attempting connections.
-            // Use a shorter structured delay; refreshMesh() handles recovery if needed.
-            delay(1500)
-            connectToAllScannedDevices()
+                MeshLogger.i(TAG, "[MeshStartup] PROFILE_FOUND: User=${user.name}, MeshID=${user.meshId}")
+                val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
+                meshRouter.localMeshId = localPeerId
+                
+                discoveryManager.startAdvertising(user.name, user.meshId, 0x01)
+                MeshLogger.i(TAG, "[MeshStartup] BLE_ADVERTISER_STARTED")
+                startServer()
+                startScanning()
+                MeshLogger.i(TAG, "[MeshStartup] BLE_SCANNER_STARTED")
 
-            val keyExchangePacket = keyExchangeHandler.generateSignedKeyExchange(localPeerId).copy(targetId = "BROADCAST")
-            dispatchSinglePacket("BROADCAST", keyExchangePacket)
+                // Allow scan results to populate before attempting connections.
+                // Use a shorter structured delay; refreshMesh() handles recovery if needed.
+                delay(1500)
+                connectToAllScannedDevices()
 
-            startupState.set(MeshStartupState.RUNNING)
-            MeshLogger.i(TAG, "[MeshStartup] MESH_READY")
+                val keyExchangePacket = keyExchangeHandler.generateSignedKeyExchange(localPeerId).copy(targetId = "BROADCAST")
+                dispatchSinglePacket("BROADCAST", keyExchangePacket)
 
-            beaconJob?.cancel()
-            beaconJob = applicationScope.launch {
-                while (startupState.get() == MeshStartupState.RUNNING) {
-                    delay(20_000L)
-                    try {
-                        val current = userRepository.getLocalUser()
-                        if (current != null && isAnyPeerConnected()) {
-                            // Pass user name directly so BeaconHandler doesn't need runBlocking
-                            val beaconPkt = beaconHandler.generateBeaconPacket(
-                                localMeshId = current.meshId,
-                                localUserName = current.name?.trim() ?: ""
-                            )
-                            dispatchSinglePacket("BROADCAST", beaconPkt)
+                // Verify we are still in STARTING state (stopMesh was not called during delay)
+                if (!startupState.compareAndSet(MeshStartupState.STARTING, MeshStartupState.RUNNING)) {
+                    MeshLogger.w(TAG, "[MeshStartup] Startup was aborted/stopped during initialization. Cleaning up.")
+                    stopMeshInternal()
+                    return
+                }
+                MeshLogger.i(TAG, "[MeshStartup] MESH_READY")
+
+                beaconJob?.cancel()
+                beaconJob = applicationScope.launch {
+                    while (startupState.get() == MeshStartupState.RUNNING) {
+                        delay(20_000L)
+                        try {
+                            val current = userRepository.getLocalUser()
+                            if (current != null && isAnyPeerConnected()) {
+                                // Pass user name directly so BeaconHandler doesn't need runBlocking
+                                val beaconPkt = beaconHandler.generateBeaconPacket(
+                                    localMeshId = current.meshId,
+                                    localUserName = current.name?.trim() ?: ""
+                                )
+                                dispatchSinglePacket("BROADCAST", beaconPkt)
+                            }
+                        } catch (e: Exception) {
+                            MeshLogger.w(TAG, "Periodic topology beacon error: ${e.message}")
                         }
-                    } catch (e: Exception) {
-                        MeshLogger.w(TAG, "Periodic topology beacon error: ${e.message}")
                     }
                 }
+            } catch (e: Throwable) {
+                // Catch Throwable (not just Exception) so that CancellationException also triggers
+                // state reset. Without this, a cancelled coroutine leaves startupState stuck at STARTING.
+                MeshLogger.e(TAG, "[MeshStartup] autoStartMesh failed: ${e.message}", e)
+                startupState.set(MeshStartupState.STOPPED)
+                stopMeshInternal()
+                throw e   // Re-throw so callers (MeshRelayService etc.) can handle/log accordingly
             }
-        } catch (e: Throwable) {
-            // Catch Throwable (not just Exception) so that CancellationException also triggers
-            // state reset. Without this, a cancelled coroutine leaves startupState stuck at STARTING.
-            MeshLogger.e(TAG, "[MeshStartup] autoStartMesh failed: ${e.message}", e)
-            startupState.set(MeshStartupState.STOPPED)
-            stopMesh()
-            throw e   // Re-throw so callers (MeshRelayService etc.) can handle/log accordingly
         }
     }
 
     fun isOperational(): Boolean = startupState.get() == MeshStartupState.RUNNING
 
     suspend fun refreshMesh() {
-        if (startupState.get() != MeshStartupState.RUNNING) {
-            MeshLogger.d(TAG, "[MeshStartup] refreshMesh: Mesh not running (${startupState.get()}). Resetting state to STOPPED and starting.")
-            startupState.set(MeshStartupState.STOPPED)
-            autoStartMesh()
-            return
+        when (startupState.get()) {
+            MeshStartupState.STARTING -> {
+                MeshLogger.d(TAG, "[MeshStartup] refreshMesh ignored: startup currently in progress")
+                return
+            }
+            MeshStartupState.STOPPED, null -> {
+                MeshLogger.d(TAG, "[MeshStartup] refreshMesh: Mesh not running (STOPPED). Triggering autoStartMesh.")
+                autoStartMesh()
+                return
+            }
+            MeshStartupState.RUNNING -> {
+                // Proceed with checking and refreshing mesh components
+            }
         }
 
         MeshLogger.d(TAG, "refreshMesh: Checking mesh component health")
@@ -425,6 +450,10 @@ class MeshMessagingManager @Inject constructor(
 
     fun stopMesh() {
         startupState.set(MeshStartupState.STOPPED)
+        stopMeshInternal()
+    }
+
+    private fun stopMeshInternal() {
         beaconJob?.cancel()
         beaconJob = null
         stopAdvertising()

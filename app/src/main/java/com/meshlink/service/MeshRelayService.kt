@@ -61,7 +61,10 @@ class MeshRelayService : Service() {
     private val radioStateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
             val action = intent?.action
-            if (action == android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED || action == android.net.wifi.WifiManager.WIFI_STATE_CHANGED_ACTION) {
+            if (action == android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED ||
+                action == android.net.wifi.WifiManager.WIFI_STATE_CHANGED_ACTION ||
+                action == android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION
+            ) {
                 if (com.meshlink.ui.components.areRadiosAndPermissionsReady(this@MeshRelayService)) {
                     MeshLogger.d(TAG, "Both Bluetooth and Wi-Fi are ON, restarting Mesh Relay")
                     serviceScope.launch {
@@ -82,6 +85,7 @@ class MeshRelayService : Service() {
         val filter = android.content.IntentFilter().apply {
             addAction(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(android.net.wifi.WifiManager.WIFI_STATE_CHANGED_ACTION)
+            addAction(android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
         }
         registerReceiver(radioStateReceiver, filter)
         

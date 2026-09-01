@@ -8,7 +8,10 @@ object MeshIdNormalizer {
      * Ensures consistent representation across transport, database, and UI layers.
      */
     fun canonicalize(id: String): String {
-        val cleaned = id.replace(":", "").trim().uppercase()
+        val trimmed = id.trim()
+        if (trimmed.isBlank()) return ""
+        if (trimmed.equals("BROADCAST", ignoreCase = true)) return "BROADCAST"
+        val cleaned = trimmed.replace(":", "").uppercase()
         return if (cleaned.length > CANONICAL_LENGTH) {
             cleaned.takeLast(CANONICAL_LENGTH)
         } else {

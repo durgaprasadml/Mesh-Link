@@ -491,37 +491,36 @@ class MeshMessagingManager @Inject constructor(
 
     fun checkAndTriggerHandshake(address: String) {
         val state = connectionManager.peerStates[address] ?: return
-        if (state == PeerConnectionState.READY || state == PeerConnectionState.SESSION_READY) {
-            val peerId = discoveryManager.scannedDevices.value.values.firstOrNull { it.address == address }?.meshId
-                ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop == address }?.key
+        if (state == PeerConnectionState.CONNECTED || state == PeerConnectionState.READY || state == PeerConnectionState.SESSION_READY) {
+            val peerId = discoveryManager.scannedDevices.value.values.firstOrNull { it.address.equals(address, ignoreCase = true) }?.meshId
+                ?: meshRouter.routeTable.entries.firstOrNull { it.value.nextHop.equals(address, ignoreCase = true) }?.key
+                ?: com.meshlink.util.MeshIdNormalizer.canonicalize(address)
                 
-            if (peerId != null) {
-                applicationScope.launch {
-                    val reqEnc = userRepository.isEncryptionEnabled.first()
-                    if (reqEnc) {
-                        if (cryptoManager.hasPeerKey(peerId)) {
-                            connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
-                            retryCoordinator.triggerEvent("session_ready")
-                            retryPendingMessages()
-                        } else {
-                            val currentState = connectionManager.peerStates[address]
-                            if (currentState != PeerConnectionState.KEY_EXCHANGE_STARTED &&
-                                currentState != PeerConnectionState.SESSION_READY &&
-                                currentState != PeerConnectionState.SESSION_ESTABLISHED) {
-                                connectionManager.peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
-                                val user = userRepository.getLocalUser()
-                                if (user != null) {
-                                    val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
-                                    val packetBase = keyExchangeHandler.generateSignedKeyExchange(localPeerId)
-                                    val packet = packetBase.copy(targetId = peerId)
-                                    dispatchSinglePacket(peerId, packet)
-                                }
+            applicationScope.launch {
+                val reqEnc = userRepository.isEncryptionEnabled.first()
+                if (reqEnc) {
+                    if (cryptoManager.hasPeerKey(peerId)) {
+                        connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
+                        retryCoordinator.triggerEvent("session_ready")
+                        retryPendingMessages()
+                    } else {
+                        val currentState = connectionManager.peerStates[address]
+                        if (currentState != PeerConnectionState.KEY_EXCHANGE_STARTED &&
+                            currentState != PeerConnectionState.SESSION_READY &&
+                            currentState != PeerConnectionState.SESSION_ESTABLISHED) {
+                            connectionManager.peerStates[address] = PeerConnectionState.KEY_EXCHANGE_STARTED
+                            val user = userRepository.getLocalUser()
+                            if (user != null) {
+                                val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
+                                val packetBase = keyExchangeHandler.generateSignedKeyExchange(localPeerId)
+                                val packet = packetBase.copy(targetId = peerId)
+                                dispatchSinglePacket(peerId, packet)
                             }
                         }
-                    } else {
-                        connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
-                        retryPendingMessages()
                     }
+                } else {
+                    connectionManager.updatePeerState(address, PeerConnectionState.SESSION_READY)
+                    retryPendingMessages()
                 }
             }
         }

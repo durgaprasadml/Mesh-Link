@@ -37,6 +37,7 @@ internal class MeshRouter @Inject constructor(
     private val routingEngine: RoutingEngine,
     private val topologyManager: com.meshlink.routing.engine.MeshTopologyManager,
     private val settingsRepository: SettingsRepository,
+    private val userRepositoryProvider: javax.inject.Provider<com.meshlink.domain.repository.UserRepository>? = null,
     @ApplicationScope private val applicationScope: CoroutineScope
 ) : com.meshlink.routing.api.Router {
 
@@ -82,6 +83,14 @@ internal class MeshRouter @Inject constructor(
         .stateIn(applicationScope, SharingStarted.Eagerly, 10)
 
     init {
+        applicationScope.launch {
+            try {
+                val user = userRepositoryProvider?.get()?.getLocalUser()
+                if (user != null && user.meshId.isNotBlank()) {
+                    localMeshId = com.meshlink.util.MeshIdNormalizer.canonicalize(user.meshId)
+                }
+            } catch (_: Exception) {}
+        }
         observeIncoming()
         startStoreAndForwardLoop()
         startQueueProcessorLoop()
@@ -200,9 +209,13 @@ internal class MeshRouter @Inject constructor(
         incomingTransport: RouteType = RouteType.BLE
     ) {
         val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)
-        val canonicalLocalId  = com.meshlink.util.MeshIdNormalizer.canonicalize(localMeshId)
-        val isBroadcast = packet.targetId == "BROADCAST" || canonicalTargetId == "BROADCAST"
-        val isForMe     = canonicalTargetId.isNotBlank() && canonicalLocalId.isNotBlank() && canonicalTargetId == canonicalLocalId
+        val canonicalLocalId  = if (localMeshId.isNotBlank()) com.meshlink.util.MeshIdNormalizer.canonicalize(localMeshId) else ""
+        val isBroadcast = packet.targetId.equals("BROADCAST", ignoreCase = true) || canonicalTargetId == "BROADCAST"
+        val isForMe = isBroadcast || (canonicalLocalId.isNotBlank() && (
+            canonicalTargetId == canonicalLocalId ||
+            packet.targetId.equals(localMeshId, ignoreCase = true) ||
+            packet.targetId.equals(canonicalLocalId, ignoreCase = true)
+        ))
 
         // --- Strict Encryption Enforcement ---
         val enforceEncryption = enforceEncryptionState.value

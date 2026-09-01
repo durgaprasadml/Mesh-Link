@@ -23,8 +23,11 @@ import kotlinx.coroutines.flow.asStateFlow
 internal class BleTransportImpl @Inject constructor(
     private val gattManager: BleGattManager,
     private val connectionManager: BleConnectionManager,
+    private val routingCoordinatorProvider: javax.inject.Provider<RoutingCoordinator>,
     @ApplicationScope private val applicationScope: CoroutineScope
 ) : BleTransport {
+
+    private val routingCoordinator get() = routingCoordinatorProvider.get()
 
     private val _healthState = MutableStateFlow(TransportHealth.CONNECTED)
     override val health: StateFlow<TransportHealth> = _healthState.asStateFlow()
@@ -54,13 +57,15 @@ internal class BleTransportImpl @Inject constructor(
     @Deprecated("Use sendPacket instead", ReplaceWith("sendPacket(packet)"))
     override suspend fun send(packet: MeshPacket) {
         val json = MeshPacketParser.toJson(packet)
-        gattManager.broadcastPacket(json, includeAddress = packet.targetId)
+        val targetAddress = if (packet.targetId == "BROADCAST") null else routingCoordinator.resolvePeerAddress(packet.targetId) ?: packet.targetId
+        gattManager.broadcastPacket(json, includeAddress = targetAddress)
     }
 
     override suspend fun sendPacket(packet: MeshPacket): com.meshlink.domain.model.MeshResult<Unit> {
         return try {
             val json = MeshPacketParser.toJson(packet)
-            gattManager.broadcastPacket(json, includeAddress = packet.targetId)
+            val targetAddress = if (packet.targetId == "BROADCAST") null else routingCoordinator.resolvePeerAddress(packet.targetId) ?: packet.targetId
+            gattManager.broadcastPacket(json, includeAddress = targetAddress)
             com.meshlink.domain.model.MeshResult.Success(Unit)
         } catch (e: Exception) {
             com.meshlink.domain.model.MeshResult.Error(
@@ -72,13 +77,17 @@ internal class BleTransportImpl @Inject constructor(
     @Deprecated("Use broadcastPacket instead", ReplaceWith("broadcastPacket(packet, excludeAddress, includeAddress)"))
     override suspend fun broadcast(packet: MeshPacket, excludeAddress: String?, includeAddress: String?) {
         val json = MeshPacketParser.toJson(packet)
-        gattManager.broadcastPacket(json, excludeAddress = excludeAddress, includeAddress = includeAddress)
+        val resolvedInclude = if (includeAddress != null && includeAddress != "BROADCAST") routingCoordinator.resolvePeerAddress(includeAddress) ?: includeAddress else null
+        val resolvedExclude = if (excludeAddress != null) routingCoordinator.resolvePeerAddress(excludeAddress) ?: excludeAddress else null
+        gattManager.broadcastPacket(json, excludeAddress = resolvedExclude, includeAddress = resolvedInclude)
     }
 
     override suspend fun broadcastPacket(packet: MeshPacket, excludeAddress: String?, includeAddress: String?): com.meshlink.domain.model.MeshResult<Unit> {
         return try {
             val json = MeshPacketParser.toJson(packet)
-            gattManager.broadcastPacket(json, excludeAddress = excludeAddress, includeAddress = includeAddress)
+            val resolvedInclude = if (includeAddress != null && includeAddress != "BROADCAST") routingCoordinator.resolvePeerAddress(includeAddress) ?: includeAddress else null
+            val resolvedExclude = if (excludeAddress != null) routingCoordinator.resolvePeerAddress(excludeAddress) ?: excludeAddress else null
+            gattManager.broadcastPacket(json, excludeAddress = resolvedExclude, includeAddress = resolvedInclude)
             com.meshlink.domain.model.MeshResult.Success(Unit)
         } catch (e: Exception) {
             com.meshlink.domain.model.MeshResult.Error(

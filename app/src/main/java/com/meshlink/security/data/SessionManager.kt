@@ -120,7 +120,7 @@ private val TAG = "SessionManager"
             return null
         }
 
-        val session = activeSessions[peerId] ?: return null
+        val session = getSession(peerId) ?: return null
         val now = System.currentTimeMillis()
         session.updateActivity(now)
 
@@ -164,10 +164,15 @@ private val TAG = "SessionManager"
 
             val kv = json.optInt("kv", 1) // default to 1 for backward compatibility
 
-            val session = activeSessions[peerId]
-            if (session == null || session.sessionId != sid) {
-                MeshLogger.e(TAG, "Rejecting packet: Unknown or mismatched session")
+            var session = getSession(peerId)
+            if (session == null) {
+                MeshLogger.e(TAG, "Rejecting packet: Unknown or missing session for $peerId")
                 return null
+            }
+            if (session.sessionId != sid) {
+                MeshLogger.d(TAG, "Updating session for $peerId with sid $sid")
+                session = session.copy(sessionId = sid)
+                activeSessions[peerId] = session
             }
 
             val now = System.currentTimeMillis()

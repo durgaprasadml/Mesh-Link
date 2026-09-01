@@ -93,13 +93,11 @@ class BleAdvertiserManager @Inject constructor(
                 .setConnectable(true)
                 .build()
 
-        // Stable 8-byte short-ID: first 8 bytes of SHA-256(canonicalMeshId).
-        // Using a hash rather than a naive truncation prevents identity collisions
-        // when two mesh IDs share the same first 8 UTF-8 bytes.
+        // 8-byte canonical Mesh ID directly embedded in manufacturer data
         val canonicalMeshId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-        val hashBytes = digest.digest(canonicalMeshId.toByteArray(Charsets.UTF_8))
-        val meshIdBytes = hashBytes.copyOf(8)   // first 8 bytes of SHA-256
+        val canonicalBytes = canonicalMeshId.toByteArray(Charsets.UTF_8)
+        val meshIdBytes = ByteArray(8)
+        System.arraycopy(canonicalBytes, 0, meshIdBytes, 0, minOf(canonicalBytes.size, 8))
         val combinedData = ByteArray(9)
         System.arraycopy(meshIdBytes, 0, combinedData, 0, 8)
         combinedData[8] = capabilities

@@ -183,13 +183,15 @@ class BleGattManager @Inject constructor(
     fun broadcastPacket(jsonPacket: String, excludeAddress: String? = null, includeAddress: String? = null) {
         val bytes = jsonPacket.toByteArray(Charsets.UTF_8)
 
+        val matchesClient = includeAddress != null && connectionManager.activeClients.containsKey(includeAddress)
+        val matchesServer = includeAddress != null && connectionManager.connectedServers.containsKey(includeAddress)
+        val shouldDirectRoute = matchesClient || matchesServer
 
-        
         // Dispatch to Nodes we initiated connection to
         connectionManager.activeClients.forEach { (address, _) ->
-            if (includeAddress != null) {
-                if (address == includeAddress) enqueueClientWrite(address, bytes)
-            } else if (address != excludeAddress) {
+            if (shouldDirectRoute) {
+                if (address.equals(includeAddress, ignoreCase = true)) enqueueClientWrite(address, bytes)
+            } else if (excludeAddress == null || !address.equals(excludeAddress, ignoreCase = true)) {
                 enqueueClientWrite(address, bytes)
             }
         }
@@ -201,9 +203,9 @@ class BleGattManager @Inject constructor(
             
             if (char != null) {
                 connectionManager.connectedServers.forEach { (address, device) ->
-                    if (includeAddress != null) {
-                        if (address == includeAddress) sendFragmentedNotification(device, char, bytes)
-                    } else if (address != excludeAddress) {
+                    if (shouldDirectRoute) {
+                        if (address.equals(includeAddress, ignoreCase = true)) sendFragmentedNotification(device, char, bytes)
+                    } else if (excludeAddress == null || !address.equals(excludeAddress, ignoreCase = true)) {
                         sendFragmentedNotification(device, char, bytes)
                     }
                 }

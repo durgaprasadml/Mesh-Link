@@ -202,11 +202,20 @@ class BleScannerManager @Inject constructor(
         val shortMeshId = if (manufacturerData != null && manufacturerData.size >= 8) {
             val shortIdBytes = ByteArray(8)
             System.arraycopy(manufacturerData, 0, shortIdBytes, 0, 8)
-            val extracted = shortIdBytes.joinToString("") { "%02x".format(it) }
-            if (extracted.isNotBlank() && !extracted.all { it == '0' }) extracted else deviceAddress
+            val asciiString = String(shortIdBytes, Charsets.UTF_8).trim().filter { it in '0'..'9' || it in 'A'..'Z' || it in 'a'..'z' }
+            if (asciiString.length in 4..8) {
+                com.meshlink.util.MeshIdNormalizer.canonicalize(asciiString)
+            } else {
+                val hexString = shortIdBytes.joinToString("") { "%02x".format(it) }
+                if (hexString.isNotBlank() && !hexString.all { it == '0' }) {
+                    com.meshlink.util.MeshIdNormalizer.canonicalize(hexString)
+                } else {
+                    com.meshlink.util.MeshIdNormalizer.canonicalize(deviceAddress)
+                }
+            }
         } else if (hasMeshServiceUuid) {
             // Identified via Mesh Service UUID (e.g., Scan Response packet)
-            deviceAddress
+            com.meshlink.util.MeshIdNormalizer.canonicalize(deviceAddress)
         } else {
             MeshLogger.d(TAG, "[NearbyDiscovery] Mesh peer rejected: missing manufacturer payload & Mesh Service UUID (device=$deviceAddress, mfgDataLength=$mfgDataLength, hasServiceUuid=$hasMeshServiceUuid)")
             return

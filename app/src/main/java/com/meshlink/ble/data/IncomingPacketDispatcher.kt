@@ -48,14 +48,20 @@ class IncomingPacketDispatcher @Inject constructor(
     private val TAG = "IncomingPacketDispatcher"
 
     suspend fun dispatch(packet: MeshPacket) {
-        if (packet.targetId != "BROADCAST") {
+        val isBroadcast = packet.targetId.equals("BROADCAST", ignoreCase = true)
+        if (!isBroadcast) {
             val myMeshId = userRepository.getLocalUser()?.meshId
-            val myNetworkId = if (myMeshId != null) MeshIdNormalizer.canonicalize(myMeshId) else null
-            val targetsMe = myNetworkId != null && packet.targetId == myNetworkId
+            if (myMeshId != null) {
+                val myNetworkId = MeshIdNormalizer.canonicalize(myMeshId)
+                val targetNorm = MeshIdNormalizer.canonicalize(packet.targetId)
+                val targetsMe = packet.targetId.equals(myMeshId, ignoreCase = true) ||
+                                packet.targetId.equals(myNetworkId, ignoreCase = true) ||
+                                (targetNorm.isNotBlank() && targetNorm == myNetworkId)
 
-            if (myMeshId != null && packet.targetId != MeshIdNormalizer.canonicalize(myMeshId)) {
-                MeshLogger.d(TAG, "Routing packet to ${MeshIdNormalizer.canonicalize(packet.targetId)}")
-                return
+                if (!targetsMe && packet.type != PacketType.KEY_EXCHANGE) {
+                    MeshLogger.d(TAG, "Routing packet to ${MeshIdNormalizer.canonicalize(packet.targetId)}")
+                    return
+                }
             }
         }
 

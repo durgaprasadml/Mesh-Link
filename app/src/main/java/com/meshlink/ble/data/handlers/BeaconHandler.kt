@@ -23,7 +23,8 @@ class BeaconHandler @Inject constructor(
     private val routeManager: RouteManager,
     private val routingTable: RoutingTable,
     private val userDao: UserDao? = null,
-    private val userRepository: UserRepository? = null
+    private val userRepository: UserRepository? = null,
+    private val discoveryEngine: com.meshlink.ble.discovery.DiscoveryEngine? = null
 ) {
     companion object {
         private const val TAG = "BeaconHandler"
@@ -95,6 +96,10 @@ class BeaconHandler @Inject constructor(
             val json = JSONObject(packet.payload)
             val senderName = json.optString("senderName", "").trim()
             val now = System.currentTimeMillis()
+
+            if (senderName.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(senderName, senderId)) {
+                discoveryEngine?.updatePeerIdentity(senderId, senderName, senderId)
+            }
 
             if (userDao != null) {
                 try {

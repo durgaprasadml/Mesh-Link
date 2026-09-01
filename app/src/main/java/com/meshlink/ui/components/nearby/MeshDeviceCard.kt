@@ -82,9 +82,14 @@ fun MeshDeviceCard(
         }
     }
 
-    val rawName = device.name.trim()
+    val rawName = (device.displayName ?: device.name).trim()
     val displayName = if (com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(rawName, device.meshId.ifBlank { device.address })) {
-        "Unknown User"
+        val btName = device.bluetoothDeviceName?.trim()
+        if (!btName.isNullOrBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(btName, device.meshId.ifBlank { device.address })) {
+            btName
+        } else {
+            "Unknown Mesh Node"
+        }
     } else {
         rawName
     }

@@ -14,7 +14,9 @@ data class PeerDiscoveryRecord(
     var failedAttempts: Int = 0,
     var capabilities: Byte = 0, // Battery, Routing, etc.
     var score: Int = 0,
-    var state: PeerLifecycleState = PeerLifecycleState.UNKNOWN
+    var state: PeerLifecycleState = PeerLifecycleState.UNKNOWN,
+    var displayName: String? = null,
+    var bluetoothDeviceName: String? = null
 )
 
 /**
@@ -31,7 +33,12 @@ class DiscoveryCache {
             evictOldest()
         }
         return peers.getOrPut(macAddress) {
-            PeerDiscoveryRecord(macAddress = macAddress, meshId = meshId, name = defaultName)
+            PeerDiscoveryRecord(
+                macAddress = macAddress,
+                meshId = meshId,
+                name = defaultName,
+                bluetoothDeviceName = defaultName.takeIf { it.isNotBlank() }
+            )
         }
     }
 

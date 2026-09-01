@@ -16,6 +16,7 @@ interface UserLocalDataSource {
 
     suspend fun insertUser(user: UserEntity)
     suspend fun getUser(meshId: String): UserEntity?
+    suspend fun getAllUsers(): List<UserEntity>
     suspend fun getLocalUser(): UserEntity?
     fun observeLocalUser(): Flow<UserEntity?>
     fun observeUser(meshId: String): Flow<UserEntity?>

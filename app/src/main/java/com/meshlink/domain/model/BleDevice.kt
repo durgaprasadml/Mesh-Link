@@ -24,5 +24,7 @@ data class BleDevice(
     val profilePhotoHash: String? = null,
     val hopCount: Int = 0,
     val isMeshNode: Boolean = false,
-    val viaRelayId: String? = null
+    val viaRelayId: String? = null,
+    val displayName: String? = null,
+    val bluetoothDeviceName: String? = null
 )

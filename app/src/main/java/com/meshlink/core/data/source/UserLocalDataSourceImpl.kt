@@ -65,6 +65,10 @@ class UserLocalDataSourceImpl @Inject constructor(
         return userDao.getUser(meshId)
     }
 
+    override suspend fun getAllUsers(): List<UserEntity> {
+        return userDao.getAllUsers()
+    }
+
     override suspend fun getLocalUser(): UserEntity? {
         return userDao.getLocalUser()
     }

@@ -56,7 +56,9 @@ class DiscoveryEngine @Inject constructor(
                 capabilities = record.capabilities,
                 isConnected = record.state == PeerLifecycleState.CONNECTED,
                 distanceMeters = record.distanceMeters,
-                distanceConfidence = record.distanceConfidence
+                distanceConfidence = record.distanceConfidence,
+                displayName = record.displayName,
+                bluetoothDeviceName = record.bluetoothDeviceName
             )
         }
         _scannedDevices.value = map
@@ -139,9 +141,13 @@ class DiscoveryEngine @Inject constructor(
             connectionPolicy.resetPeer(macAddress)
         }
         
-        // Ensure name is updated if non-blank
+        // Store Bluetooth hardware device name as transport metadata
         if (name.isNotBlank()) {
-            record.name = name
+            record.bluetoothDeviceName = name
+            // Only update record.name if displayName is not already set from Mesh-Link profile
+            if (record.displayName.isNullOrBlank()) {
+                record.name = name
+            }
         }
         record.capabilities = capabilities
         record.lastSeenMillis = System.currentTimeMillis()
@@ -172,6 +178,34 @@ class DiscoveryEngine @Inject constructor(
         // Notify downstream (Repository) that a peer was processed and scored
         _engineEvents.tryEmit(record)
         publishCache()
+    }
+
+    /**
+     * Updates peer profile metadata (Mesh-Link display name and canonical mesh ID)
+     * when received securely via handshake, beacon, or repository resolution.
+     */
+    fun updatePeerIdentity(identifier: String, displayName: String, canonicalMeshId: String? = null) {
+        if (identifier.isBlank()) return
+        val targetNorm = com.meshlink.util.MeshIdNormalizer.canonicalize(identifier)
+        val record = cache.get(identifier)
+            ?: cache.getAll().firstOrNull { 
+                it.macAddress.equals(identifier, ignoreCase = true) ||
+                it.meshId.equals(identifier, ignoreCase = true) ||
+                com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == targetNorm
+            }
+
+        if (record != null) {
+            val trimmedName = displayName.trim()
+            if (trimmedName.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(trimmedName, canonicalMeshId ?: record.meshId)) {
+                record.displayName = trimmedName
+                record.name = trimmedName
+            }
+            if (!canonicalMeshId.isNullOrBlank() && canonicalMeshId.isNotBlank()) {
+                record.meshId = canonicalMeshId
+            }
+            publishCache()
+            MeshLogger.d(TAG, "[NearbyDiscovery] Updated peer identity: mac=${record.macAddress}, meshId=${record.meshId}, displayName='${record.displayName}'")
+        }
     }
 
     fun notifyConnectionAttempt(macAddress: String) {

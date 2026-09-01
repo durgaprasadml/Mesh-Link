@@ -316,4 +316,192 @@ class NearbyDiscoveryPipelineTest {
             assertEquals(-60, state.devices[0].rssi)
         }
     }
+
+    /**
+     * Test 9 — Profile Name preferred over Bluetooth Hardware Name:
+     * User profile display name ("Durga Prasad") takes precedence over
+     * Bluetooth device name ("motorola edge 60 fusion").
+     */
+    @Test
+    fun `test9_profileDisplayName_takesPrecedenceOverBluetoothName`() = runTest {
+        val localUser = User(meshId = "LOCALUSER1", name = "Local Device")
+        coEvery { userRepository.getLocalUser() } returns localUser
+        coEvery { userRepository.getUserDisplayName("PEER1234") } returns "Durga Prasad"
+        coEvery { userRepository.getUserProfile("PEER1234") } returns null
+
+        val peerDevice = BleDevice(
+            meshId = "PEER1234",
+            name = "motorola edge 60 fusion",
+            bluetoothDeviceName = "motorola edge 60 fusion",
+            address = "AA:BB:CC:DD:EE:10",
+            rssi = -60
+        )
+
+        val scannedFlow = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
+        every { meshRepository.scannedDevices } returns scannedFlow
+        every { topologyManager.reachableNodes } returns MutableStateFlow(emptyList())
+
+        val viewModel = NearbyViewModel(meshRepository, userRepository, topologyManager)
+
+        viewModel.uiState.test {
+            val initial = awaitItem()
+            assertTrue(initial.devices.isEmpty())
+
+            scannedFlow.value = mapOf("PEER1234" to peerDevice)
+
+            val updated = awaitItem()
+            assertEquals(1, updated.devices.size)
+            assertEquals("Durga Prasad", updated.devices[0].name)
+            assertEquals("Durga Prasad", updated.devices[0].displayName)
+            assertEquals("motorola edge 60 fusion", updated.devices[0].bluetoothDeviceName)
+        }
+    }
+
+    /**
+     * Test 10 — Rescan and continued discovery does not overwrite resolved profile name:
+     * When new BLE advertisements arrive with Bluetooth hardware name, DiscoveryEngine
+     * does not overwrite already resolved Mesh-Link profile display name.
+     */
+    @Test
+    fun `test10_continuedBleScanning_doesNotOverwriteResolvedProfileName`() {
+        val batteryScanner: BatteryAwareScanner = mockk(relaxed = true)
+        val engine = DiscoveryEngine(batteryScanner)
+
+        // 1. Initial BLE discovery with hardware name
+        engine.onDeviceDiscovered(
+            macAddress = "AA:BB:CC:DD:EE:20",
+            meshId = "SHORTID1",
+            name = "motorola edge 60 fusion",
+            rssi = -70
+        )
+
+        val initial = engine.cache.get("AA:BB:CC:DD:EE:20")
+        assertNotNull(initial)
+        assertEquals("motorola edge 60 fusion", initial?.name)
+        assertEquals("motorola edge 60 fusion", initial?.bluetoothDeviceName)
+
+        // 2. Identity received via handshake or beacon
+        engine.updatePeerIdentity(
+            identifier = "AA:BB:CC:DD:EE:20",
+            displayName = "Durga Prasad",
+            canonicalMeshId = "CANONICAL1"
+        )
+
+        val afterIdentity = engine.cache.get("AA:BB:CC:DD:EE:20")
+        assertNotNull(afterIdentity)
+        assertEquals("Durga Prasad", afterIdentity?.displayName)
+        assertEquals("Durga Prasad", afterIdentity?.name)
+        assertEquals("CANONICAL1", afterIdentity?.meshId)
+
+        // 3. Subsequent BLE scan arrives with hardware name
+        // Wait past duplicate filter window (2000ms)
+        Thread.sleep(2100)
+        engine.onDeviceDiscovered(
+            macAddress = "AA:BB:CC:DD:EE:20",
+            meshId = "SHORTID1",
+            name = "motorola edge 60 fusion",
+            rssi = -55
+        )
+
+        val afterRescan = engine.cache.get("AA:BB:CC:DD:EE:20")
+        assertNotNull(afterRescan)
+        // Profile display name MUST NOT be overwritten by Bluetooth name
+        assertEquals("Durga Prasad", afterRescan?.displayName)
+        assertEquals("Durga Prasad", afterRescan?.name)
+        assertEquals("motorola edge 60 fusion", afterRescan?.bluetoothDeviceName)
+    }
+
+    /**
+     * Test 11 — Multiple peers display distinct profile names:
+     * Peer A ("Alice" on Samsung) and Peer B ("Bob" on Pixel) are both resolved independently.
+     */
+    @Test
+    fun `test11_multiplePeers_displayDistinctProfileNames`() = runTest {
+        val localUser = User(meshId = "MYID123", name = "Me")
+        coEvery { userRepository.getLocalUser() } returns localUser
+        coEvery { userRepository.getUserDisplayName("ALICE001") } returns "Alice"
+        coEvery { userRepository.getUserDisplayName("BOB00002") } returns "Bob"
+        coEvery { userRepository.getUserProfile(any()) } returns null
+
+        val peerA = BleDevice(
+            meshId = "ALICE001",
+            name = "Samsung Galaxy",
+            bluetoothDeviceName = "Samsung Galaxy",
+            address = "AA:BB:CC:DD:EE:A1",
+            rssi = -50
+        )
+        val peerB = BleDevice(
+            meshId = "BOB00002",
+            name = "Pixel 8",
+            bluetoothDeviceName = "Pixel 8",
+            address = "AA:BB:CC:DD:EE:B2",
+            rssi = -65
+        )
+
+        val scannedFlow = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
+        every { meshRepository.scannedDevices } returns scannedFlow
+        every { topologyManager.reachableNodes } returns MutableStateFlow(emptyList())
+
+        val viewModel = NearbyViewModel(meshRepository, userRepository, topologyManager)
+
+        viewModel.uiState.test {
+            val initial = awaitItem()
+            assertTrue(initial.devices.isEmpty())
+
+            scannedFlow.value = mapOf("ALICE001" to peerA, "BOB00002" to peerB)
+
+            val updated = awaitItem()
+            assertEquals(2, updated.devices.size)
+            val names = updated.devices.map { it.name }
+            assertTrue(names.contains("Alice"))
+            assertTrue(names.contains("Bob"))
+        }
+    }
+
+    /**
+     * Test 12 — Missing display name gracefully falls back to Bluetooth device name or Unknown Mesh Node:
+     */
+    @Test
+    fun `test12_missingDisplayName_fallbackHandling`() = runTest {
+        val localUser = User(meshId = "MYID123", name = "Me")
+        coEvery { userRepository.getLocalUser() } returns localUser
+        coEvery { userRepository.getUserDisplayName(any()) } returns "Unknown User"
+        coEvery { userRepository.getUserProfile(any()) } returns null
+
+        val peerWithBtName = BleDevice(
+            meshId = "PEER001",
+            name = "motorola edge",
+            bluetoothDeviceName = "motorola edge",
+            address = "AA:BB:CC:DD:EE:31",
+            rssi = -60
+        )
+        val peerWithoutAnyName = BleDevice(
+            meshId = "PEER002",
+            name = "",
+            bluetoothDeviceName = null,
+            address = "AA:BB:CC:DD:EE:32",
+            rssi = -70
+        )
+
+        val scannedFlow = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
+        every { meshRepository.scannedDevices } returns scannedFlow
+        every { topologyManager.reachableNodes } returns MutableStateFlow(emptyList())
+
+        val viewModel = NearbyViewModel(meshRepository, userRepository, topologyManager)
+
+        viewModel.uiState.test {
+            val initial = awaitItem()
+            assertTrue(initial.devices.isEmpty())
+
+            scannedFlow.value = mapOf("PEER001" to peerWithBtName, "PEER002" to peerWithoutAnyName)
+
+            val updated = awaitItem()
+            assertEquals(2, updated.devices.size)
+            val device1 = updated.devices.first { it.address == "AA:BB:CC:DD:EE:31" }
+            val device2 = updated.devices.first { it.address == "AA:BB:CC:DD:EE:32" }
+
+            assertEquals("motorola edge", device1.name)
+            assertEquals("Unknown Mesh Node", device2.name)
+        }
+    }
 }

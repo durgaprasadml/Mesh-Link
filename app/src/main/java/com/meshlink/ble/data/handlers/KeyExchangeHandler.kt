@@ -37,7 +37,8 @@ class KeyExchangeHandler @Inject constructor(
     private val packetDispatcher: PacketDispatcher,
     @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope,
     private val userDao: com.meshlink.database.data.local.UserDao? = null,
-    private val profileSyncManagerProvider: javax.inject.Provider<com.meshlink.profile.ProfileSyncManager>? = null
+    private val profileSyncManagerProvider: javax.inject.Provider<com.meshlink.profile.ProfileSyncManager>? = null,
+    private val discoveryEngine: com.meshlink.ble.discovery.DiscoveryEngine? = null
 ) {
     private val TAG = "KeyExchangeHandler"
 
@@ -169,15 +170,22 @@ class KeyExchangeHandler @Inject constructor(
             profileSyncManagerProvider?.get()?.onPeerProfileHashDiscovered(packet.senderId, peerPhotoHash)
         }
 
+        if (peerDisplayName.isNotBlank()) {
+            discoveryEngine?.updatePeerIdentity(packet.senderId, peerDisplayName, packet.senderId)
+            if (address != null) {
+                discoveryEngine?.updatePeerIdentity(address, peerDisplayName, packet.senderId)
+            }
+        }
+
         if (userDao != null && peerDisplayName.isNotBlank()) {
-            val now = System.currentTimeMillis()
+            val currentTime = System.currentTimeMillis()
             applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     val existing = userDao.getUser(packet.senderId)
                     if (existing == null) {
-                        userDao.insertUser(com.meshlink.database.data.local.UserEntity(meshId = packet.senderId, name = peerDisplayName, publicKey = signingPublicKey, lastSeen = now))
-                    } else if (existing.name != peerDisplayName || existing.publicKey != signingPublicKey || existing.lastSeen != now) {
-                        userDao.insertUser(existing.copy(name = peerDisplayName, publicKey = signingPublicKey, lastSeen = now))
+                        userDao.insertUser(com.meshlink.database.data.local.UserEntity(meshId = packet.senderId, name = peerDisplayName, publicKey = signingPublicKey, lastSeen = currentTime))
+                    } else if (existing.name != peerDisplayName || existing.publicKey != signingPublicKey || existing.lastSeen != currentTime) {
+                        userDao.insertUser(existing.copy(name = peerDisplayName, publicKey = signingPublicKey, lastSeen = currentTime))
                     }
                 } catch (e: Exception) {
                     MeshLogger.w(TAG, "Failed to persist identity in KeyExchangeHandler: ${e.message}")

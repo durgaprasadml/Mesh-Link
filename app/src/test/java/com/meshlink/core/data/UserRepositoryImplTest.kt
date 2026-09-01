@@ -66,9 +66,32 @@ class UserRepositoryImplTest {
         val peerId = "mesh-unknown-999"
         coEvery { localDataSource.getLocalUser() } returns UserEntity("mesh-local-456", "Durga Prasad")
         coEvery { localDataSource.getUser(peerId) } returns null
+        coEvery { localDataSource.getAllUsers() } returns emptyList()
 
         val name = userRepository.getUserDisplayName(peerId)
 
         assertEquals("Unknown User", name)
+    }
+
+    @Test
+    fun `getUserDisplayName resolves name via shortMeshId from allUsers cache`() = runBlocking {
+        val canonicalPeerId = "mesh-peer-full-12345"
+        val normId = com.meshlink.util.MeshIdNormalizer.canonicalize(canonicalPeerId)
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val shortId = digest.digest(normId.toByteArray(Charsets.UTF_8)).copyOf(8).joinToString("") { "%02x".format(it) }
+
+        val peerUser = UserEntity(canonicalPeerId, "Durga Prasad")
+        coEvery { localDataSource.getUser(shortId) } returns null
+        coEvery { localDataSource.getUser(any()) } returns null
+        coEvery { localDataSource.getAllUsers() } returns listOf(peerUser)
+        coEvery { identityManager.getOrCreateIdentity() } returns com.meshlink.trust.MeshIdentity(
+            meshId = "mesh-local-456",
+            publicKey = "pk",
+            displayName = "Local User"
+        )
+
+        val resolved = userRepository.getUserDisplayName(shortId)
+
+        assertEquals("Durga Prasad", resolved)
     }
 }

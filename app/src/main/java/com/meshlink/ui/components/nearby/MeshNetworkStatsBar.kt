@@ -1,33 +1,52 @@
 package com.meshlink.ui.components.nearby
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BluetoothConnected
-import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.meshlink.domain.model.BleDevice
+import com.meshlink.domain.model.TransportType
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.SuccessColorDark
 
+/**
+ * Modern, responsive Mesh Network Status Bar.
+ *
+ * Displays live, verified mesh metrics across 4 balanced columns without horizontal clipping:
+ * - Discovery Status: Live scanning / Paused state with subtle pulse dot
+ * - Nearby Peers: Total verified nearby peers discovered
+ * - Connected: Count of active peer connections
+ * - Transport: Active physical transport (BLE / Wi-Fi Direct)
+ *
+ * Free of fake metrics, synthetic latency estimates, or arbitrary heuristics.
+ */
 @Composable
 fun MeshNetworkStatsBar(
     devices: List<BleDevice>,
@@ -35,119 +54,127 @@ fun MeshNetworkStatsBar(
     modifier: Modifier = Modifier
 ) {
     val totalNearby = devices.size
-    val connectedCount = devices.count { it.isConnected }
-    val relayCount = devices.count { it.isMeshNode || (it.capabilities.toInt() and 0x01 != 0) }
+    val connectedCount = remember(devices) { devices.count { it.isConnected } }
     
-    val avgRssi = remember(devices) {
-        if (devices.isEmpty()) 0 else devices.map { it.rssi }.average().toInt()
+    val hasWifiDirect = remember(devices) {
+        devices.any { it.transport == TransportType.WIFI_DIRECT }
     }
-    
-    val avgLatencyMs = remember(devices) {
-        if (devices.isEmpty()) null else (-avgRssi * 0.35).toInt().coerceIn(8, 120)
-    }
+    val transportLabel = if (hasWifiDirect) "BLE + P2P" else "BLE"
 
-    val (healthText, healthColor) = remember(devices, isScanning, avgRssi) {
-        when {
-            devices.isEmpty() -> if (isScanning) "Scanning" to Color(0xFF2196F3) else "Idle" to Color(0xFF9E9E9E)
-            avgRssi > -75 -> "Optimal" to Color(0xFF4CAF50)
-            avgRssi > -85 -> "Good" to Color(0xFF2196F3)
-            else -> "Fair" to Color(0xFFFF9800)
-        }
-    }
+    val statusText = if (isScanning) "Scanning" else "Paused"
+    val statusColor = if (isScanning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+
+    val infiniteTransition = rememberInfiniteTransition(label = "StatsPulseTransition")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "StatusDotPulse"
+    )
+
+    val contentDesc = "Network summary: $statusText, $totalNearby nearby peers, $connectedCount connected, transport $transportLabel"
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.extraSmall),
+            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
+            .semantics { contentDescription = contentDesc },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 1.dp
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 0.8.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.small),
-            horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium),
+                .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Health Badge
-            StatBadge(
-                icon = Icons.Default.Security,
-                label = "Health",
-                value = healthText,
-                valueColor = healthColor
+            // 1. Discovery State
+            MetricItem(
+                label = "Discovery",
+                value = statusText,
+                valueColor = statusColor,
+                leadingDot = {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isScanning) {
+                                    statusColor.copy(alpha = pulseAlpha)
+                                } else {
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                                }
+                            )
+                    )
+                },
+                modifier = Modifier.weight(1f)
             )
 
-            VerticalDivider(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-
-            // Nearby Devices
-            StatBadge(
-                icon = Icons.Default.Radar,
+            // 2. Nearby Count
+            MetricItem(
                 label = "Nearby",
-                value = "$totalNearby"
+                value = "$totalNearby",
+                valueColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(0.85f)
             )
 
-            VerticalDivider(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-
-            // Connected
-            StatBadge(
-                icon = Icons.Default.BluetoothConnected,
+            // 3. Connected Count
+            MetricItem(
                 label = "Connected",
                 value = "$connectedCount",
-                valueColor = if (connectedCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                valueColor = if (connectedCount > 0) SuccessColorDark else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(0.95f)
             )
 
-            VerticalDivider(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-
-            // Relay Nodes
-            StatBadge(
-                icon = Icons.Default.Hub,
-                label = "Relays",
-                value = "$relayCount"
+            // 4. Transport Mode
+            MetricItem(
+                label = "Transport",
+                value = transportLabel,
+                valueColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(0.95f)
             )
-
-            if (avgLatencyMs != null) {
-                VerticalDivider(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-                
-                // Latency
-                StatBadge(
-                    icon = Icons.Default.Speed,
-                    label = "Avg Latency",
-                    value = "~${avgLatencyMs} ms"
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun StatBadge(
-    icon: ImageVector,
+private fun MetricItem(
     label: String,
     value: String,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface
+    valueColor: Color,
+    modifier: Modifier = Modifier,
+    leadingDot: (@Composable () -> Unit)? = null
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.extraSmall)
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(16.dp)
-        )
         Text(
-            text = "$label:",
+            text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium
         )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = valueColor
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            leadingDot?.invoke()
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = valueColor
+            )
+        }
     }
 }

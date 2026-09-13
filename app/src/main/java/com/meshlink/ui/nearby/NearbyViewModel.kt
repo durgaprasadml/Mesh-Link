@@ -175,6 +175,10 @@ class NearbyViewModel @Inject constructor(
     }
 
     fun startDiscovery() {
+        if (_isScanning.value && meshRepository.getMeshStatus().isBleScanning) {
+            MeshLogger.d("NearbyViewModel", "[NearbyDiscovery] startDiscovery ignored: already scanning")
+            return
+        }
         _isScanning.value = true
         _errorMessage.value = null
         viewModelScope.launch {
@@ -190,6 +194,18 @@ class NearbyViewModel @Inject constructor(
             } else {
                 _errorMessage.value = "User not found. Please log in."
                 _isScanning.value = false
+            }
+        }
+    }
+
+    fun refreshDiscovery() {
+        _errorMessage.value = null
+        viewModelScope.launch {
+            try {
+                meshRepository.refreshMesh()
+                _isScanning.value = meshRepository.getMeshStatus().isBleScanning
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Failed to refresh discovery"
             }
         }
     }

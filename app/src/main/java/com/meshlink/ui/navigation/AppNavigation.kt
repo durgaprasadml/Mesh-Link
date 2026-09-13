@@ -30,6 +30,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
@@ -348,32 +351,48 @@ fun NavHostController.navigateToTopLevel(route: String) {
 
 @Composable
 fun MeshNavigationBar(navController: NavHostController, currentRoute: String?) {
-    NavigationBar {
+    val navItemColors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.primary,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        windowInsets = androidx.compose.foundation.layout.WindowInsets.navigationBars
+    ) {
         NavigationBarItem(
             icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
             label = { Text("Home") },
             selected = currentRoute == Screen.Home.route,
-            onClick = { navController.navigateToTopLevel(Screen.Home.route) }
+            onClick = { navController.navigateToTopLevel(Screen.Home.route) },
+            colors = navItemColors
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Wifi, contentDescription = "Nearby") },
             label = { Text("Nearby") },
             selected = currentRoute == Screen.Nearby.route,
-            onClick = { navController.navigateToTopLevel(Screen.Nearby.route) }
+            onClick = { navController.navigateToTopLevel(Screen.Nearby.route) },
+            colors = navItemColors
         )
         
         NavigationBarItem(
             icon = { Icon(Icons.Default.Warning, contentDescription = "SOS") },
             label = { Text("SOS") },
             selected = currentRoute == Screen.Sos.route,
-            onClick = { navController.navigateToTopLevel(Screen.Sos.route) }
+            onClick = { navController.navigateToTopLevel(Screen.Sos.route) },
+            colors = navItemColors
         )
 
         NavigationBarItem(
             icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
             label = { Text("Settings") },
             selected = currentRoute == Screen.Settings.route,
-            onClick = { navController.navigateToTopLevel(Screen.Settings.route) }
+            onClick = { navController.navigateToTopLevel(Screen.Settings.route) },
+            colors = navItemColors
         )
     }
 }

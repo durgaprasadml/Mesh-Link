@@ -1,28 +1,42 @@
 package com.meshlink.ui.components.nearby
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.SignalCellular4Bar
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.SignalCellularAlt
-import androidx.compose.material.icons.filled.SignalCellularOff
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.SignalCellularAlt1Bar
+import androidx.compose.material.icons.filled.SignalCellularAlt2Bar
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,16 +49,27 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.meshlink.core.data.UserRepositoryImpl
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.model.TransportType
-import java.util.Locale
 import com.meshlink.ui.components.UserAvatarImage
-import com.meshlink.ui.designsystem.theme.MeshSpacing
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.SuccessColorDark
 import com.meshlink.util.MeshIdNormalizer
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Modern, clean Mesh-Link Peer List Item.
+ *
+ * Professional list-row design:
+ * - Avatar with verified connection state badge.
+ * - Strictly displays verified Mesh-Link profile display name (or neutral "Mesh Peer").
+ * - Clear semantic status (Connected / Nearby / Connecting) and transport (BLE / Wi-Fi Direct).
+ * - Real signal strength (dBm) with semantic signal bars.
+ * - Direct, compact action button ("Chat" when connected, "Connect" when discovered).
+ * - Free of oversized cards, fake latency formulas, or hardware model leaks.
+ */
 @Composable
 fun MeshDeviceCard(
     device: BleDevice,
@@ -53,63 +78,58 @@ fun MeshDeviceCard(
     isConnecting: Boolean = false,
     isSelected: Boolean = false
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
-
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    
+
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(stiffness = 400f),
-        label = "CardPressScale"
+        targetValue = if (isPressed) 0.985f else 1f,
+        animationSpec = spring(stiffness = 500f),
+        label = "PeerItemPressScale"
     )
-
-    val isStrongSignal = device.rssi > -70
-    val isWeakSignal = device.rssi < -85
-    val (signalText, signalColor) = when {
-        isStrongSignal -> "Excellent" to MeshTheme.colors.success
-        isWeakSignal -> "Weak" to MeshTheme.colors.warning
-        else -> "Good" to MaterialTheme.colorScheme.primary
-    }
-
-    val distanceText = remember(device.distanceMeters, device.distanceConfidence) {
-        if (device.distanceMeters != null) {
-            val confStr = device.distanceConfidence?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Estimated"
-            "~${String.format(Locale.getDefault(), "%.1f m", device.distanceMeters)} ($confStr)"
-        } else {
-            "Distance: Calculating..."
-        }
-    }
 
     val canonicalId = remember(device.address, device.meshId) {
         MeshIdNormalizer.canonicalize(device.meshId.ifBlank { device.address })
     }
 
+    // Strictly resolve verified Mesh-Link profile display name; never fall back to hardware model!
     val displayName = remember(device.displayName, device.name, canonicalId) {
-        val profName = device.displayName?.trim()?.takeIf { it.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId) }
-        val fallbackName = device.name.trim().takeIf { it.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId) }
+        val profName = device.displayName?.trim()?.takeIf {
+            it.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId)
+        }
+        val fallbackName = device.name.trim().takeIf {
+            it.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId)
+        }
         profName ?: fallbackName ?: "Mesh Peer"
     }
 
-    val isRelayCapable = remember(device.capabilities, device.isMeshNode) {
-        device.isMeshNode || (device.capabilities.toInt() and 0x01 != 0)
+    // Signal evaluation (Real RSSI)
+    val isStrongSignal = device.rssi >= -65
+    val isMediumSignal = device.rssi >= -80
+    val (signalColor, signalIcon) = when {
+        isStrongSignal -> SuccessColorDark to Icons.Default.SignalCellularAlt
+        isMediumSignal -> MeshTheme.colors.warning to Icons.Default.SignalCellularAlt2Bar
+        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) to Icons.Default.SignalCellularAlt1Bar
     }
 
-    val estimatedLatencyMs = remember(device.rssi) {
-        (-device.rssi * 0.35).toInt().coerceIn(10, 150)
+    val transportName = when (device.transport) {
+        TransportType.BLE -> "BLE"
+        TransportType.WIFI_DIRECT -> "Wi-Fi Direct"
     }
 
-    val containerBorderColor = if (isSelected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        Color.Transparent
+    val statusSubtitle = when {
+        isConnecting -> "Connecting…"
+        device.isConnected -> "Connected · $transportName"
+        device.isMeshNode -> "Mesh · ${device.hopCount} ${if (device.hopCount == 1) "hop" else "hops"}"
+        else -> "Nearby · $transportName"
     }
 
-    Card(
+    val itemContentDesc = "$displayName, $statusSubtitle, signal ${device.rssi} dBm"
+
+    Surface(
         onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            expanded = !expanded
+            onClick()
         },
         modifier = modifier
             .fillMaxWidth()
@@ -117,259 +137,153 @@ fun MeshDeviceCard(
                 scaleX = scale
                 scaleY = scale
             }
-            .border(width = if (isSelected) 2.dp else 0.dp, color = containerBorderColor, shape = RoundedCornerShape(20.dp))
-            .animateContentSize()
             .semantics {
                 role = Role.Button
-                contentDescription = "$displayName, ${if (device.isConnected) "Connected" else "Discovered"}, Signal $signalText, Distance $distanceText"
+                contentDescription = itemContentDesc
             },
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        shape = RoundedCornerShape(14.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
+        },
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isSelected) 1.5.dp else 0.8.dp,
+            color = if (isSelected) {
+                MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
             }
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp),
         interactionSource = interactionSource
     ) {
-        Column(modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Avatar with Connection Dot
-                Box(contentAlignment = Alignment.BottomEnd) {
-                        com.meshlink.ui.components.UserAvatarImage(
-                            meshId = device.meshId,
-                            displayName = displayName,
-                            profilePhotoPath = device.profilePhotoPath,
-                            avatarUri = device.avatarUri,
-                            size = 52.dp
-                        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MeshTheme.spacing.medium, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 1. Avatar with live connection dot
+            Box(contentAlignment = Alignment.BottomEnd) {
+                UserAvatarImage(
+                    meshId = device.meshId,
+                    displayName = displayName,
+                    profilePhotoPath = device.profilePhotoPath,
+                    avatarUri = device.avatarUri,
+                    size = 44.dp
+                )
 
-                    if (device.isConnected) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF4CAF50))
-                                .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumLarge))
-
-                // Device Name & Info
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = displayName,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (isRelayCapable) {
-                            Spacer(modifier = Modifier.width(MeshTheme.spacing.extraSmall))
-                            Icon(
-                                imageVector = Icons.Default.Hub,
-                                contentDescription = "Relay Node",
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    Text(
-                        text = distanceText,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
+                if (device.isConnected) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(SuccessColorDark)
+                            .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                     )
-                }
-
-                // Signal Strength & Transport Badge
-                Column(horizontalAlignment = Alignment.End) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "${device.rssi} dBm",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = signalColor,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Icon(
-                            imageVector = if (isWeakSignal) Icons.Default.SignalCellularOff else Icons.Default.SignalCellularAlt,
-                            contentDescription = "Signal $signalText",
-                            tint = signalColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    val (transportIcon, transportLabel) = Icons.Default.Bluetooth to "BLE"
-
-                    val isDarkTheme = MeshTheme.isDark
-                    val (hopContainerColor, hopTextColor) = when (device.hopCount) {
-                        0 -> if (isDarkTheme) Color(0xFF14532D) to Color(0xFF86EFAC) else Color(0xFFDCFCE7) to Color(0xFF15803D)
-                        1 -> if (isDarkTheme) Color(0xFF1E3A8A) to Color(0xFF93C5FD) else Color(0xFFDBEAFE) to Color(0xFF1D4ED8)
-                        else -> if (isDarkTheme) Color(0xFF581C87) to Color(0xFFD8B4FE) else Color(0xFFF3E8FF) to Color(0xFF7E22CE)
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Surface(
-                            color = hopContainerColor,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = when (device.hopCount) {
-                                    0 -> "Direct"
-                                    1 -> "Mesh • 1 Hop"
-                                    else -> "Mesh • ${device.hopCount} Hops"
-                                },
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = hopTextColor,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = transportIcon,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Text(
-                                    text = transportLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
                 }
             }
 
-            // Expanded Details Section
-            if (expanded) {
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
-                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
 
-                Column(verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.small)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        // Encryption Info
-                        DetailChip(
-                            icon = Icons.Default.Lock,
-                            label = "Security",
-                            value = "E2E Encrypted"
-                        )
+            // 2. Identity & Connection Metadata
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-                        // Latency Estimate
-                        DetailChip(
-                            icon = Icons.Default.Speed,
-                            label = "Est. Latency",
-                            value = "~$estimatedLatencyMs ms"
-                        )
-                    }
+                Spacer(modifier = Modifier.height(2.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        // Relay capability
-                        DetailChip(
-                            icon = Icons.Default.Hub,
-                            label = "Routing Role",
-                            value = if (isRelayCapable) "Relay Ready" else "Leaf Node"
-                        )
-
-                        // Canonical ID
-                        DetailChip(
-                            icon = Icons.Default.Bluetooth,
-                            label = "Mesh ID",
-                            value = canonicalId.take(12)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-
-                Button(
-                    onClick = onClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    enabled = !isConnecting
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    if (isConnecting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
-                        Text("Connecting...")
-                    } else {
-                        Text(
-                            text = if (device.isConnected) "Open Mesh Chat" else "Connect & Message",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Text(
+                        text = statusSubtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (device.isConnected) SuccessColorDark else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (device.isConnected) FontWeight.Medium else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+
+            // 3. Real Signal (dBm)
+            if (device.rssi != 0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.padding(end = MeshTheme.spacing.small)
+                ) {
+                    Icon(
+                        imageVector = signalIcon,
+                        contentDescription = "Signal ${device.rssi} dBm",
+                        tint = signalColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "${device.rssi}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = signalColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            // 4. Action Button (Compact, clear touch target)
+            if (isConnecting) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .padding(4.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else if (device.isConnected) {
+                FilledTonalButton(
+                    onClick = onClick,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Chat",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onClick,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Text(
+                        text = "Connect",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun DetailChip(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    value: String
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(16.dp)
-        )
-        Text(
-            text = "$label: ",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
     }
 }

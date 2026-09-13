@@ -12,6 +12,20 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.Immutable
 
 @Immutable
+data class ThemePreferences(
+    val themeMode: String = "LIGHT",
+    val isMaterialYouEnabled: Boolean = true,
+    val accentColor: String = "Blue",
+    val fontScale: Float = 1.0f,
+    val largeTextEnabled: Boolean = false,
+    val cornerRadiusScale: Float = 1.0f,
+    val animationsEnabled: Boolean = true,
+    val glassEffectsEnabled: Boolean = true,
+    val highContrast: Boolean = false,
+    val reduceMotionEnabled: Boolean = false
+)
+
+@Immutable
 data class SettingsUiState(
     val user: User? = null,
     
@@ -199,6 +213,22 @@ class SettingsViewModel @Inject constructor(
             reduceMotionEnabled = args[9] as Boolean
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
+
+    val themePreferences: StateFlow<ThemePreferences> = uiState.map { state ->
+        ThemePreferences(
+            themeMode = state.themeMode,
+            isMaterialYouEnabled = state.isMaterialYouEnabled,
+            accentColor = state.accentColor,
+            fontScale = state.fontScale,
+            largeTextEnabled = state.largeTextEnabled,
+            cornerRadiusScale = state.cornerRadiusScale,
+            animationsEnabled = state.animationsEnabled,
+            glassEffectsEnabled = state.glassEffectsEnabled,
+            highContrast = state.highContrast,
+            reduceMotionEnabled = state.reduceMotionEnabled
+        )
+    }.distinctUntilChanged()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences())
 
     // Internal data classes for grouping
     private data class SettingsGroup1(val enc: Boolean, val onl: Boolean, val mesh: String)

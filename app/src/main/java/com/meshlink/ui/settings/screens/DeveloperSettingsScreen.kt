@@ -26,6 +26,7 @@ fun DeveloperSettingsScreen(
     var developerMode by remember { mutableStateOf(uiState.developerMode) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 navigationIcon = {

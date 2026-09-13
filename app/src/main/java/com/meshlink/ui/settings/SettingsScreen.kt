@@ -55,13 +55,9 @@ fun SettingsScreen(
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            AnimatedContent(
-                targetState = currentDestination,
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = currentDestination,
                 transitionSpec = {
                     if (targetState != SettingsDestination.HOME) {
                         slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn() togetherWith
@@ -131,7 +127,10 @@ fun SettingsScreen(
                     )
                 }
             }
-        }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
@@ -224,6 +223,7 @@ fun SettingsHome(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
@@ -256,6 +256,7 @@ fun SettingsHome(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
+            contentPadding = PaddingValues(bottom = MeshTheme.spacing.medium),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumLarge)
         ) {
             // Search Bar Filter
@@ -391,8 +392,6 @@ fun SettingsHome(
                     }
                 }
             }
-
-            item(key = "bottom_spacer", contentType = "spacer") { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
     }
 }

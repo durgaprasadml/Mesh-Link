@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,10 +52,23 @@ class HomeViewModel @Inject constructor(
     val user: StateFlow<User?> = userRepository.localUser
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    private val stableDevices = meshRepository.scannedDevices
+        .distinctUntilChanged { old, new ->
+            old.size == new.size && old.keys == new.keys && old.values.all { oldDev ->
+                val newDev = new[oldDev.address]
+                newDev != null && newDev.isConnected == oldDev.isConnected
+            }
+        }
+
+    private val stableChats = chatDao.getAllChats()
+        .distinctUntilChanged { old, new ->
+            old.size == new.size && old.sumOf { it.unreadCount } == new.sumOf { it.unreadCount }
+        }
+
     val uiState: StateFlow<HomeUiState> = combine(
         userRepository.localUser,
-        meshRepository.scannedDevices,
-        chatDao.getAllChats()
+        stableDevices,
+        stableChats
     ) { localUser, scannedDevices, chats ->
         withContext(defaultDispatcher) {
             HomeUiState(

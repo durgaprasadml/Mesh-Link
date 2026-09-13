@@ -32,6 +32,7 @@ fun AppearanceSettingsScreen(
     onBack: () -> Unit
 ) {
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 navigationIcon = {

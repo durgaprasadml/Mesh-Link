@@ -31,6 +31,7 @@ fun NotificationsSettingsScreen(
     var showSoundDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 navigationIcon = {

@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
+import androidx.compose.runtime.remember
+
 val LocalMeshIsDark = staticCompositionLocalOf { false }
 
 @Composable
@@ -45,41 +47,52 @@ fun MeshTheme(
         else -> false
     }
 
-    // Resolve Custom Primary Color
-    val customPrimary = when (accentColor) {
-        "Green" -> Color(0xFF4CAF50)
-        "Purple" -> Color(0xFF9C27B0)
-        "Orange" -> Color(0xFFFF9800)
-        "Red" -> Color(0xFFF44336)
-        else -> Color(0xFF2196F3) // Blue
+    // Resolve Custom Accent Color Set
+    val accentSet = remember(accentColor, darkTheme) {
+        getAccentColorSet(accentColor, darkTheme)
     }
 
-    val baseColorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val context = LocalContext.current
+    val baseColorScheme = remember(dynamicColor, darkTheme, accentSet, amoledDark, context) {
+        when {
+            dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            }
+            darkTheme -> {
+                val darkBase = MeshDarkColorScheme.copy(
+                    primary = accentSet.primary,
+                    onPrimary = accentSet.onPrimary,
+                    primaryContainer = accentSet.primaryContainer,
+                    onPrimaryContainer = accentSet.onPrimaryContainer
+                )
+                if (amoledDark) darkBase.copy(background = BackgroundAmoled, surface = BackgroundAmoled)
+                else darkBase
+            }
+            else -> MeshLightColorScheme.copy(
+                primary = accentSet.primary,
+                onPrimary = accentSet.onPrimary,
+                primaryContainer = accentSet.primaryContainer,
+                onPrimaryContainer = accentSet.onPrimaryContainer
+            )
         }
-        darkTheme -> {
-            if (amoledDark) MeshDarkColorScheme.copy(background = BackgroundAmoled, surface = BackgroundAmoled)
-            else MeshDarkColorScheme.copy(primary = customPrimary)
-        }
-        else -> MeshLightColorScheme.copy(primary = customPrimary)
     }
 
     // Apply High Contrast modifications if needed
-    val colorScheme = if (highContrast) {
-        if (darkTheme) baseColorScheme.copy(
-            surface = Color.Black,
-            background = Color.Black,
-            onSurface = Color.White,
-            onBackground = Color.White
-        ) else baseColorScheme.copy(
-            surface = Color.White,
-            background = Color.White,
-            onSurface = Color.Black,
-            onBackground = Color.Black
-        )
-    } else baseColorScheme
+    val colorScheme = remember(highContrast, darkTheme, baseColorScheme) {
+        if (highContrast) {
+            if (darkTheme) baseColorScheme.copy(
+                surface = Color.Black,
+                background = Color.Black,
+                onSurface = Color.White,
+                onBackground = Color.White
+            ) else baseColorScheme.copy(
+                surface = Color.White,
+                background = Color.White,
+                onSurface = Color.Black,
+                onBackground = Color.Black
+            )
+        } else baseColorScheme
+    }
 
     val semanticColors = if (darkTheme) DarkSemanticColors else LightSemanticColors
 
@@ -98,40 +111,51 @@ fun MeshTheme(
     // Adjust Density for font scaling
     val currentDensity = LocalDensity.current
     val effectiveFontScale = fontScale * (if (largeTextEnabled) 1.3f else 1.0f)
-    val customDensity = Density(
-        density = currentDensity.density,
-        fontScale = currentDensity.fontScale * effectiveFontScale
-    )
+    val customDensity = remember(currentDensity.density, currentDensity.fontScale, effectiveFontScale) {
+        Density(
+            density = currentDensity.density,
+            fontScale = currentDensity.fontScale * effectiveFontScale
+        )
+    }
 
     // Adjust Shapes
-    val shapes = MeshShapes(
-        extraSmall = RoundedCornerShape(4.dp * cornerRadiusScale),
-        small = RoundedCornerShape(8.dp * cornerRadiusScale),
-        medium = RoundedCornerShape(12.dp * cornerRadiusScale),
-        large = RoundedCornerShape(16.dp * cornerRadiusScale),
-        extraLarge = RoundedCornerShape(24.dp * cornerRadiusScale)
-    )
-    val materialShapes = androidx.compose.material3.Shapes(
-        extraSmall = RoundedCornerShape(4.dp * cornerRadiusScale),
-        small = RoundedCornerShape(8.dp * cornerRadiusScale),
-        medium = RoundedCornerShape(12.dp * cornerRadiusScale),
-        large = RoundedCornerShape(16.dp * cornerRadiusScale),
-        extraLarge = RoundedCornerShape(24.dp * cornerRadiusScale)
-    )
+    val shapes = remember(cornerRadiusScale) {
+        MeshShapes(
+            extraSmall = RoundedCornerShape(4.dp * cornerRadiusScale),
+            small = RoundedCornerShape(8.dp * cornerRadiusScale),
+            medium = RoundedCornerShape(12.dp * cornerRadiusScale),
+            large = RoundedCornerShape(16.dp * cornerRadiusScale),
+            extraLarge = RoundedCornerShape(24.dp * cornerRadiusScale)
+        )
+    }
+    val materialShapes = remember(cornerRadiusScale) {
+        androidx.compose.material3.Shapes(
+            extraSmall = RoundedCornerShape(4.dp * cornerRadiusScale),
+            small = RoundedCornerShape(8.dp * cornerRadiusScale),
+            medium = RoundedCornerShape(12.dp * cornerRadiusScale),
+            large = RoundedCornerShape(16.dp * cornerRadiusScale),
+            extraLarge = RoundedCornerShape(24.dp * cornerRadiusScale)
+        )
+    }
 
     // Adjust Animations
-    val animations = if (!animationsEnabled) {
-        MeshAnimations(fast = 0, normal = 0, slow = 0)
-    } else if (reduceMotionEnabled) {
-        MeshAnimations(fast = 100, normal = 150, slow = 250)
-    } else {
-        MeshAnimations()
+    val animations = remember(animationsEnabled, reduceMotionEnabled) {
+        if (!animationsEnabled) {
+            MeshAnimations(fast = 0, normal = 0, slow = 0)
+        } else if (reduceMotionEnabled) {
+            MeshAnimations(fast = 100, normal = 150, slow = 250)
+        } else {
+            MeshAnimations()
+        }
     }
+
+    val spacing = remember { MeshSpacing() }
+    val elevation = remember { MeshElevation() }
 
     CompositionLocalProvider(
         LocalDensity provides customDensity,
-        LocalMeshSpacing provides MeshSpacing(),
-        LocalMeshElevation provides MeshElevation(),
+        LocalMeshSpacing provides spacing,
+        LocalMeshElevation provides elevation,
         LocalMeshShapes provides shapes,
         LocalMeshAnimations provides animations,
         LocalMeshSemanticColors provides semanticColors,

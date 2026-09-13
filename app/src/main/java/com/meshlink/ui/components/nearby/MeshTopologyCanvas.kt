@@ -157,11 +157,12 @@ fun MeshTopologyCanvas(
             textAlign = TextAlign.Center
         )
     }
-    val markerTextStyle = remember {
+    val markerColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+    val markerTextStyle = remember(markerColor) {
         TextStyle(
-            color = Color(0x6694A3B8),
+            color = markerColor,
             fontSize = 9.sp,
-            fontWeight = FontWeight.Normal,
+            fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Start
         )
     }

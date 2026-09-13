@@ -33,3 +33,4 @@ tmp/
 cache/
 *reports/
 *exports/.idea/
+test-debug.txt

@@ -27,6 +27,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -94,6 +95,7 @@ fun SosScreen(
     )
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = {
@@ -334,14 +336,21 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .size(180.dp)
-                        .scale(breathingScale)
+                        .graphicsLayer {
+                            scaleX = breathingScale
+                            scaleY = breathingScale
+                        }
                         .clip(CircleShape)
                         .background(MeshTheme.colors.danger.copy(alpha = 0.15f))
                 )
                 Box(
                     modifier = Modifier
                         .size(150.dp)
-                        .scale(breathingScale * 1.05f)
+                        .graphicsLayer {
+                            val s = breathingScale * 1.05f
+                            scaleX = s
+                            scaleY = s
+                        }
                         .clip(CircleShape)
                         .background(MeshTheme.colors.danger.copy(alpha = 0.25f))
                 )
@@ -363,7 +372,10 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
             Box(
                 modifier = Modifier
                     .size(160.dp)
-                    .scale(buttonScale)
+                    .graphicsLayer {
+                        scaleX = buttonScale
+                        scaleY = buttonScale
+                    }
                     .clip(CircleShape)
                     .background(
                         brush = Brush.radialGradient(
@@ -678,6 +690,12 @@ fun NearbyResponders(state: SosUiState) {
 
 @Composable
 fun ResponderCard(device: BleDevice) {
+    val displayName = remember(device.displayName, device.name, device.meshId) {
+        val profName = device.displayName?.trim()?.takeIf { it.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(it, device.meshId) }
+        val fallbackName = device.name.trim().takeIf { it.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(it, device.meshId) }
+        profName ?: fallbackName ?: "Mesh Peer"
+    }
+
     Card(
         shape = MeshTheme.shapes.medium,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -694,8 +712,8 @@ fun ResponderCard(device: BleDevice) {
             Icon(icon, contentDescription = "Responder transport method", tint = MeshTheme.colors.success)
             Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
             Column {
-                Text(device.name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
-                Text("Transport: ${device.transport.name}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Text(displayName, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                Text("Transport: ${device.transport.name}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

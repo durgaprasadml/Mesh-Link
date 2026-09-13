@@ -30,6 +30,7 @@ fun EmergencySettingsScreen(
     var showTemplateDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 navigationIcon = {

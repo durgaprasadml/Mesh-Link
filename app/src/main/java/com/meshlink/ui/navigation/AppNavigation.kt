@@ -1,12 +1,19 @@
 package com.meshlink.ui.navigation
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -203,9 +210,14 @@ fun MainAppScaffold(
     )
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
-            if (showNavigationBar) {
+            AnimatedVisibility(
+                visible = showNavigationBar,
+                enter = fadeIn(tween(180, easing = FastOutSlowInEasing)) + expandVertically(tween(180, easing = FastOutSlowInEasing)),
+                exit = fadeOut(tween(180, easing = FastOutSlowInEasing)) + shrinkVertically(tween(180, easing = FastOutSlowInEasing))
+            ) {
                 MeshNavigationBar(navController, currentRoute)
             }
         }
@@ -213,7 +225,8 @@ fun MainAppScaffold(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(bottom = paddingValues.calculateBottomPadding())
+                .consumeWindowInsets(PaddingValues(bottom = paddingValues.calculateBottomPadding()))
         ) {
             if (showNavigationRail) {
                 MeshNavigationRail(navController, currentRoute)
@@ -224,30 +237,30 @@ fun MainAppScaffold(
                 startDestination = Screen.Home.route,
                 enterTransition = {
                     if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeIn(tween(210, delayMillis = 90))
+                        fadeIn(tween(180, easing = FastOutSlowInEasing))
                     } else {
-                        slideInHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeIn(tween(300))
+                        slideInHorizontally(tween(280, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(200, easing = FastOutSlowInEasing))
                     }
                 },
                 exitTransition = {
                     if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeOut(tween(90))
+                        fadeOut(tween(180, easing = FastOutSlowInEasing))
                     } else {
-                        fadeOut(tween(300))
+                        slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { -(it * 0.2f).toInt() } + fadeOut(tween(200, easing = FastOutSlowInEasing))
                     }
                 },
                 popEnterTransition = {
                     if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeIn(tween(210, delayMillis = 90))
+                        fadeIn(tween(180, easing = FastOutSlowInEasing))
                     } else {
-                        slideInHorizontally(tween(300)) { -(it * 0.2f).toInt() } + fadeIn(tween(300))
+                        slideInHorizontally(tween(280, easing = FastOutSlowInEasing)) { -(it * 0.2f).toInt() } + fadeIn(tween(200, easing = FastOutSlowInEasing))
                     }
                 },
                 popExitTransition = {
                     if (initialState.destination.route in topLevelRoutes && targetState.destination.route in topLevelRoutes) {
-                        fadeOut(tween(90))
+                        fadeOut(tween(180, easing = FastOutSlowInEasing))
                     } else {
-                        slideOutHorizontally(tween(300)) { (it * 0.2f).toInt() } + fadeOut(tween(300))
+                        slideOutHorizontally(tween(280, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(280, easing = FastOutSlowInEasing))
                     }
                 }
             ) {

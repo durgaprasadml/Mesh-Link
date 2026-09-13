@@ -31,6 +31,7 @@ fun MessagingSettingsScreen(
     var selectedRetention by remember { mutableStateOf(uiState.messageRetention) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 navigationIcon = {

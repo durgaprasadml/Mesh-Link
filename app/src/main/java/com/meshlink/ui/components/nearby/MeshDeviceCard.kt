@@ -68,8 +68,8 @@ fun MeshDeviceCard(
     val isStrongSignal = device.rssi > -70
     val isWeakSignal = device.rssi < -85
     val (signalText, signalColor) = when {
-        isStrongSignal -> "Excellent" to Color(0xFF4CAF50)
-        isWeakSignal -> "Weak" to Color(0xFFFF9800)
+        isStrongSignal -> "Excellent" to MeshTheme.colors.success
+        isWeakSignal -> "Weak" to MeshTheme.colors.warning
         else -> "Good" to MaterialTheme.colorScheme.primary
     }
 
@@ -215,28 +215,27 @@ fun MeshDeviceCard(
 
                     val (transportIcon, transportLabel) = Icons.Default.Bluetooth to "BLE"
 
+                    val isDarkTheme = MeshTheme.isDark
+                    val (hopContainerColor, hopTextColor) = when (device.hopCount) {
+                        0 -> if (isDarkTheme) Color(0xFF14532D) to Color(0xFF86EFAC) else Color(0xFFDCFCE7) to Color(0xFF15803D)
+                        1 -> if (isDarkTheme) Color(0xFF1E3A8A) to Color(0xFF93C5FD) else Color(0xFFDBEAFE) to Color(0xFF1D4ED8)
+                        else -> if (isDarkTheme) Color(0xFF581C87) to Color(0xFFD8B4FE) else Color(0xFFF3E8FF) to Color(0xFF7E22CE)
+                    }
+
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Surface(
-                            color = when (device.hopCount) {
-                                0 -> Color(0xFF4CAF50).copy(alpha = 0.15f)
-                                1 -> Color(0xFF2196F3).copy(alpha = 0.15f)
-                                else -> Color(0xFF9C27B0).copy(alpha = 0.15f)
-                            },
+                            color = hopContainerColor,
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
                                 text = when (device.hopCount) {
-                                    0 -> "🟢 Direct"
-                                    1 -> "🔵 Mesh • 1 Hop"
-                                    else -> "🟣 Mesh • ${device.hopCount} Hops"
+                                    0 -> "Direct"
+                                    1 -> "Mesh • 1 Hop"
+                                    else -> "Mesh • ${device.hopCount} Hops"
                                 },
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = when (device.hopCount) {
-                                    0 -> Color(0xFF2E7D32)
-                                    1 -> Color(0xFF1565C0)
-                                    else -> Color(0xFF6A1B9A)
-                                },
+                                color = hopTextColor,
                                 fontWeight = FontWeight.Bold
                             )
                         }

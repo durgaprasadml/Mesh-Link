@@ -73,6 +73,7 @@ fun HomeScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         floatingActionButton = {
             FloatingActionButton(
@@ -95,6 +96,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
+                    .statusBarsPadding()
                     .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.medium)
             ) {
                 Row(
@@ -181,7 +183,7 @@ fun HomeScreen(
                                 subtitle = "${uiState.nearbyDevices.size} available",
                                 onClick = onNavigateToNearby,
                                 iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                iconTintColor = MaterialTheme.colorScheme.primary
+                                iconTintColor = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                         item(key = "dashboard_broadcast", contentType = "dashboard_card") {
@@ -191,7 +193,7 @@ fun HomeScreen(
                                 subtitle = "Send to all",
                                 onClick = onNavigateToBroadcast,
                                 iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                iconTintColor = MaterialTheme.colorScheme.tertiary
+                                iconTintColor = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                         }
                         item(key = "dashboard_sos", contentType = "dashboard_card") {
@@ -201,7 +203,7 @@ fun HomeScreen(
                                 subtitle = "Emergency",
                                 onClick = onNavigateToSos,
                                 iconContainerColor = MaterialTheme.colorScheme.errorContainer,
-                                iconTintColor = MaterialTheme.colorScheme.error
+                                iconTintColor = MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
                     }

@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val splashScreen = installSplashScreen()
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -58,23 +58,29 @@ class MainActivity : ComponentActivity() {
 
         requestNotificationPermissionIfNeeded()
 
+        val initialAddress = intent?.getStringExtra("address")
+        val initialName = intent?.getStringExtra("name")
+        if (initialAddress != null && initialName != null) {
+            pendingIntents.trySend(intent)
+        }
+
         setContent {
             val windowSizeClass = @OptIn(ExperimentalMaterial3WindowSizeClassApi::class) calculateWindowSizeClass(this)
             
             val settingsViewModel: com.meshlink.ui.settings.SettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
-            val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+            val themePreferences by settingsViewModel.themePreferences.collectAsStateWithLifecycle()
 
             MeshTheme(
-                themeMode = uiState.themeMode,
-                dynamicColor = uiState.isMaterialYouEnabled,
-                accentColor = uiState.accentColor,
-                fontScale = uiState.fontScale,
-                largeTextEnabled = uiState.largeTextEnabled,
-                cornerRadiusScale = uiState.cornerRadiusScale,
-                animationsEnabled = uiState.animationsEnabled,
-                glassEffectsEnabled = uiState.glassEffectsEnabled,
-                highContrast = uiState.highContrast,
-                reduceMotionEnabled = uiState.reduceMotionEnabled
+                themeMode = themePreferences.themeMode,
+                dynamicColor = themePreferences.isMaterialYouEnabled,
+                accentColor = themePreferences.accentColor,
+                fontScale = themePreferences.fontScale,
+                largeTextEnabled = themePreferences.largeTextEnabled,
+                cornerRadiusScale = themePreferences.cornerRadiusScale,
+                animationsEnabled = themePreferences.animationsEnabled,
+                glassEffectsEnabled = themePreferences.glassEffectsEnabled,
+                highContrast = themePreferences.highContrast,
+                reduceMotionEnabled = themePreferences.reduceMotionEnabled
             ) {
                 val navController = rememberNavController()
 
@@ -83,21 +89,9 @@ class MainActivity : ComponentActivity() {
                         val address = newIntent.getStringExtra("address")
                         val name = newIntent.getStringExtra("name")
                         if (address != null && name != null) {
-
                             navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
                                 launchSingleTop = true
                             }
-                        }
-                    }
-                }
-                
-                LaunchedEffect(intent) {
-                    val address = intent.getStringExtra("address")
-                    val name = intent.getStringExtra("name")
-                    if (address != null && name != null) {
-
-                        navController.navigate(Screen.ChatDetail.createRoute(address, name)) {
-                            launchSingleTop = true
                         }
                     }
                 }

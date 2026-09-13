@@ -48,9 +48,18 @@ class UserRepositoryImpl @Inject constructor(
         }
     }
     
+    private val displayNameCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val profileCache = java.util.concurrent.ConcurrentHashMap<String, User>()
+
+    private fun invalidateCaches() {
+        displayNameCache.clear()
+        profileCache.clear()
+    }
+
     @Deprecated("Use setupProfile instead", ReplaceWith("setupProfile(name, avatarUri)"))
     override suspend fun createProfile(name: String, avatarUri: String?): Result<Unit> {
         return try {
+            invalidateCaches()
             val identity = identityManager.getOrCreateIdentity()
             identityManager.updateDisplayName(name)
             val user = UserEntity(meshId = identity.meshId, name = name, avatarUri = avatarUri)
@@ -64,6 +73,7 @@ class UserRepositoryImpl @Inject constructor(
 
     override suspend fun setupProfile(name: String, avatarUri: String?): com.meshlink.domain.model.MeshResult<Unit> {
         return try {
+            invalidateCaches()
             val identity = identityManager.getOrCreateIdentity()
             identityManager.updateDisplayName(name)
             val user = UserEntity(meshId = identity.meshId, name = name, avatarUri = avatarUri)
@@ -146,6 +156,7 @@ class UserRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateUserName(name: String) {
+        invalidateCaches()
         val identity = identityManager.getOrCreateIdentity()
         val userEntity = localDataSource.getUser(identity.meshId) ?: localDataSource.getLocalUser()
         if (userEntity != null) {
@@ -155,6 +166,7 @@ class UserRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateProfile(name: String, aboutMe: String?, avatarUri: String?) {
+        invalidateCaches()
         val identity = identityManager.getOrCreateIdentity()
         val userEntity = localDataSource.getUser(identity.meshId) ?: localDataSource.getLocalUser()
         if (userEntity != null) {
@@ -165,7 +177,11 @@ class UserRepositoryImpl @Inject constructor(
 
     override suspend fun getUserDisplayName(meshId: String): String {
         if (meshId.isBlank()) return "Unknown User"
+        displayNameCache[meshId]?.let { return it }
         val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
+        if (canonicalTargetId != meshId) {
+            displayNameCache[canonicalTargetId]?.let { return it }
+        }
         val localUser = getLocalUser()
         if (localUser != null) {
             val localCanonical = com.meshlink.util.MeshIdNormalizer.canonicalize(localUser.meshId)
@@ -175,7 +191,10 @@ class UserRepositoryImpl @Inject constructor(
 
             if (localCanonical == canonicalTargetId || localShortId.equals(meshId, ignoreCase = true)) {
                 val localName = localUser.name.trim()
-                return if (!isGenericOrInvalidName(localName, canonicalTargetId)) localName else "Unknown User"
+                val result = if (!isGenericOrInvalidName(localName, canonicalTargetId)) localName else "Unknown User"
+                displayNameCache[meshId] = result
+                displayNameCache[canonicalTargetId] = result
+                return result
             }
         }
         var userEntity = localDataSource.getUser(meshId) ?: localDataSource.getUser(canonicalTargetId)
@@ -184,18 +203,25 @@ class UserRepositoryImpl @Inject constructor(
             userEntity = findMatchingUserEntity(allUsers, meshId)
         }
         val name = userEntity?.name?.trim()
-        return if (!isGenericOrInvalidName(name, canonicalTargetId)) name!! else "Unknown User"
+        val result = if (!isGenericOrInvalidName(name, canonicalTargetId)) name!! else "Unknown User"
+        displayNameCache[meshId] = result
+        displayNameCache[canonicalTargetId] = result
+        return result
     }
 
     override suspend fun getUserProfile(meshId: String): User? {
         if (meshId.isBlank()) return null
+        profileCache[meshId]?.let { return it }
         val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
+        if (canonicalTargetId != meshId) {
+            profileCache[canonicalTargetId]?.let { return it }
+        }
         var entity = localDataSource.getUser(meshId) ?: localDataSource.getUser(canonicalTargetId)
         if (entity == null) {
             val allUsers = localDataSource.getAllUsers()
             entity = findMatchingUserEntity(allUsers, meshId)
         }
-        return entity?.let {
+        val result = entity?.let {
             User(
                 meshId = it.meshId,
                 name = it.name,
@@ -207,6 +233,11 @@ class UserRepositoryImpl @Inject constructor(
                 profileLastUpdated = it.profileLastUpdated
             )
         }
+        if (result != null) {
+            profileCache[meshId] = result
+            profileCache[canonicalTargetId] = result
+        }
+        return result
     }
 
     override fun observeUserProfile(meshId: String): Flow<User?> {
@@ -232,6 +263,7 @@ class UserRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateProfilePhoto(meshId: String, photoPath: String, photoHash: String, version: Long, lastUpdated: Long) {
+        invalidateCaches()
         val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
         val existingUser = localDataSource.getUser(canonicalTargetId) ?: localDataSource.getUser(meshId)
         if (existingUser != null) {

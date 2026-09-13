@@ -111,7 +111,7 @@ class SettingsLocalDataSourceImpl @Inject constructor(
     }
 
     // Appearance
-    override val themeMode: Flow<String> = dataStore.data.map { it[THEME_MODE] ?: "SYSTEM" }
+    override val themeMode: Flow<String> = dataStore.data.map { it[THEME_MODE] ?: "LIGHT" }
     override suspend fun setThemeMode(mode: String) {
         dataStore.edit { it[THEME_MODE] = mode }
     }

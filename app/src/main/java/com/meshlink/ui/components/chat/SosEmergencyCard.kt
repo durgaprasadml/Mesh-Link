@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,7 +47,7 @@ fun SosEmergencyCard(
     onLocationClick: (Double, Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MeshTheme.isDark
 
     // Color palette carefully crafted for high contrast, emergency theme, & Material 3 compliance
     val headerGradient = Brush.horizontalGradient(

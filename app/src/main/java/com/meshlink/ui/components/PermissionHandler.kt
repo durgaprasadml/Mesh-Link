@@ -609,7 +609,7 @@ private fun HeroPermissionIconCluster(permanentlyDenied: Boolean) {
         label = "hero_perm_pulse"
     )
 
-    val isDark = isSystemInDarkTheme()
+    val isDark = MeshTheme.isDark
     val primaryColor = if (permanentlyDenied) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
 
     Box(
@@ -666,7 +666,7 @@ private fun ModernPermissionCard(
     accentColor: Color,
     contentDescription: String
 ) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MeshTheme.isDark
     val cardBorderColor by animateColorAsState(
         targetValue = if (isGranted) {
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
@@ -765,7 +765,7 @@ private fun ModernPermissionCard(
  */
 @Composable
 private fun PermissionStatusPill(isGranted: Boolean) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MeshTheme.isDark
 
     val badgeBgColor by animateColorAsState(
         targetValue = if (isGranted) {
@@ -1080,7 +1080,7 @@ private fun HeroRadioIcons(
     isBluetoothEnabled: Boolean,
     isWifiEnabled: Boolean
 ) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MeshTheme.isDark
 
     // Micro-animation for Bluetooth: subtle breathing pulse when ON
     val infiniteTransition = rememberInfiniteTransition(label = "hero_radio_anim")
@@ -1224,7 +1224,7 @@ private fun ModernRadioStatusCard(
     activeAccentColor: Color,
     contentDescription: String
 ) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MeshTheme.isDark
 
     // Interactive button press scale state
     val buttonInteractionSource = remember { MutableInteractionSource() }
@@ -1364,7 +1364,7 @@ private fun ModernRadioStatusCard(
 
 @Composable
 private fun StatusBadgePill(isEnabled: Boolean) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MeshTheme.isDark
 
     val badgeBgColor by animateColorAsState(
         targetValue = if (isEnabled) {

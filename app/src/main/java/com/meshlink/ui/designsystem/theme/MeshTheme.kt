@@ -10,6 +10,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -19,9 +20,11 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
+val LocalMeshIsDark = staticCompositionLocalOf { false }
+
 @Composable
 fun MeshTheme(
-    themeMode: String = "SYSTEM",
+    themeMode: String = "LIGHT",
     dynamicColor: Boolean = true,
     amoledDark: Boolean = false,
     accentColor: String = "Blue",
@@ -38,7 +41,8 @@ fun MeshTheme(
     val darkTheme = when (themeMode) {
         "DARK" -> true
         "LIGHT" -> false
-        else -> isSystemDark
+        "SYSTEM" -> isSystemDark
+        else -> false
     }
 
     // Resolve Custom Primary Color
@@ -84,7 +88,10 @@ fun MeshTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            window.navigationBarColor = colorScheme.background.toArgb()
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            insetsController.isAppearanceLightStatusBars = !darkTheme
+            insetsController.isAppearanceLightNavigationBars = !darkTheme
         }
     }
 
@@ -127,7 +134,8 @@ fun MeshTheme(
         LocalMeshElevation provides MeshElevation(),
         LocalMeshShapes provides shapes,
         LocalMeshAnimations provides animations,
-        LocalMeshSemanticColors provides semanticColors
+        LocalMeshSemanticColors provides semanticColors,
+        LocalMeshIsDark provides darkTheme
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
@@ -139,6 +147,9 @@ fun MeshTheme(
 }
 
 object MeshTheme {
+    val isDark: Boolean
+        @Composable
+        get() = LocalMeshIsDark.current
     val colors: MeshSemanticColors
         @Composable
         get() = LocalMeshSemanticColors.current

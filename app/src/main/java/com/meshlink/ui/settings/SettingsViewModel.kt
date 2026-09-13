@@ -42,7 +42,7 @@ data class SettingsUiState(
     val advancedEncryptionEnforcement: Boolean = true,
     
     // Appearance
-    val themeMode: String = "SYSTEM",
+    val themeMode: String = "LIGHT",
     val isMaterialYouEnabled: Boolean = true,
     val fontScale: Float = 1.0f,
     val highContrast: Boolean = false,

@@ -65,7 +65,7 @@ fun LocationMessageCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val isDark = isSystemInDarkTheme()
+    val isDark = MeshTheme.isDark
 
     val lat = message.latitude
     val lng = message.longitude

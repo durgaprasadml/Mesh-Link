@@ -101,4 +101,18 @@ class SettingsViewModelTest {
 
         coVerify { settingsRepository.setAdvancedEncryptionEnforcement(false) }
     }
+
+    @Test
+    fun `default SettingsUiState has LIGHT theme mode for first launch`() {
+        val defaultState = SettingsUiState()
+        assertEquals("LIGHT", defaultState.themeMode)
+    }
+
+    @Test
+    fun `setThemeMode calls settings repository`() = runTest(testDispatcher) {
+        viewModel.setThemeMode("DARK")
+        testScheduler.advanceUntilIdle()
+
+        coVerify { settingsRepository.setThemeMode("DARK") }
+    }
 }

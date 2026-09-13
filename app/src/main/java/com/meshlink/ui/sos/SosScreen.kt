@@ -53,6 +53,8 @@ import java.util.Locale
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +63,26 @@ fun SosScreen(
     viewModel: SosViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    val cameraPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        viewModel.sendSos(hasPermission = isGranted)
+    }
+
+    val triggerSos = {
+        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            viewModel.sendSos(hasPermission = true)
+        } else {
+            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        }
+    }
 
     com.meshlink.ui.components.AnimatedErrorDialog(
         visible = state.errorMessage != null,
@@ -121,7 +143,7 @@ fun SosScreen(
                         when (targetStatus) {
                             SosStatus.SAFE, SosStatus.FAILED -> {
                                 HoldToActivateButton(
-                                    onActivate = { viewModel.sendSos() }
+                                    onActivate = triggerSos
                                 )
                             }
                             else -> {
@@ -439,6 +461,70 @@ fun ActiveSosState(state: SosUiState, onCancel: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
+        }
+
+        if (state.cameraCaptureStatus != null) {
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+            Text(
+                text = state.cameraCaptureStatus,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        // Dual Camera Captures Preview
+        if (state.frontImagePath != null || state.rearImagePath != null) {
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
+            Row(
+                modifier = Modifier.padding(horizontal = MeshTheme.spacing.large),
+                horizontalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
+            ) {
+                state.frontImagePath?.let { path ->
+                    val file = File(path)
+                    if (file.exists()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .size(90.dp, 120.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                AsyncImage(
+                                    model = file,
+                                    contentDescription = "Front camera capture",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("FRONT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                state.rearImagePath?.let { path ->
+                    val file = File(path)
+                    if (file.exists()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .size(90.dp, 120.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                AsyncImage(
+                                    model = file,
+                                    contentDescription = "Rear camera capture",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("REAR", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
         }
         
         Spacer(modifier = Modifier.height(MeshTheme.spacing.extraLarge))

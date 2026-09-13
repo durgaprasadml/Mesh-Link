@@ -36,7 +36,7 @@ fun MeshNetworkStatsBar(
 ) {
     val totalNearby = devices.size
     val connectedCount = devices.count { it.isConnected }
-    val relayCount = devices.count { (it.capabilities.toInt() and 0x01 != 0) || (it.isConnected && it.rssi > -75) }
+    val relayCount = devices.count { it.isMeshNode || (it.capabilities.toInt() and 0x01 != 0) }
     
     val avgRssi = remember(devices) {
         if (devices.isEmpty()) 0 else devices.map { it.rssi }.average().toInt()

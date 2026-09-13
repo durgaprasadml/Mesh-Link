@@ -93,15 +93,13 @@ class NearbyViewModel @Inject constructor(
                     null
                 }
 
-                val btDeviceName = (device.bluetoothDeviceName?.trim() ?: device.name.trim())
-                    .takeIf { it.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId) }
-
-                val finalName = finalDisplayName ?: btDeviceName ?: "Unknown Mesh Node"
+                // Strictly use Mesh-Link profile display name; never fall back to smartphone hardware/device model!
+                val finalName = finalDisplayName ?: "Mesh Peer"
 
                 mergedDevices[canonicalId] = device.copy(
                     name = finalName,
                     displayName = finalDisplayName,
-                    bluetoothDeviceName = device.bluetoothDeviceName ?: device.name.takeIf { it != finalDisplayName },
+                    bluetoothDeviceName = device.bluetoothDeviceName,
                     profilePhotoPath = profile?.profilePhotoPath,
                     profilePhotoHash = profile?.profilePhotoHash,
                     hopCount = 0,
@@ -121,7 +119,7 @@ class NearbyViewModel @Inject constructor(
                     val profile = userRepository.getUserProfile(canonicalId) ?: userRepository.getUserProfile(node.nodeId)
                     val resolvedName = userRepository.getUserDisplayName(canonicalId).takeIf { !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId) }
                         ?: userRepository.getUserDisplayName(node.nodeId).takeIf { !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId) }
-                    val finalName = resolvedName ?: "Unknown Mesh Node"
+                    val finalName = resolvedName ?: "Mesh Peer"
                     mergedDevices[canonicalId] = BleDevice(
                         meshId = node.nodeId,
                         name = finalName,

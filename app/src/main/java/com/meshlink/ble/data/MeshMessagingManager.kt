@@ -481,8 +481,8 @@ class MeshMessagingManager @Inject constructor(
         ackManager.sendReadReceipts(chatId)
     }
 
-    suspend fun sendSos() {
-        broadcastHandler.sendSos()
+    suspend fun sendSos(sosEventId: String = java.util.UUID.randomUUID().toString()) {
+        broadcastHandler.sendSos(sosEventId)
     }
 
     suspend fun broadcastMessage(messageText: String) {

@@ -121,6 +121,7 @@ fun NearbyDevicesScreen(
                     MeshTopologyCanvas(
                         devices = uiState.devices,
                         selectedAddress = selectedDeviceAddress,
+                        isScanning = uiState.isScanning,
                         onNodeSelected = { device ->
                             selectedDeviceAddress = if (selectedDeviceAddress == device.address) null else device.address
                             // Scroll list to selected device if present
@@ -245,7 +246,7 @@ fun NearbyDevicesScreen(
                                             connectingToAddress = null
                                             onNavigateToChat(
                                                 device.meshId.ifBlank { device.address },
-                                                device.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(device.address) }
+                                                device.displayName ?: device.name.ifBlank { com.meshlink.util.MeshIdNormalizer.canonicalize(device.address) }
                                             )
                                         },
                                         onError = {

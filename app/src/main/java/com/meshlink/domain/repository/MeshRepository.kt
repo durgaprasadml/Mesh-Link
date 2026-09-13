@@ -63,7 +63,8 @@ interface MeshRepository {
 
     @Deprecated("Use dispatchSos instead", ReplaceWith("dispatchSos()"))
     suspend fun sendSos()
-    suspend fun dispatchSos(): MeshResult<Unit>
+    suspend fun dispatchSos(sosEventId: String = java.util.UUID.randomUUID().toString()): MeshResult<Unit>
+    suspend fun sendSosMedia(sosEventId: String, frontImage: java.io.File?, rearImage: java.io.File?): MeshResult<Unit>
 
     @Deprecated("Use dispatchBroadcastMessage instead", ReplaceWith("dispatchBroadcastMessage(messageText)"))
     suspend fun broadcastMessage(messageText: String)

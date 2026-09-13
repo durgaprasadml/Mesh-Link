@@ -17,6 +17,12 @@ import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.launch
+import java.io.File
+import kotlin.coroutines.resume
 
 @Singleton
 class CameraController @Inject constructor(
@@ -111,4 +117,196 @@ class CameraController @Inject constructor(
     fun toggleTorch(enable: Boolean) {
         camera?.cameraControl?.enableTorch(enable)
     }
+
+    fun hasCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    suspend fun captureDualSosImages(
+        sosEventId: String,
+        lifecycleOwner: LifecycleOwner? = null
+    ): SosDualCaptureResult = withContext(Dispatchers.IO) {
+        if (!hasCameraPermission()) {
+            return@withContext SosDualCaptureResult(
+                frontError = "Camera permission not granted",
+                rearError = "Camera permission not granted"
+            )
+        }
+
+        initialize()
+        val provider = cameraProvider
+        if (provider == null) {
+            return@withContext SosDualCaptureResult(
+                frontError = "CameraProvider unavailable",
+                rearError = "CameraProvider unavailable"
+            )
+        }
+
+        val resolvedLifecycleOwner = lifecycleOwner ?: try {
+            androidx.lifecycle.ProcessLifecycleOwner.get()
+        } catch (e: Exception) {
+            MeshLogger.w(TAG, "ProcessLifecycleOwner unavailable: ${e.message}")
+            return@withContext SosDualCaptureResult(
+                frontError = "LifecycleOwner unavailable: ${e.message}",
+                rearError = "LifecycleOwner unavailable: ${e.message}"
+            )
+        }
+
+        val outputDir = File(context.cacheDir, "sos_media").apply { mkdirs() }
+        val frontFile = File(outputDir, "sos_${sosEventId}_front.jpg")
+        val rearFile = File(outputDir, "sos_${sosEventId}_rear.jpg")
+
+        var frontResultFile: File? = null
+        var frontError: String? = null
+        var rearResultFile: File? = null
+        var rearError: String? = null
+
+        try {
+            // Check front camera
+            val hasFront = try {
+                provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
+            } catch (e: Exception) {
+                false
+            }
+
+            if (hasFront) {
+                MeshLogger.d(TAG, "Capturing FRONT camera for SOS $sosEventId")
+                val res = captureImageWithSelector(
+                    provider,
+                    resolvedLifecycleOwner,
+                    CameraSelector.DEFAULT_FRONT_CAMERA,
+                    frontFile
+                )
+                if (res.isSuccess) {
+                    frontResultFile = res.getOrNull()
+                } else {
+                    frontError = res.exceptionOrNull()?.message ?: "Front camera capture failed"
+                }
+            } else {
+                frontError = "Front camera hardware not available"
+            }
+
+            // Check rear camera
+            val hasRear = try {
+                provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
+            } catch (e: Exception) {
+                false
+            }
+
+            if (hasRear) {
+                MeshLogger.d(TAG, "Capturing REAR camera for SOS $sosEventId")
+                val res = captureImageWithSelector(
+                    provider,
+                    resolvedLifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    rearFile
+                )
+                if (res.isSuccess) {
+                    rearResultFile = res.getOrNull()
+                } else {
+                    rearError = res.exceptionOrNull()?.message ?: "Rear camera capture failed"
+                }
+            } else {
+                rearError = "Rear camera hardware not available"
+            }
+        } finally {
+            // Camera resource cleanup: unbind all use cases immediately
+            try {
+                withContext(Dispatchers.Main) {
+                    provider.unbindAll()
+                }
+                MeshLogger.d(TAG, "Camera resources unbound and cleaned up for SOS $sosEventId")
+            } catch (e: Exception) {
+                MeshLogger.w(TAG, "Error unbinding camera: ${e.message}")
+            }
+        }
+
+        SosDualCaptureResult(
+            frontImage = frontResultFile,
+            rearImage = rearResultFile,
+            frontError = frontError,
+            rearError = rearError
+        )
+    }
+
+    private suspend fun captureImageWithSelector(
+        provider: ProcessCameraProvider,
+        lifecycleOwner: LifecycleOwner,
+        selector: CameraSelector,
+        outputFile: File
+    ): Result<File> = withContext(Dispatchers.IO) {
+        suspendCancellableCoroutine { continuation ->
+            try {
+                if (outputFile.exists()) {
+                    outputFile.delete()
+                }
+
+                val imageCapture = androidx.camera.core.ImageCapture.Builder()
+                    .setCaptureMode(androidx.camera.core.ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
+
+                // Binding to lifecycle must happen on main thread in CameraX
+                kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
+                    try {
+                        provider.unbindAll()
+                        provider.bindToLifecycle(lifecycleOwner, selector, imageCapture)
+
+                        val outputOptions = androidx.camera.core.ImageCapture.OutputFileOptions.Builder(outputFile).build()
+
+                        imageCapture.takePicture(
+                            outputOptions,
+                            cameraExecutor,
+                            object : androidx.camera.core.ImageCapture.OnImageSavedCallback {
+                                override fun onImageSaved(outputFileResults: androidx.camera.core.ImageCapture.OutputFileResults) {
+                                    MeshLogger.d(TAG, "Image saved successfully: ${outputFile.absolutePath} (${outputFile.length()} bytes)")
+                                    if (continuation.isActive) {
+                                        continuation.resume(Result.success(outputFile))
+                                    }
+                                }
+
+                                override fun onError(exception: androidx.camera.core.ImageCaptureException) {
+                                    MeshLogger.e(TAG, "Image capture error: ${exception.message}", exception)
+                                    if (continuation.isActive) {
+                                        continuation.resume(Result.failure(exception))
+                                    }
+                                }
+                            }
+                        )
+                    } catch (e: Exception) {
+                        MeshLogger.e(TAG, "Failed to bind camera on main thread: ${e.message}", e)
+                        if (continuation.isActive) {
+                            continuation.resume(Result.failure(e))
+                        }
+                    }
+                }
+
+                continuation.invokeOnCancellation {
+                    kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
+                        try {
+                            provider.unbindAll()
+                        } catch (_: Exception) {}
+                    }
+                }
+            } catch (e: Exception) {
+                MeshLogger.e(TAG, "Failed in captureImageWithSelector: ${e.message}", e)
+                if (continuation.isActive) {
+                    continuation.resume(Result.failure(e))
+                }
+            }
+        }
+    }
 }
+
+data class SosDualCaptureResult(
+    val frontImage: File? = null,
+    val rearImage: File? = null,
+    val frontError: String? = null,
+    val rearError: String? = null
+) {
+    val hasAtLeastOneImage: Boolean get() = frontImage != null || rearImage != null
+    val bothSucceeded: Boolean get() = frontImage != null && rearImage != null
+}
+

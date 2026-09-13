@@ -26,11 +26,6 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-private data class RadarMeshNode(
-    val angleDeg: Float,
-    val distanceRatio: Float,
-    val phaseOffset: Float
-)
 
 @Composable
 fun MeshScanningEmptyState(
@@ -162,14 +157,6 @@ fun TargetScanningIcon(
         label = "RadarPulsePhase"
     )
 
-    val nodes = remember {
-        listOf(
-            RadarMeshNode(angleDeg = 38f, distanceRatio = 0.68f, phaseOffset = 0f),
-            RadarMeshNode(angleDeg = 142f, distanceRatio = 0.46f, phaseOffset = 1.2f),
-            RadarMeshNode(angleDeg = 228f, distanceRatio = 0.78f, phaseOffset = 2.4f),
-            RadarMeshNode(angleDeg = 315f, distanceRatio = 0.54f, phaseOffset = 3.6f)
-        )
-    }
 
     val cyanAccent = remember(tint) {
         Color(
@@ -307,52 +294,6 @@ fun TargetScanningIcon(
             )
         }
 
-        // 5. Mesh-Node Dots with Dynamic Radar Ping & Pulse Glow
-        nodes.forEach { node ->
-            val rad = Math.toRadians(node.angleDeg.toDouble())
-            val nodeX = (center.x + cos(rad) * (maxR * node.distanceRatio)).toFloat()
-            val nodeY = (center.y + sin(rad) * (maxR * node.distanceRatio)).toFloat()
-            val nodeOffset = Offset(nodeX, nodeY)
-
-            // Calculate angular difference from current sweep beam
-            val angleDiff = (sweepAngle - node.angleDeg + 360f) % 360f
-            // Beam just passed: illuminate blip with smooth exponential decay
-            val pingFactor = if (angleDiff in 0f..65f) {
-                val factor = (65f - angleDiff) / 65f
-                factor * factor
-            } else 0f
-
-            // Baseline breathing glow
-            val breathing = (0.25f + 0.15f * sin((pulsePhase * 2f * PI + node.phaseOffset).toDouble()).toFloat())
-            val blipAlpha = (breathing + pingFactor * 0.60f).coerceIn(0.2f, 1f)
-            val baseRadius = 2.2.dp.toPx()
-            val dynamicRadius = baseRadius + (1.5.dp.toPx() * pingFactor)
-
-            // Outer ping glow ring
-            if (pingFactor > 0.05f) {
-                drawCircle(
-                    color = cyanAccent.copy(alpha = pingFactor * 0.45f),
-                    radius = dynamicRadius * 2.4f,
-                    center = nodeOffset
-                )
-            }
-
-            // Mesh-node core dot
-            drawCircle(
-                color = cyanAccent.copy(alpha = blipAlpha),
-                radius = dynamicRadius,
-                center = nodeOffset
-            )
-
-            // Bright white hotspot when scanned
-            if (pingFactor > 0.2f) {
-                drawCircle(
-                    color = Color.White.copy(alpha = pingFactor * 0.95f),
-                    radius = dynamicRadius * 0.5f,
-                    center = nodeOffset
-                )
-            }
-        }
 
         // 6. Glowing 3D Center Point / Emitter Hub
         val centerBaseR = 3.dp.toPx()

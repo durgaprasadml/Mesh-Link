@@ -98,6 +98,29 @@ fun SosEmergencyCard(
         else -> "Direct Mesh"
     }
 
+    val frontPath = remember(message.mediaPath) {
+        val path = message.mediaPath ?: return@remember null
+        if (path.startsWith("{")) {
+            try {
+                val obj = org.json.JSONObject(path)
+                if (obj.has("front")) obj.getString("front") else null
+            } catch (_: Exception) { null }
+        } else {
+            path
+        }
+    }
+    val rearPath = remember(message.mediaPath) {
+        val path = message.mediaPath ?: return@remember null
+        if (path.startsWith("{")) {
+            try {
+                val obj = org.json.JSONObject(path)
+                if (obj.has("rear")) obj.getString("rear") else null
+            } catch (_: Exception) { null }
+        } else {
+            null
+        }
+    }
+
     val talkBackDescription = remember(message, formattedTime, latStr, lngStr, batteryText, connectionText) {
         buildString {
             append("Emergency SOS Alert. ")
@@ -369,6 +392,137 @@ fun SosEmergencyCard(
                                 fontWeight = FontWeight.SemiBold,
                                 color = primaryTextColor
                             )
+                        }
+                    }
+
+                    if (frontPath != null || rearPath != null) {
+                        HorizontalDivider(color = dividerColor, thickness = 1.dp)
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.PhotoCamera,
+                                contentDescription = null,
+                                tint = iconTintColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Emergency Scene Visuals",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = primaryTextColor
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // Front Camera Capture
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(130.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isDark) Color(0xFF141414) else Color(0xFFF5F5F5)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (frontPath != null && java.io.File(frontPath).exists()) {
+                                    coil.compose.AsyncImage(
+                                        model = java.io.File(frontPath),
+                                        contentDescription = "Front Camera Evidence",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .padding(6.dp),
+                                        color = Color.Black.copy(alpha = 0.65f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "FRONT",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                } else {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.NoPhotography,
+                                            contentDescription = null,
+                                            tint = labelTextColor,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = if (frontPath != null) "Receiving..." else "Unavailable",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = labelTextColor,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Rear Camera Capture
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(130.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isDark) Color(0xFF141414) else Color(0xFFF5F5F5)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (rearPath != null && java.io.File(rearPath).exists()) {
+                                    coil.compose.AsyncImage(
+                                        model = java.io.File(rearPath),
+                                        contentDescription = "Rear Camera Evidence",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .padding(6.dp),
+                                        color = Color.Black.copy(alpha = 0.65f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "REAR",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                } else {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.NoPhotography,
+                                            contentDescription = null,
+                                            tint = labelTextColor,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = if (rearPath != null) "Receiving..." else "Unavailable",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = labelTextColor,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

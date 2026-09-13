@@ -82,23 +82,18 @@ fun MeshDeviceCard(
         }
     }
 
-    val rawName = (device.displayName ?: device.name).trim()
-    val displayName = if (com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(rawName, device.meshId.ifBlank { device.address })) {
-        val btName = device.bluetoothDeviceName?.trim()
-        if (!btName.isNullOrBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(btName, device.meshId.ifBlank { device.address })) {
-            btName
-        } else {
-            "Unknown Mesh Node"
-        }
-    } else {
-        rawName
-    }
     val canonicalId = remember(device.address, device.meshId) {
         MeshIdNormalizer.canonicalize(device.meshId.ifBlank { device.address })
     }
 
-    val isRelayCapable = remember(device.capabilities, device.isConnected, device.rssi) {
-        (device.capabilities.toInt() and 0x01 != 0) || (device.isConnected && device.rssi > -75)
+    val displayName = remember(device.displayName, device.name, canonicalId) {
+        val profName = device.displayName?.trim()?.takeIf { it.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId) }
+        val fallbackName = device.name.trim().takeIf { it.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId) }
+        profName ?: fallbackName ?: "Mesh Peer"
+    }
+
+    val isRelayCapable = remember(device.capabilities, device.isMeshNode) {
+        device.isMeshNode || (device.capabilities.toInt() and 0x01 != 0)
     }
 
     val estimatedLatencyMs = remember(device.rssi) {

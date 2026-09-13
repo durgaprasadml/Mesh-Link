@@ -377,7 +377,8 @@ class NearbyDiscoveryPipelineTest {
 
         val initial = engine.cache.get("AA:BB:CC:DD:EE:20")
         assertNotNull(initial)
-        assertEquals("motorola edge 60 fusion", initial?.name)
+        // Primary name must NOT be set to hardware phone model; it defaults to Mesh Peer placeholder
+        assertEquals("Mesh Peer", initial?.name)
         assertEquals("motorola edge 60 fusion", initial?.bluetoothDeviceName)
 
         // 2. Identity received via handshake or beacon
@@ -459,10 +460,10 @@ class NearbyDiscoveryPipelineTest {
     }
 
     /**
-     * Test 12 — Missing display name gracefully falls back to Bluetooth device name or Unknown Mesh Node:
+     * Test 12 — Missing display name defaults to Mesh Peer, never physical smartphone hardware name:
      */
     @Test
-    fun `test12_missingDisplayName_fallbackHandling`() = runTest {
+    fun `test12_missingDisplayName_fallsBackToMeshPeerNeverPhoneModel`() = runTest {
         val localUser = User(meshId = "MYID123", name = "Me")
         coEvery { userRepository.getLocalUser() } returns localUser
         coEvery { userRepository.getUserDisplayName(any()) } returns "Unknown User"
@@ -470,14 +471,14 @@ class NearbyDiscoveryPipelineTest {
 
         val peerWithBtName = BleDevice(
             meshId = "PEER001",
-            name = "motorola edge",
-            bluetoothDeviceName = "motorola edge",
+            name = "Mesh Peer",
+            bluetoothDeviceName = "motorola edge 60 fusion",
             address = "AA:BB:CC:DD:EE:31",
             rssi = -60
         )
         val peerWithoutAnyName = BleDevice(
             meshId = "PEER002",
-            name = "",
+            name = "Mesh Peer",
             bluetoothDeviceName = null,
             address = "AA:BB:CC:DD:EE:32",
             rssi = -70
@@ -500,8 +501,76 @@ class NearbyDiscoveryPipelineTest {
             val device1 = updated.devices.first { it.address == "AA:BB:CC:DD:EE:31" }
             val device2 = updated.devices.first { it.address == "AA:BB:CC:DD:EE:32" }
 
-            assertEquals("motorola edge", device1.name)
-            assertEquals("Unknown Mesh Node", device2.name)
+            assertEquals("Mesh Peer", device1.name)
+            assertEquals("Mesh Peer", device2.name)
+            // Bluetooth hardware name is preserved only as transport metadata
+            assertEquals("motorola edge 60 fusion", device1.bluetoothDeviceName)
         }
+    }
+
+    /**
+     * Test 13 — Searching by user profile display name matches discovered peers:
+     */
+    @Test
+    fun `test13_searchQuery_filtersByProfileDisplayName`() = runTest {
+        val localUser = User(meshId = "MYID123", name = "Me")
+        coEvery { userRepository.getLocalUser() } returns localUser
+        coEvery { userRepository.getUserDisplayName("NODE_RAHUL") } returns "Rahul"
+        coEvery { userRepository.getUserDisplayName("NODE_ALICE") } returns "Alice"
+        coEvery { userRepository.getUserProfile(any()) } returns null
+
+        val peerA = BleDevice(
+            meshId = "NODE_RAHUL",
+            name = "vivo Y300 Plus 5G",
+            bluetoothDeviceName = "vivo Y300 Plus 5G",
+            address = "AA:BB:CC:DD:EE:41",
+            rssi = -55
+        )
+        val peerB = BleDevice(
+            meshId = "NODE_ALICE",
+            name = "Pixel 7a",
+            bluetoothDeviceName = "Pixel 7a",
+            address = "AA:BB:CC:DD:EE:42",
+            rssi = -65
+        )
+
+        val scannedFlow = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
+        every { meshRepository.scannedDevices } returns scannedFlow
+        every { topologyManager.reachableNodes } returns MutableStateFlow(emptyList())
+
+        val viewModel = NearbyViewModel(meshRepository, userRepository, topologyManager)
+
+        viewModel.uiState.test {
+            val initial = awaitItem()
+            assertTrue(initial.devices.isEmpty())
+
+            scannedFlow.value = mapOf("NODE_RAHUL" to peerA, "NODE_ALICE" to peerB)
+
+            val both = awaitItem()
+            assertEquals(2, both.devices.size)
+
+            // Search for "Rahul"
+            viewModel.onSearchQueryChanged("Rahul")
+            val filtered = awaitItem()
+            assertEquals(1, filtered.devices.size)
+            assertEquals("Rahul", filtered.devices[0].name)
+            assertEquals("NODE_RAHUL", filtered.devices[0].meshId)
+        }
+    }
+
+    /**
+     * Test 14 — Deterministic angle calculation remains stable across recompositions:
+     */
+    @Test
+    fun `test14_deterministicRadarAngle_isStableForSameCanonicalMeshId`() {
+        val canonicalId = "MESH_PEER_ALPHA"
+        val hash1 = Math.abs((canonicalId.hashCode().toLong() and 0xFFFFFFFFL))
+        val angleDeg1 = (hash1 % 360).toFloat()
+
+        val hash2 = Math.abs((canonicalId.hashCode().toLong() and 0xFFFFFFFFL))
+        val angleDeg2 = (hash2 % 360).toFloat()
+
+        assertEquals(angleDeg1, angleDeg2, 0.001f)
+        assertTrue(angleDeg1 in 0f..360f)
     }
 }

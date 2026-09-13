@@ -472,12 +472,98 @@ class BleRepositoryImpl @Inject constructor(
         meshMessagingManager.sendSos()
     }
 
-    override suspend fun dispatchSos(): com.meshlink.domain.model.MeshResult<Unit> {
+    override suspend fun dispatchSos(sosEventId: String): com.meshlink.domain.model.MeshResult<Unit> {
         return try {
-            meshMessagingManager.sendSos()
+            meshMessagingManager.sendSos(sosEventId)
             com.meshlink.domain.model.MeshResult.Success(Unit)
         } catch (e: Exception) {
             com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to send SOS", null, e))
+        }
+    }
+
+    override suspend fun sendSosMedia(
+        sosEventId: String,
+        frontImage: java.io.File?,
+        rearImage: java.io.File?
+    ): com.meshlink.domain.model.MeshResult<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val localUser = userRepository.getLocalUser()
+                ?: return@withContext com.meshlink.domain.model.MeshResult.Error(
+                    com.meshlink.domain.model.MeshError.SecurityError("Local user identity missing", null)
+                )
+            val localPeerId = com.meshlink.util.MeshIdNormalizer.canonicalize(localUser.meshId)
+
+            // 1. Build and store/update the local message in chatDao linking the media paths
+            val mediaJson = org.json.JSONObject()
+            frontImage?.let { if (it.exists()) mediaJson.put("front", it.absolutePath) }
+            rearImage?.let { if (it.exists()) mediaJson.put("rear", it.absolutePath) }
+            val mediaPathString = if (mediaJson.length() > 0) mediaJson.toString() else null
+
+            val existingLocal = chatDao.getMessageByUuid(sosEventId)
+            if (existingLocal != null) {
+                val updated = existingLocal.copy(mediaPath = mediaPathString)
+                chatDao.insertMessageAndUpdateChat(updated, "🚨 SOS Emergency")
+            } else {
+                val loc = locationProvider.getCurrentLocation()
+                val localMsg = MessageEntity(
+                    messageId = sosEventId,
+                    chatId = localPeerId,
+                    senderId = localPeerId,
+                    text = "🚨 SOS EMERGENCY (Dispatched)",
+                    timestamp = System.currentTimeMillis(),
+                    isFromMe = true,
+                    status = DeliveryStatus.SENT,
+                    messageType = MessageType.SOS,
+                    mediaPath = mediaPathString,
+                    latitude = loc?.latitude,
+                    longitude = loc?.longitude,
+                    batteryPercent = loc?.batteryPercent ?: locationProvider.getBatteryPercent()
+                )
+                chatDao.insertMessageAndUpdateChat(localMsg, "🚨 SOS Emergency")
+            }
+
+            // 2. Discover eligible nearby peers
+            val eligiblePeers = discoveryManager.scannedDevices.value.values
+                .map { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) }
+                .distinct()
+                .filter { it.isNotBlank() && it != localPeerId }
+
+            if (eligiblePeers.isEmpty()) {
+                com.meshlink.common.logger.MeshLogger.w(TAG, "No eligible nearby peers connected/scanned for SOS media. Kept in store-and-forward.")
+                return@withContext com.meshlink.domain.model.MeshResult.Success(Unit)
+            }
+
+            // 3. Send images via TransferManager to every eligible nearby peer
+            eligiblePeers.forEach { peerId ->
+                if (frontImage != null && frontImage.exists()) {
+                    val frontThumb = ImageCompressor.generateThumbnailBase64(context, android.net.Uri.fromFile(frontImage))
+                    transferManager.sendFile(
+                        file = frontImage,
+                        senderId = localPeerId,
+                        targetId = peerId,
+                        priority = com.meshlink.transfer.TransferPriority.CRITICAL,
+                        transferId = "${sosEventId}_front_${peerId}",
+                        thumbnailBase64 = frontThumb
+                    )
+                }
+                if (rearImage != null && rearImage.exists()) {
+                    val rearThumb = ImageCompressor.generateThumbnailBase64(context, android.net.Uri.fromFile(rearImage))
+                    transferManager.sendFile(
+                        file = rearImage,
+                        senderId = localPeerId,
+                        targetId = peerId,
+                        priority = com.meshlink.transfer.TransferPriority.CRITICAL,
+                        transferId = "${sosEventId}_rear_${peerId}",
+                        thumbnailBase64 = rearThumb
+                    )
+                }
+            }
+
+            com.meshlink.common.logger.MeshLogger.i(TAG, "SOS media queued for transmission to ${eligiblePeers.size} nearby peers.")
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.common.logger.MeshLogger.e(TAG, "Failed to send SOS media: ${e.message}", e)
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to send SOS media", null, e))
         }
     }
 

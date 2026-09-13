@@ -87,12 +87,18 @@ class ChunkDispatcher @Inject constructor(
 
         try {
             val b64Payload = encodeBase64(chunkBytes)
+            val packetPriority = if (session.priority == TransferPriority.CRITICAL) {
+                com.meshlink.domain.model.PacketPriority.CRITICAL
+            } else {
+                com.meshlink.domain.model.PacketPriority.NORMAL
+            }
             val packet = MeshPacket(
                 senderId = session.senderId,
                 targetId = session.targetId,
                 transferId = transferId,
                 payload = b64Payload,
                 type = PacketType.MEDIA_CHUNK,
+                priority = packetPriority,
                 chunkIndex = chunkIndex,
                 totalChunks = session.totalChunks,
                 mimeType = session.mimeType,

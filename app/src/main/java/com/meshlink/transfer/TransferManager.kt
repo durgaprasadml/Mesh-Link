@@ -292,9 +292,15 @@ class TransferManager @Inject constructor(
         val metaPayload = metaManager.generateMetaPayload(
             FileMetadata(session.fileName, session.mimeType, session.totalBytes, session.sha256Checksum, session.thumbnailBase64)
         )
+        val metaPriority = if (session.priority == TransferPriority.CRITICAL) {
+            com.meshlink.domain.model.PacketPriority.CRITICAL
+        } else {
+            com.meshlink.domain.model.PacketPriority.NORMAL
+        }
         sendPacket(
             session.senderId, session.targetId, session.transferId,
-            metaPayload, PacketType.MEDIA_META, 0, session.totalChunks, session.mimeType
+            metaPayload, PacketType.MEDIA_META, 0, session.totalChunks, session.mimeType,
+            metaPriority
         )
 
         // Determine if Wi-Fi Direct streaming can be used
@@ -840,7 +846,8 @@ class TransferManager @Inject constructor(
 
     private suspend fun sendPacket(
         senderId: String, targetId: String, transferId: String,
-        payload: String, type: PacketType, index: Int, total: Int, mime: String
+        payload: String, type: PacketType, index: Int, total: Int, mime: String,
+        priority: com.meshlink.domain.model.PacketPriority = com.meshlink.domain.model.PacketPriority.NORMAL
     ) {
         val packet = MeshPacket(
             senderId = senderId,
@@ -848,6 +855,7 @@ class TransferManager @Inject constructor(
             transferId = transferId,
             payload = payload,
             type = type,
+            priority = priority,
             chunkIndex = index,
             totalChunks = total,
             mimeType = mime,

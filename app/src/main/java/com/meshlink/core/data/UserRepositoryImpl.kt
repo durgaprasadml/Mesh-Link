@@ -16,7 +16,7 @@ class UserRepositoryImpl @Inject constructor(
 
     companion object {
         private val GENERIC_NAMES = setOf(
-            "man", "device", "peer", "nearby node", "unknown", "unknown user", "android", "null", "-", "user"
+            "man", "device", "peer", "nearby node", "unknown", "unknown user", "android", "null", "-", "user", "mesh peer", "unknown mesh node"
         )
 
         fun isGenericOrInvalidName(name: String?, meshIdOrAddress: String? = null): Boolean {

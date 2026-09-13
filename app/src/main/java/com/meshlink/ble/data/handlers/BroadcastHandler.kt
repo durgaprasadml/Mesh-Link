@@ -33,7 +33,7 @@ class BroadcastHandler @Inject constructor(
 ) {
     private val TAG = "BroadcastHandler"
 
-    suspend fun sendSos() {
+    suspend fun sendSos(sosEventId: String = java.util.UUID.randomUUID().toString()) {
         val user = userRepository.getLocalUser() ?: return
         val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
         router.localMeshId = localPeerId
@@ -46,6 +46,7 @@ class BroadcastHandler @Inject constructor(
         val displayName = user.name.trim().ifBlank { "Unknown User" }
 
         val payloadJson = JSONObject().apply {
+            put("sosEventId", sosEventId)
             put("lat", lat)
             put("lng", lng)
             put("battery", battery)
@@ -54,10 +55,13 @@ class BroadcastHandler @Inject constructor(
         }.toString()
 
         val packet = MeshPacket(
+            packetId = sosEventId,
             senderId = localPeerId,
             targetId = "BROADCAST",
             payload = payloadJson,
             type = PacketType.SOS,
+            priority = com.meshlink.domain.model.PacketPriority.CRITICAL,
+            broadcastType = com.meshlink.domain.model.BroadcastType.SOS,
             encrypted = false,
             ttl = 15
         )
@@ -65,13 +69,14 @@ class BroadcastHandler @Inject constructor(
     }
 
     suspend fun receiveSosMessage(packet: MeshPacket) {
-        if (chatDao.getMessageByUuid(packet.packetId) != null) return
+        val json = try { JSONObject(packet.payload) } catch (_: Exception) { null }
+        val sosEventId = json?.optString("sosEventId", packet.packetId)?.ifBlank { packet.packetId } ?: packet.packetId
 
-        val json = try { JSONObject(packet.payload) } catch (_: Exception) { return }
-        val lat = json.optDouble("lat", 0.0)
-        val lng = json.optDouble("lng", 0.0)
-        val battery = json.optInt("battery", -1)
-        val payloadSenderName = json.optString("senderName", "").trim()
+        val existing = chatDao.getMessageByUuid(sosEventId)
+        val lat = json?.optDouble("lat", 0.0) ?: 0.0
+        val lng = json?.optDouble("lng", 0.0) ?: 0.0
+        val battery = json?.optInt("battery", -1) ?: -1
+        val payloadSenderName = json?.optString("senderName", "")?.trim() ?: ""
 
         val existingUser = userDao.getUser(packet.senderId)
         val resolvedSenderName = when {
@@ -90,8 +95,21 @@ class BroadcastHandler @Inject constructor(
 
         val chatId = MeshIdNormalizer.canonicalize(packet.senderId)
 
+        if (existing != null) {
+            // If already exists (e.g. placeholder from media), update details while preserving existing mediaPath
+            val updatedMessage = existing.copy(
+                text = "🚨 SOS EMERGENCY from $resolvedSenderName — Lat: $lat, Lng: $lng — Battery: $battery%",
+                latitude = lat,
+                longitude = lng,
+                batteryPercent = battery,
+                status = DeliveryStatus.DELIVERED
+            )
+            chatDao.insertMessageAndUpdateChat(updatedMessage, "🚨 $resolvedSenderName")
+            return
+        }
+
         val message = MessageEntity(
-            messageId = packet.packetId,
+            messageId = sosEventId,
             chatId = chatId,
             senderId = packet.senderId,
             text = "🚨 SOS EMERGENCY from $resolvedSenderName — Lat: $lat, Lng: $lng — Battery: $battery%",
@@ -105,6 +123,7 @@ class BroadcastHandler @Inject constructor(
         )
         chatDao.insertMessageAndUpdateChat(message, "🚨 $resolvedSenderName")
     }
+
 
     suspend fun broadcastMessage(messageText: String) {
         val user = userRepository.getLocalUser() ?: return

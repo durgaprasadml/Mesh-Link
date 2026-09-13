@@ -5,57 +5,60 @@ import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import kotlinx.coroutines.launch
-
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-import android.net.wifi.WifiManager
-import android.content.BroadcastReceiver
-import android.content.IntentFilter
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.launch
 
 @Composable
 fun rememberRadioAndPermissionState(context: Context = LocalContext.current): Boolean {
@@ -126,16 +129,16 @@ fun PermissionHandler(
     var isBluetoothEnabled by remember { mutableStateOf(isBluetoothEnabled(context)) }
 
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
-    var isLocationEnabled by remember { 
+    var isLocationEnabled by remember {
         mutableStateOf(
             locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true ||
             locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
-        ) 
+        )
     }
 
     var isWifiEnabled by remember { mutableStateOf(isWifiEnabled(context)) }
 
-    // Real-time broadcast listener for Bluetooth & Wi-Fi radio state changes
+    // Real-time broadcast listener for Bluetooth, Wi-Fi, and Location changes
     DisposableEffect(context) {
         val filter = IntentFilter().apply {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
@@ -200,15 +203,44 @@ fun PermissionHandler(
         }
     }
 
+    val permissionsToRequest = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.POST_NOTIFICATIONS,
+                Manifest.permission.NEARBY_WIFI_DEVICES
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        } else {
+            arrayOf(
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_ADMIN,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        hasPermissions = results.values.all { it }
+        hasPermissions = hasRequiredPermissions(context)
         if (!hasPermissions) {
             val activity = context.findActivity()
             if (activity != null) {
                 permanentlyDenied = results.filter { !it.value }.keys.any { permission ->
-                    !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+                    !ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
                 }
             } else {
                 permanentlyDenied = true
@@ -246,92 +278,27 @@ fun PermissionHandler(
         isWifiEnabled = isWifiEnabled(context)
     }
 
-    val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        arrayOf(
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_ADVERTISE,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.POST_NOTIFICATIONS,
-            Manifest.permission.NEARBY_WIFI_DEVICES
-        )
-    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        arrayOf(
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_ADVERTISE,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-    } else {
-        arrayOf(
-            Manifest.permission.BLUETOOTH,
-            Manifest.permission.BLUETOOTH_ADMIN,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-    }
+    val isLocationHardwareRequired = Build.VERSION.SDK_INT < Build.VERSION_CODES.S
 
     if (!hasPermissions) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(MeshTheme.spacing.extraLarge),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            if (permanentlyDenied) {
-                Text(
-                    "Permissions were permanently denied. Please open App Settings, tap Permissions, and grant them to use Mesh Link.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-                Button(onClick = {
-                    val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                        data = android.net.Uri.fromParts("package", context.packageName, null)
-                    }
-                    settingsLauncher.launch(intent)
-                }) {
-                    Text("Open App Settings")
+        GrantPermissionsScreen(
+            context = context,
+            permanentlyDenied = permanentlyDenied,
+            onGrantPermissions = { permissionLauncher.launch(permissionsToRequest) },
+            onOpenSettings = {
+                val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.fromParts("package", context.packageName, null)
                 }
-            } else {
-                Text(
-                    "Mesh Link requires Bluetooth and Location permissions to discover and chat with nearby devices.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-                Button(onClick = { permissionLauncher.launch(permissionsToRequest) }) {
-                    Text("Grant Permissions")
-                }
+                settingsLauncher.launch(intent)
             }
-        }
-    } else if (!isLocationEnabled) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(MeshTheme.spacing.extraLarge),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                "Android requires device Location to be turned on to scan for background Bluetooth signals.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumLarge))
-            Button(onClick = { 
+        )
+    } else if (isLocationHardwareRequired && !isLocationEnabled) {
+        LocationRequirementSetupScreen(
+            onTurnOnLocation = {
                 val enableLocationIntent = Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
                 locationEnableLauncher.launch(enableLocationIntent)
-            }) {
-                Text("Turn on Location")
             }
-        }
+        )
     } else if (!isBluetoothEnabled || !isWifiEnabled) {
         RadioRequirementSetupScreen(
             isBluetoothEnabled = isBluetoothEnabled,
@@ -357,6 +324,582 @@ fun PermissionHandler(
     } else {
         LaunchedEffect(Unit) {
             onPermissionsGranted()
+        }
+    }
+}
+
+/**
+ * High-visibility, modern Grant Permissions screen adhering to the Mesh-Link design system.
+ * Displays clear heading, explanatory description, granular permission status cards,
+ * and high-contrast action button across Light, Dark, AMOLED, and High-Contrast modes.
+ */
+@Composable
+private fun GrantPermissionsScreen(
+    context: Context,
+    permanentlyDenied: Boolean,
+    onGrantPermissions: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    val entranceAlpha = remember { Animatable(0f) }
+    val entranceOffset = remember { Animatable(24f) }
+
+    LaunchedEffect(Unit) {
+        launch {
+            entranceAlpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
+            )
+        }
+        launch {
+            entranceOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+
+    val isBtGranted = isBluetoothPermissionGranted(context)
+    val isLocGranted = isLocationPermissionGranted(context)
+    val isNearbyWifiGranted = isNearbyWifiPermissionGranted(context)
+    val isNotifGranted = isNotificationPermissionGranted(context)
+
+    // Interactive button press scale state
+    val buttonInteractionSource = remember { MutableInteractionSource() }
+    val isButtonPressed by buttonInteractionSource.collectIsPressedAsState()
+    val buttonScale by animateFloatAsState(
+        targetValue = if (isButtonPressed) 0.97f else 1.0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "perm_btn_scale"
+    )
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = MeshTheme.spacing.large, vertical = MeshTheme.spacing.mediumLarge),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+
+            // 1. Hero 3D Icon Badge Area
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        alpha = entranceAlpha.value
+                        scaleX = 0.92f + (0.08f * entranceAlpha.value)
+                        scaleY = 0.92f + (0.08f * entranceAlpha.value)
+                    }
+                    .padding(top = MeshTheme.spacing.small, bottom = MeshTheme.spacing.large)
+            ) {
+                HeroPermissionIconCluster(permanentlyDenied = permanentlyDenied)
+            }
+
+            // 2. Main Title (fade + slide up)
+            Text(
+                text = if (permanentlyDenied) "Permissions Required" else "Grant Permissions",
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 32.sp
+                ),
+                color = if (permanentlyDenied) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        alpha = entranceAlpha.value
+                        translationY = entranceOffset.value * 0.75f
+                    }
+                    .padding(horizontal = MeshTheme.spacing.mediumSmall)
+            )
+
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
+
+            // 3. Description (fade + slide up)
+            Text(
+                text = if (permanentlyDenied) {
+                    "Permissions were permanently denied. Please open Android App Settings and grant Bluetooth, Location, and Nearby permissions to use Mesh Link."
+                } else {
+                    "Mesh Link is an offline peer-to-peer network.\nDevice permissions are required to discover and chat with nearby devices without internet."
+                },
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    lineHeight = 22.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        alpha = entranceAlpha.value
+                        translationY = entranceOffset.value * 0.6f
+                    }
+                    .padding(horizontal = MeshTheme.spacing.small)
+            )
+
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.large))
+
+            // 4. Granular Permission Status Cards
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        alpha = entranceAlpha.value
+                        translationY = entranceOffset.value * 0.4f
+                    },
+                verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.medium)
+            ) {
+                // Bluetooth / Nearby Scanning Card
+                ModernPermissionCard(
+                    title = "Bluetooth & Nearby",
+                    description = "Discovers, advertises, and connects with nearby mesh peers.",
+                    isGranted = isBtGranted,
+                    icon = Icons.Default.Bluetooth,
+                    accentColor = Color(0xFF2563EB),
+                    contentDescription = "Bluetooth permission status"
+                )
+
+                // Location Access Card
+                ModernPermissionCard(
+                    title = "Location Access",
+                    description = "Required by Android for peer-to-peer wireless mesh scanning.",
+                    isGranted = isLocGranted,
+                    icon = Icons.Default.LocationOn,
+                    accentColor = Color(0xFFF59E0B),
+                    contentDescription = "Location permission status"
+                )
+
+                // Nearby Wi-Fi Card (Android 13+)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    ModernPermissionCard(
+                        title = "Nearby Wi-Fi Devices",
+                        description = "Enables Wi-Fi Direct for high-speed offline media & file transfer.",
+                        isGranted = isNearbyWifiGranted,
+                        icon = Icons.Default.Wifi,
+                        accentColor = Color(0xFF16A34A),
+                        contentDescription = "Nearby Wi-Fi permission status"
+                    )
+                }
+
+                // Notifications Card (Android 13+)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    ModernPermissionCard(
+                        title = "Notifications",
+                        description = "Alerts you to incoming messages, peer connections, and SOS alarms.",
+                        isGranted = isNotifGranted,
+                        icon = Icons.Default.Notifications,
+                        accentColor = Color(0xFF8B5CF6),
+                        contentDescription = "Notification permission status"
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraLarge))
+
+            // 5. Action Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        alpha = entranceAlpha.value
+                        translationY = entranceOffset.value * 0.2f
+                    }
+            ) {
+                if (permanentlyDenied) {
+                    Button(
+                        onClick = onOpenSettings,
+                        interactionSource = buttonInteractionSource,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .scale(buttonScale),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 2.dp,
+                            pressedElevation = 4.dp
+                        )
+                    ) {
+                        Text(
+                            text = "Open App Settings",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onGrantPermissions,
+                        interactionSource = buttonInteractionSource,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .scale(buttonScale),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 2.dp,
+                            pressedElevation = 4.dp
+                        )
+                    ) {
+                        Text(
+                            text = "Grant Permissions",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.large))
+
+            // 6. Security / Privacy Note
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        alpha = entranceAlpha.value
+                    }
+                    .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = "Security and Privacy",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
+                Text(
+                    text = "Permissions are used strictly for local mesh communication.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
+        }
+    }
+}
+
+/**
+ * 3D Hero Icon Cluster with pulsing animation for permission landing.
+ */
+@Composable
+private fun HeroPermissionIconCluster(permanentlyDenied: Boolean) {
+    val infiniteTransition = rememberInfiniteTransition(label = "hero_perm_anim")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "hero_perm_pulse"
+    )
+
+    val isDark = isSystemInDarkTheme()
+    val primaryColor = if (permanentlyDenied) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier = Modifier.size(84.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Glowing halo
+        Box(
+            modifier = Modifier
+                .size(84.dp)
+                .scale(pulseScale)
+                .clip(CircleShape)
+                .background(primaryColor.copy(alpha = if (isDark) 0.15f else 0.10f))
+        )
+
+        Surface(
+            modifier = Modifier
+                .size(72.dp)
+                .scale(pulseScale)
+                .shadow(
+                    elevation = 4.dp,
+                    shape = CircleShape,
+                    ambientColor = primaryColor.copy(alpha = 0.25f),
+                    spotColor = primaryColor.copy(alpha = 0.35f)
+                ),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                1.5.dp,
+                primaryColor.copy(alpha = 0.4f)
+            )
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (permanentlyDenied) Icons.Default.Warning else Icons.Default.Shield,
+                    contentDescription = "Permission Security Hero",
+                    tint = primaryColor,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Modern permission status card showing icon, name, rationale, and live Granted/Required status pill.
+ */
+@Composable
+private fun ModernPermissionCard(
+    title: String,
+    description: String,
+    isGranted: Boolean,
+    icon: ImageVector,
+    accentColor: Color,
+    contentDescription: String
+) {
+    val isDark = isSystemInDarkTheme()
+    val cardBorderColor by animateColorAsState(
+        targetValue = if (isGranted) {
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        } else {
+            accentColor.copy(alpha = 0.3f)
+        },
+        animationSpec = tween(300),
+        label = "perm_card_border"
+    )
+
+    val iconBgColor = if (isGranted) {
+        if (isDark) Color(0xFF1B382B) else Color(0xFFE8F5E9)
+    } else {
+        if (isDark) accentColor.copy(alpha = 0.18f) else accentColor.copy(alpha = 0.10f)
+    }
+
+    val iconTintColor = if (isGranted) {
+        if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A)
+    } else {
+        accentColor
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = if (isGranted) 1.dp else 2.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = if (isGranted) Color.Black.copy(alpha = 0.02f) else accentColor.copy(alpha = 0.08f),
+                spotColor = if (isGranted) Color.Black.copy(alpha = 0.04f) else accentColor.copy(alpha = 0.12f)
+            ),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, cardBorderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MeshTheme.spacing.mediumLarge),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Circular Icon Badge
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = iconBgColor,
+                border = BorderStroke(1.dp, iconTintColor.copy(alpha = 0.3f))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = contentDescription,
+                        tint = iconTintColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    PermissionStatusPill(isGranted = isGranted)
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        lineHeight = 18.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Status badge pill indicating GRANTED vs REQUIRED with high contrast in both light and dark themes.
+ */
+@Composable
+private fun PermissionStatusPill(isGranted: Boolean) {
+    val isDark = isSystemInDarkTheme()
+
+    val badgeBgColor by animateColorAsState(
+        targetValue = if (isGranted) {
+            if (isDark) Color(0xFF064E3B) else Color(0xFFDCFCE7)
+        } else {
+            if (isDark) Color(0xFF451A1A) else Color(0xFFFEE2E2)
+        },
+        animationSpec = tween(300),
+        label = "perm_pill_bg"
+    )
+
+    val badgeTextColor by animateColorAsState(
+        targetValue = if (isGranted) {
+            if (isDark) Color(0xFF4ADE80) else Color(0xFF15803D)
+        } else {
+            if (isDark) Color(0xFFF87171) else Color(0xFFDC2626)
+        },
+        animationSpec = tween(300),
+        label = "perm_pill_text"
+    )
+
+    Surface(
+        shape = CircleShape,
+        color = badgeBgColor
+    ) {
+        Text(
+            text = if (isGranted) "GRANTED" else "REQUIRED",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp
+            ),
+            color = badgeTextColor,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+        )
+    }
+}
+
+/**
+ * Setup screen for Location provider on legacy Android versions (< S).
+ */
+@Composable
+private fun LocationRequirementSetupScreen(
+    onTurnOnLocation: () -> Unit
+) {
+    val entranceAlpha = remember { Animatable(0f) }
+    val entranceOffset = remember { Animatable(24f) }
+
+    LaunchedEffect(Unit) {
+        launch {
+            entranceAlpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
+            )
+        }
+        launch {
+            entranceOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = MeshTheme.spacing.large, vertical = MeshTheme.spacing.mediumLarge),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraGiant))
+
+            Box(
+                modifier = Modifier
+                    .size(76.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFF59E0B).copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = "Location Required",
+                    tint = Color(0xFFF59E0B),
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.large))
+
+            Text(
+                text = "Location Service Required",
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
+
+            Text(
+                text = "Android requires device Location services to be turned on to scan for background Bluetooth mesh nodes.",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    lineHeight = 22.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.extraGiant))
+
+            Button(
+                onClick = onTurnOnLocation,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFF59E0B),
+                    contentColor = Color.White
+                )
+            ) {
+                Text(
+                    text = "Turn on Location",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+            }
         }
     }
 }
@@ -472,7 +1015,6 @@ private fun RadioRequirementSetupScreen(
                     actionButtonText = "Turn on Bluetooth",
                     onActionClick = onTurnOnBluetooth,
                     activeAccentColor = Color(0xFF2563EB),
-                    activeContainerColor = Color(0xFFE8F1FD),
                     contentDescription = "Bluetooth status: ${if (isBluetoothEnabled) "Enabled" else "Disabled"}"
                 )
             }
@@ -496,7 +1038,6 @@ private fun RadioRequirementSetupScreen(
                     actionButtonText = "Turn on Wi-Fi",
                     onActionClick = onTurnOnWifi,
                     activeAccentColor = Color(0xFF16A34A),
-                    activeContainerColor = Color(0xFFE6F7ED),
                     contentDescription = "Wi-Fi status: ${if (isWifiEnabled) "Enabled" else "Disabled"}"
                 )
             }
@@ -539,6 +1080,8 @@ private fun HeroRadioIcons(
     isBluetoothEnabled: Boolean,
     isWifiEnabled: Boolean
 ) {
+    val isDark = isSystemInDarkTheme()
+
     // Micro-animation for Bluetooth: subtle breathing pulse when ON
     val infiniteTransition = rememberInfiniteTransition(label = "hero_radio_anim")
     val btPulseScale by infiniteTransition.animateFloat(
@@ -587,7 +1130,7 @@ private fun HeroRadioIcons(
                         .size(76.dp)
                         .scale(btPulseScale)
                         .clip(CircleShape)
-                        .background(Color(0xFF2563EB).copy(alpha = 0.12f))
+                        .background(Color(0xFF2563EB).copy(alpha = if (isDark) 0.20f else 0.12f))
                 )
             }
             Surface(
@@ -601,7 +1144,11 @@ private fun HeroRadioIcons(
                         spotColor = if (isBluetoothEnabled) Color(0xFF2563EB).copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.1f)
                     ),
                 shape = CircleShape,
-                color = if (isBluetoothEnabled) Color(0xFFE8F1FD) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                color = if (isBluetoothEnabled) {
+                    if (isDark) Color(0xFF1E293B) else Color(0xFFE8F1FD)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                },
                 border = BorderStroke(
                     1.5.dp,
                     if (isBluetoothEnabled) Color(0xFF93C5FD) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -643,7 +1190,11 @@ private fun HeroRadioIcons(
                         spotColor = if (isWifiEnabled) Color(0xFF16A34A).copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.1f)
                     ),
                 shape = CircleShape,
-                color = if (isWifiEnabled) Color(0xFFE6F7ED) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                color = if (isWifiEnabled) {
+                    if (isDark) Color(0xFF142E1F) else Color(0xFFE6F7ED)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                },
                 border = BorderStroke(
                     1.5.dp,
                     if (isWifiEnabled) Color(0xFF86EFAC) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -667,15 +1218,16 @@ private fun ModernRadioStatusCard(
     title: String,
     description: String,
     isEnabled: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     actionButtonText: String,
     onActionClick: () -> Unit,
     activeAccentColor: Color,
-    activeContainerColor: Color,
     contentDescription: String
 ) {
+    val isDark = isSystemInDarkTheme()
+
     // Interactive button press scale state
-    val buttonInteractionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val buttonInteractionSource = remember { MutableInteractionSource() }
     val isButtonPressed by buttonInteractionSource.collectIsPressedAsState()
     val buttonScale by animateFloatAsState(
         targetValue = if (isButtonPressed) 0.97f else 1.0f,
@@ -684,11 +1236,17 @@ private fun ModernRadioStatusCard(
     )
 
     // Animated container colors and elevation
-    val cardBorderColor by androidx.compose.animation.animateColorAsState(
+    val cardBorderColor by animateColorAsState(
         targetValue = if (isEnabled) activeAccentColor.copy(alpha = 0.25f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
         animationSpec = tween(300),
         label = "card_border"
     )
+
+    val iconContainerColor = if (isEnabled) {
+        if (isDark) activeAccentColor.copy(alpha = 0.20f) else activeAccentColor.copy(alpha = 0.12f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+    }
 
     Surface(
         modifier = Modifier
@@ -716,7 +1274,7 @@ private fun ModernRadioStatusCard(
                 Surface(
                     modifier = Modifier.size(48.dp),
                     shape = CircleShape,
-                    color = if (isEnabled) activeContainerColor else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    color = iconContainerColor,
                     border = BorderStroke(
                         1.dp,
                         if (isEnabled) activeAccentColor.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -767,10 +1325,10 @@ private fun ModernRadioStatusCard(
             }
 
             // Smooth Action Button visibility transition
-            androidx.compose.animation.AnimatedVisibility(
+            AnimatedVisibility(
                 visible = !isEnabled,
-                enter = androidx.compose.animation.fadeIn(tween(250)) + androidx.compose.animation.expandVertically(tween(250)),
-                exit = androidx.compose.animation.fadeOut(tween(200)) + androidx.compose.animation.shrinkVertically(tween(200))
+                enter = fadeIn(tween(250)) + expandVertically(tween(250)),
+                exit = fadeOut(tween(200)) + shrinkVertically(tween(200))
             ) {
                 Column {
                     Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
@@ -806,15 +1364,25 @@ private fun ModernRadioStatusCard(
 
 @Composable
 private fun StatusBadgePill(isEnabled: Boolean) {
-    val badgeBgColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isEnabled) Color(0xFFDCFCE7) else Color(0xFFFEE2E2),
+    val isDark = isSystemInDarkTheme()
+
+    val badgeBgColor by animateColorAsState(
+        targetValue = if (isEnabled) {
+            if (isDark) Color(0xFF064E3B) else Color(0xFFDCFCE7)
+        } else {
+            if (isDark) Color(0xFF451A1A) else Color(0xFFFEE2E2)
+        },
         animationSpec = tween(300),
-        label = "pill_bg"
+        label = "radio_pill_bg"
     )
-    val badgeTextColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (isEnabled) Color(0xFF15803D) else Color(0xFFDC2626),
+    val badgeTextColor by animateColorAsState(
+        targetValue = if (isEnabled) {
+            if (isDark) Color(0xFF4ADE80) else Color(0xFF15803D)
+        } else {
+            if (isDark) Color(0xFFF87171) else Color(0xFFDC2626)
+        },
         animationSpec = tween(300),
-        label = "pill_text"
+        label = "radio_pill_text"
     )
 
     Surface(
@@ -829,6 +1397,37 @@ private fun StatusBadgePill(isEnabled: Boolean) {
             color = badgeTextColor,
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
         )
+    }
+}
+
+fun isBluetoothPermissionGranted(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED
+    } else {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED
+    }
+}
+
+fun isLocationPermissionGranted(context: Context): Boolean {
+    return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+           ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+}
+
+fun isNearbyWifiPermissionGranted(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true
+    }
+}
+
+fun isNotificationPermissionGranted(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true
     }
 }
 
@@ -886,4 +1485,3 @@ fun Context.findActivity(): Activity? {
     }
     return null
 }
-

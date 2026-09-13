@@ -47,9 +47,10 @@ class DiscoveryEngine @Inject constructor(
     private fun publishCache() {
         val map = cache.getAll().associate { record ->
             val key = record.meshId.ifBlank { record.macAddress }
+            val resolvedName = record.displayName?.takeIf { it.isNotBlank() } ?: "Mesh Peer"
             key to BleDevice(
                 meshId = record.meshId,
-                name = record.name,
+                name = resolvedName,
                 address = record.macAddress,
                 rssi = record.smoothedRssi,
                 lastSeen = record.lastSeenMillis,
@@ -141,13 +142,13 @@ class DiscoveryEngine @Inject constructor(
             connectionPolicy.resetPeer(macAddress)
         }
         
-        // Store Bluetooth hardware device name as transport metadata
+        // Store Bluetooth hardware device name purely as transport metadata
         if (name.isNotBlank()) {
             record.bluetoothDeviceName = name
-            // Only update record.name if displayName is not already set from Mesh-Link profile
-            if (record.displayName.isNullOrBlank()) {
-                record.name = name
-            }
+        }
+        // Do NOT overwrite record.name with the Bluetooth hardware phone model!
+        if (record.displayName.isNullOrBlank()) {
+            record.name = "Mesh Peer"
         }
         record.capabilities = capabilities
         record.lastSeenMillis = System.currentTimeMillis()

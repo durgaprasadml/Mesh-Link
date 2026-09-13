@@ -36,7 +36,7 @@ class DiscoveryCache {
             PeerDiscoveryRecord(
                 macAddress = macAddress,
                 meshId = meshId,
-                name = defaultName,
+                name = "Mesh Peer",
                 bluetoothDeviceName = defaultName.takeIf { it.isNotBlank() }
             )
         }

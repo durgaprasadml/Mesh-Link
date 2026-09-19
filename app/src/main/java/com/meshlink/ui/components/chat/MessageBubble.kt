@@ -67,8 +67,11 @@ fun MessageBubble(
 
     val isSos = message.messageType == MessageType.SOS
     val isLocation = message.messageType == MessageType.LOCATION
+    val isIncomingLocation = isLocation && !isMe
+    val isOutgoingLocation = isLocation && isMe
+
     val baseBubbleColor = when {
-        isSos || isLocation -> Color.Transparent
+        isSos || isIncomingLocation -> Color.Transparent
         isMe -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
@@ -80,7 +83,7 @@ fun MessageBubble(
     )
 
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    val shape = if (isSos || isLocation) {
+    val shape = if (isSos || isIncomingLocation) {
         RoundedCornerShape(20.dp)
     } else if (isMe) {
         RoundedCornerShape(topStart = MeshTheme.spacing.large, topEnd = MeshTheme.spacing.small, bottomStart = MeshTheme.spacing.large, bottomEnd = MeshTheme.spacing.large)
@@ -140,11 +143,14 @@ fun MessageBubble(
                 .clip(shape)
                 .background(bgColor)
                 .then(
-                    if (!isSos && !isLocation) {
+                    if (!isSos && !isIncomingLocation) {
                         Modifier.padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
                     } else Modifier
                 )
-                .widthIn(max = if (isSos || isLocation) 340.dp else 300.dp, min = if (isSos || isLocation) 280.dp else 80.dp)
+                .widthIn(
+                    max = if (isSos || isIncomingLocation) 340.dp else if (isOutgoingLocation) 280.dp else 300.dp,
+                    min = if (isSos || isIncomingLocation) 280.dp else if (isOutgoingLocation) 220.dp else 80.dp
+                )
                 .animateContentSize()
         ) {
             when (message.messageType) {
@@ -503,11 +509,7 @@ fun MessageBubble(
                 }
             }
 
-            if (!isSos) {
-                val formattedTime = androidx.compose.runtime.remember(message.timestamp) {
-                    com.meshlink.ui.util.DateTimeUtils.formatTimeHHMM(message.timestamp)
-                }
-
+            if (!isSos && !isIncomingLocation) {
                 // Timestamp + status row
                 Row(
                     modifier = Modifier
@@ -538,7 +540,7 @@ fun MessageBubble(
                         )
                     }
                 }
-            } else if (isMe) {
+            } else if (isSos && isMe) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.End)

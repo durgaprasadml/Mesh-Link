@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -48,7 +49,180 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Modern Material 3 Location Message Card for Mesh Link chat.
+ * Modern Material 3 Location Message component for Mesh Link chat.
+ * 
+ * Automatically routes between:
+ * - [OutgoingLocationBubble]: A compact, chat-oriented bubble for the sender's own outgoing location message.
+ * - [IncomingLocationCard]: The rich, detailed elevated card for incoming receiver-side location messages.
+ */
+@Composable
+fun LocationMessageCard(
+    message: Message,
+    onLocationClick: (Double, Double) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (message.isFromMe) {
+        OutgoingLocationBubble(
+            message = message,
+            onLocationClick = onLocationClick,
+            modifier = modifier
+        )
+    } else {
+        IncomingLocationCard(
+            message = message,
+            onLocationClick = onLocationClick,
+            modifier = modifier
+        )
+    }
+}
+
+/**
+ * Compact, chat-oriented location bubble for outgoing (sender-side) messages.
+ *
+ * Features:
+ * - Compact header with location icon pin and "Location" title
+ * - Responsive, compact map preview (~115dp height) with tap-to-open interaction
+ * - Concise coordinate display (e.g., "12.779922, 75.184170")
+ * - Full TalkBack accessibility semantics
+ * - No hardware / battery / connection rows (unnecessary for sender)
+ * - Optimized static canvas fallback to eliminate infinite recomposition loops
+ */
+@Composable
+fun OutgoingLocationBubble(
+    message: Message,
+    onLocationClick: (Double, Double) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isDark = MeshTheme.isDark
+    val lat = message.latitude
+    val lng = message.longitude
+    val hasCoords = lat != null && lng != null
+
+    val formattedLat = remember(lat) {
+        lat?.let { String.format(Locale.US, "%.6f", it) } ?: "Unavailable"
+    }
+    val formattedLng = remember(lng) {
+        lng?.let { String.format(Locale.US, "%.6f", it) } ?: "Unavailable"
+    }
+
+    val coordsText = remember(hasCoords, formattedLat, formattedLng) {
+        if (hasCoords) "$formattedLat, $formattedLng" else "Location unavailable"
+    }
+
+    val mapBitmap = rememberMapBitmap(message)
+
+    val talkBackDescription = remember(coordsText) {
+        "Shared Location. Coordinates: $coordsText. Tap map to open in Maps."
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = talkBackDescription
+            }
+    ) {
+        // Compact Header: 📍 Location
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = MeshTheme.spacing.small),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.LocationOn,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+            Text(
+                text = "Location",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+
+        // Compact Map Preview
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(115.dp)
+                .clip(RoundedCornerShape(MeshTheme.spacing.medium))
+                .clickable(enabled = hasCoords) {
+                    if (lat != null && lng != null) {
+                        onLocationClick(lat, lng)
+                    }
+                }
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "Map preview for $coordsText. Tap to open in Maps."
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            if (mapBitmap != null) {
+                Image(
+                    bitmap = mapBitmap,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                StyledMapCanvasPreview(
+                    isDark = isDark,
+                    latText = formattedLat,
+                    lngText = formattedLng,
+                    animatePulse = false
+                )
+            }
+
+            // Subtle tap-to-open affordance chip in bottom-end corner
+            if (hasCoords) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(MeshTheme.spacing.small),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = if (isDark) 0.75f else 0.85f),
+                    shape = RoundedCornerShape(MeshTheme.spacing.small)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "Maps",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+
+        // Concise Coordinates Display
+        Text(
+            text = coordsText,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/**
+ * Modern Material 3 Location Message Card for Mesh Link chat (Receiver-side).
  * 
  * Features:
  * - Premium Material 3 elevated card container with rounded corners (20dp)
@@ -59,7 +233,7 @@ import java.util.Locale
  * - Dark mode, high contrast, dynamic color, and TalkBack accessibility semantics
  */
 @Composable
-fun LocationMessageCard(
+fun IncomingLocationCard(
     message: Message,
     onLocationClick: (Double, Double) -> Unit,
     modifier: Modifier = Modifier
@@ -103,34 +277,9 @@ fun LocationMessageCard(
         "Shared Location message. Latitude: $formattedLat, Longitude: $formattedLng, Battery: $batteryText, Connection: $connectionText, Shared at: $formattedTime."
     }
 
-    // Cached map thumbnail preview decoding off-UI thread
-    val mapBitmap by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(
-        initialValue = null,
-        key1 = message.thumbnailBase64,
-        key2 = message.mediaPath
-    ) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                if (!message.thumbnailBase64.isNullOrEmpty()) {
-                    val bytes = Base64.decode(message.thumbnailBase64, Base64.DEFAULT)
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                } else if (!message.mediaPath.isNullOrEmpty() && File(message.mediaPath).exists()) {
-                    BitmapFactory.decodeFile(message.mediaPath)?.asImageBitmap()
-                } else {
-                    null
-                }
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
+    val mapBitmap = rememberMapBitmap(message)
 
-    // Card styling tokens
-    val cardBgColor = when {
-        message.isFromMe -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (isDark) 0.35f else 0.25f)
-        else -> MaterialTheme.colorScheme.surfaceContainer
-    }
-
+    val cardBgColor = MaterialTheme.colorScheme.surfaceContainer
     val cardBorderColor = if (isDark) {
         MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     } else {
@@ -224,7 +373,7 @@ fun LocationMessageCard(
                     )
                 } else {
                     // Styled Canvas Map Vector Graphic Fallback
-                    StyledMapCanvasPreview(isDark = isDark, latText = formattedLat, lngText = formattedLng)
+                    StyledMapCanvasPreview(isDark = isDark, latText = formattedLat, lngText = formattedLng, animatePulse = true)
                 }
 
                 // Coordinate Chip Overlay
@@ -339,36 +488,77 @@ fun LocationMessageCard(
 }
 
 /**
- * Styled Vector Map Canvas Preview composable.
- * Renders topographic grid lines, simulated road vectors, compass ring, and animated pulsing location pin.
+ * Cached map thumbnail preview decoding off-UI thread.
  */
 @Composable
-private fun StyledMapCanvasPreview(
+fun rememberMapBitmap(message: Message): androidx.compose.ui.graphics.ImageBitmap? {
+    val mapBitmap by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        initialValue = null,
+        key1 = message.thumbnailBase64,
+        key2 = message.mediaPath
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                if (!message.thumbnailBase64.isNullOrEmpty()) {
+                    val bytes = Base64.decode(message.thumbnailBase64, Base64.DEFAULT)
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                } else if (!message.mediaPath.isNullOrEmpty() && File(message.mediaPath).exists()) {
+                    BitmapFactory.decodeFile(message.mediaPath)?.asImageBitmap()
+                } else {
+                    null
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+    return mapBitmap
+}
+
+/**
+ * Styled Vector Map Canvas Preview composable.
+ * Renders topographic grid lines, simulated road vectors, compass ring, and location pin.
+ *
+ * @param animatePulse Controls whether an infinite pulsing radar animation runs.
+ *                     Disabled by default to optimize performance and prevent recomposition frame drops.
+ */
+@Composable
+fun StyledMapCanvasPreview(
     isDark: Boolean,
     latText: String,
     lngText: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    animatePulse: Boolean = false
 ) {
-    // Pulse animation for location marker pin
-    val infiniteTransition = rememberInfiniteTransition(label = "mapPinPulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.35f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulseScale"
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.7f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "pulseAlpha"
-    )
+    val pulseScale: Float
+    val pulseAlpha: Float
+
+    if (animatePulse) {
+        val infiniteTransition = rememberInfiniteTransition(label = "mapPinPulse")
+        val animatedScale by infiniteTransition.animateFloat(
+            initialValue = 0.85f,
+            targetValue = 1.35f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1400, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "pulseScale"
+        )
+        val animatedAlpha by infiniteTransition.animateFloat(
+            initialValue = 0.7f,
+            targetValue = 0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1400, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "pulseAlpha"
+        )
+        pulseScale = animatedScale
+        pulseAlpha = animatedAlpha
+    } else {
+        pulseScale = 1.0f
+        pulseAlpha = 0.25f
+    }
 
     val bgColor = if (isDark) Color(0xFF1E293B) else Color(0xFFE2E8F0)
     val gridColor = if (isDark) Color(0xFF334155) else Color(0xFFCBD5E1)
@@ -381,7 +571,13 @@ private fun StyledMapCanvasPreview(
             .background(bgColor),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .semantics {
+                    contentDescription = "Map preview at $latText, $lngText"
+                }
+        ) {
             val width = size.width
             val height = size.height
 
@@ -430,7 +626,7 @@ private fun StyledMapCanvasPreview(
                 style = Stroke(width = 4.dp.toPx())
             )
 
-            // Animated pulsing radar aura at center
+            // Radar aura at center
             drawCircle(
                 color = primaryPinColor.copy(alpha = pulseAlpha),
                 radius = 28.dp.toPx() * pulseScale,

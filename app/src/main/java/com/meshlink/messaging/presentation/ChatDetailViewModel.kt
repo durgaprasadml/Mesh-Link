@@ -34,6 +34,7 @@ data class ChatDetailUiState(
     val isRecording: Boolean = false,
     val recordingElapsedMs: Long = 0L,
     val currentlyPlaying: String? = null,
+    val currentlyPreparing: String? = null,
     val playbackProgress: Float = 0f,
     val selectedMessageIds: Set<String> = emptySet(),
     val isSelectionMode: Boolean = false,
@@ -103,6 +104,7 @@ class ChatDetailViewModel @Inject constructor(
     val recordingElapsedMs = voiceRecorder.elapsedMs
 
     val currentlyPlaying = voicePlayer.currentlyPlaying
+    val currentlyPreparing = voicePlayer.currentlyPreparing
     val playbackProgress = voicePlayer.progress
 
     // ────────── Selection Logic ──────────
@@ -126,22 +128,22 @@ class ChatDetailViewModel @Inject constructor(
         combine(messages, connectionStatus, transferProgress) { msgs, conn, transfer ->
             Triple(msgs, conn, transfer)
         },
-        combine(isRecording, recordingElapsedMs, currentlyPlaying, playbackProgress) { isRec, recMs, playing, prog ->
-            listOf(isRec, recMs, playing, prog)
+        combine(isRecording, recordingElapsedMs, currentlyPlaying, currentlyPreparing, playbackProgress) { args ->
+            args // 5-element Array<Any?>
         },
         combine(_selectedMessageIds, peerProfilePhotoPath) { selectedIds, photoPath ->
             Pair(selectedIds, photoPath)
         }
     ) { (msgs, conn, transfer), mediaState, (selectedIds, photoPath) ->
-        val (isRec, recMs, playing, prog) = mediaState
         ChatDetailUiState(
             messages = msgs,
             connectionStatus = conn,
             transferProgress = transfer,
-            isRecording = isRec as Boolean,
-            recordingElapsedMs = recMs as Long,
-            currentlyPlaying = playing as String?,
-            playbackProgress = prog as Float,
+            isRecording = mediaState[0] as Boolean,
+            recordingElapsedMs = mediaState[1] as Long,
+            currentlyPlaying = mediaState[2] as String?,
+            currentlyPreparing = mediaState[3] as String?,
+            playbackProgress = mediaState[4] as Float,
             selectedMessageIds = selectedIds,
             isSelectionMode = selectedIds.isNotEmpty(),
             peerProfilePhotoPath = photoPath

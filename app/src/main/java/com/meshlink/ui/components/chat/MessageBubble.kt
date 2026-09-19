@@ -51,6 +51,7 @@ fun MessageBubble(
     isSelected: Boolean,
     isSelectionMode: Boolean,
     currentlyPlaying: String?,
+    currentlyPreparing: String? = null,
     playbackProgress: Float,
     transferProgress: Float?,
     onToggleSelection: () -> Unit,
@@ -149,12 +150,14 @@ fun MessageBubble(
             when (message.messageType) {
                 MessageType.IMAGE -> {
                     val mediaPath = message.mediaPath
-                    val isComplete = message.status != DeliveryStatus.QUEUED && message.status != DeliveryStatus.FAILED
-                    val hasFullFile = remember(mediaPath) {
+                    // Re-key on both mediaPath and status so `hasFullFile` recomputes
+                    // when the transfer completes and the file is written to disk.
+                    val hasFullFile = remember(mediaPath, message.status) {
                         mediaPath != null && File(mediaPath).exists()
                     }
-                    
-                    if (isComplete && hasFullFile) {
+
+                    if (hasFullFile) {
+                        // STATE C / D — original is on disk: show full-resolution, tap opens viewer
                         AsyncImage(
                             model = File(mediaPath!!),
                             contentDescription = "View full image",
@@ -166,68 +169,115 @@ fun MessageBubble(
                             contentScale = ContentScale.Crop
                         )
                     } else if (!message.thumbnailBase64.isNullOrEmpty()) {
-                        val imageBitmapState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+                        // STATE A / B — original still transferring but thumbnail available.
+                        // Show thumbnail at full opacity so the user can see a clear preview.
+                        // The image is tappable so the viewer opens immediately with the
+                        // thumbnail while the original continues loading in the background.
+                        val imageBitmapState = remember {
+                            androidx.compose.runtime.mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
+                        }
                         androidx.compose.runtime.LaunchedEffect(message.thumbnailBase64) {
                             if (!message.thumbnailBase64.isNullOrEmpty()) {
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                     try {
                                         val bytes = Base64.decode(message.thumbnailBase64, Base64.DEFAULT)
-                                        imageBitmapState.value = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                                    } catch (e: Exception) {
-                                        // Ignore
-                                    }
+                                        imageBitmapState.value = BitmapFactory.decodeByteArray(
+                                            bytes, 0, bytes.size
+                                        )?.asImageBitmap()
+                                    } catch (_: Exception) { /* ignore */ }
                                 }
                             }
                         }
                         val imageBitmap = imageBitmapState.value
-                        
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(180.dp)
                                 .clip(RoundedCornerShape(MeshTheme.spacing.medium))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .then(
+                                    // Allow tapping to open viewer even while transferring.
+                                    // The viewer will display the thumbnail while original loads.
+                                    if (message.status != DeliveryStatus.FAILED) {
+                                        Modifier.clickable { onImageClick(message.messageId) }
+                                    } else Modifier
+                                )
                         ) {
+                            // Thumbnail at full opacity — visually clear preview
                             if (imageBitmap != null) {
                                 Image(
                                     bitmap = imageBitmap,
-                                    contentDescription = "Image thumbnail",
+                                    contentDescription = "Image preview",
                                     modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop,
-                                    alpha = 0.5f
+                                    contentScale = ContentScale.Crop
                                 )
                             }
-                            
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
-                                    if (message.status == DeliveryStatus.FAILED) {
+
+                            // Error/retry state: show overlay button
+                            if (message.status == DeliveryStatus.FAILED) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.45f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)
+                                    ) {
                                         IconButton(
                                             onClick = { onRetryMedia(message.messageId) },
-                                            modifier = Modifier.background(MaterialTheme.colorScheme.error, CircleShape).size(36.dp)
+                                            modifier = Modifier
+                                                .background(MaterialTheme.colorScheme.error, CircleShape)
+                                                .size(36.dp)
                                         ) {
-                                            Icon(Icons.Default.Refresh, contentDescription = "Retry image transfer", tint = MaterialTheme.colorScheme.onPrimary)
+                                            Icon(
+                                                Icons.Default.Refresh,
+                                                contentDescription = "Retry image transfer",
+                                                tint = MaterialTheme.colorScheme.onPrimary
+                                            )
                                         }
                                         Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
-                                        Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                                    } else if (transferProgress != null && transferProgress >= 0f) {
-                                        CircularProgressIndicator(
-                                            progress = { transferProgress },
-                                            color = MaterialTheme.colorScheme.primary,
-                                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        Text(
+                                            "Failed. Tap to retry.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White
                                         )
-                                    } else {
-                                        CircularProgressIndicator(
+                                    }
+                                }
+                            } else {
+                                // Subtle progress strip at the bottom edge — non-intrusive,
+                                // does not obscure the thumbnail.
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .align(Alignment.BottomCenter)
+                                ) {
+                                    if (transferProgress != null && transferProgress >= 0f && transferProgress < 1f) {
+                                        LinearProgressIndicator(
+                                            progress = { transferProgress },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(3.dp),
                                             color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(24.dp)
+                                            trackColor = Color.Transparent
+                                        )
+                                    } else if (transferProgress == null) {
+                                        // Indeterminate — no progress info yet
+                                        LinearProgressIndicator(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(3.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            trackColor = Color.Transparent
                                         )
                                     }
                                 }
                             }
                         }
                     } else {
+                        // STATE — no thumbnail yet and not complete: compact placeholder
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -240,17 +290,27 @@ fun MessageBubble(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     IconButton(
                                         onClick = { onRetryMedia(message.messageId) },
-                                        modifier = Modifier.background(MaterialTheme.colorScheme.error, CircleShape).size(36.dp)
+                                        modifier = Modifier
+                                            .background(MaterialTheme.colorScheme.error, CircleShape)
+                                            .size(36.dp)
                                     ) {
-                                        Icon(Icons.Default.Refresh, contentDescription = "Retry image transfer", tint = MaterialTheme.colorScheme.onPrimary)
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = "Retry image transfer",
+                                            tint = MaterialTheme.colorScheme.onPrimary
+                                        )
                                     }
                                     Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
-                                    Text("Failed. Tap to retry.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                    Text(
+                                        "Failed. Tap to retry.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
                                 }
                             } else {
                                 CircularProgressIndicator(
                                     color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
@@ -260,7 +320,12 @@ fun MessageBubble(
                     val fileExists = remember(message.mediaPath) {
                         message.mediaPath != null && File(message.mediaPath).exists()
                     }
-                    val isThisPlaying = currentlyPlaying == message.messageId
+                    // True while this message's file is loaded into the player but not yet started
+                    val isThisPreparing = currentlyPreparing == message.mediaPath
+                    val isThisPlaying = currentlyPlaying == message.mediaPath
+                    // Active transfer in progress for this message
+                    val isReceiving = transferProgress != null && transferProgress < 1.0f
+
                     val durationMs = message.mediaDurationMs ?: 0L
                     val durationText = remember(durationMs) {
                         val seconds = (durationMs / 1000) % 60
@@ -272,61 +337,135 @@ fun MessageBubble(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(MeshTheme.spacing.small)
                     ) {
-                        IconButton(
-                            onClick = {
-                                if (isThisPlaying) {
-                                    onStopPlayback()
-                                } else if (fileExists && message.mediaPath != null) {
-                                    onPlayVoice(message.mediaPath)
-                                }
-                            },
-                            enabled = fileExists && !isSelectionMode,
+                        // Play / Stop button — disabled while receiving or failed
+                        val playEnabled = fileExists && !isSelectionMode && !isReceiving
+                        Box(
+                            contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .background(textColor.copy(alpha = 0.15f), CircleShape)
+                                .background(
+                                    if (playEnabled) textColor.copy(alpha = 0.15f)
+                                    else textColor.copy(alpha = 0.07f),
+                                    CircleShape
+                                )
                                 .size(MeshTheme.spacing.huge)
                         ) {
-                            Icon(
-                                imageVector = if (isThisPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                contentDescription = if (isThisPlaying) "Stop voice message" else "Play voice message",
-                                tint = textColor
-                            )
+                            if (isThisPreparing) {
+                                // Show a small spinner on the play button while prepareAsync is running
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = textColor.copy(alpha = 0.7f)
+                                )
+                            } else {
+                                IconButton(
+                                    onClick = {
+                                        if (isThisPlaying) {
+                                            onStopPlayback()
+                                        } else if (fileExists && message.mediaPath != null) {
+                                            onPlayVoice(message.mediaPath)
+                                        }
+                                    },
+                                    enabled = playEnabled,
+                                    modifier = Modifier.size(MeshTheme.spacing.huge)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isThisPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                        contentDescription = if (isThisPlaying) "Stop voice message" else "Play voice message",
+                                        tint = if (playEnabled) textColor else textColor.copy(alpha = 0.4f)
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
 
                         Column(modifier = Modifier.weight(1f)) {
-                            if (message.status == DeliveryStatus.FAILED) {
-                                Text(
-                                    text = "Failed to download voice note",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                                Text(
-                                    text = "Tap to retry",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.clickable { onRetryMedia(message.messageId) }
-                                )
-                            } else if (transferProgress != null && transferProgress < 1.0f) {
-                                LinearProgressIndicator(
-                                    progress = { transferProgress },
-                                    modifier = Modifier.fillMaxWidth().height(MeshTheme.spacing.small).clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
-                                    color = textColor,
-                                    trackColor = textColor.copy(alpha = 0.3f)
-                                )
-                            } else {
-                                LinearProgressIndicator(
-                                    progress = { if (isThisPlaying) playbackProgress else 0f },
-                                    modifier = Modifier.fillMaxWidth().height(MeshTheme.spacing.small).clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
-                                    color = textColor.copy(alpha = 0.8f),
-                                    trackColor = textColor.copy(alpha = 0.3f)
-                                )
-                                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                                Text(
-                                    text = if (fileExists) durationText else "File missing",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = textColor.copy(alpha = 0.7f)
-                                )
+                            when {
+                                message.status == DeliveryStatus.FAILED -> {
+                                    Text(
+                                        text = "Failed to download voice note",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    Text(
+                                        text = "Tap to retry",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.clickable { onRetryMedia(message.messageId) }
+                                    )
+                                }
+                                isReceiving -> {
+                                    // Determinate transfer progress with percentage label
+                                    val pct = (transferProgress!! * 100).toInt()
+                                    LinearProgressIndicator(
+                                        progress = { transferProgress },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(MeshTheme.spacing.small)
+                                            .clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
+                                        color = textColor,
+                                        trackColor = textColor.copy(alpha = 0.3f)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Receiving\u2026 $pct%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = textColor.copy(alpha = 0.7f)
+                                    )
+                                }
+                                !fileExists && !isReceiving -> {
+                                    // File not present and not currently being transferred
+                                    // (could be a legacy message missing its file)
+                                    LinearProgressIndicator(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(MeshTheme.spacing.small)
+                                            .clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
+                                        color = textColor.copy(alpha = 0.4f),
+                                        trackColor = textColor.copy(alpha = 0.15f)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (!message.isFromMe) "Receiving\u2026" else "File missing",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = textColor.copy(alpha = 0.6f)
+                                    )
+                                }
+                                isThisPreparing -> {
+                                    // File is present but player is still running prepareAsync
+                                    LinearProgressIndicator(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(MeshTheme.spacing.small)
+                                            .clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
+                                        color = textColor,
+                                        trackColor = textColor.copy(alpha = 0.3f)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Preparing\u2026",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = textColor.copy(alpha = 0.7f)
+                                    )
+                                }
+                                else -> {
+                                    // Normal state: file ready, show playback progress bar and duration
+                                    LinearProgressIndicator(
+                                        progress = { if (isThisPlaying) playbackProgress else 0f },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(MeshTheme.spacing.small)
+                                            .clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
+                                        color = textColor.copy(alpha = 0.8f),
+                                        trackColor = textColor.copy(alpha = 0.3f)
+                                    )
+                                    Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+                                    Text(
+                                        text = if (durationMs > 0L) durationText else "\u2014",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = textColor.copy(alpha = 0.7f)
+                                    )
+                                }
                             }
                         }
                     }

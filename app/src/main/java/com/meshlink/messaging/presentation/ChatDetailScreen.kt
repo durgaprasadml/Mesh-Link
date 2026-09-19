@@ -170,6 +170,9 @@ fun ChatDetailScreen(
             MediaViewerScreen(
                 mediaMessages = mediaMessages,
                 initialIndex = initialIndex,
+                // Pass transfer progress so the viewer can show a subtle top indicator
+                // while the original image is still being received in the background.
+                transferProgress = uiState.transferProgress,
                 onBack = { fullscreenMessageId = null },
                 onDelete = { msg ->
                     if (!uiState.selectedMessageIds.contains(msg.messageId)) {
@@ -181,6 +184,7 @@ fun ChatDetailScreen(
             )
         }
     }
+
 
     DisposableEffect(viewModel.address) {
         com.meshlink.util.NotificationHelper.setCurrentChatId(viewModel.address)
@@ -343,6 +347,7 @@ fun ChatDetailScreen(
                         isSelected = isSelected,
                         isSelectionMode = uiState.isSelectionMode,
                         currentlyPlaying = uiState.currentlyPlaying,
+                        currentlyPreparing = uiState.currentlyPreparing,
                         playbackProgress = uiState.playbackProgress,
                         transferProgress = msgTransferProgress,
                         onToggleSelection = { viewModel.toggleMessageSelection(msg.messageId) },

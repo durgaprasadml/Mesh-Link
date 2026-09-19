@@ -1,6 +1,7 @@
 package com.meshlink.ble.data.handlers
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.meshlink.ble.api.PacketDispatcher
 import com.meshlink.common.logger.MeshLogger
@@ -179,6 +180,11 @@ class MediaMessageHandler @Inject constructor(
                 else -> "Unsupported File"
             }
 
+            // For voice notes, extract the actual duration from the assembled file so the
+            // bubble shows the correct time immediately — without requiring playback first.
+            // MediaMetadataRetriever is fast (~10-30 ms) and runs here on the IO dispatcher.
+            val durationMs: Long? = if (isVoice) extractAudioDurationMs(completedFilePath) else null
+
             val message = MessageEntity(
                 messageId = completedTransferId,
                 chatId = chatId,
@@ -188,7 +194,8 @@ class MediaMessageHandler @Inject constructor(
                 isFromMe = false,
                 status = DeliveryStatus.DELIVERED,
                 messageType = messageType,
-                mediaPath = completedFilePath
+                mediaPath = completedFilePath,
+                mediaDurationMs = durationMs
             )
             chatDao.insertMessageAndUpdateChat(message, resolvedSenderName)
 
@@ -206,6 +213,28 @@ class MediaMessageHandler @Inject constructor(
                 encrypted = false
             )
             packetDispatcher.dispatchSinglePacket(completedSenderId, ackPacket)
+        }
+    }
+
+    /**
+     * Extracts the playback duration from an audio file using [MediaMetadataRetriever].
+     * Must be called from an IO dispatcher — never from Main.
+     * Returns null if the file cannot be opened or metadata is unavailable.
+     */
+    private suspend fun extractAudioDurationMs(filePath: String): Long? = withContext(Dispatchers.IO) {
+        if (filePath.isBlank()) return@withContext null
+        val file = File(filePath)
+        if (!file.exists() || file.length() == 0L) return@withContext null
+        return@withContext try {
+            MediaMetadataRetriever().use { retriever ->
+                retriever.setDataSource(filePath)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull()
+                    ?.takeIf { it > 0L }
+            }
+        } catch (e: Exception) {
+            MeshLogger.w(TAG, "Duration extraction failed for $filePath: ${e.message}")
+            null
         }
     }
 

@@ -168,16 +168,20 @@ class BroadcastHandler @Inject constructor(
         val rawPayload = packet.payload
         val internalKeywords = setOf("KEY_EXCHANGE", "ACK", "RELAY", "ROUTING", "HANDSHAKE")
 
-        val (rawText, payloadSenderName) = try {
+        val (rawText, payloadSenderName, payloadTimestamp) = try {
             val json = JSONObject(rawPayload)
             if (json.has("text")) {
-                json.getString("text") to json.optString("senderName", "").trim()
+                Triple(
+                    json.getString("text"),
+                    json.optString("senderName", "").trim(),
+                    json.optLong("timestamp", System.currentTimeMillis())
+                )
             } else {
                 MeshLogger.w(TAG, "Filtering out JSON protocol packet masquerading as broadcast text: $rawPayload")
                 return
             }
         } catch (_: Exception) {
-            rawPayload to ""
+            Triple(rawPayload, "", System.currentTimeMillis())
         }
 
         val cleanText = if (rawText.startsWith("[BROADCAST]")) {
@@ -213,7 +217,7 @@ class BroadcastHandler @Inject constructor(
             chatId = "BROADCAST",
             senderId = packet.senderId,
             text = cleanText,
-            timestamp = System.currentTimeMillis(),
+            timestamp = if (payloadTimestamp > 0L) payloadTimestamp else System.currentTimeMillis(),
             isFromMe = false,
             status = DeliveryStatus.DELIVERED,
             messageType = MessageType.TEXT

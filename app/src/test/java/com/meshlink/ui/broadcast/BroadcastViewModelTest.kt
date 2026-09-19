@@ -1,5 +1,6 @@
 package com.meshlink.ui.broadcast
 
+import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
@@ -9,6 +10,7 @@ import com.meshlink.domain.usecase.messaging.GetBroadcastMessagesUseCase
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
@@ -24,6 +26,7 @@ class BroadcastViewModelTest {
     private val meshRepository = mockk<MeshRepository>(relaxed = true)
     private val userRepository = mockk<UserRepository>(relaxed = true)
     private val getBroadcastMessagesUseCase = mockk<GetBroadcastMessagesUseCase>(relaxed = true)
+    private val scannedDevicesFlow = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
 
     private lateinit var viewModel: BroadcastViewModel
 
@@ -31,10 +34,13 @@ class BroadcastViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         val messages = listOf(
-            Message("b1", "BROADCAST", "Emergency Alert", "s1", System.currentTimeMillis(), true, DeliveryStatus.SENT, MessageType.TEXT)
+            Message("b1", "BROADCAST", "Emergency Alert", "s1", System.currentTimeMillis(), true, DeliveryStatus.SENT, MessageType.TEXT),
+            Message("b2", "BROADCAST", "Follow up", "s1", System.currentTimeMillis(), true, DeliveryStatus.SENT, MessageType.TEXT)
         )
         every { getBroadcastMessagesUseCase() } returns flowOf(messages)
+        every { meshRepository.scannedDevices } returns scannedDevicesFlow
         coEvery { userRepository.getUserDisplayName("s1") } returns "Durga Prasad"
+        coEvery { userRepository.getUserProfile("s1") } returns null
 
         viewModel = BroadcastViewModel(meshRepository, userRepository, getBroadcastMessagesUseCase)
     }
@@ -50,18 +56,48 @@ class BroadcastViewModelTest {
         viewModel.sendBroadcast("Public Emergency Warning")
         testScheduler.advanceUntilIdle()
 
-        coVerify { meshRepository.broadcastMessage("Public Emergency Warning") }
+        coVerify(exactly = 1) { meshRepository.broadcastMessage("Public Emergency Warning") }
     }
 
     @Test
-    fun `uiState maps broadcast messages flow with resolved sender name`() = runTest(testDispatcher) {
+    fun `sendBroadcast ignores blank or whitespace-only messages`() = runTest(testDispatcher) {
+        viewModel.sendBroadcast("   ")
+        testScheduler.advanceUntilIdle()
+
+        coVerify(exactly = 0) { meshRepository.broadcastMessage(any()) }
+    }
+
+    @Test
+    fun `uiState maps broadcast messages flow with resolved sender name and batches profile lookups`() = runTest(testDispatcher) {
         backgroundScope.launch { viewModel.uiState.collect {} }
         testScheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(1, state.messages.size)
-        assertEquals("b1", state.messages.first().message.messageId)
-        assertEquals("Emergency Alert", state.messages.first().message.text)
-        assertEquals("Durga Prasad", state.messages.first().senderName)
+        assertEquals(2, state.messages.size)
+        assertEquals("b1", state.messages[0].message.messageId)
+        assertEquals("Emergency Alert", state.messages[0].message.text)
+        assertEquals("Durga Prasad", state.messages[0].senderName)
+
+        assertEquals("b2", state.messages[1].message.messageId)
+        assertEquals("Follow up", state.messages[1].message.text)
+        assertEquals("Durga Prasad", state.messages[1].senderName)
+
+        // Verifies batching: even though there are 2 messages with sender "s1", lookup is only performed once
+        coVerify(exactly = 1) { userRepository.getUserDisplayName("s1") }
+        coVerify(exactly = 1) { userRepository.getUserProfile("s1") }
+    }
+
+    @Test
+    fun `uiState reflects nearby devices count from meshRepository`() = runTest(testDispatcher) {
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(0, viewModel.uiState.value.nearbyDevicesCount)
+
+        val device = mockk<BleDevice>(relaxed = true)
+        scannedDevicesFlow.value = mapOf("node_1" to device, "node_2" to device)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(2, viewModel.uiState.value.nearbyDevicesCount)
     }
 }

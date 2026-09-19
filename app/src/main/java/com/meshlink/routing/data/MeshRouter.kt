@@ -211,11 +211,12 @@ internal class MeshRouter @Inject constructor(
         val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.targetId)
         val canonicalLocalId  = if (localMeshId.isNotBlank()) com.meshlink.util.MeshIdNormalizer.canonicalize(localMeshId) else ""
         val isBroadcast = packet.targetId.equals("BROADCAST", ignoreCase = true) || canonicalTargetId == "BROADCAST"
-        val isForMe = isBroadcast || (canonicalLocalId.isNotBlank() && (
+        val isDirectForMe = !isBroadcast && canonicalLocalId.isNotBlank() && (
             canonicalTargetId == canonicalLocalId ||
             packet.targetId.equals(localMeshId, ignoreCase = true) ||
             packet.targetId.equals(canonicalLocalId, ignoreCase = true)
-        ))
+        )
+        val isForMe = isBroadcast || isDirectForMe
 
         // --- Strict Encryption Enforcement ---
         val enforceEncryption = enforceEncryptionState.value
@@ -237,13 +238,14 @@ internal class MeshRouter @Inject constructor(
             return
         }
 
-        // Strict de-dup — reject if already processed, UNLESS it's a direct message for us
-        // (we want to re-process duplicates for ourselves so we can re-send ACKs if the sender retried)
+        // Strict de-dup — reject if already processed, UNLESS it's a direct unicast message for us
+        // (we want to re-process direct duplicates so we can re-send ACKs if the sender retried;
+        // broadcast packets do not use ACKs and MUST be dropped when duplicated to prevent relay storms)
         val isDuplicate = !routingEngine.markPacketProcessed(packet.packetId)
         if (isDuplicate) {
             topologyManager.recordDuplicate()
-            if (isForMe && packet.type != PacketType.DELIVERY_ACK) {
-                MeshLogger.d(TAG) { "Dedup: re-processing duplicate ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} for local delivery/ACK" }
+            if (isDirectForMe && packet.type != PacketType.DELIVERY_ACK) {
+                MeshLogger.d(TAG) { "Dedup: re-processing duplicate direct packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} for local delivery/ACK" }
             } else {
                 MeshLogger.d(TAG) { "Dedup: dropped duplicate ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}" }
                 return

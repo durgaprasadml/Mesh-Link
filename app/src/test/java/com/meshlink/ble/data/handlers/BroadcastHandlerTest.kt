@@ -77,10 +77,11 @@ class BroadcastHandlerTest {
         coEvery { chatDao.getMessageByUuid(any()) } returns null
         coEvery { userDao.getUser("peer_rahul") } returns null
 
+        val expectedTimestamp = 1700000000000L
         val payload = JSONObject().apply {
             put("text", "Need first aid near Gate 2")
             put("senderName", "Rahul")
-            put("timestamp", System.currentTimeMillis())
+            put("timestamp", expectedTimestamp)
         }.toString()
 
         val packet = MeshPacket(
@@ -101,6 +102,7 @@ class BroadcastHandlerTest {
         val slotMsg = slot<MessageEntity>()
         coVerify { chatDao.insertMessage(capture(slotMsg)) }
         assertEquals("Need first aid near Gate 2", slotMsg.captured.text)
+        assertEquals(expectedTimestamp, slotMsg.captured.timestamp)
 
         verify { com.meshlink.util.NotificationHelper.showMessageNotification(context, "peer_rahul", "📢 Broadcast from Rahul", "Need first aid near Gate 2") }
     }

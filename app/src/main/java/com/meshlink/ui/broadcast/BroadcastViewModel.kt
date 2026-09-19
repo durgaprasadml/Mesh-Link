@@ -9,9 +9,10 @@ import com.meshlink.domain.repository.UserRepository
 import com.meshlink.domain.usecase.messaging.GetBroadcastMessagesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -24,7 +25,9 @@ data class BroadcastUiMessage(
 
 @Immutable
 data class BroadcastUiState(
-    val messages: List<BroadcastUiMessage> = emptyList()
+    val messages: List<BroadcastUiMessage> = emptyList(),
+    val nearbyDevicesCount: Int = 0,
+    val isSending: Boolean = false
 )
 
 @HiltViewModel
@@ -34,30 +37,54 @@ class BroadcastViewModel @Inject constructor(
     private val getBroadcastMessagesUseCase: GetBroadcastMessagesUseCase
 ) : ViewModel() {
 
+    private val _isSending = MutableStateFlow(false)
+
     fun sendBroadcast(message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isBlank() || _isSending.value) return
         viewModelScope.launch {
-            meshRepository.broadcastMessage(message)
+            _isSending.value = true
+            try {
+                meshRepository.broadcastMessage(trimmed)
+            } finally {
+                _isSending.value = false
+            }
         }
     }
 
     val uiState: StateFlow<BroadcastUiState> =
-        getBroadcastMessagesUseCase()
-            .map { messages ->
-                val uiMessages = messages.map { msg ->
-                    val userProfile = userRepository.getUserProfile(msg.senderId)
-                    val resolvedName = userRepository.getUserDisplayName(msg.senderId)
-                    val cleanText = if (msg.text.startsWith("[BROADCAST]")) {
-                        msg.text.removePrefix("[BROADCAST]").trim()
-                    } else {
-                        msg.text
-                    }
-                    BroadcastUiMessage(
-                        message = msg.copy(text = cleanText),
-                        senderName = resolvedName,
-                        senderProfilePhotoPath = userProfile?.profilePhotoPath
-                    )
-                }
-                BroadcastUiState(messages = uiMessages)
+        combine(
+            getBroadcastMessagesUseCase(),
+            meshRepository.scannedDevices,
+            _isSending
+        ) { messages, scannedDevices, isSending ->
+            // Batch user profile lookups for distinct senders to avoid N+1 queries
+            val uniqueSenderIds = messages.map { it.senderId }.distinct()
+            val profileCache = uniqueSenderIds.associateWith { senderId ->
+                val userProfile = userRepository.getUserProfile(senderId)
+                val resolvedName = userRepository.getUserDisplayName(senderId)
+                Pair(resolvedName, userProfile?.profilePhotoPath)
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BroadcastUiState())
+
+            val uiMessages = messages.map { msg ->
+                val (resolvedName, photoPath) = profileCache[msg.senderId] ?: Pair("Unknown User", null)
+                val cleanText = if (msg.text.startsWith("[BROADCAST]")) {
+                    msg.text.removePrefix("[BROADCAST]").trim()
+                } else {
+                    msg.text
+                }
+                BroadcastUiMessage(
+                    message = msg.copy(text = cleanText),
+                    senderName = resolvedName,
+                    senderProfilePhotoPath = photoPath
+                )
+            }
+            BroadcastUiState(
+                messages = uiMessages,
+                nearbyDevicesCount = scannedDevices.size,
+                isSending = isSending
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BroadcastUiState())
 }
+

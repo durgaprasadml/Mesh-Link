@@ -212,6 +212,32 @@ class MeshRouterTest {
     }
 
     @Test
+    fun `handleIncomingPacket drops duplicate broadcast packet`() = runTest {
+        every { routingEngine.markPacketProcessed("pkt_bcast_dup") } returns false
+        val meshRouter = createRouter(backgroundScope)
+        val receivedPayloads = mutableListOf<Pair<String, MeshPacket>>()
+        backgroundScope.launch {
+            meshRouter.incomingPayloads.collect { receivedPayloads.add(it) }
+        }
+        testScheduler.runCurrent()
+
+        val broadcastPacket = MeshPacket(
+            packetId = "pkt_bcast_dup",
+            senderId = "node_sender",
+            targetId = "BROADCAST",
+            payload = "Duplicate Broadcast",
+            encrypted = false,
+            ttl = 5
+        )
+
+        bleIncomingPacketsFlow.emit("peer_address_1" to broadcastPacket)
+        testScheduler.advanceUntilIdle()
+
+        verify(exactly = 0) { queueOptimizer.enqueue(match { it.packetId == "pkt_bcast_dup" }) }
+        assertTrue(receivedPayloads.isEmpty())
+    }
+
+    @Test
     fun `handleIncomingPacket stores packet in RelayDao when no peers available to forward`() = runTest {
         every { bleTransport.connectedPeers } returns emptySet()
         every { wifiTransport.connectedPeers } returns emptySet()

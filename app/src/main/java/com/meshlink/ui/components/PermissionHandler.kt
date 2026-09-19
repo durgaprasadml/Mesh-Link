@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Shield
@@ -212,7 +213,8 @@ fun PermissionHandler(
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION,
                 Manifest.permission.POST_NOTIFICATIONS,
-                Manifest.permission.NEARBY_WIFI_DEVICES
+                Manifest.permission.NEARBY_WIFI_DEVICES,
+                Manifest.permission.CAMERA
             )
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
@@ -220,14 +222,16 @@ fun PermissionHandler(
                 Manifest.permission.BLUETOOTH_ADVERTISE,
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.CAMERA
             )
         } else {
             arrayOf(
                 Manifest.permission.BLUETOOTH,
                 Manifest.permission.BLUETOOTH_ADMIN,
                 Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.CAMERA
             )
         }
     }
@@ -284,7 +288,16 @@ fun PermissionHandler(
         GrantPermissionsScreen(
             context = context,
             permanentlyDenied = permanentlyDenied,
-            onGrantPermissions = { permissionLauncher.launch(permissionsToRequest) },
+            onGrantPermissions = {
+                val ungranted = permissionsToRequest.filter {
+                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                }.toTypedArray()
+                if (ungranted.isNotEmpty()) {
+                    permissionLauncher.launch(ungranted)
+                } else {
+                    hasPermissions = true
+                }
+            },
             onOpenSettings = {
                 val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = android.net.Uri.fromParts("package", context.packageName, null)
@@ -362,6 +375,7 @@ private fun GrantPermissionsScreen(
     val isLocGranted = isLocationPermissionGranted(context)
     val isNearbyWifiGranted = isNearbyWifiPermissionGranted(context)
     val isNotifGranted = isNotificationPermissionGranted(context)
+    val isCameraGranted = isCameraPermissionGranted(context)
 
     // Interactive button press scale state
     val buttonInteractionSource = remember { MutableInteractionSource() }
@@ -494,6 +508,16 @@ private fun GrantPermissionsScreen(
                         contentDescription = "Notification permission status"
                     )
                 }
+
+                // Camera Card (Emergency SOS Capture)
+                ModernPermissionCard(
+                    title = "Camera Access",
+                    description = "Required so SOS can capture emergency images immediately without interrupting you during an emergency.",
+                    isGranted = isCameraGranted,
+                    icon = Icons.Default.CameraAlt,
+                    accentColor = Color(0xFFEF4444),
+                    contentDescription = "Camera permission status"
+                )
             }
 
             Spacer(modifier = Modifier.height(MeshTheme.spacing.extraLarge))
@@ -1400,6 +1424,10 @@ private fun StatusBadgePill(isEnabled: Boolean) {
     }
 }
 
+fun isCameraPermissionGranted(context: Context): Boolean {
+    return ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+}
+
 fun isBluetoothPermissionGranted(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
@@ -1454,7 +1482,8 @@ fun hasRequiredPermissions(context: Context): Boolean {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.POST_NOTIFICATIONS,
-            Manifest.permission.NEARBY_WIFI_DEVICES
+            Manifest.permission.NEARBY_WIFI_DEVICES,
+            Manifest.permission.CAMERA
         )
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         listOf(
@@ -1462,13 +1491,15 @@ fun hasRequiredPermissions(context: Context): Boolean {
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.CAMERA
         )
     } else {
         listOf(
             Manifest.permission.BLUETOOTH,
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.CAMERA
         )
     }
 

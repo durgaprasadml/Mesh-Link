@@ -66,22 +66,16 @@ fun SosScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    val cameraPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        viewModel.sendSos(hasPermission = isGranted)
-    }
-
-    val triggerSos = {
-        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-            context,
-            android.Manifest.permission.CAMERA
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-        if (hasPermission) {
-            viewModel.sendSos(hasPermission = true)
-        } else {
-            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.checkReadiness()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -128,6 +122,20 @@ fun SosScreen(
                 EmergencyStatusCard(state)
             }
 
+            if (!state.isCameraReady || !state.isSosSetupComplete) {
+                item {
+                    SosReadinessWarningCard(
+                        isCameraReady = state.isCameraReady,
+                        onOpenSettings = {
+                            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                            }
+                            context.startActivity(intent)
+                        }
+                    )
+                }
+            }
+
             item {
                 Box(
                     modifier = Modifier
@@ -145,7 +153,7 @@ fun SosScreen(
                         when (targetStatus) {
                             SosStatus.SAFE, SosStatus.FAILED -> {
                                 HoldToActivateButton(
-                                    onActivate = triggerSos
+                                    onActivate = { viewModel.sendSos() }
                                 )
                             }
                             else -> {
@@ -210,22 +218,40 @@ fun SosScreen(
 fun EmergencyStatusCard(state: SosUiState) {
     val containerColor = when (state.status) {
         SosStatus.SAFE -> MaterialTheme.colorScheme.surfaceVariant
-        SosStatus.BROADCASTING -> MeshTheme.colors.warning.copy(alpha = 0.2f)
+        SosStatus.ACTIVATING,
+        SosStatus.CAPTURING_FRONT,
+        SosStatus.CAPTURING_REAR,
+        SosStatus.ENCRYPTING,
+        SosStatus.SENDING -> MeshTheme.colors.warning.copy(alpha = 0.2f)
         SosStatus.DELIVERED -> MeshTheme.colors.success.copy(alpha = 0.2f)
+        SosStatus.PARTIALLY_DELIVERED -> MeshTheme.colors.warning.copy(alpha = 0.25f)
+        SosStatus.QUEUED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
         SosStatus.FAILED -> MaterialTheme.colorScheme.errorContainer
     }
     
     val contentColor = when (state.status) {
         SosStatus.SAFE -> MaterialTheme.colorScheme.onSurfaceVariant
-        SosStatus.BROADCASTING -> MeshTheme.colors.warning
+        SosStatus.ACTIVATING,
+        SosStatus.CAPTURING_FRONT,
+        SosStatus.CAPTURING_REAR,
+        SosStatus.ENCRYPTING,
+        SosStatus.SENDING -> MeshTheme.colors.warning
         SosStatus.DELIVERED -> MeshTheme.colors.success
+        SosStatus.PARTIALLY_DELIVERED -> MeshTheme.colors.warning
+        SosStatus.QUEUED -> MaterialTheme.colorScheme.primary
         SosStatus.FAILED -> MaterialTheme.colorScheme.onErrorContainer
     }
     
     val statusText = when (state.status) {
         SosStatus.SAFE -> "Ready to Broadcast"
-        SosStatus.BROADCASTING -> "Broadcasting SOS..."
+        SosStatus.ACTIVATING -> "Activating SOS..."
+        SosStatus.CAPTURING_FRONT -> "Capturing Front Camera..."
+        SosStatus.CAPTURING_REAR -> "Capturing Rear Camera..."
+        SosStatus.ENCRYPTING -> "Encrypting Media..."
+        SosStatus.SENDING -> "Broadcasting SOS..."
         SosStatus.DELIVERED -> "SOS Delivered"
+        SosStatus.PARTIALLY_DELIVERED -> "SOS Partially Delivered"
+        SosStatus.QUEUED -> "SOS Queued (No Peers Reachable)"
         SosStatus.FAILED -> "Broadcast Failed"
     }
 
@@ -260,6 +286,58 @@ fun EmergencyStatusCard(state: SosUiState) {
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = contentColor
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun SosReadinessWarningCard(
+    isCameraReady: Boolean,
+    onOpenSettings: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = MeshTheme.spacing.large),
+        shape = MeshTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = "Incomplete SOS Setup",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
+                Text(
+                    text = "SOS Setup Incomplete",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+            Text(
+                text = if (!isCameraReady) {
+                    "Camera permission is missing. Automatic emergency image capture is disabled until permission is granted."
+                } else {
+                    "One or more required device capabilities are missing. Complete permission setup to ensure full emergency readiness."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(MeshTheme.spacing.mediumSmall))
+            OutlinedButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Open App Settings")
             }
         }
     }
@@ -433,19 +511,41 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
 @Composable
 fun ActiveSosState(state: SosUiState, onCancel: () -> Unit) {
     val isDelivered = state.status == SosStatus.DELIVERED
+    val isPartiallyDelivered = state.status == SosStatus.PARTIALLY_DELIVERED
+    val isQueued = state.status == SosStatus.QUEUED
+    val isCompleted = isDelivered || isPartiallyDelivered || isQueued
     
+    val accentColor = when {
+        isDelivered -> MeshTheme.colors.success
+        isPartiallyDelivered -> MeshTheme.colors.warning
+        isQueued -> MaterialTheme.colorScheme.primary
+        else -> MeshTheme.colors.warning
+    }
+
+    val titleText = when (state.status) {
+        SosStatus.DELIVERED -> "SUCCESS"
+        SosStatus.PARTIALLY_DELIVERED -> "PARTIAL DELIVERY"
+        SosStatus.QUEUED -> "QUEUED"
+        SosStatus.ACTIVATING -> "ACTIVATING"
+        SosStatus.CAPTURING_FRONT -> "CAPTURING FRONT"
+        SosStatus.CAPTURING_REAR -> "CAPTURING REAR"
+        SosStatus.ENCRYPTING -> "ENCRYPTING"
+        SosStatus.SENDING -> "BROADCASTING"
+        else -> "BROADCASTING"
+    }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
                 .size(160.dp)
                 .clip(CircleShape)
-                .background(if (isDelivered) MeshTheme.colors.success else MeshTheme.colors.warning)
+                .background(accentColor)
                 .border(MeshTheme.spacing.mediumSmall, MaterialTheme.colorScheme.surface, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            if (isDelivered) {
+            if (isCompleted) {
                 Icon(
-                    Icons.Default.CheckCircle,
+                    imageVector = if (isDelivered) Icons.Default.CheckCircle else if (isQueued) Icons.Default.Schedule else Icons.Default.Warning,
                     contentDescription = "Safe User",
                     modifier = Modifier.size(72.dp),
                     tint = MaterialTheme.colorScheme.onPrimary
@@ -462,9 +562,9 @@ fun ActiveSosState(state: SosUiState, onCancel: () -> Unit) {
         Spacer(modifier = Modifier.height(MeshTheme.spacing.large))
         
         Text(
-            text = if (isDelivered) "SUCCESS" else "BROADCASTING",
+            text = titleText,
             style = MaterialTheme.typography.titleLarge.copy(letterSpacing = 2.sp, fontWeight = FontWeight.Bold),
-            color = if (isDelivered) MeshTheme.colors.success else MeshTheme.colors.warning
+            color = accentColor
         )
         
         if (isDelivered) {
@@ -472,6 +572,20 @@ fun ActiveSosState(state: SosUiState, onCancel: () -> Unit) {
                 text = "Reached ${state.relaysReached} devices in network",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+        } else if (isPartiallyDelivered) {
+            Text(
+                text = "Reached ${state.relaysReached} devices (partial media capture)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+        } else if (isQueued) {
+            Text(
+                text = "Stored in store-and-forward queue (0 nearby peers currently reachable)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = MeshTheme.spacing.large)
             )
         }
 

@@ -135,10 +135,23 @@ object ImageCompressor {
     }
 
     /**
-     * Generates a 120px thumbnail encoded as a Base64 JPEG string.
+     * Generates a 160px thumbnail encoded as a Base64 JPEG string.
+     *
+     * Size budget: FileMetadataManager caps the thumbnail at 7168 Base64 chars in the META
+     * payload, which corresponds to ~5350 raw bytes. We target ≤5200 raw bytes (≤6934 B64 chars)
+     * to stay well within that limit while providing a visibly sharper preview image.
+     *
+     * Improvement over previous (120px / 5KB / quality 25-40):
+     *  - 160px dimension → 78% more pixels, noticeably sharper at 180dp bubble height
+     *  - JPEG quality 55% → better colour fidelity, fewer compression artefacts
+     *  - Still well within the BLE META payload cap
      */
     fun generateThumbnailBase64(context: Context, uri: Uri): String? {
         return try {
+            val thumbDim = 160
+            // Raw byte budget: base64(7168 chars) ≈ 5376 bytes. Use 5200 as safe target.
+            val thumbByteCap = 5200
+
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(uri)?.use { stream ->
                 BitmapFactory.decodeStream(stream, null, bounds)
@@ -146,29 +159,38 @@ object ImageCompressor {
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
             val decodeOptions = BitmapFactory.Options().apply {
-                inSampleSize = calculateInSampleSize(bounds, 120, 120)
+                inSampleSize = calculateInSampleSize(bounds, thumbDim, thumbDim)
                 inPreferredConfig = Bitmap.Config.RGB_565
             }
             val bitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
                 BitmapFactory.decodeStream(stream, null, decodeOptions)
             } ?: return null
 
-            val scaled = scaleBitmapToMax(bitmap, 120)
+            val scaled = scaleBitmapToMax(bitmap, thumbDim)
             val baos = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 40, baos)
+
+            // First attempt: quality 55
+            scaled.compress(Bitmap.CompressFormat.JPEG, 55, baos)
             var thumbBytes = baos.toByteArray()
-            if (thumbBytes.size > 5000) {
+
+            // Fallback 1: quality 35
+            if (thumbBytes.size > thumbByteCap) {
                 baos.reset()
-                scaled.compress(Bitmap.CompressFormat.JPEG, 25, baos)
+                scaled.compress(Bitmap.CompressFormat.JPEG, 35, baos)
                 thumbBytes = baos.toByteArray()
             }
-            
-            if (scaled !== bitmap) {
-                scaled.recycle()
+
+            // Fallback 2: quality 20 (matches the main compress path)
+            if (thumbBytes.size > thumbByteCap) {
+                baos.reset()
+                scaled.compress(Bitmap.CompressFormat.JPEG, 20, baos)
+                thumbBytes = baos.toByteArray()
             }
+
+            if (scaled !== bitmap) scaled.recycle()
             bitmap.recycle()
 
-            if (thumbBytes.size <= 5000) {
+            if (thumbBytes.size <= thumbByteCap) {
                 android.util.Base64.encodeToString(thumbBytes, android.util.Base64.NO_WRAP)
             } else null
         } catch (e: Exception) {

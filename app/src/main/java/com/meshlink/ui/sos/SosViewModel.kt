@@ -31,7 +31,16 @@ import java.io.File
 import java.util.UUID
 
 enum class SosStatus {
-    SAFE, BROADCASTING, DELIVERED, FAILED
+    SAFE,
+    ACTIVATING,
+    CAPTURING_FRONT,
+    CAPTURING_REAR,
+    ENCRYPTING,
+    SENDING,
+    DELIVERED,
+    PARTIALLY_DELIVERED,
+    QUEUED,
+    FAILED
 }
 
 @Immutable
@@ -44,7 +53,14 @@ data class SosUiState(
     val sosSent: Boolean = false,
     val isSending: Boolean = false,
     
-    // New fields for the expanded UI
+    // Readiness states
+    val isCameraReady: Boolean = true,
+    val isLocationReady: Boolean = true,
+    val isBleReady: Boolean = true,
+    val isWifiDirectReady: Boolean = true,
+    val isSosSetupComplete: Boolean = true,
+
+    // Expanded UI fields
     val address: String? = null,
     val isBleEnabled: Boolean = true,
     val isWifiDirectEnabled: Boolean = true,
@@ -73,6 +89,7 @@ class SosViewModel @Inject constructor(
     private var cameraId: String? = null
 
     init {
+        checkReadiness()
         refreshLocation()
         
         viewModelScope.launch {
@@ -88,7 +105,26 @@ class SosViewModel @Inject constructor(
         }
     }
 
+    fun checkReadiness() {
+        val hasCamera = cameraController.hasCameraPermission()
+        val hasLocation = com.meshlink.ui.components.isLocationPermissionGranted(context)
+        val isBle = com.meshlink.ui.components.isBluetoothPermissionGranted(context) && com.meshlink.ui.components.isBluetoothEnabled(context)
+        val isWifi = com.meshlink.ui.components.isWifiEnabled(context)
+        val isReady = hasCamera && hasLocation && isBle && isWifi
+
+        _uiState.update {
+            it.copy(
+                isCameraReady = hasCamera,
+                isLocationReady = hasLocation,
+                isBleReady = isBle,
+                isWifiDirectReady = isWifi,
+                isSosSetupComplete = isReady
+            )
+        }
+    }
+
     fun refreshLocation() {
+        checkReadiness()
         viewModelScope.launch {
             _uiState.update { it.copy(isFetchingLocation = true) }
             val location = locationProvider.getCurrentLocation()
@@ -107,22 +143,28 @@ class SosViewModel @Inject constructor(
         return cameraController.hasCameraPermission()
     }
 
-    fun sendSos(hasPermission: Boolean? = null) {
-        if (_uiState.value.isSending || _uiState.value.status == SosStatus.BROADCASTING) {
+    fun sendSos() {
+        val currentStatus = _uiState.value.status
+        if (_uiState.value.isSending ||
+            currentStatus == SosStatus.ACTIVATING ||
+            currentStatus == SosStatus.CAPTURING_FRONT ||
+            currentStatus == SosStatus.CAPTURING_REAR ||
+            currentStatus == SosStatus.ENCRYPTING ||
+            currentStatus == SosStatus.SENDING) {
             MeshLogger.w("SosViewModel", "SOS dispatch already in progress, ignoring duplicate trigger")
             return
         }
 
-        val permissionGranted = hasPermission ?: cameraController.hasCameraPermission()
+        val hasCamera = cameraController.hasCameraPermission()
 
         _uiState.update { 
             it.copy(
                 isSending = true, 
-                status = SosStatus.BROADCASTING,
+                status = SosStatus.ACTIVATING,
                 errorMessage = null,
                 frontImagePath = null,
                 rearImagePath = null,
-                cameraCaptureStatus = if (permissionGranted) "Capturing front and rear cameras..." else "Camera permission not granted"
+                cameraCaptureStatus = if (hasCamera) "Capturing emergency photos..." else "Camera permission not granted"
             ) 
         }
 
@@ -130,15 +172,17 @@ class SosViewModel @Inject constructor(
             val sosEventId = UUID.randomUUID().toString()
             try {
                 // 1. Immediately dispatch the SOS alert packet to the mesh
+                _uiState.update { it.copy(status = SosStatus.SENDING) }
                 val result = meshRepository.dispatchSos(sosEventId)
                 val reachableRelays = meshRepository.scannedDevices.value.size
 
-                // 2. Immediately start camera capture (if permitted)
+                // 2. Immediately start camera capture (if permitted) - NEVER request permission here
                 var frontFile: File? = null
                 var rearFile: File? = null
                 var captureStatus = "Camera unavailable"
 
-                if (permissionGranted) {
+                if (hasCamera) {
+                    _uiState.update { it.copy(status = SosStatus.CAPTURING_FRONT, cameraCaptureStatus = "Capturing front camera...") }
                     val captureResult = cameraController.captureDualSosImages(sosEventId)
                     frontFile = captureResult.frontImage
                     rearFile = captureResult.rearImage
@@ -150,8 +194,9 @@ class SosViewModel @Inject constructor(
                         else -> "Camera capture failed: ${captureResult.frontError ?: captureResult.rearError ?: "unknown"}"
                     }
 
-                    // 3. Immediately send captured photos through existing TransferManager pipeline
+                    // 3. Encrypt and dispatch captured photos through existing TransferManager pipeline
                     if (captureResult.hasAtLeastOneImage) {
+                        _uiState.update { it.copy(status = SosStatus.ENCRYPTING, cameraCaptureStatus = "Encrypting and dispatching photos...") }
                         meshRepository.sendSosMedia(sosEventId, frontFile, rearFile)
                     }
                 } else {
@@ -159,11 +204,17 @@ class SosViewModel @Inject constructor(
                 }
 
                 if (result is com.meshlink.domain.model.MeshResult.Success) {
+                    val finalStatus = when {
+                        reachableRelays == 0 -> SosStatus.QUEUED
+                        hasCamera && (frontFile == null || rearFile == null) && (frontFile != null || rearFile != null) -> SosStatus.PARTIALLY_DELIVERED
+                        else -> SosStatus.DELIVERED
+                    }
+
                     _uiState.update { 
                         it.copy(
                             isSending = false, 
                             sosSent = true,
-                            status = SosStatus.DELIVERED,
+                            status = finalStatus,
                             relaysReached = reachableRelays,
                             frontImagePath = frontFile?.absolutePath,
                             rearImagePath = rearFile?.absolutePath,

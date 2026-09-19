@@ -3,6 +3,7 @@ package com.meshlink.ui.sos
 import android.content.Context
 import android.hardware.camera2.CameraManager
 import com.meshlink.data.location.LocationProvider
+import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.model.MeshResult
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.video.camera.CameraController
@@ -41,12 +42,13 @@ class SosViewModelTest {
     private val cameraManager: CameraManager = mockk(relaxed = true)
     private val cameraController: CameraController = mockk(relaxed = true)
 
+    private val scannedDevicesFlow = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
     private lateinit var classUnderTest: SosViewModel
 
     @Before
     fun setup() {
         every { context.getSystemService(Context.CAMERA_SERVICE) } returns cameraManager
-        every { meshRepository.scannedDevices } returns MutableStateFlow(emptyMap())
+        every { meshRepository.scannedDevices } returns scannedDevicesFlow
         classUnderTest = SosViewModel(meshRepository, locationProvider, context, cameraController)
     }
 
@@ -85,7 +87,20 @@ class SosViewModelTest {
     }
 
     @Test
+    fun `checkReadiness reflects missing camera permission in readiness state`() {
+        every { cameraController.hasCameraPermission() } returns false
+        classUnderTest.checkReadiness()
+
+        val state = classUnderTest.uiState.value
+        assertEquals(false, state.isCameraReady)
+        assertEquals(false, state.isSosSetupComplete)
+    }
+
+    @Test
     fun `sendSos with camera permission triggers immediate dual capture and sends SOS media`() = runTest(testDispatcher) {
+        val mockPeer = mockk<BleDevice>(relaxed = true)
+        scannedDevicesFlow.value = mapOf("PEER1" to mockPeer)
+
         val dummyFront = File.createTempFile("test_front", ".jpg")
         val dummyRear = File.createTempFile("test_rear", ".jpg")
         every { cameraController.hasCameraPermission() } returns true
@@ -101,6 +116,7 @@ class SosViewModelTest {
         val state = classUnderTest.uiState.value
         assertEquals(SosStatus.DELIVERED, state.status)
         assertTrue(state.sosSent)
+        assertEquals(1, state.relaysReached)
         assertEquals(dummyFront.absolutePath, state.frontImagePath)
         assertEquals(dummyRear.absolutePath, state.rearImagePath)
         assertEquals("Front and rear cameras captured", state.cameraCaptureStatus)
@@ -115,6 +131,9 @@ class SosViewModelTest {
 
     @Test
     fun `sendSos handles camera permission denied gracefully without crashing`() = runTest(testDispatcher) {
+        val mockPeer = mockk<BleDevice>(relaxed = true)
+        scannedDevicesFlow.value = mapOf("PEER1" to mockPeer)
+
         every { cameraController.hasCameraPermission() } returns false
         coEvery { meshRepository.dispatchSos(any()) } returns MeshResult.Success(Unit)
 
@@ -135,6 +154,9 @@ class SosViewModelTest {
 
     @Test
     fun `sendSos handles partial camera capture when rear camera fails`() = runTest(testDispatcher) {
+        val mockPeer = mockk<BleDevice>(relaxed = true)
+        scannedDevicesFlow.value = mapOf("PEER1" to mockPeer)
+
         val dummyFront = File.createTempFile("test_front", ".jpg")
         every { cameraController.hasCameraPermission() } returns true
         coEvery { cameraController.captureDualSosImages(any(), any()) } returns SosDualCaptureResult(
@@ -148,7 +170,7 @@ class SosViewModelTest {
         advanceUntilIdle()
 
         val state = classUnderTest.uiState.value
-        assertEquals(SosStatus.DELIVERED, state.status)
+        assertEquals(SosStatus.PARTIALLY_DELIVERED, state.status)
         assertEquals(dummyFront.absolutePath, state.frontImagePath)
         assertEquals(null, state.rearImagePath)
         assertTrue(state.cameraCaptureStatus?.contains("rear failed") == true)
@@ -156,6 +178,31 @@ class SosViewModelTest {
         coVerify { meshRepository.sendSosMedia(any(), dummyFront, null) }
 
         dummyFront.delete()
+    }
+
+    @Test
+    fun `sendSos when no nearby nodes are discovered marks state as QUEUED honestly`() = runTest(testDispatcher) {
+        scannedDevicesFlow.value = emptyMap()
+
+        val dummyFront = File.createTempFile("test_front", ".jpg")
+        val dummyRear = File.createTempFile("test_rear", ".jpg")
+        every { cameraController.hasCameraPermission() } returns true
+        coEvery { cameraController.captureDualSosImages(any(), any()) } returns SosDualCaptureResult(
+            frontImage = dummyFront,
+            rearImage = dummyRear
+        )
+        coEvery { meshRepository.dispatchSos(any()) } returns MeshResult.Success(Unit)
+
+        classUnderTest.sendSos()
+        advanceUntilIdle()
+
+        val state = classUnderTest.uiState.value
+        assertEquals(SosStatus.QUEUED, state.status)
+        assertEquals(0, state.relaysReached)
+        assertTrue(state.sosSent)
+
+        dummyFront.delete()
+        dummyRear.delete()
     }
 
     @Test

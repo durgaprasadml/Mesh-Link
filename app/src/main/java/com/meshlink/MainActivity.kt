@@ -40,14 +40,6 @@ class MainActivity : ComponentActivity() {
     lateinit var meshRepository: MeshRepository
     private val pendingIntents = kotlinx.coroutines.channels.Channel<Intent>(kotlinx.coroutines.channels.Channel.UNLIMITED)
 
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            checkAndStartMesh()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -55,8 +47,6 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             checkAndStartMesh()
         }
-
-        requestNotificationPermissionIfNeeded()
 
         val initialAddress = intent?.getStringExtra("address")
         val initialName = intent?.getStringExtra("name")
@@ -153,21 +143,5 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             com.meshlink.common.logger.MeshLogger.e("MainActivity", "Error starting relay service: ${e.message}")
         }
-    }
-
-    private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-
-        if (ContextCompat.checkSelfPermission(
-                this,
-                android.Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-
-        notificationPermissionLauncher.launch(
-            android.Manifest.permission.POST_NOTIFICATIONS
-        )
     }
 }

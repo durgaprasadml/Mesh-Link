@@ -55,19 +55,25 @@ class BroadcastViewModel @Inject constructor(
     val uiState: StateFlow<BroadcastUiState> =
         combine(
             getBroadcastMessagesUseCase(),
+            userRepository.observeAllUsers(),
             meshRepository.scannedDevices,
             _isSending
-        ) { messages, scannedDevices, isSending ->
+        ) { messages, _, scannedDevices, isSending ->
             // Batch user profile lookups for distinct senders to avoid N+1 queries
             val uniqueSenderIds = messages.map { it.senderId }.distinct()
             val profileCache = uniqueSenderIds.associateWith { senderId ->
                 val userProfile = userRepository.getUserProfile(senderId)
-                val resolvedName = userRepository.getUserDisplayName(senderId)
+                val rawResolvedName = userRepository.getUserDisplayName(senderId)
+                val resolvedName = if (!com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(rawResolvedName, senderId)) {
+                    rawResolvedName
+                } else {
+                    "Mesh Peer"
+                }
                 Pair(resolvedName, userProfile?.profilePhotoPath)
             }
 
             val uiMessages = messages.map { msg ->
-                val (resolvedName, photoPath) = profileCache[msg.senderId] ?: Pair("Unknown User", null)
+                val (resolvedName, photoPath) = profileCache[msg.senderId] ?: Pair("Mesh Peer", null)
                 val cleanText = if (msg.text.startsWith("[BROADCAST]")) {
                     msg.text.removePrefix("[BROADCAST]").trim()
                 } else {

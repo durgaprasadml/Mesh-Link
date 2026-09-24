@@ -20,12 +20,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.SignalCellularAlt1Bar
 import androidx.compose.material.icons.filled.SignalCellularAlt2Bar
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
@@ -230,7 +227,7 @@ fun MeshDeviceCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "${device.rssi}",
+                        text = "${device.rssi} dBm",
                         style = MaterialTheme.typography.labelSmall,
                         color = signalColor,
                         fontWeight = FontWeight.SemiBold

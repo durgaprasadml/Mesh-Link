@@ -69,6 +69,10 @@ class UserLocalDataSourceImpl @Inject constructor(
         return userDao.getAllUsers()
     }
 
+    override fun observeAllUsers(): Flow<List<UserEntity>> {
+        return userDao.observeAllUsers()
+    }
+
     override suspend fun getLocalUser(): UserEntity? {
         return userDao.getLocalUser()
     }

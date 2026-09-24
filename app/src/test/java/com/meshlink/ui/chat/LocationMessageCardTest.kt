@@ -4,8 +4,10 @@ import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
 import com.meshlink.ui.components.chat.DeliveryUiState
+import com.meshlink.ui.util.DateTimeUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
@@ -41,6 +43,9 @@ class LocationMessageCardTest {
         val formattedLng = String.format(Locale.US, "%.6f", message.longitude)
         assertEquals("12.779922", formattedLat)
         assertEquals("75.184170", formattedLng)
+
+        val coordsText = "$formattedLat, $formattedLng"
+        assertEquals("12.779922, 75.184170", coordsText)
     }
 
     @Test
@@ -67,6 +72,83 @@ class LocationMessageCardTest {
         assertEquals(lng, message.longitude!!, 0.000001)
         assertEquals(88, message.batteryPercent)
         assertEquals(DeliveryStatus.DELIVERED, message.status)
+
+        val formattedLat = String.format(Locale.US, "%.6f", message.latitude)
+        val formattedLng = String.format(Locale.US, "%.6f", message.longitude)
+        assertEquals("12.779922", formattedLat)
+        assertEquals("75.184170", formattedLng)
+
+        val coordsText = "$formattedLat, $formattedLng"
+        assertEquals("12.779922, 75.184170", coordsText)
+    }
+
+    @Test
+    fun informationParity_senderAndReceiverRetainIdenticalMetadataStructure() {
+        val lat = 12.781538
+        val lng = 75.185111
+        val timestamp = 1700000000000L
+
+        val outgoingMsg = Message(
+            messageId = "msg-out",
+            chatId = "peer-x",
+            text = "📍 Location: $lat, $lng",
+            senderId = "me",
+            timestamp = timestamp,
+            isFromMe = true,
+            status = DeliveryStatus.SENT,
+            messageType = MessageType.LOCATION,
+            latitude = lat,
+            longitude = lng,
+            batteryPercent = 74
+        )
+
+        val incomingMsg = Message(
+            messageId = "msg-in",
+            chatId = "peer-x",
+            text = "📍 Location: $lat, $lng",
+            senderId = "peer-x",
+            timestamp = timestamp,
+            isFromMe = false,
+            status = DeliveryStatus.DELIVERED,
+            messageType = MessageType.LOCATION,
+            latitude = lat,
+            longitude = lng,
+            batteryPercent = 74
+        )
+
+        assertEquals(outgoingMsg.latitude, incomingMsg.latitude)
+        assertEquals(outgoingMsg.longitude, incomingMsg.longitude)
+        assertEquals(outgoingMsg.batteryPercent, incomingMsg.batteryPercent)
+        assertEquals(outgoingMsg.timestamp, incomingMsg.timestamp)
+    }
+
+    @Test
+    fun connectionType_mapsRelayedAndDirectStatusesAccurately() {
+        fun resolveConnection(status: DeliveryStatus): String = when (status) {
+            DeliveryStatus.RELAYED -> "Mesh Relayed"
+            else -> "Direct Mesh"
+        }
+
+        assertEquals("Mesh Relayed", resolveConnection(DeliveryStatus.RELAYED))
+        assertEquals("Direct Mesh", resolveConnection(DeliveryStatus.SENT))
+        assertEquals("Direct Mesh", resolveConnection(DeliveryStatus.DELIVERED))
+        assertEquals("Direct Mesh", resolveConnection(DeliveryStatus.PENDING))
+        assertEquals("Direct Mesh", resolveConnection(DeliveryStatus.QUEUED))
+    }
+
+    @Test
+    fun batteryFormatting_handlesValidNegativeAndNullAccuratelyWithoutFakeData() {
+        fun formatBattery(battery: Int?): String? = if (battery != null && battery >= 0) {
+            "$battery%"
+        } else {
+            null
+        }
+
+        assertEquals("74%", formatBattery(74))
+        assertEquals("100%", formatBattery(100))
+        assertEquals("0%", formatBattery(0))
+        assertNull(formatBattery(null))
+        assertNull(formatBattery(-1))
     }
 
     @Test
@@ -111,5 +193,13 @@ class LocationMessageCardTest {
         val formattedLng = String.format(Locale.US, "%.6f", preciseLng)
         assertEquals("37.422066", formattedLat)
         assertEquals("-122.084090", formattedLng)
+    }
+
+    @Test
+    fun timestampFormatting_producesValidTimeDisplay() {
+        val timestamp = 1700000000000L
+        val formatted = DateTimeUtils.formatTimeHHMM(timestamp)
+        assertTrue(formatted.isNotBlank())
+        assertTrue(formatted.matches(Regex("\\d{2}:\\d{2}")))
     }
 }

@@ -31,6 +31,7 @@ enum class SortOption { RSSI, NAME, STATUS }
 @Immutable
 data class NearbyUiState(
     val devices: List<BleDevice> = emptyList(),
+    val allDiscoveredDevices: List<BleDevice> = emptyList(),
     val searchQuery: String = "",
     val sortOption: SortOption = SortOption.RSSI,
     val isScanning: Boolean = false,
@@ -135,12 +136,13 @@ class NearbyViewModel @Inject constructor(
                 }
             }
 
-            var sortedList = when (sortOption) {
+            val allSortedList = when (sortOption) {
                 SortOption.RSSI -> mergedDevices.values.toList().sortedByDescending { it.rssi }
                 SortOption.NAME -> mergedDevices.values.toList().sortedBy { it.name.ifBlank { "~" } }
                 SortOption.STATUS -> mergedDevices.values.toList().sortedBy { it.hopCount }
             }
 
+            var sortedList = allSortedList
             if (query.isNotBlank()) {
                 sortedList = sortedList.filter {
                     it.name.contains(query, ignoreCase = true) ||
@@ -153,6 +155,7 @@ class NearbyViewModel @Inject constructor(
 
             NearbyUiState(
                 devices = sortedList,
+                allDiscoveredDevices = allSortedList,
                 searchQuery = query,
                 sortOption = sortOption,
                 isScanning = isScanning,

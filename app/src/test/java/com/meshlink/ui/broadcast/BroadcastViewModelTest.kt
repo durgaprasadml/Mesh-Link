@@ -4,6 +4,7 @@ import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
+import com.meshlink.domain.model.User
 import com.meshlink.domain.repository.MeshRepository
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.domain.usecase.messaging.GetBroadcastMessagesUseCase
@@ -28,6 +29,8 @@ class BroadcastViewModelTest {
     private val getBroadcastMessagesUseCase = mockk<GetBroadcastMessagesUseCase>(relaxed = true)
     private val scannedDevicesFlow = MutableStateFlow<Map<String, BleDevice>>(emptyMap())
 
+    private val usersFlow = MutableStateFlow<List<User>>(emptyList())
+
     private lateinit var viewModel: BroadcastViewModel
 
     @Before
@@ -39,6 +42,7 @@ class BroadcastViewModelTest {
         )
         every { getBroadcastMessagesUseCase() } returns flowOf(messages)
         every { meshRepository.scannedDevices } returns scannedDevicesFlow
+        every { userRepository.observeAllUsers() } returns usersFlow
         coEvery { userRepository.getUserDisplayName("s1") } returns "Durga Prasad"
         coEvery { userRepository.getUserProfile("s1") } returns null
 
@@ -99,5 +103,31 @@ class BroadcastViewModelTest {
         testScheduler.advanceUntilIdle()
 
         assertEquals(2, viewModel.uiState.value.nearbyDevicesCount)
+    }
+
+    @Test
+    fun `uiState reactively updates sender name when peer profile arrives after message`() = runTest(testDispatcher) {
+        val unknownMessages = listOf(
+            Message("b1", "BROADCAST", "Hello from peer", "peer_raju", System.currentTimeMillis(), false, DeliveryStatus.DELIVERED, MessageType.TEXT)
+        )
+        every { getBroadcastMessagesUseCase() } returns flowOf(unknownMessages)
+        coEvery { userRepository.getUserDisplayName("peer_raju") } returns "Mesh Peer"
+        coEvery { userRepository.getUserProfile("peer_raju") } returns null
+
+        val vm = BroadcastViewModel(meshRepository, userRepository, getBroadcastMessagesUseCase)
+
+        backgroundScope.launch { vm.uiState.collect {} }
+        testScheduler.advanceUntilIdle()
+
+        // Initially unresolved, shows neutral placeholder
+        assertEquals("Mesh Peer", vm.uiState.value.messages[0].senderName)
+
+        // Peer profile arrives asynchronously (from beacon, handshake, or broadcast senderName)
+        coEvery { userRepository.getUserDisplayName("peer_raju") } returns "Raju"
+        usersFlow.value = listOf(User("peer_raju", "Raju"))
+        testScheduler.advanceUntilIdle()
+
+        // UI state reactively updates to "Raju" without requiring screen reload or user action
+        assertEquals("Raju", vm.uiState.value.messages[0].senderName)
     }
 }

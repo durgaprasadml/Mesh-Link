@@ -67,11 +67,9 @@ fun MessageBubble(
 
     val isSos = message.messageType == MessageType.SOS
     val isLocation = message.messageType == MessageType.LOCATION
-    val isIncomingLocation = isLocation && !isMe
-    val isOutgoingLocation = isLocation && isMe
 
     val baseBubbleColor = when {
-        isSos || isIncomingLocation -> Color.Transparent
+        isSos -> Color.Transparent
         isMe -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
@@ -83,7 +81,7 @@ fun MessageBubble(
     )
 
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    val shape = if (isSos || isIncomingLocation) {
+    val shape = if (isSos) {
         RoundedCornerShape(20.dp)
     } else if (isMe) {
         RoundedCornerShape(topStart = MeshTheme.spacing.large, topEnd = MeshTheme.spacing.small, bottomStart = MeshTheme.spacing.large, bottomEnd = MeshTheme.spacing.large)
@@ -143,13 +141,13 @@ fun MessageBubble(
                 .clip(shape)
                 .background(bgColor)
                 .then(
-                    if (!isSos && !isIncomingLocation) {
+                    if (!isSos) {
                         Modifier.padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall)
                     } else Modifier
                 )
                 .widthIn(
-                    max = if (isSos || isIncomingLocation) 340.dp else if (isOutgoingLocation) 280.dp else 300.dp,
-                    min = if (isSos || isIncomingLocation) 280.dp else if (isOutgoingLocation) 220.dp else 80.dp
+                    max = if (isSos) 340.dp else if (isLocation) 290.dp else 300.dp,
+                    min = if (isSos) 280.dp else if (isLocation) 250.dp else 80.dp
                 )
                 .animateContentSize()
         ) {
@@ -509,7 +507,7 @@ fun MessageBubble(
                 }
             }
 
-            if (!isSos && !isIncomingLocation) {
+            if (!isSos) {
                 // Timestamp + status row
                 Row(
                     modifier = Modifier

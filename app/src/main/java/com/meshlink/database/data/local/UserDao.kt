@@ -16,6 +16,9 @@ interface UserDao {
     @Query("SELECT * FROM users")
     suspend fun getAllUsers(): List<UserEntity>
 
+    @Query("SELECT * FROM users")
+    fun observeAllUsers(): kotlinx.coroutines.flow.Flow<List<UserEntity>>
+
     @Query("SELECT * FROM users LIMIT 1")
     suspend fun getLocalUser(): UserEntity?
 

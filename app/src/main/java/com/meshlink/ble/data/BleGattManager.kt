@@ -244,21 +244,22 @@ class BleGattManager @Inject constructor(
     private suspend fun flushClientWriteQueueLocked() {
         val now = System.currentTimeMillis()
         
-        // If GATT write queue is empty, try to pull and fragment from app queue
-        if (!writeQueue.hasPendingForDevice(writeQueue.getActiveWriteAddress() ?: "")) {
-            // Find a device that is READY and has app messages
-            val readyAppMessage = appMessageQueue.dequeueReady(connectionManager.activeClients.keys.firstOrNull { 
-                connectionManager.getDeviceState(it) == BleConnectionState.READY && appMessageQueue.hasPendingForDevice(it) 
-            } ?: "")
-            
-            if (readyAppMessage != null) {
-                val mtu = mtuManager.getMtu(readyAppMessage.address)
-                MeshLogger.d("BleGatt") { "Fragmenting message of size ${readyAppMessage.payload.size} with MTU $mtu" }
-                fragmenter.fragment(readyAppMessage.payload, mtu) { fragment ->
-                    val queuedPacket = BufferPool.borrowBuffer(fragment.size)
-                    System.arraycopy(fragment, 0, queuedPacket, 0, fragment.size)
-                    BufferPool.returnBuffer(fragment)
-                    writeQueue.enqueue(PendingClientWrite(readyAppMessage.address, queuedPacket))
+        // Pull and fragment from app queue for each ready device that has no pending writes in writeQueue
+        val readyClients = connectionManager.activeClients.keys.filter { 
+            connectionManager.getDeviceState(it) == BleConnectionState.READY 
+        }
+        for (address in readyClients) {
+            if (!writeQueue.hasPendingForDevice(address) && appMessageQueue.hasPendingForDevice(address)) {
+                val readyAppMessage = appMessageQueue.dequeueReady(address)
+                if (readyAppMessage != null) {
+                    val mtu = mtuManager.getMtu(readyAppMessage.address)
+                    MeshLogger.d("BleGatt") { "Fragmenting message of size ${readyAppMessage.payload.size} for ${readyAppMessage.address} with MTU $mtu" }
+                    fragmenter.fragment(readyAppMessage.payload, mtu) { fragment ->
+                        val queuedPacket = BufferPool.borrowBuffer(fragment.size)
+                        System.arraycopy(fragment, 0, queuedPacket, 0, fragment.size)
+                        BufferPool.returnBuffer(fragment)
+                        writeQueue.enqueue(PendingClientWrite(readyAppMessage.address, queuedPacket))
+                    }
                 }
             }
         }

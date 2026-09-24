@@ -87,10 +87,12 @@ class ChunkDispatcher @Inject constructor(
 
         try {
             val b64Payload = encodeBase64(chunkBytes)
-            val packetPriority = if (session.priority == TransferPriority.CRITICAL) {
-                com.meshlink.domain.model.PacketPriority.CRITICAL
-            } else {
-                com.meshlink.domain.model.PacketPriority.NORMAL
+            // Map transfer priority to mesh packet priority so the router's outbound queue
+            // correctly orders audio (HIGH) ahead of images (MEDIUM/NORMAL) and behind SOS (CRITICAL).
+            val packetPriority = when (session.priority) {
+                TransferPriority.CRITICAL -> com.meshlink.domain.model.PacketPriority.CRITICAL
+                TransferPriority.HIGH     -> com.meshlink.domain.model.PacketPriority.HIGH
+                else                      -> com.meshlink.domain.model.PacketPriority.NORMAL
             }
             val packet = MeshPacket(
                 senderId = session.senderId,

@@ -11,7 +11,8 @@ import kotlinx.coroutines.flow.map
 
 class UserRepositoryImpl @Inject constructor(
     private val localDataSource: UserLocalDataSource,
-    private val identityManager: MeshIdentityManager
+    private val identityManager: MeshIdentityManager,
+    private val discoveryEngineProvider: javax.inject.Provider<com.meshlink.ble.discovery.DiscoveryEngine>? = null
 ) : UserRepository {
 
     companion object {
@@ -33,18 +34,30 @@ class UserRepositoryImpl @Inject constructor(
 
     override val hasProfile: Flow<Boolean> = localDataSource.hasProfile
 
-    override val localUser: Flow<User?> = localDataSource.observeLocalUser().map { entity ->
-        entity?.let {
-            User(
-                meshId = it.meshId,
-                name = it.name,
-                avatarUri = it.avatarUri,
-                aboutMe = it.aboutMe,
-                profilePhotoPath = it.profilePhotoPath,
-                profilePhotoHash = it.profilePhotoHash,
-                profilePhotoVersion = it.profilePhotoVersion,
-                profileLastUpdated = it.profileLastUpdated
-            )
+    override val localUser: Flow<User?> = run {
+        val identity = identityManager.getOrCreateIdentity()
+        val canonicalId = com.meshlink.util.MeshIdNormalizer.canonicalize(identity.meshId)
+        localDataSource.observeUser(canonicalId).map { entity ->
+            val finalEntity = entity ?: localDataSource.getUser(identity.meshId)
+            if (finalEntity != null) {
+                User(
+                    meshId = finalEntity.meshId,
+                    name = finalEntity.name.ifBlank { identity.displayName },
+                    avatarUri = finalEntity.avatarUri,
+                    aboutMe = finalEntity.aboutMe,
+                    profilePhotoPath = finalEntity.profilePhotoPath,
+                    profilePhotoHash = finalEntity.profilePhotoHash,
+                    profilePhotoVersion = finalEntity.profilePhotoVersion,
+                    profileLastUpdated = finalEntity.profileLastUpdated
+                )
+            } else if (identity.displayName.isNotBlank()) {
+                User(
+                    meshId = identity.meshId,
+                    name = identity.displayName
+                )
+            } else {
+                null
+            }
         }
     }
     
@@ -130,9 +143,10 @@ class UserRepositoryImpl @Inject constructor(
 
     override suspend fun getLocalUser(): User? {
         val identity = identityManager.getOrCreateIdentity()
-        val userEntity = localDataSource.getUser(identity.meshId)
-            ?: localDataSource.getUser(com.meshlink.util.MeshIdNormalizer.canonicalize(identity.meshId))
-            ?: localDataSource.getLocalUser()
+        val canonicalId = com.meshlink.util.MeshIdNormalizer.canonicalize(identity.meshId)
+        val userEntity = localDataSource.getUser(canonicalId)
+            ?: localDataSource.getUser(identity.meshId)
+            ?: (localDataSource.getAllUsers().firstOrNull { it.meshId == canonicalId || it.meshId == identity.meshId })
 
         return if (userEntity != null) {
             User(
@@ -176,7 +190,7 @@ class UserRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getUserDisplayName(meshId: String): String {
-        if (meshId.isBlank()) return "Unknown User"
+        if (meshId.isBlank()) return "Mesh Peer"
         displayNameCache[meshId]?.let { return it }
         val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
         if (canonicalTargetId != meshId) {
@@ -189,12 +203,14 @@ class UserRepositoryImpl @Inject constructor(
             val localHashBytes = localDigest.digest(localCanonical.toByteArray(Charsets.UTF_8))
             val localShortId = localHashBytes.copyOf(8).joinToString("") { b -> "%02x".format(b) }
 
-            if (localCanonical == canonicalTargetId || localShortId.equals(meshId, ignoreCase = true)) {
+            if (localCanonical == canonicalTargetId || localShortId.equals(meshId, ignoreCase = true) || localUser.meshId.equals(meshId, ignoreCase = true)) {
                 val localName = localUser.name.trim()
-                val result = if (!isGenericOrInvalidName(localName, canonicalTargetId)) localName else "Unknown User"
-                displayNameCache[meshId] = result
-                displayNameCache[canonicalTargetId] = result
-                return result
+                if (!isGenericOrInvalidName(localName, canonicalTargetId)) {
+                    displayNameCache[meshId] = localName
+                    displayNameCache[canonicalTargetId] = localName
+                    return localName
+                }
+                return "Mesh Peer"
             }
         }
         var userEntity = localDataSource.getUser(meshId) ?: localDataSource.getUser(canonicalTargetId)
@@ -203,10 +219,13 @@ class UserRepositoryImpl @Inject constructor(
             userEntity = findMatchingUserEntity(allUsers, meshId)
         }
         val name = userEntity?.name?.trim()
-        val result = if (!isGenericOrInvalidName(name, canonicalTargetId)) name!! else "Unknown User"
-        displayNameCache[meshId] = result
-        displayNameCache[canonicalTargetId] = result
-        return result
+        if (!name.isNullOrBlank() && !isGenericOrInvalidName(name, canonicalTargetId)) {
+            displayNameCache[meshId] = name
+            displayNameCache[canonicalTargetId] = name
+            return name
+        }
+        // Do NOT cache generic or unresolved placeholder names!
+        return "Mesh Peer"
     }
 
     override suspend fun getUserProfile(meshId: String): User? {
@@ -259,6 +278,81 @@ class UserRepositoryImpl @Inject constructor(
                     profileLastUpdated = it.profileLastUpdated
                 )
             }
+        }
+    }
+
+    override fun observeAllUsers(): Flow<List<User>> = localDataSource.observeAllUsers().map { entities ->
+        entities.map { entity ->
+            User(
+                meshId = entity.meshId,
+                name = entity.name,
+                avatarUri = entity.avatarUri,
+                aboutMe = entity.aboutMe,
+                profilePhotoPath = entity.profilePhotoPath,
+                profilePhotoHash = entity.profilePhotoHash,
+                profilePhotoVersion = entity.profilePhotoVersion,
+                profileLastUpdated = entity.profileLastUpdated
+            )
+        }
+    }
+
+    override suspend fun saveOrUpdatePeerProfile(
+        meshId: String,
+        name: String,
+        publicKey: String?,
+        lastSeen: Long,
+        rssi: Int
+    ) {
+        if (meshId.isBlank()) return
+        val canonicalTargetId = com.meshlink.util.MeshIdNormalizer.canonicalize(meshId)
+        val cleanName = name.trim()
+        if (isGenericOrInvalidName(cleanName, canonicalTargetId) || isGenericOrInvalidName(cleanName, meshId)) {
+            return
+        }
+
+        val existingUser = localDataSource.getUser(canonicalTargetId)
+            ?: localDataSource.getUser(meshId)
+            ?: findMatchingUserEntity(localDataSource.getAllUsers(), meshId)
+
+        if (existingUser != null) {
+            val updated = existingUser.copy(
+                name = cleanName,
+                publicKey = publicKey ?: existingUser.publicKey,
+                lastSeen = lastSeen,
+                rssi = if (rssi != 0) rssi else existingUser.rssi
+            )
+            localDataSource.insertUser(updated)
+            if (existingUser.meshId != canonicalTargetId) {
+                localDataSource.insertUser(updated.copy(meshId = canonicalTargetId))
+            }
+        } else {
+            val newUser = UserEntity(
+                meshId = canonicalTargetId,
+                name = cleanName,
+                publicKey = publicKey,
+                lastSeen = lastSeen,
+                rssi = rssi
+            )
+            localDataSource.insertUser(newUser)
+            if (meshId != canonicalTargetId) {
+                localDataSource.insertUser(newUser.copy(meshId = meshId))
+            }
+        }
+
+        // Immediately update in-memory caches
+        displayNameCache[canonicalTargetId] = cleanName
+        displayNameCache[meshId] = cleanName
+        profileCache.remove(canonicalTargetId)
+        profileCache.remove(meshId)
+
+        // Notify discovery engine if available
+        try {
+            discoveryEngineProvider?.get()?.updatePeerIdentity(canonicalTargetId, cleanName, canonicalTargetId)
+            if (meshId != canonicalTargetId) {
+                discoveryEngineProvider?.get()?.updatePeerIdentity(meshId, cleanName, canonicalTargetId)
+            }
+        } catch (_: Exception) {
+            // Optional integration
         }
     }
 

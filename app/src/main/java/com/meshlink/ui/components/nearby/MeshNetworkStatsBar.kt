@@ -7,12 +7,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -20,32 +19,30 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.model.TransportType
 import com.meshlink.ui.designsystem.theme.MeshTheme
 import com.meshlink.ui.designsystem.theme.SuccessColorDark
 
 /**
- * Modern, responsive Mesh Network Status Bar.
+ * Modern, Apple-inspired compact status strip for the Mesh Network screen.
  *
- * Displays live, verified mesh metrics across 4 balanced columns without horizontal clipping:
- * - Discovery Status: Live scanning / Paused state with subtle pulse dot
- * - Nearby Peers: Total verified nearby peers discovered
- * - Connected: Count of active peer connections
- * - Transport: Active physical transport (BLE / Wi-Fi Direct)
+ * Streamlined single-row capsule:
+ * [ ● Scanning ] · 2 Nearby · 0 Connected · BLE
  *
- * Free of fake metrics, synthetic latency estimates, or arbitrary heuristics.
+ * Restrained height, subtle border, clean typography, perfectly balanced across screen widths.
  */
 @Composable
 fun MeshNetworkStatsBar(
@@ -55,7 +52,7 @@ fun MeshNetworkStatsBar(
 ) {
     val totalNearby = devices.size
     val connectedCount = remember(devices) { devices.count { it.isConnected } }
-    
+
     val hasWifiDirect = remember(devices) {
         devices.any { it.transport == TransportType.WIFI_DIRECT }
     }
@@ -66,7 +63,7 @@ fun MeshNetworkStatsBar(
 
     val infiniteTransition = rememberInfiniteTransition(label = "StatsPulseTransition")
     val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
+        initialValue = 0.40f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
             animation = tween(1200, easing = FastOutSlowInEasing),
@@ -75,106 +72,120 @@ fun MeshNetworkStatsBar(
         label = "StatusDotPulse"
     )
 
-    val contentDesc = "Network summary: $statusText, $totalNearby nearby peers, $connectedCount connected, transport $transportLabel"
+    val contentDesc = "Mesh Status: $statusText, $totalNearby nearby peers, $connectedCount connected, transport $transportLabel"
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = MeshTheme.spacing.small)
+            .padding(horizontal = MeshTheme.spacing.mediumLarge, vertical = 4.dp)
+            .height(40.dp)
             .semantics { contentDescription = contentDesc },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+        shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(
             width = 0.8.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = MeshTheme.spacing.medium, vertical = MeshTheme.spacing.mediumSmall),
+                .padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Discovery State
-            MetricItem(
-                label = "Discovery",
-                value = statusText,
-                valueColor = statusColor,
-                leadingDot = {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isScanning) {
-                                    statusColor.copy(alpha = pulseAlpha)
-                                } else {
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
-                                }
-                            )
-                    )
-                },
-                modifier = Modifier.weight(1f)
+            // 1. Discovery State with subtle pulsing indicator
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isScanning) {
+                                statusColor.copy(alpha = pulseAlpha)
+                            } else {
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                            }
+                        )
+                )
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = statusColor
+                )
+            }
+
+            VerticalDivider(
+                modifier = Modifier.height(14.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                thickness = 0.8.dp
             )
 
             // 2. Nearby Count
-            MetricItem(
-                label = "Nearby",
-                value = "$totalNearby",
-                valueColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(0.85f)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "$totalNearby",
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Nearby",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            VerticalDivider(
+                modifier = Modifier.height(14.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                thickness = 0.8.dp
             )
 
             // 3. Connected Count
-            MetricItem(
-                label = "Connected",
-                value = "$connectedCount",
-                valueColor = if (connectedCount > 0) SuccessColorDark else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(0.95f)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "$connectedCount",
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = if (connectedCount > 0) SuccessColorDark else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Connected",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    color = if (connectedCount > 0) SuccessColorDark else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            VerticalDivider(
+                modifier = Modifier.height(14.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                thickness = 0.8.dp
             )
 
             // 4. Transport Mode
-            MetricItem(
-                label = "Transport",
-                value = transportLabel,
-                valueColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(0.95f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun MetricItem(
-    label: String,
-    value: String,
-    valueColor: Color,
-    modifier: Modifier = Modifier,
-    leadingDot: (@Composable () -> Unit)? = null
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Medium
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            leadingDot?.invoke()
-            Text(
-                text = value,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = valueColor
-            )
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                shape = RoundedCornerShape(6.dp)
+            ) {
+                Text(
+                    text = transportLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
         }
     }
 }

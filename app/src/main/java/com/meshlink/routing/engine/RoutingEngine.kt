@@ -140,6 +140,10 @@ class RoutingEngine @Inject constructor(
         if (optimalRoute != null && connectedNodes.contains(optimalRoute.nextHop)) {
             return optimalRoute.nextHop
         }
+
+        if (connectedNodes.contains(packet.targetId)) {
+            return packet.targetId
+        }
         
         return null
     }

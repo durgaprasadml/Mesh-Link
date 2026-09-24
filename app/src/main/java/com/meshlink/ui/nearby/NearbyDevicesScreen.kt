@@ -106,8 +106,9 @@ fun NearbyDevicesScreen(
         }
     )
 
-    val totalPeers = uiState.devices.size
-    val connectedPeers = remember(uiState.devices) { uiState.devices.count { it.isConnected } }
+    val allPeers = uiState.allDiscoveredDevices.ifEmpty { uiState.devices }
+    val totalPeers = allPeers.size
+    val connectedPeers = remember(allPeers) { allPeers.count { it.isConnected } }
     val subtitleText = when {
         uiState.isScanning && totalPeers > 0 -> "$totalPeers nearby · $connectedPeers connected"
         uiState.isScanning -> "Discovering nearby peers"
@@ -173,17 +174,18 @@ fun NearbyDevicesScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 1. Restrained Discovery Visualization Canvas
+            // 1. Apple-Inspired Discovery Visualization Radar Canvas
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(205.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f)),
+                    .height(235.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 MeshTopologyCanvas(
-                    devices = uiState.devices,
+                    devices = allPeers,
                     selectedAddress = selectedDeviceAddress,
+                    searchQuery = uiState.searchQuery,
                     isScanning = uiState.isScanning,
                     onNodeSelected = { device ->
                         selectedDeviceAddress = if (selectedDeviceAddress == device.address) null else device.address
@@ -198,9 +200,9 @@ fun NearbyDevicesScreen(
                 )
             }
 
-            // 2. Responsive Live Network Statistics Strip
+            // 2. Sleek Compact Live Network Status Strip
             MeshNetworkStatsBar(
-                devices = uiState.devices,
+                devices = allPeers,
                 isScanning = uiState.isScanning
             )
 
@@ -352,6 +354,19 @@ fun NearbyDevicesScreen(
                         .padding(horizontal = MeshTheme.spacing.mediumLarge),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    item {
+                        Text(
+                            text = if (uiState.searchQuery.isBlank()) {
+                                "Nearby Devices (${uiState.devices.size})"
+                            } else {
+                                "Search Results (${uiState.devices.size})"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 2.dp)
+                        )
+                    }
                     items(
                         items = uiState.devices,
                         key = { it.meshId.ifBlank { it.address } },

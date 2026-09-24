@@ -495,6 +495,7 @@ class TransferManager @Inject constructor(
             scheduler.addSession(session)
             sessionRegistry.registerSession(session)
             onTransferStateChanged?.invoke(transferId, TransferState.RECEIVING)
+            // Persist initial state for resume-after-disconnect support
             applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
             startTimeoutMonitor(transferId)
         }
@@ -515,6 +516,18 @@ class TransferManager @Inject constructor(
                 packet.targetId, packet.senderId, transferId,
                 packet.chunkIndex.toString(), PacketType.MEDIA_ACK, packet.chunkIndex, packet.totalChunks, session.mimeType
             )
+
+            // Persist session state only at meaningful milestones to avoid per-chunk disk I/O pressure.
+            // The session.json is required only for resume-after-disconnect; it does not need to be
+            // perfectly up-to-date on every 180-byte BLE packet.
+            // Milestones: first chunk (count==1) and every 10% progress step.
+            val totalChunks = packet.totalChunks.coerceAtLeast(1)
+            val progressPct = (count * 100) / totalChunks
+            val prevProgressPct = ((count - 1) * 100) / totalChunks
+            val isMilestone = count == 1 || (progressPct / 10) > (prevProgressPct / 10)
+            if (isMilestone) {
+                applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
+            }
 
             if (count >= packet.totalChunks) {
                 assembleAndVerify(session)
@@ -811,6 +824,10 @@ class TransferManager @Inject constructor(
         scheduler.updateSessionState(transferId, newState)
         onTransferStateChanged?.invoke(transferId, newState)
         diagnostics.logSessionStateTransition(transferId, oldState, newState.name)
+        // Release throttle tracking entry when a session reaches a terminal state
+        if (newState.isTerminal()) {
+            scheduler.cleanupProgressTracking(transferId)
+        }
     }
 
     private suspend fun failSession(transferId: String, reason: String) {

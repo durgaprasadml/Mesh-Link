@@ -282,4 +282,44 @@ class MeshRouterTest {
         assertTrue(result is DispatchResult.Queued)
         verify { queueOptimizer.enqueue(mediaPacket) }
     }
+
+    @Test
+    fun `handleIncomingPacket delivers broadcast locally and forwards to downstream peers with original senderId`() = runTest {
+        every { bleTransport.connectedPeers } returns setOf("peer_address_1", "peer_address_2")
+        every { routingEngine.shouldRelayBroadcast(any()) } returns true
+        every { routingEngine.getNextHopForForwarding(any(), any(), any()) } returns null
+
+        val meshRouter = createRouter(backgroundScope)
+        val payloadDeferred = async { meshRouter.incomingPayloads.first() }
+        testScheduler.runCurrent()
+
+        val broadcastPacket = MeshPacket(
+            packetId = "pkt_bcast_multihop",
+            senderId = "node_original_raju",
+            targetId = "BROADCAST",
+            payload = "Emergency update",
+            type = PacketType.TEXT,
+            encrypted = true,
+            ttl = 5,
+            hopCount = 0
+        )
+
+        bleIncomingPacketsFlow.emit("peer_address_1" to broadcastPacket)
+        testScheduler.advanceUntilIdle()
+
+        // 1. Delivered locally
+        val (sender, receivedPacket) = payloadDeferred.await()
+        assertEquals("node_original_raju", sender)
+        assertEquals("pkt_bcast_multihop", receivedPacket.packetId)
+
+        // 2. Forwarded to other peers in mesh with original sender preserved and decremented TTL
+        verify {
+            queueOptimizer.enqueue(match {
+                it.packetId == "pkt_bcast_multihop" &&
+                it.senderId == "node_original_raju" &&
+                it.ttl == 4 &&
+                it.hopCount == 1
+            })
+        }
+    }
 }

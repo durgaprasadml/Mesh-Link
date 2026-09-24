@@ -523,10 +523,16 @@ class BleRepositoryImpl @Inject constructor(
             }
 
             // 2. Discover eligible nearby peers
-            val eligiblePeers = discoveryManager.scannedDevices.value.values
+            val scannedPeers = discoveryManager.scannedDevices.value.values
                 .map { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) }
+            val connectedBlePeers = (connectionManager.activeClients + connectionManager.connectedServers)
+                .mapNotNull { routingCoordinator.resolveMeshId(it) }
+            val routedPeers = meshRouter.routeTable.keys
+                .map { com.meshlink.util.MeshIdNormalizer.canonicalize(it) }
+
+            val eligiblePeers = (scannedPeers + connectedBlePeers + routedPeers)
                 .distinct()
-                .filter { it.isNotBlank() && it != localPeerId }
+                .filter { it.isNotBlank() && it != localPeerId && it != "BROADCAST" }
 
             if (eligiblePeers.isEmpty()) {
                 com.meshlink.common.logger.MeshLogger.w(TAG, "No eligible nearby peers connected/scanned for SOS media. Kept in store-and-forward.")
@@ -535,27 +541,31 @@ class BleRepositoryImpl @Inject constructor(
 
             // 3. Send images via TransferManager to every eligible nearby peer
             eligiblePeers.forEach { peerId ->
-                if (frontImage != null && frontImage.exists()) {
-                    val frontThumb = ImageCompressor.generateThumbnailBase64(context, android.net.Uri.fromFile(frontImage))
-                    transferManager.sendFile(
-                        file = frontImage,
-                        senderId = localPeerId,
-                        targetId = peerId,
-                        priority = com.meshlink.transfer.TransferPriority.CRITICAL,
-                        transferId = "${sosEventId}_front_${peerId}",
-                        thumbnailBase64 = frontThumb
-                    )
-                }
-                if (rearImage != null && rearImage.exists()) {
-                    val rearThumb = ImageCompressor.generateThumbnailBase64(context, android.net.Uri.fromFile(rearImage))
-                    transferManager.sendFile(
-                        file = rearImage,
-                        senderId = localPeerId,
-                        targetId = peerId,
-                        priority = com.meshlink.transfer.TransferPriority.CRITICAL,
-                        transferId = "${sosEventId}_rear_${peerId}",
-                        thumbnailBase64 = rearThumb
-                    )
+                try {
+                    if (frontImage != null && frontImage.exists()) {
+                        val frontThumb = ImageCompressor.generateThumbnailBase64(context, android.net.Uri.fromFile(frontImage))
+                        transferManager.sendFile(
+                            file = frontImage,
+                            senderId = localPeerId,
+                            targetId = peerId,
+                            priority = com.meshlink.transfer.TransferPriority.CRITICAL,
+                            transferId = "${sosEventId}_front_${peerId}",
+                            thumbnailBase64 = frontThumb
+                        )
+                    }
+                    if (rearImage != null && rearImage.exists()) {
+                        val rearThumb = ImageCompressor.generateThumbnailBase64(context, android.net.Uri.fromFile(rearImage))
+                        transferManager.sendFile(
+                            file = rearImage,
+                            senderId = localPeerId,
+                            targetId = peerId,
+                            priority = com.meshlink.transfer.TransferPriority.CRITICAL,
+                            transferId = "${sosEventId}_rear_${peerId}",
+                            thumbnailBase64 = rearThumb
+                        )
+                    }
+                } catch (e: Exception) {
+                    com.meshlink.common.logger.MeshLogger.e(TAG, "Error queuing SOS media for peer $peerId: ${e.message}", e)
                 }
             }
 

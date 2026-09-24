@@ -64,6 +64,10 @@ class MediaTransferManager @Inject constructor(
         private const val MAX_CONCURRENT_TRANSFERS = 10
 
         private val ALLOWED_MIME_PREFIXES = listOf("image/", "audio/")
+
+        // Minimum interval between progress StateFlow emissions (100ms) to prevent excessive
+        // Compose recompositions on every chunk. Always emit for sentinel values (0f, 1f, negative).
+        private const val PROGRESS_EMIT_INTERVAL_MS = 100L
     }
 
     // ─────────────────── Public API surfaces ───────────────────
@@ -71,6 +75,9 @@ class MediaTransferManager @Inject constructor(
     /** Req. 6: Progress per active transferId (0.0 → 1.0). */
     private val _transferProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
     val transferProgress: StateFlow<Map<String, Float>> = _transferProgress.asStateFlow()
+
+    // Per-transfer throttle tracking for progress emissions
+    private val lastProgressEmitMs = ConcurrentHashMap<String, Long>()
 
     /**
      * Callback invoked by MeshRepository when a chunk packet needs to be dispatched.
@@ -556,11 +563,24 @@ class MediaTransferManager @Inject constructor(
         timeoutJobs.remove(transferId)?.cancel()
     }
 
-    /** Req. 6: Update progress map on main-safe StateFlow. */
+    /** Req. 6: Update progress map with time-based throttling.
+     * Sentinel values (0f = start, 1f = complete, negative = error) always emit immediately
+     * to ensure UI reacts to transfer lifecycle events without delay.
+     */
     private fun updateProgress(transferId: String, progress: Float) {
-        _transferProgress.update { current ->
-            current.toMutableMap().apply {
-                this[transferId] = progress
+        val isSentinel = progress <= 0f || progress >= 1f
+        val now = System.currentTimeMillis()
+        val last = lastProgressEmitMs[transferId] ?: 0L
+        if (isSentinel || (now - last) >= PROGRESS_EMIT_INTERVAL_MS) {
+            lastProgressEmitMs[transferId] = now
+            _transferProgress.update { current ->
+                current.toMutableMap().apply {
+                    this[transferId] = progress
+                }
+            }
+            // Clean up tracking for completed or error transfers
+            if (progress >= 1f || progress < 0f) {
+                lastProgressEmitMs.remove(transferId)
             }
         }
     }

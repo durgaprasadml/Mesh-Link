@@ -44,5 +44,13 @@ interface UserRepository {
     suspend fun getUserDisplayName(meshId: String): String
     suspend fun getUserProfile(meshId: String): User?
     fun observeUserProfile(meshId: String): Flow<User?>
+    fun observeAllUsers(): Flow<List<User>>
+    suspend fun saveOrUpdatePeerProfile(
+        meshId: String,
+        name: String,
+        publicKey: String? = null,
+        lastSeen: Long = System.currentTimeMillis(),
+        rssi: Int = 0
+    )
     suspend fun updateProfilePhoto(meshId: String, photoPath: String, photoHash: String, version: Long = System.currentTimeMillis(), lastUpdated: Long = System.currentTimeMillis())
 }

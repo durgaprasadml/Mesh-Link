@@ -9,7 +9,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -37,42 +37,28 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.meshlink.core.data.UserRepositoryImpl
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.ui.designsystem.theme.SuccessColorDark
-import com.meshlink.util.MeshIdNormalizer
-import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.math.sqrt
 
-private data class NodePosition(
-    val device: BleDevice,
-    val centerOffset: Offset,
-    val radiusPx: Float,
-    val displayName: String
-)
-
 /**
- * Modern, clean Mesh Network Discovery Visualization.
+ * Apple-inspired, high-performance Mesh Network Discovery Radar Canvas.
  *
- * Visualizes active peer discovery around the local user ("You"):
- * - Calm, restrained circular discovery boundary rings (without overlapping text markers).
- * - Subtle continuous 360° scanning sweep beam with soft gradient trail when active.
- * - Gentle expanding discovery pulse wave.
- * - Anchored central "You" node with clear legible labeling.
- * - Discovered peer nodes positioned deterministically via canonical Mesh ID hash and real signal.
- * - Verified Mesh-Link profile display names (falling back to "Mesh Peer" while pending).
- * - Clean connection line and subtle packet flow for actively connected peers only.
- * - Quiet, uncluttered representation for discovered unconnected peers.
- * - Efficient: animations run within DrawScope without outer recomposition churn.
+ * Core architectural features:
+ * - Precomputed layout via [RadarLayoutEngine]: Zero allocations or text measuring in DrawScope.
+ * - Guaranteed non-overlapping peer markers and labels.
+ * - Protected center "You" node exclusion zone with clear separation.
+ * - Restrained, elegant aesthetics: 3 subtle concentric rings, clean cardinal marks, gentle sweep.
+ * - Real discovered peers only with peer initial badges and verified profile names.
+ * - Real connection lines for actively connected peers only.
+ * - Search highlighting with subtle dimming of non-matching peers.
  */
 @Composable
 fun MeshTopologyCanvas(
     devices: List<BleDevice>,
     modifier: Modifier = Modifier,
     selectedAddress: String? = null,
+    searchQuery: String = "",
     isScanning: Boolean = true,
     onNodeSelected: ((BleDevice) -> Unit)? = null
 ) {
@@ -83,65 +69,7 @@ fun MeshTopologyCanvas(
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
 
-    // 1. Hardware-accelerated animations within DrawScope
-    val infiniteTransition = rememberInfiniteTransition(label = "DiscoveryCanvasTransitions")
-
-    // Continuous 360-degree rotating sweep
-    val sweepAngle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "DiscoverySweepAngle"
-    )
-
-    // Soft scanning pulse wave expanding outward
-    val pulseProgress by infiniteTransition.animateFloat(
-        initialValue = 0.08f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "DiscoveryPulseProgress"
-    )
-
-    // Breathing scale for active elements
-    val breathingScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "DiscoveryBreathing"
-    )
-
-    // Packet flow offset along connected lines
-    val packetOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "DiscoveryPacketOffset"
-    )
-
-    val centerNodeRadiusPx = with(density) { 18.dp.toPx() }
-    val peerNodeRadiusPx = with(density) { 11.dp.toPx() }
-
-    // Reusable draw objects to eliminate frame allocations
-    val boundaryStroke = remember { Stroke(width = 1.0f) }
-    val outerBoundaryStroke = remember { Stroke(width = 1.5f) }
-    val pulseStroke = remember { Stroke(width = 1.2f) }
-
-    // Positions cache for tap detection
-    val nodePositionsRef = remember { AtomicReference<List<NodePosition>>(emptyList()) }
-
-    // Text styles
+    // 1. Text styles
     val youTextStyle = remember {
         TextStyle(
             color = Color.White,
@@ -158,64 +86,142 @@ fun MeshTopologyCanvas(
             textAlign = TextAlign.Center
         )
     }
+    val initialTextStyle = remember {
+        TextStyle(
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+    }
+
+    // 2. Hardware-accelerated animations (animating purely visual angles / progress)
+    val infiniteTransition = rememberInfiniteTransition(label = "RadarCanvasTransitions")
+
+    // Smooth continuous 360-degree rotating sweep
+    val sweepAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "RadarSweepAngle"
+    )
+
+    // Gentle expanding scanning pulse wave
+    val pulseProgress by infiniteTransition.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "RadarPulseProgress"
+    )
+
+    // Gentle breathing scale for active elements
+    val breathingScale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "RadarBreathing"
+    )
+
+    // Packet flow offset along verified connection lines
+    val packetOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "RadarPacketOffset"
+    )
+
+    // Reusable stroke objects
+    val boundaryStroke = remember { Stroke(width = 0.8f) }
+    val outerBoundaryStroke = remember { Stroke(width = 1.2f) }
+    val pulseStroke = remember { Stroke(width = 1.0f) }
 
     val connectedCount = remember(devices) { devices.count { it.isConnected } }
     val semanticsDesc = remember(devices.size, connectedCount, isScanning) {
-        "Mesh network discovery canvas showing ${devices.size} nearby peers, $connectedCount connected. " +
-            if (isScanning) "Actively discovering." else "Discovery paused."
+        "Mesh network radar showing ${devices.size} nearby peers, $connectedCount connected. " +
+            if (isScanning) "Actively scanning." else "Discovery paused."
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .semantics { contentDescription = semanticsDesc }
-            .pointerInput(devices) {
-                detectTapGestures { tapOffset ->
-                    val currentPositions = nodePositionsRef.get()
-                    val tappedNode = currentPositions.firstOrNull { nodePos ->
-                        val dx = tapOffset.x - nodePos.centerOffset.x
-                        val dy = tapOffset.y - nodePos.centerOffset.y
-                        sqrt(dx * dx + dy * dy) <= nodePos.radiusPx * 2.5f
-                    }
+    ) {
+        val widthPx = with(density) { maxWidth.toPx() }
+        val heightPx = with(density) { maxHeight.toPx() }
+        val canvasSize = remember(widthPx, heightPx) { Size(widthPx, heightPx) }
 
-                    if (tappedNode != null) {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNodeSelected?.invoke(tappedNode.device)
+        // PRECOMPUTE full collision-aware layout outside DrawScope!
+        val sceneLayout = remember(devices, selectedAddress, searchQuery, canvasSize, density) {
+            RadarLayoutEngine.calculateLayout(
+                devices = devices,
+                canvasSize = canvasSize,
+                density = density,
+                textMeasurer = textMeasurer,
+                labelTextStyle = nodeLabelTextStyle,
+                initialTextStyle = initialTextStyle,
+                youTextStyle = youTextStyle,
+                selectedAddress = selectedAddress,
+                searchQuery = searchQuery
+            )
+        }
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(sceneLayout.nodes) {
+                    detectTapGestures { tapOffset ->
+                        val tappedNode = sceneLayout.nodes.firstOrNull { node ->
+                            val dx = tapOffset.x - node.centerOffset.x
+                            val dy = tapOffset.y - node.centerOffset.y
+                            sqrt(dx * dx + dy * dy) <= node.nodeRadiusPx * 2.2f
+                        }
+                        if (tappedNode != null) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onNodeSelected?.invoke(tappedNode.device)
+                        }
                     }
                 }
-            }
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = Offset(size.width / 2f, size.height / 2f)
-            val maxCanvasRadius = (size.width.coerceAtMost(size.height) / 2f) * 0.88f
-            if (maxCanvasRadius <= 0f) return@Canvas
+        ) {
+            val center = sceneLayout.center
+            val maxRadarRadius = sceneLayout.maxRadius
+            if (maxRadarRadius <= 0f) return@Canvas
 
-            val calculatedPositions = ArrayList<NodePosition>(devices.size)
-
-            // 1. SUBTLE BACKGROUND AMBIENT RADIUS
+            // 1. SUBTLE AMBIENT RADAR BACKGROUND
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        primaryColor.copy(alpha = 0.05f),
-                        primaryColor.copy(alpha = 0.015f),
+                        primaryColor.copy(alpha = 0.04f),
+                        primaryColor.copy(alpha = 0.01f),
                         Color.Transparent
                     ),
                     center = center,
-                    radius = maxCanvasRadius
+                    radius = maxRadarRadius
                 ),
-                radius = maxCanvasRadius,
+                radius = maxRadarRadius,
                 center = center
             )
 
-            // 2. RESTRAINED DISCOVERY BOUNDARY RINGS (3 rings, NO overlapping text labels)
-            val ringFractions = floatArrayOf(0.40f, 0.70f, 1.00f)
+            // 2. RESTRAINED CONCENTRIC RADAR RINGS (3 clean rings)
+            val ringFractions = floatArrayOf(0.42f, 0.70f, 1.00f)
             ringFractions.forEachIndexed { index, fraction ->
-                val ringRadius = maxCanvasRadius * fraction
+                val ringRadius = maxRadarRadius * fraction
                 val isOuter = index == ringFractions.lastIndex
                 val ringColor = if (isOuter) {
-                    primaryColor.copy(alpha = 0.22f)
+                    primaryColor.copy(alpha = 0.18f)
                 } else {
-                    primaryColor.copy(alpha = 0.10f)
+                    primaryColor.copy(alpha = 0.09f)
                 }
 
                 drawCircle(
@@ -226,10 +232,25 @@ fun MeshTopologyCanvas(
                 )
             }
 
-            // 3. EXPANDING DISCOVERY PULSE WAVE (Restrained and gentle)
+            // 3. SUBTLE CARDINAL TICK MARKS (Apple-style navigation elegance)
+            val tickLen = 6.dp.toPx()
+            val outerRadius = maxRadarRadius
+            val cardinalAngles = floatArrayOf(0f, 90f, 180f, 270f)
+            for (angle in cardinalAngles) {
+                rotate(degrees = angle, pivot = center) {
+                    drawLine(
+                        color = primaryColor.copy(alpha = 0.25f),
+                        start = Offset(center.x + outerRadius - tickLen, center.y),
+                        end = Offset(center.x + outerRadius, center.y),
+                        strokeWidth = 1.0f
+                    )
+                }
+            }
+
+            // 4. GENTLE SCANNING PULSE WAVE
             if (isScanning) {
-                val pulseRadius = maxCanvasRadius * pulseProgress
-                val pulseAlpha = (1f - pulseProgress).coerceIn(0f, 0.25f)
+                val pulseRadius = maxRadarRadius * pulseProgress
+                val pulseAlpha = (1f - pulseProgress).coerceIn(0f, 0.18f)
                 drawCircle(
                     color = primaryColor.copy(alpha = pulseAlpha),
                     radius = pulseRadius,
@@ -238,258 +259,216 @@ fun MeshTopologyCanvas(
                 )
             }
 
-            // 4. SUBTLE CONTINUOUS ROTATING SCANNING SWEEP
+            // 5. SUBTLE CONTINUOUS ROTATING SCANNING SWEEP
             if (isScanning) {
                 rotate(degrees = sweepAngle, pivot = center) {
-                    // Soft gradient trail (~60 degrees arc behind beam)
+                    // Soft gradient trail (~50 degrees arc behind beam)
                     val trailBrush = Brush.sweepGradient(
                         0.00f to Color.Transparent,
-                        0.80f to Color.Transparent,
-                        0.90f to primaryColor.copy(alpha = 0.02f),
-                        0.97f to primaryColor.copy(alpha = 0.08f),
-                        1.00f to primaryColor.copy(alpha = 0.18f),
+                        0.84f to Color.Transparent,
+                        0.92f to primaryColor.copy(alpha = 0.02f),
+                        0.97f to primaryColor.copy(alpha = 0.06f),
+                        1.00f to primaryColor.copy(alpha = 0.14f),
                         center = center
                     )
                     drawCircle(
                         brush = trailBrush,
-                        radius = maxCanvasRadius,
+                        radius = maxRadarRadius,
                         center = center
                     )
 
                     // Leading sweep line
                     drawLine(
                         brush = Brush.linearGradient(
-                            0f to primaryColor.copy(alpha = 0.05f),
-                            1f to primaryColor.copy(alpha = 0.60f),
+                            0f to primaryColor.copy(alpha = 0.04f),
+                            1f to primaryColor.copy(alpha = 0.45f),
                             start = center,
-                            end = Offset(center.x + maxCanvasRadius, center.y)
+                            end = Offset(center.x + maxRadarRadius, center.y)
                         ),
                         start = center,
-                        end = Offset(center.x + maxCanvasRadius, center.y),
-                        strokeWidth = 1.5f,
+                        end = Offset(center.x + maxRadarRadius, center.y),
+                        strokeWidth = 1.2f,
                         cap = StrokeCap.Round
                     )
                 }
             }
 
-            // 5. DETERMINISTIC PEER NODE POSITIONING & CONNECTION VISUALIZATION
-            if (devices.isNotEmpty()) {
-                devices.forEachIndexed { itemIndex, device ->
-                    val canonicalId = MeshIdNormalizer.canonicalize(device.meshId.ifBlank { device.address })
+            // 6. VERIFIED PEER NODES & ACTIVE CONNECTION LINES
+            for (node in sceneLayout.nodes) {
+                val nodePos = node.centerOffset
+                val isSelected = node.isSelected
+                val isDirectConnected = node.isConnected
+                val dynamicRadius = node.nodeRadiusPx * (if (isSelected) 1.22f else 1.0f)
+                val isDimmed = searchQuery.isNotBlank() && !node.isMatchSearch
 
-                    // Deterministic Angle: hash canonical Mesh ID to ensure node is visually stable
-                    val idHash = abs((canonicalId.hashCode().toLong() and 0xFFFFFFFFL))
-                    val baseAngleDeg = ((idHash % 360) + (itemIndex * 43)) % 360
-                    val angleRad = Math.toRadians(baseAngleDeg.toDouble()).toFloat()
+                val baseAlpha = if (isDimmed) 0.30f else 1.0f
 
-                    // Radial distance mapped to signal / hop
-                    val radiusRatio = when {
-                        device.isMeshNode -> 0.88f
-                        device.rssi >= -60 -> 0.38f // Strong signal
-                        device.rssi >= -75 -> 0.58f // Medium signal
-                        device.rssi >= -88 -> 0.76f // Weak signal
-                        else -> 0.88f
-                    }
-
-                    val ringRadius = maxCanvasRadius * radiusRatio
-                    val posX = center.x + ringRadius * cos(angleRad)
-                    val posY = center.y + ringRadius * sin(angleRad)
-                    val nodePos = Offset(posX, posY)
-
-                    // Strictly resolve Mesh-Link profile display name (never smartphone model)
-                    val profName = device.displayName?.trim()?.takeIf {
-                        it.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId)
-                    }
-                    val fallbackName = device.name.trim().takeIf {
-                        it.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(it, canonicalId)
-                    }
-                    val resolvedDisplayName = profName ?: fallbackName ?: "Mesh Peer"
-
-                    calculatedPositions.add(
-                        NodePosition(
-                            device = device,
-                            centerOffset = nodePos,
-                            radiusPx = peerNodeRadiusPx,
-                            displayName = resolvedDisplayName
-                        )
+                // 6a. ACTIVE CONNECTION LINE (Only for verified active connections)
+                if (isDirectConnected) {
+                    drawLine(
+                        color = connectedColor.copy(alpha = 0.55f * baseAlpha),
+                        start = center,
+                        end = nodePos,
+                        strokeWidth = 1.5f
                     )
 
-                    val isSelected = device.address == selectedAddress
-                    val isDirectConnected = device.isConnected
+                    // Subtle packet pulse dot along active connection
+                    val packetDx = nodePos.x - center.x
+                    val packetDy = nodePos.y - center.y
+                    val currentPacketPos = Offset(
+                        center.x + packetDx * packetOffset,
+                        center.y + packetDy * packetOffset
+                    )
 
-                    // 5a. CONNECTION LINE (ONLY for real connections!)
-                    if (isDirectConnected) {
-                        drawLine(
-                            color = connectedColor.copy(alpha = 0.70f),
-                            start = center,
-                            end = nodePos,
-                            strokeWidth = 2.0f
-                        )
-
-                        // Subtle animated packet dot flowing along the active connection line
-                        val packetDx = nodePos.x - center.x
-                        val packetDy = nodePos.y - center.y
-                        val currentPacketPos = Offset(
-                            center.x + packetDx * packetOffset,
-                            center.y + packetDy * packetOffset
-                        )
-
-                        drawCircle(
-                            color = Color.White,
-                            radius = 2.5f,
-                            center = currentPacketPos
-                        )
-                        drawCircle(
-                            color = connectedColor.copy(alpha = 0.45f),
-                            radius = 5.0f,
-                            center = currentPacketPos
-                        )
-                    }
-
-                    // 5b. PEER NODE BADGE
-                    val dynamicRadius = peerNodeRadiusPx * (if (isSelected) 1.20f else 1.0f)
-
-                    // Outer Selection Ring
-                    if (isSelected) {
-                        drawCircle(
-                            color = primaryColor.copy(alpha = 0.25f),
-                            radius = dynamicRadius + 6f,
-                            center = nodePos
-                        )
-                        drawCircle(
-                            color = primaryColor,
-                            radius = dynamicRadius + 3f,
-                            center = nodePos,
-                            style = Stroke(width = 1.5f)
-                        )
-                    }
-
-                    // Node Outer Dark Border
                     drawCircle(
-                        color = Color(0xFF1E293B),
-                        radius = dynamicRadius + 1.5f,
+                        color = Color.White.copy(alpha = baseAlpha),
+                        radius = 2.0f,
+                        center = currentPacketPos
+                    )
+                    drawCircle(
+                        color = connectedColor.copy(alpha = 0.35f * baseAlpha),
+                        radius = 4.0f,
+                        center = currentPacketPos
+                    )
+                }
+
+                // 6b. SELECTION RING
+                if (isSelected) {
+                    drawCircle(
+                        color = primaryColor.copy(alpha = 0.20f * baseAlpha),
+                        radius = dynamicRadius + 5f,
                         center = nodePos
                     )
-
-                    // Node Body Color
-                    val nodeColor = if (isDirectConnected) connectedColor else primaryColor.copy(alpha = 0.85f)
                     drawCircle(
-                        color = nodeColor,
-                        radius = dynamicRadius,
+                        color = primaryColor.copy(alpha = baseAlpha),
+                        radius = dynamicRadius + 2.5f,
+                        center = nodePos,
+                        style = Stroke(width = 1.2f)
+                    )
+                }
+
+                // 6c. NODE BOUNDARY BORDER
+                drawCircle(
+                    color = Color(0xFF1E293B).copy(alpha = baseAlpha),
+                    radius = dynamicRadius + 1.2f,
+                    center = nodePos
+                )
+
+                // 6d. NODE BODY COLOR
+                val nodeColor = if (isDirectConnected) {
+                    connectedColor.copy(alpha = 0.90f * baseAlpha)
+                } else {
+                    primaryColor.copy(alpha = 0.85f * baseAlpha)
+                }
+                drawCircle(
+                    color = nodeColor,
+                    radius = dynamicRadius,
+                    center = nodePos
+                )
+
+                // 6e. PEER INITIAL (Apple-style initial inside marker)
+                if (node.initialLayoutResult != null) {
+                    val initLayout = node.initialLayoutResult
+                    val initX = nodePos.x - initLayout.size.width / 2f
+                    val initY = nodePos.y - initLayout.size.height / 2f
+                    drawText(
+                        textLayoutResult = initLayout,
+                        topLeft = Offset(initX, initY)
+                    )
+                } else {
+                    // Fallback crisp white core dot
+                    drawCircle(
+                        color = Color.White.copy(alpha = baseAlpha),
+                        radius = dynamicRadius * 0.30f,
                         center = nodePos
                     )
+                }
 
-                    // Node Core Dot
-                    drawCircle(
-                        color = Color.White,
-                        radius = dynamicRadius * 0.32f,
-                        center = nodePos
-                    )
+                // 6f. PEER DISPLAY NAME BADGE (Collision-free precomputed pill)
+                if (node.showLabel && node.nameLayoutResult != null) {
+                    val pillLeft = node.labelTopLeft.x
+                    val pillTop = node.labelTopLeft.y
+                    val pillW = node.labelSize.width
+                    val pillH = node.labelSize.height
+                    val pillPadH = 5.dp.toPx()
+                    val pillPadV = 2.dp.toPx()
 
-                    // 5c. PEER DISPLAY NAME BADGE (Clean, compact, no collisions)
-                    val truncatedName = if (resolvedDisplayName.length > 12) {
-                        resolvedDisplayName.take(11) + "…"
-                    } else {
-                        resolvedDisplayName
-                    }
-
-                    val nameLayoutResult = textMeasurer.measure(
-                        text = truncatedName,
-                        style = nodeLabelTextStyle
-                    )
-
-                    val pillPaddingH = 5.dp.toPx()
-                    val pillPaddingV = 2.dp.toPx()
-                    val pillWidth = nameLayoutResult.size.width + pillPaddingH * 2
-                    val pillHeight = nameLayoutResult.size.height + pillPaddingV * 2
-                    val pillTop = nodePos.y + dynamicRadius + 2.dp.toPx()
-                    val pillLeft = nodePos.x - pillWidth / 2f
-
-                    // Compact pill backing
                     drawRoundRect(
-                        color = Color(0xDD0F172A),
+                        color = Color(0xEE0F172A).copy(alpha = 0.92f * baseAlpha),
                         topLeft = Offset(pillLeft, pillTop),
-                        size = Size(pillWidth, pillHeight),
+                        size = Size(pillW, pillH),
                         cornerRadius = CornerRadius(6f, 6f)
                     )
                     drawRoundRect(
-                        color = if (isSelected) primaryColor else Color(0x28FFFFFF),
+                        color = if (isSelected) primaryColor.copy(alpha = baseAlpha) else Color(0x28FFFFFF).copy(alpha = baseAlpha),
                         topLeft = Offset(pillLeft, pillTop),
-                        size = Size(pillWidth, pillHeight),
+                        size = Size(pillW, pillH),
                         cornerRadius = CornerRadius(6f, 6f),
                         style = Stroke(width = 0.8f)
                     )
-
-                    // Text
                     drawText(
-                        textLayoutResult = nameLayoutResult,
-                        topLeft = Offset(pillLeft + pillPaddingH, pillTop + pillPaddingV)
+                        textLayoutResult = node.nameLayoutResult,
+                        topLeft = Offset(pillLeft + pillPadH, pillTop + pillPadV)
                     )
                 }
             }
 
-            // 6. CENTRAL "YOU" HUB NODE
-            val centerBreathingRadius = centerNodeRadiusPx * (1.0f + (breathingScale - 1.0f) * 0.3f)
+            // 7. CENTRAL "YOU" HUB NODE (Strictly protected, pristine Apple styling)
+            val centerNodeRadiusPx = sceneLayout.centerNodeRadiusPx
+            val centerBreathingRadius = centerNodeRadiusPx * (1.0f + (breathingScale - 1.0f) * 0.25f)
 
-            // Subtle Outer Glow for "You" node
+            // Subtle outer glow halo for "You" node
             drawCircle(
-                color = primaryColor.copy(alpha = 0.15f),
-                radius = centerBreathingRadius + 8f,
+                color = primaryColor.copy(alpha = 0.12f),
+                radius = centerBreathingRadius + 6f,
                 center = center
             )
 
-            // Node Boundary Border
+            // Dark boundary ring
             drawCircle(
                 color = Color(0xFF0F172A),
-                radius = centerBreathingRadius + 2f,
+                radius = centerBreathingRadius + 1.5f,
                 center = center
             )
 
-            // Solid Primary Circle
+            // Solid primary circle
             drawCircle(
                 color = primaryColor,
                 radius = centerBreathingRadius,
                 center = center
             )
 
-            // Inner Core Dot
+            // Crisp inner white core dot
             drawCircle(
                 color = Color.White,
-                radius = centerBreathingRadius * 0.30f,
+                radius = centerBreathingRadius * 0.32f,
                 center = center
             )
 
             // "You" Label Pill beneath center node
-            val youLayoutResult = textMeasurer.measure(
-                text = "You",
-                style = youTextStyle
-            )
-            val youPillPaddingH = 7.dp.toPx()
-            val youPillPaddingV = 1.5.dp.toPx()
-            val youPillWidth = youLayoutResult.size.width + youPillPaddingH * 2
-            val youPillHeight = youLayoutResult.size.height + youPillPaddingV * 2
-            val youPillTop = center.y + centerBreathingRadius + 2.dp.toPx()
-            val youPillLeft = center.x - youPillWidth / 2f
+            if (sceneLayout.youLayoutResult != null) {
+                val youRect = sceneLayout.youLabelRect
+                val youPadH = 6.dp.toPx()
+                val youPadV = 1.5.dp.toPx()
 
-            drawRoundRect(
-                color = Color(0xEE0F172A),
-                topLeft = Offset(youPillLeft, youPillTop),
-                size = Size(youPillWidth, youPillHeight),
-                cornerRadius = CornerRadius(8f, 8f)
-            )
-            drawRoundRect(
-                color = primaryColor.copy(alpha = 0.6f),
-                topLeft = Offset(youPillLeft, youPillTop),
-                size = Size(youPillWidth, youPillHeight),
-                cornerRadius = CornerRadius(8f, 8f),
-                style = Stroke(width = 0.8f)
-            )
-            drawText(
-                textLayoutResult = youLayoutResult,
-                topLeft = Offset(youPillLeft + youPillPaddingH, youPillTop + youPillPaddingV)
-            )
-
-            nodePositionsRef.set(calculatedPositions)
+                drawRoundRect(
+                    color = Color(0xEE0F172A),
+                    topLeft = Offset(youRect.left, youRect.top),
+                    size = Size(youRect.width, youRect.height),
+                    cornerRadius = CornerRadius(8f, 8f)
+                )
+                drawRoundRect(
+                    color = primaryColor.copy(alpha = 0.55f),
+                    topLeft = Offset(youRect.left, youRect.top),
+                    size = Size(youRect.width, youRect.height),
+                    cornerRadius = CornerRadius(8f, 8f),
+                    style = Stroke(width = 0.8f)
+                )
+                drawText(
+                    textLayoutResult = sceneLayout.youLayoutResult,
+                    topLeft = Offset(youRect.left + youPadH, youRect.top + youPadV)
+                )
+            }
         }
     }
 }

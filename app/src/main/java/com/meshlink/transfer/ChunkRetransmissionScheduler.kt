@@ -50,7 +50,10 @@ class ChunkRetransmissionScheduler @Inject constructor(
         val transferId = session.transferId
         stopMonitoring(transferId)
 
-        val timeoutMs = config.getAckTimeoutMs(session.transportUsed)
+        // Use chunk-count-aware timeout: small files (e.g. voice notes) get a tighter ACK
+        // timeout (2000ms) to avoid retry storms while still giving BLE mesh relay time to
+        // route the ACK back.  Larger files retain the standard 2500ms timeout.
+        val timeoutMs = config.getAckTimeoutMs(session.transportUsed, session.totalChunks)
 
         val job = applicationScope.launch(ioDispatcher + SupervisorJob()) {
             val sessionAttempts = retransmissionAttempts.computeIfAbsent(transferId) { ConcurrentHashMap() }

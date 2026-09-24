@@ -274,8 +274,17 @@ internal class MeshRouter @Inject constructor(
             _incomingPayloads.tryEmit(packet.senderId to packet)
         }
 
-        // Packets FOR US: do not forward or store
-        if (isForMe) return
+        // Packets directed specifically to US: do not forward or store
+        if (isDirectForMe) return
+
+        // Do not forward packets originated by us
+        if (canonicalLocalId.isNotBlank() && (
+            packet.senderId.equals(localMeshId, ignoreCase = true) ||
+            packet.senderId.equals(canonicalLocalId, ignoreCase = true) ||
+            com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId) == canonicalLocalId
+        )) {
+            return
+        }
 
         // ACK/NACK are ephemeral
         val isAckNack = packet.type == PacketType.MEDIA_ACK || packet.type == PacketType.MEDIA_NACK

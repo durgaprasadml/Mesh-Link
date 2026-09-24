@@ -177,16 +177,16 @@ class KeyExchangeHandler @Inject constructor(
             }
         }
 
-        if (userDao != null && peerDisplayName.isNotBlank()) {
+        if (peerDisplayName.isNotBlank()) {
             val currentTime = System.currentTimeMillis()
             applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
-                    val existing = userDao.getUser(packet.senderId)
-                    if (existing == null) {
-                        userDao.insertUser(com.meshlink.database.data.local.UserEntity(meshId = packet.senderId, name = peerDisplayName, publicKey = signingPublicKey, lastSeen = currentTime))
-                    } else if (existing.name != peerDisplayName || existing.publicKey != signingPublicKey || existing.lastSeen != currentTime) {
-                        userDao.insertUser(existing.copy(name = peerDisplayName, publicKey = signingPublicKey, lastSeen = currentTime))
-                    }
+                    userRepository.saveOrUpdatePeerProfile(
+                        meshId = packet.senderId,
+                        name = peerDisplayName,
+                        publicKey = signingPublicKey,
+                        lastSeen = currentTime
+                    )
                 } catch (e: Exception) {
                     MeshLogger.w(TAG, "Failed to persist identity in KeyExchangeHandler: ${e.message}")
                 }

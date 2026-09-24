@@ -48,9 +48,11 @@ internal class BleTransportImpl @Inject constructor(
 
     override val connectedPeers: Set<String>
         get() {
-            val peers = gattManager.connectedServers.keys + gattManager.activeClients.keys
+            val macs = gattManager.connectedServers.keys + gattManager.activeClients.keys
+            val resolvedMeshIds = macs.mapNotNull { routingCoordinator.resolveMeshId(it) }
+            val peers = macs + resolvedMeshIds
             _connectedPeersFlow.value = peers
-            _healthState.value = if (peers.isNotEmpty()) TransportHealth.CONNECTED else TransportHealth.AVAILABLE
+            _healthState.value = if (macs.isNotEmpty()) TransportHealth.CONNECTED else TransportHealth.AVAILABLE
             return peers
         }
 
@@ -77,7 +79,11 @@ internal class BleTransportImpl @Inject constructor(
     @Deprecated("Use broadcastPacket instead", ReplaceWith("broadcastPacket(packet, excludeAddress, includeAddress)"))
     override suspend fun broadcast(packet: MeshPacket, excludeAddress: String?, includeAddress: String?) {
         val json = MeshPacketParser.toJson(packet)
-        val resolvedInclude = if (includeAddress != null && includeAddress != "BROADCAST") routingCoordinator.resolvePeerAddress(includeAddress) ?: includeAddress else null
+        val resolvedInclude = if (includeAddress != null && includeAddress != "BROADCAST") {
+            routingCoordinator.resolvePeerAddress(includeAddress) ?: includeAddress
+        } else if (packet.targetId != "BROADCAST") {
+            routingCoordinator.resolvePeerAddress(packet.targetId) ?: packet.targetId
+        } else null
         val resolvedExclude = if (excludeAddress != null) routingCoordinator.resolvePeerAddress(excludeAddress) ?: excludeAddress else null
         gattManager.broadcastPacket(json, excludeAddress = resolvedExclude, includeAddress = resolvedInclude)
     }
@@ -85,7 +91,11 @@ internal class BleTransportImpl @Inject constructor(
     override suspend fun broadcastPacket(packet: MeshPacket, excludeAddress: String?, includeAddress: String?): com.meshlink.domain.model.MeshResult<Unit> {
         return try {
             val json = MeshPacketParser.toJson(packet)
-            val resolvedInclude = if (includeAddress != null && includeAddress != "BROADCAST") routingCoordinator.resolvePeerAddress(includeAddress) ?: includeAddress else null
+            val resolvedInclude = if (includeAddress != null && includeAddress != "BROADCAST") {
+                routingCoordinator.resolvePeerAddress(includeAddress) ?: includeAddress
+            } else if (packet.targetId != "BROADCAST") {
+                routingCoordinator.resolvePeerAddress(packet.targetId) ?: packet.targetId
+            } else null
             val resolvedExclude = if (excludeAddress != null) routingCoordinator.resolvePeerAddress(excludeAddress) ?: excludeAddress else null
             gattManager.broadcastPacket(json, excludeAddress = resolvedExclude, includeAddress = resolvedInclude)
             com.meshlink.domain.model.MeshResult.Success(Unit)

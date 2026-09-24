@@ -6,18 +6,15 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.widget.Toast
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -43,17 +40,22 @@ import androidx.compose.ui.unit.dp
 import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.util.DateTimeUtils
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 /**
  * Modern Material 3 Location Message component for Mesh Link chat.
- * 
- * Automatically routes between:
- * - [OutgoingLocationBubble]: A compact, chat-oriented bubble for the sender's own outgoing location message.
- * - [IncomingLocationCard]: The rich, detailed elevated card for incoming receiver-side location messages.
+ *
+ * Provides a unified, information-rich, Apple-inspired presentation for both
+ * sender (outgoing) and receiver (incoming) location messages with:
+ * - Shared Location header with location icon pin and subtitle
+ * - Clean map preview with centered marker and tap-to-open interaction
+ * - Exact formatted coordinates
+ * - Subtle separator line
+ * - Compact metadata rows for Battery %, Connection type, and Shared timestamp
+ * - WCAG AA accessible "Open in Maps" action button with clipboard fallback
+ * - Full Dark Mode, TalkBack, and zero-allocation 60fps scrolling performance
  */
 @Composable
 fun LocationMessageCard(
@@ -61,39 +63,68 @@ fun LocationMessageCard(
     onLocationClick: (Double, Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (message.isFromMe) {
-        OutgoingLocationBubble(
-            message = message,
-            onLocationClick = onLocationClick,
-            modifier = modifier
-        )
-    } else {
-        IncomingLocationCard(
-            message = message,
-            onLocationClick = onLocationClick,
-            modifier = modifier
-        )
-    }
+    LocationMessageContent(
+        message = message,
+        onLocationClick = onLocationClick,
+        modifier = modifier
+    )
 }
 
 /**
- * Compact, chat-oriented location bubble for outgoing (sender-side) messages.
- *
- * Features:
- * - Compact header with location icon pin and "Location" title
- * - Responsive, compact map preview (~115dp height) with tap-to-open interaction
- * - Concise coordinate display (e.g., "12.779922, 75.184170")
- * - Full TalkBack accessibility semantics
- * - No hardware / battery / connection rows (unnecessary for sender)
- * - Optimized static canvas fallback to eliminate infinite recomposition loops
+ * Backward-compatible alias for the outgoing location message bubble.
+ * Delegates to the unified [LocationMessageCard].
  */
+@Deprecated(
+    message = "Use LocationMessageCard directly for unified sender and receiver rendering.",
+    replaceWith = ReplaceWith("LocationMessageCard(message, onLocationClick, modifier)")
+)
 @Composable
 fun OutgoingLocationBubble(
     message: Message,
     onLocationClick: (Double, Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    LocationMessageCard(
+        message = message,
+        onLocationClick = onLocationClick,
+        modifier = modifier
+    )
+}
+
+/**
+ * Backward-compatible alias for the incoming location message card.
+ * Delegates to the unified [LocationMessageCard].
+ */
+@Deprecated(
+    message = "Use LocationMessageCard directly for unified sender and receiver rendering.",
+    replaceWith = ReplaceWith("LocationMessageCard(message, onLocationClick, modifier)")
+)
+@Composable
+fun IncomingLocationCard(
+    message: Message,
+    onLocationClick: (Double, Double) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LocationMessageCard(
+        message = message,
+        onLocationClick = onLocationClick,
+        modifier = modifier
+    )
+}
+
+/**
+ * Unified content composable rendering the rich location card inside the chat message bubble.
+ */
+@Composable
+private fun LocationMessageContent(
+    message: Message,
+    onLocationClick: (Double, Double) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
     val isDark = MeshTheme.isDark
+    val isMe = message.isFromMe
+
     val lat = message.latitude
     val lng = message.longitude
     val hasCoords = lat != null && lng != null
@@ -109,11 +140,69 @@ fun OutgoingLocationBubble(
         if (hasCoords) "$formattedLat, $formattedLng" else "Location unavailable"
     }
 
-    val mapBitmap = rememberMapBitmap(message)
-
-    val talkBackDescription = remember(coordsText) {
-        "Shared Location. Coordinates: $coordsText. Tap map to open in Maps."
+    val batteryPercent = message.batteryPercent
+    val batteryText = remember(batteryPercent) {
+        if (batteryPercent != null && batteryPercent >= 0) {
+            "$batteryPercent%"
+        } else {
+            null
+        }
     }
+
+    val connectionText = remember(message.status) {
+        when (message.status) {
+            DeliveryStatus.RELAYED -> "Mesh Relayed"
+            else -> "Direct Mesh"
+        }
+    }
+
+    val formattedTime = remember(message.timestamp) {
+        DateTimeUtils.formatTimeHHMM(message.timestamp)
+    }
+
+    // Adaptive color tokens tailored to chat bubble surface
+    val primaryTextColor = if (isMe) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val secondaryTextColor = if (isMe) {
+        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+    }
+
+    val accentColor = MaterialTheme.colorScheme.primary
+    val iconBgColor = MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.18f else 0.12f)
+    val subSurfaceColor = MaterialTheme.colorScheme.surface.copy(alpha = if (isDark) 0.35f else 0.45f)
+    val mapBorderColor = if (isMe) {
+        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = if (isDark) 0.3f else 0.2f)
+    }
+    val dividerColor = if (isMe) {
+        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
+    }
+    val buttonBgColor = MaterialTheme.colorScheme.primary
+    val buttonTextColor = MaterialTheme.colorScheme.onPrimary
+
+    val talkBackDescription = remember(coordsText, batteryText, connectionText, formattedTime) {
+        buildString {
+            append("Shared Location. ")
+            append("Coordinates: $coordsText. ")
+            if (batteryText != null) {
+                append("Battery: $batteryText. ")
+            }
+            append("Connection: $connectionText. ")
+            append("Shared at: $formattedTime. ")
+            append("Tap to open in Maps.")
+        }
+    }
+
+    val mapBitmap = rememberMapBitmap(message)
 
     Column(
         modifier = modifier
@@ -122,34 +211,56 @@ fun OutgoingLocationBubble(
                 contentDescription = talkBackDescription
             }
     ) {
-        // Compact Header: 📍 Location
+        // 1. HEADER: 📍 Shared Location / Location shared via Mesh Link
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = MeshTheme.spacing.small),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(iconBgColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
             Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
-            Text(
-                text = "Location",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Shared Location",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = primaryTextColor
+                )
+                Text(
+                    text = "Location shared via Mesh Link",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = secondaryTextColor
+                )
+            }
         }
 
-        // Compact Map Preview
+        Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
+
+        // 2. MAP PREVIEW (Clean 130dp height with centered marker and tap-to-open interaction)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(115.dp)
+                .height(130.dp)
                 .clip(RoundedCornerShape(MeshTheme.spacing.medium))
+                .border(
+                    width = 0.5.dp,
+                    color = mapBorderColor,
+                    shape = RoundedCornerShape(MeshTheme.spacing.medium)
+                )
                 .clickable(enabled = hasCoords) {
                     if (lat != null && lng != null) {
                         onLocationClick(lat, lng)
@@ -164,325 +275,125 @@ fun OutgoingLocationBubble(
             if (mapBitmap != null) {
                 Image(
                     bitmap = mapBitmap,
-                    contentDescription = null,
+                    contentDescription = "Map preview",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
+                )
+                // Centered location pin marker over preview bitmap
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .offset(y = (-8).dp)
                 )
             } else {
                 StyledMapCanvasPreview(
                     isDark = isDark,
                     latText = formattedLat,
-                    lngText = formattedLng,
-                    animatePulse = false
+                    lngText = formattedLng
                 )
-            }
-
-            // Subtle tap-to-open affordance chip in bottom-end corner
-            if (hasCoords) {
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(MeshTheme.spacing.small),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = if (isDark) 0.75f else 0.85f),
-                    shape = RoundedCornerShape(MeshTheme.spacing.small)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "Maps",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
             }
         }
 
         Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
 
-        // Concise Coordinates Display
+        // 3. EXACT COORDINATES
         Text(
             text = coordsText,
             style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+            fontWeight = FontWeight.SemiBold,
+            color = primaryTextColor,
             modifier = Modifier.fillMaxWidth()
         )
-    }
-}
 
-/**
- * Modern Material 3 Location Message Card for Mesh Link chat (Receiver-side).
- * 
- * Features:
- * - Premium Material 3 elevated card container with rounded corners (20dp)
- * - Clear header with location icon badge, title, and "Shared via Mesh Link" subtitle
- * - Aspect-ratio (16:9) Map Preview supporting cached bitmaps with canvas vector grid & animated pin fallback
- * - Structured information section presenting Latitude, Longitude, Battery, Connection, and Timestamp rows
- * - WCAG AA accessible "Open in Maps" action button (≥48dp touch target) with graceful clipboard fallback
- * - Dark mode, high contrast, dynamic color, and TalkBack accessibility semantics
- */
-@Composable
-fun IncomingLocationCard(
-    message: Message,
-    onLocationClick: (Double, Double) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val isDark = MeshTheme.isDark
+        // 4. SUBTLE DIVIDER
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = MeshTheme.spacing.small),
+            thickness = 0.5.dp,
+            color = dividerColor
+        )
 
-    val lat = message.latitude
-    val lng = message.longitude
-    val hasCoords = lat != null && lng != null
-
-    val formattedLat = remember(lat) {
-        lat?.let { String.format(Locale.US, "%.6f", it) } ?: "Unavailable"
-    }
-
-    val formattedLng = remember(lng) {
-        lng?.let { String.format(Locale.US, "%.6f", it) } ?: "Unavailable"
-    }
-
-    val batteryText = remember(message.batteryPercent) {
-        if (message.batteryPercent != null && message.batteryPercent >= 0) {
-            "${message.batteryPercent}%"
-        } else {
-            "Unknown"
-        }
-    }
-
-    val connectionText = remember(message.status) {
-        when (message.status) {
-            DeliveryStatus.RELAYED -> "Mesh Relayed"
-            else -> "Direct Mesh"
-        }
-    }
-
-    val formattedTime = remember(message.timestamp) {
-        com.meshlink.ui.util.DateTimeUtils.formatTimeHHMM(message.timestamp)
-    }
-
-    // Accessible screen reader narrative
-    val talkBackDescription = remember(formattedLat, formattedLng, batteryText, connectionText, formattedTime) {
-        "Shared Location message. Latitude: $formattedLat, Longitude: $formattedLng, Battery: $batteryText, Connection: $connectionText, Shared at: $formattedTime."
-    }
-
-    val mapBitmap = rememberMapBitmap(message)
-
-    val cardBgColor = MaterialTheme.colorScheme.surfaceContainer
-    val cardBorderColor = if (isDark) {
-        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-    } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-    }
-
-    ElevatedCard(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(MeshTheme.spacing.large))
-            .border(
-                width = 1.dp,
-                color = cardBorderColor,
-                shape = RoundedCornerShape(MeshTheme.spacing.large)
-            )
-            .semantics(mergeDescendants = true) {
-                contentDescription = talkBackDescription
-            },
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = cardBgColor
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = MeshTheme.elevation.level1
-        ),
-        shape = RoundedCornerShape(MeshTheme.spacing.large)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MeshTheme.spacing.mediumLarge)
+        // 5. STRUCTURED METADATA ROWS (Battery, Connection, Shared time)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = subSurfaceColor,
+            shape = RoundedCornerShape(MeshTheme.spacing.small)
         ) {
-            // HEADER SECTION
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(MeshTheme.spacing.huge)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(MeshTheme.spacing.extraLarge)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(MeshTheme.spacing.medium))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Shared Location",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Location shared via Mesh Link",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
-
-            // MAP PREVIEW SECTION
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .clip(RoundedCornerShape(MeshTheme.spacing.medium))
-                    .clickable(enabled = hasCoords) {
-                        if (lat != null && lng != null) {
-                            onLocationClick(lat, lng)
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                val currentMapBitmap = mapBitmap
-                if (currentMapBitmap != null) {
-                    Image(
-                        bitmap = currentMapBitmap,
-                        contentDescription = "Map preview snapshot",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    // Styled Canvas Map Vector Graphic Fallback
-                    StyledMapCanvasPreview(isDark = isDark, latText = formattedLat, lngText = formattedLng, animatePulse = true)
-                }
-
-                // Coordinate Chip Overlay
-                if (hasCoords) {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(MeshTheme.spacing.mediumSmall),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                        shape = RoundedCornerShape(MeshTheme.spacing.small)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PinDrop,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "$formattedLat°, $formattedLng°",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
-
-            // INFORMATION SECTION (Structured Rows)
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = if (isDark) 0.35f else 0.5f),
-                shape = RoundedCornerShape(MeshTheme.spacing.medium)
-            ) {
-                Column(
-                    modifier = Modifier.padding(MeshTheme.spacing.medium),
-                    verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.mediumSmall)
-                ) {
-                    LocationInfoRow(
-                        icon = Icons.Default.Explore,
-                        label = "Latitude",
-                        value = formattedLat
-                    )
-                    LocationInfoRow(
-                        icon = Icons.Default.Place,
-                        label = "Longitude",
-                        value = formattedLng
-                    )
+                if (batteryText != null) {
                     LocationInfoRow(
                         icon = Icons.Default.BatteryChargingFull,
                         label = "Battery",
-                        value = batteryText
-                    )
-                    LocationInfoRow(
-                        icon = Icons.Default.CellTower,
-                        label = "Connection",
-                        value = connectionText
-                    )
-                    LocationInfoRow(
-                        icon = Icons.Default.Schedule,
-                        label = "Shared",
-                        value = formattedTime
+                        value = batteryText,
+                        labelColor = secondaryTextColor,
+                        valueColor = primaryTextColor,
+                        iconColor = accentColor
                     )
                 }
+                LocationInfoRow(
+                    icon = Icons.Default.CellTower,
+                    label = "Connection",
+                    value = connectionText,
+                    labelColor = secondaryTextColor,
+                    valueColor = primaryTextColor,
+                    iconColor = accentColor
+                )
+                LocationInfoRow(
+                    icon = Icons.Default.Schedule,
+                    label = "Shared",
+                    value = formattedTime,
+                    labelColor = secondaryTextColor,
+                    valueColor = primaryTextColor,
+                    iconColor = accentColor
+                )
             }
+        }
 
-            Spacer(modifier = Modifier.height(MeshTheme.spacing.medium))
+        Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
 
-            // PRIMARY ACTION BUTTON (Open in Maps / Clipboard Fallback)
-            FilledTonalButton(
-                onClick = {
-                    if (lat != null && lng != null) {
-                        onLocationClick(lat, lng)
-                    } else {
-                        // Fallback: Copy to Clipboard
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Location Coordinates", "$formattedLat, $formattedLng")
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Coordinates copied to clipboard", Toast.LENGTH_SHORT).show()
-                    }
+        // 6. ACTION BUTTON: "Open in Maps" (WCAG AA accessible touch target)
+        Button(
+            onClick = {
+                if (lat != null && lng != null) {
+                    onLocationClick(lat, lng)
+                } else {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("Location Coordinates", coordsText)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "Coordinates copied to clipboard", Toast.LENGTH_SHORT).show()
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 40.dp)
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "Open location in maps application"
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = MeshTheme.spacing.giant) // ≥48dp Touch Target
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = "Open location in maps application"
-                    },
-                shape = RoundedCornerShape(MeshTheme.spacing.medium)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Map,
-                    contentDescription = null,
-                    modifier = Modifier.size(MeshTheme.spacing.large)
-                )
-                Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
-                Text(
-                    text = "Open in Maps",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            shape = RoundedCornerShape(MeshTheme.spacing.medium),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = buttonBgColor,
+                contentColor = buttonTextColor
+            ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Map,
+                contentDescription = null,
+                tint = buttonTextColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(MeshTheme.spacing.small))
+            Text(
+                text = "Open in Maps",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
@@ -516,11 +427,10 @@ fun rememberMapBitmap(message: Message): androidx.compose.ui.graphics.ImageBitma
 }
 
 /**
- * Styled Vector Map Canvas Preview composable.
- * Renders topographic grid lines, simulated road vectors, compass ring, and location pin.
+ * Static Vector Map Canvas Preview composable.
+ * Renders topographic grid lines, simulated road vectors, ground contact dot, and centered location pin.
  *
- * @param animatePulse Controls whether an infinite pulsing radar animation runs.
- *                     Disabled by default to optimize performance and prevent recomposition frame drops.
+ * Designed to be 100% static and zero-allocation to prevent recomposition loops and frame drops during chat scroll.
  */
 @Composable
 fun StyledMapCanvasPreview(
@@ -528,42 +438,11 @@ fun StyledMapCanvasPreview(
     latText: String,
     lngText: String,
     modifier: Modifier = Modifier,
-    animatePulse: Boolean = false
+    @Suppress("UNUSED_PARAMETER") animatePulse: Boolean = false
 ) {
-    val pulseScale: Float
-    val pulseAlpha: Float
-
-    if (animatePulse) {
-        val infiniteTransition = rememberInfiniteTransition(label = "mapPinPulse")
-        val animatedScale by infiniteTransition.animateFloat(
-            initialValue = 0.85f,
-            targetValue = 1.35f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1400, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "pulseScale"
-        )
-        val animatedAlpha by infiniteTransition.animateFloat(
-            initialValue = 0.7f,
-            targetValue = 0f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1400, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "pulseAlpha"
-        )
-        pulseScale = animatedScale
-        pulseAlpha = animatedAlpha
-    } else {
-        pulseScale = 1.0f
-        pulseAlpha = 0.25f
-    }
-
     val bgColor = if (isDark) Color(0xFF1E293B) else Color(0xFFE2E8F0)
     val gridColor = if (isDark) Color(0xFF334155) else Color(0xFFCBD5E1)
     val roadColor = if (isDark) Color(0xFF475569) else Color(0xFF94A3B8)
-    val primaryPinColor = MaterialTheme.colorScheme.primary
 
     Box(
         modifier = modifier
@@ -582,7 +461,7 @@ fun StyledMapCanvasPreview(
             val height = size.height
 
             // Draw grid lines
-            val step = 32.dp.toPx()
+            val step = 28.dp.toPx()
             var x = 0f
             while (x < width) {
                 drawLine(
@@ -604,7 +483,7 @@ fun StyledMapCanvasPreview(
                 y += step
             }
 
-            // Draw stylized road path 1
+            // Stylized road path 1
             val roadPath1 = Path().apply {
                 moveTo(0f, height * 0.7f)
                 cubicTo(width * 0.3f, height * 0.8f, width * 0.6f, height * 0.3f, width, height * 0.4f)
@@ -612,42 +491,37 @@ fun StyledMapCanvasPreview(
             drawPath(
                 path = roadPath1,
                 color = roadColor,
-                style = Stroke(width = 6.dp.toPx())
+                style = Stroke(width = 5.dp.toPx())
             )
 
-            // Draw stylized road path 2
+            // Stylized road path 2
             val roadPath2 = Path().apply {
-                moveTo(width * 0.4f, 0f)
-                cubicTo(width * 0.45f, height * 0.5f, width * 0.55f, height * 0.6f, width * 0.7f, height)
+                moveTo(width * 0.35f, 0f)
+                cubicTo(width * 0.42f, height * 0.5f, width * 0.58f, height * 0.6f, width * 0.75f, height)
             }
             drawPath(
                 path = roadPath2,
-                color = roadColor.copy(alpha = 0.8f),
-                style = Stroke(width = 4.dp.toPx())
+                color = roadColor.copy(alpha = 0.75f),
+                style = Stroke(width = 3.5.dp.toPx())
             )
 
-            // Radar aura at center
+            // Ground contact shadow dot under the pin tip
             drawCircle(
-                color = primaryPinColor.copy(alpha = pulseAlpha),
-                radius = 28.dp.toPx() * pulseScale,
-                center = Offset(width / 2f, height / 2f)
+                color = Color.Black.copy(alpha = 0.22f),
+                radius = 4.dp.toPx(),
+                center = Offset(width / 2f, height / 2f + 8.dp.toPx())
             )
         }
 
         // Center Location Pin Icon
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier
-                    .size(36.dp)
-                    .offset(y = (-4).dp)
-            )
-        }
+        Icon(
+            imageVector = Icons.Default.LocationOn,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier
+                .size(32.dp)
+                .offset(y = (-8).dp)
+        )
     }
 }
 
@@ -659,6 +533,9 @@ private fun LocationInfoRow(
     icon: ImageVector,
     label: String,
     value: String,
+    labelColor: Color,
+    valueColor: Color,
+    iconColor: Color,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -668,24 +545,24 @@ private fun LocationInfoRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(18.dp)
+            tint = iconColor,
+            modifier = Modifier.size(14.dp)
         )
 
-        Spacer(modifier = Modifier.width(MeshTheme.spacing.mediumSmall))
+        Spacer(modifier = Modifier.width(6.dp))
 
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            color = labelColor,
             modifier = Modifier.weight(1f)
         )
 
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = valueColor
         )
     }
 }

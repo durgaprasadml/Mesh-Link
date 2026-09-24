@@ -407,7 +407,7 @@ private fun BroadcastBubble(
 ) {
     val msg = uiMsg.message
     val isMe = msg.isFromMe
-    val senderDisplayName = uiMsg.senderName.trim().ifBlank { "Unknown User" }
+    val senderDisplayName = uiMsg.senderName.trim().ifBlank { "Mesh Peer" }
 
     val formattedTime = remember(msg.timestamp) {
         DateTimeUtils.formatTimeHHMM(msg.timestamp)

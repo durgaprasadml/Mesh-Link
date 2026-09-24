@@ -21,11 +21,13 @@ class SlidingWindowManagerTest {
 
     @Test
     fun `initializeSessionWindow sets window size based on transport`() {
-        val wifiSize = slidingWindowManager.initializeSessionWindow("transfer_wifi", TransportType.WIFI_DIRECT, 100)
-        val bleSize = slidingWindowManager.initializeSessionWindow("transfer_ble", TransportType.BLE, 100)
+        val wifiSize = slidingWindowManager.initializeSessionWindow("transfer_wifi", TransportType.WIFI_DIRECT, 200)
+        val bleLargeSize = slidingWindowManager.initializeSessionWindow("transfer_ble_large", TransportType.BLE, 200)
+        val bleSmallSize = slidingWindowManager.initializeSessionWindow("transfer_ble_small", TransportType.BLE, 50)
 
         assertEquals(16, wifiSize)
-        assertEquals(4, bleSize)
+        assertEquals(12, bleLargeSize)
+        assertEquals(256, bleSmallSize)
         assertEquals(0, slidingWindowManager.getBase("transfer_wifi"))
     }
 

@@ -109,7 +109,10 @@ class SlidingWindowManager @Inject constructor(
     // ─────────────────── Session-Aware Window Management ───────────────────
 
     fun initializeSessionWindow(transferId: String, transportType: TransportType, totalChunks: Int): Int {
-        val size = config.getWindowSize(transportType)
+        // Use chunk-count-aware overload: small files (≤ config.smallFileChunkThreshold chunks,
+        // e.g. a 2-second voice note ≈ 23 chunks) get a window large enough to cover ALL chunks,
+        // so they are dispatched in a single pass without waiting for intermediate ACKs.
+        val size = config.getWindowSize(transportType, totalChunks)
         val windowState = WindowState(transferId, size, totalChunks)
         activeWindows[transferId] = windowState
         runtimeStateRegistry.getOrCreateState(transferId, size)

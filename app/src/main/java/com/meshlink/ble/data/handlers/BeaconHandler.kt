@@ -101,7 +101,13 @@ class BeaconHandler @Inject constructor(
                 discoveryEngine?.updatePeerIdentity(senderId, senderName, senderId)
             }
 
-            if (userDao != null) {
+            if (userRepository != null && senderName.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(senderName, senderId)) {
+                try {
+                    userRepository.saveOrUpdatePeerProfile(senderId, senderName, lastSeen = now, rssi = -65)
+                } catch (e: Exception) {
+                    MeshLogger.w(TAG, "Failed to update UserRepository from BEACON: ${e.message}")
+                }
+            } else if (userDao != null) {
                 try {
                     val existingUser = userDao.getUser(senderId)
                     if (senderName.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(senderName, senderId)) {

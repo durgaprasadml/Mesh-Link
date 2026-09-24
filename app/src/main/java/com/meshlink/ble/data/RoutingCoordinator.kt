@@ -37,9 +37,33 @@ class RoutingCoordinator @Inject constructor(
         
         val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm }
         if (scanned != null) return scanned.address
+
+        val record = discoveryManager.discoveryEngine.cache.getAll().firstOrNull {
+            com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm
+        }
+        if (record != null && record.macAddress.isNotBlank()) return record.macAddress
         
         val route = meshRouter.routeTable[peerIdOrAddress] ?: meshRouter.routeTable[norm]
         if (route != null) return route.nextHop
+
+        return null
+    }
+
+    fun resolveMeshId(addressOrMeshId: String): String? {
+        if (!BleConstants.isBluetoothAddress(addressOrMeshId)) {
+            return com.meshlink.util.MeshIdNormalizer.canonicalize(addressOrMeshId)
+        }
+
+        val scanned = discoveryManager.scannedDevices.value[addressOrMeshId]
+            ?: discoveryManager.scannedDevices.value.values.firstOrNull { it.address.equals(addressOrMeshId, ignoreCase = true) }
+        if (scanned != null && scanned.meshId.isNotBlank()) {
+            return com.meshlink.util.MeshIdNormalizer.canonicalize(scanned.meshId)
+        }
+
+        val record = discoveryManager.discoveryEngine.cache.get(addressOrMeshId)
+        if (record != null && record.meshId.isNotBlank()) {
+            return com.meshlink.util.MeshIdNormalizer.canonicalize(record.meshId)
+        }
 
         return null
     }

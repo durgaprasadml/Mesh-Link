@@ -43,7 +43,8 @@ class BroadcastHandler @Inject constructor(
         val lng = location?.longitude ?: 0.0
         val battery = location?.batteryPercent ?: locationProvider.getBatteryPercent()
 
-        val displayName = user.name.trim().ifBlank { "Unknown User" }
+        val rawName = user.name.trim()
+        val displayName = if (!com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(rawName, localPeerId)) rawName else ""
 
         val payloadJson = JSONObject().apply {
             put("sosEventId", sosEventId)
@@ -77,23 +78,14 @@ class BroadcastHandler @Inject constructor(
         val lng = json?.optDouble("lng", 0.0) ?: 0.0
         val battery = json?.optInt("battery", -1) ?: -1
         val payloadSenderName = json?.optString("senderName", "")?.trim() ?: ""
+        val canonicalSenderId = MeshIdNormalizer.canonicalize(packet.senderId)
 
-        val existingUser = userDao.getUser(packet.senderId)
-        val resolvedSenderName = when {
-            existingUser != null && existingUser.name.isNotBlank() && existingUser.name != "Unknown User" -> existingUser.name
-            payloadSenderName.isNotBlank() -> payloadSenderName
-            else -> "Unknown User"
+        if (payloadSenderName.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(payloadSenderName, canonicalSenderId)) {
+            userRepository.saveOrUpdatePeerProfile(packet.senderId, payloadSenderName)
         }
 
-        if (resolvedSenderName != "Unknown User") {
-            if (existingUser == null) {
-                userDao.insertUser(UserEntity(meshId = packet.senderId, name = resolvedSenderName))
-            } else if (existingUser.name.isBlank() || existingUser.name == "Unknown User" || existingUser.name == packet.senderId) {
-                userDao.insertUser(existingUser.copy(name = resolvedSenderName))
-            }
-        }
-
-        val chatId = MeshIdNormalizer.canonicalize(packet.senderId)
+        val resolvedSenderName = userRepository.getUserDisplayName(packet.senderId)
+        val chatId = canonicalSenderId
 
         if (existing != null) {
             // If already exists (e.g. placeholder from media), update details while preserving existing mediaPath
@@ -130,7 +122,8 @@ class BroadcastHandler @Inject constructor(
         val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
         router.localMeshId = localPeerId
 
-        val displayName = user.name.trim().ifBlank { "Unknown User" }
+        val rawName = user.name.trim()
+        val displayName = if (!com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(rawName, localPeerId)) rawName else ""
         val cleanText = messageText.trim()
 
         val payloadJson = JSONObject().apply {
@@ -195,22 +188,13 @@ class BroadcastHandler @Inject constructor(
             return
         }
 
-        val existingUser = userDao.getUser(packet.senderId)
         val canonicalSenderId = MeshIdNormalizer.canonicalize(packet.senderId)
 
-        val resolvedSenderName = when {
-            existingUser != null && existingUser.name.isNotBlank() && existingUser.name != "Unknown User" -> existingUser.name
-            payloadSenderName.isNotBlank() && payloadSenderName != canonicalSenderId -> payloadSenderName
-            else -> "Unknown User"
+        if (payloadSenderName.isNotBlank() && !com.meshlink.core.data.UserRepositoryImpl.isGenericOrInvalidName(payloadSenderName, canonicalSenderId)) {
+            userRepository.saveOrUpdatePeerProfile(packet.senderId, payloadSenderName)
         }
 
-        if (resolvedSenderName != "Unknown User") {
-            if (existingUser == null) {
-                userDao.insertUser(UserEntity(meshId = packet.senderId, name = resolvedSenderName))
-            } else if (existingUser.name.isBlank() || existingUser.name == "Unknown User" || existingUser.name == canonicalSenderId) {
-                userDao.insertUser(existingUser.copy(name = resolvedSenderName))
-            }
-        }
+        val resolvedSenderName = userRepository.getUserDisplayName(packet.senderId)
 
         val message = MessageEntity(
             messageId = packet.packetId,

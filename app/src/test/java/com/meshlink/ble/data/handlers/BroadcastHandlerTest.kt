@@ -73,9 +73,9 @@ class BroadcastHandlerTest {
     }
 
     @Test
-    fun `receiveBroadcastTextMessage extracts senderName and updates userDao`() = runTest {
+    fun `receiveBroadcastTextMessage extracts senderName and updates userRepository`() = runTest {
         coEvery { chatDao.getMessageByUuid(any()) } returns null
-        coEvery { userDao.getUser("peer_rahul") } returns null
+        coEvery { userRepository.getUserDisplayName("peer_rahul") } returns "Rahul"
 
         val expectedTimestamp = 1700000000000L
         val payload = JSONObject().apply {
@@ -94,10 +94,7 @@ class BroadcastHandlerTest {
 
         broadcastHandler.receiveBroadcastTextMessage(packet)
 
-        val slotUser = slot<UserEntity>()
-        coVerify { userDao.insertUser(capture(slotUser)) }
-        assertEquals("peer_rahul", slotUser.captured.meshId)
-        assertEquals("Rahul", slotUser.captured.name)
+        coVerify { userRepository.saveOrUpdatePeerProfile(eq("peer_rahul"), eq("Rahul"), any(), any(), any()) }
 
         val slotMsg = slot<MessageEntity>()
         coVerify { chatDao.insertMessage(capture(slotMsg)) }
@@ -108,9 +105,9 @@ class BroadcastHandlerTest {
     }
 
     @Test
-    fun `receiveBroadcastTextMessage falls back to Unknown User when senderName is missing`() = runTest {
+    fun `receiveBroadcastTextMessage falls back to Mesh Peer when senderName is missing`() = runTest {
         coEvery { chatDao.getMessageByUuid(any()) } returns null
-        coEvery { userDao.getUser("peer_anon") } returns null
+        coEvery { userRepository.getUserDisplayName("peer_anon") } returns "Mesh Peer"
 
         val payload = JSONObject().apply {
             put("text", "Emergency alert")
@@ -127,10 +124,36 @@ class BroadcastHandlerTest {
 
         broadcastHandler.receiveBroadcastTextMessage(packet)
 
+        coVerify(exactly = 0) { userRepository.saveOrUpdatePeerProfile(any(), any(), any(), any(), any()) }
+
         val slotMsg = slot<MessageEntity>()
         coVerify { chatDao.insertMessage(capture(slotMsg)) }
         assertEquals("Emergency alert", slotMsg.captured.text)
 
-        verify { com.meshlink.util.NotificationHelper.showMessageNotification(context, "peer_anon", "📢 Broadcast from Unknown User", "Emergency alert") }
+        verify { com.meshlink.util.NotificationHelper.showMessageNotification(context, "peer_anon", "📢 Broadcast from Mesh Peer", "Emergency alert") }
+    }
+
+    @Test
+    fun `receiveBroadcastTextMessage does not persist generic senderName`() = runTest {
+        coEvery { chatDao.getMessageByUuid(any()) } returns null
+        coEvery { userRepository.getUserDisplayName("peer_anon") } returns "Mesh Peer"
+
+        val payload = JSONObject().apply {
+            put("text", "Generic alert")
+            put("senderName", "Unknown User")
+            put("timestamp", System.currentTimeMillis())
+        }.toString()
+
+        val packet = MeshPacket(
+            packetId = "p102",
+            senderId = "peer_anon",
+            targetId = "BROADCAST",
+            payload = payload,
+            type = PacketType.TEXT
+        )
+
+        broadcastHandler.receiveBroadcastTextMessage(packet)
+
+        coVerify(exactly = 0) { userRepository.saveOrUpdatePeerProfile(any(), any(), any(), any(), any()) }
     }
 }

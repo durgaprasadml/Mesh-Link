@@ -34,6 +34,7 @@ import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.meshlink.domain.model.Message
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import java.io.File
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -48,11 +49,12 @@ fun MediaViewerScreen(
     val pagerState = rememberPagerState(initialPage = initialIndex) { mediaMessages.size }
     var showControls by remember { mutableStateOf(true) }
     val context = LocalContext.current
+    val isDark = MeshTheme.isDark
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(if (isDark) Color.Black else MaterialTheme.colorScheme.background)
     ) {
         HorizontalPager(
             state = pagerState,
@@ -86,7 +88,7 @@ fun MediaViewerScreen(
                         .height(3.dp)
                         .align(Alignment.TopCenter),
                     color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.White.copy(alpha = 0.15f)
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                 )
             } else {
                 LinearProgressIndicator(
@@ -95,7 +97,7 @@ fun MediaViewerScreen(
                         .height(3.dp)
                         .align(Alignment.TopCenter),
                     color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.White.copy(alpha = 0.15f)
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                 )
             }
         }
@@ -149,10 +151,10 @@ fun MediaViewerScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black.copy(alpha = 0.5f),
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor = if (isDark) Color.Black.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                    titleContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
                 )
             )
         }
@@ -275,7 +277,7 @@ fun ZoomableImageWithFallback(
                 // Thumbnail still decoding on IO — show a minimal centered indicator
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -284,7 +286,7 @@ fun ZoomableImageWithFallback(
             // No thumbnail and no file — unlikely in practice but handled gracefully
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(32.dp)
                 )
             }

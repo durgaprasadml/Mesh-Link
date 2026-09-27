@@ -17,6 +17,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import com.meshlink.ui.designsystem.theme.MeshTheme
+
 /**
  * Minimal Material 3 Welcome overlay for first-time profile creation users.
  */
@@ -26,6 +28,7 @@ fun WelcomeAnimation(
     visible: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val isDark = MeshTheme.isDark
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.BottomCenter
@@ -39,7 +42,7 @@ fun WelcomeAnimation(
             Text(
                 text = if (displayName.isNotBlank()) "Welcome to Mesh Link, $displayName" else "Welcome to Mesh Link",
                 style = MaterialTheme.typography.titleMedium,
-                color = AnimationConstants.SoftNeonGreenBright,
+                color = if (isDark) AnimationConstants.SoftNeonGreenBright else MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 1.2.sp,
                 textAlign = TextAlign.Center

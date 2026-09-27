@@ -38,7 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meshlink.domain.model.BleDevice
-import com.meshlink.ui.designsystem.theme.SuccessColorDark
+import com.meshlink.ui.designsystem.theme.MeshTheme
 import kotlin.math.sqrt
 
 /**
@@ -63,7 +63,7 @@ fun MeshTopologyCanvas(
     onNodeSelected: ((BleDevice) -> Unit)? = null
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
-    val connectedColor = SuccessColorDark
+    val connectedColor = MeshTheme.colors.online
 
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current

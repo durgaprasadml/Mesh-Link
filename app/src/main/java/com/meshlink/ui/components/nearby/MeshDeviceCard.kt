@@ -53,6 +53,7 @@ import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.model.TransportType
 import com.meshlink.ui.components.UserAvatarImage
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.SuccessColorDark
 import com.meshlink.util.MeshIdNormalizer
 
 /**
@@ -103,7 +104,7 @@ fun MeshDeviceCard(
     val isStrongSignal = device.rssi >= -65
     val isMediumSignal = device.rssi >= -80
     val (signalColor, signalIcon) = when {
-        isStrongSignal -> MeshTheme.colors.success to Icons.Default.SignalCellularAlt
+        isStrongSignal -> SuccessColorDark to Icons.Default.SignalCellularAlt
         isMediumSignal -> MeshTheme.colors.warning to Icons.Default.SignalCellularAlt2Bar
         else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) to Icons.Default.SignalCellularAlt1Bar
     }
@@ -174,7 +175,7 @@ fun MeshDeviceCard(
                         modifier = Modifier
                             .size(12.dp)
                             .clip(CircleShape)
-                            .background(MeshTheme.colors.online)
+                            .background(SuccessColorDark)
                             .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                     )
                 }
@@ -202,7 +203,7 @@ fun MeshDeviceCard(
                     Text(
                         text = statusSubtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (device.isConnected) MeshTheme.colors.success else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (device.isConnected) SuccessColorDark else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = if (device.isConnected) FontWeight.Medium else FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis

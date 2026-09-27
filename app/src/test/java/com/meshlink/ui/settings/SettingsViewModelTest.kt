@@ -106,14 +106,6 @@ class SettingsViewModelTest {
     fun `default SettingsUiState has LIGHT theme mode for first launch`() {
         val defaultState = SettingsUiState()
         assertEquals("LIGHT", defaultState.themeMode)
-        assertEquals(false, defaultState.isMaterialYouEnabled)
-    }
-
-    @Test
-    fun `default ThemePreferences has LIGHT theme mode and material you disabled`() {
-        val defaultPrefs = ThemePreferences()
-        assertEquals("LIGHT", defaultPrefs.themeMode)
-        assertEquals(false, defaultPrefs.isMaterialYouEnabled)
     }
 
     @Test

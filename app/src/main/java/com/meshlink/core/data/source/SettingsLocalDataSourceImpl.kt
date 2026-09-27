@@ -116,7 +116,7 @@ class SettingsLocalDataSourceImpl @Inject constructor(
         dataStore.edit { it[THEME_MODE] = mode }
     }
 
-    override val isMaterialYouEnabled: Flow<Boolean> = dataStore.data.map { it[MATERIAL_YOU_ENABLED] ?: false }
+    override val isMaterialYouEnabled: Flow<Boolean> = dataStore.data.map { it[MATERIAL_YOU_ENABLED] ?: true }
     override suspend fun setMaterialYouEnabled(enabled: Boolean) {
         dataStore.edit { it[MATERIAL_YOU_ENABLED] = enabled }
     }

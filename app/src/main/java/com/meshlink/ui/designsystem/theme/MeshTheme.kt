@@ -27,7 +27,7 @@ val LocalMeshIsDark = staticCompositionLocalOf { false }
 @Composable
 fun MeshTheme(
     themeMode: String = "LIGHT",
-    dynamicColor: Boolean = false,
+    dynamicColor: Boolean = true,
     amoledDark: Boolean = false,
     accentColor: String = "Blue",
     fontScale: Float = 1.0f,
@@ -99,12 +99,9 @@ fun MeshTheme(
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = view.context.findActivity()?.window ?: return@SideEffect
+            val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
-            window.navigationBarColor = colorScheme.surface.toArgb()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                window.isNavigationBarContrastEnforced = false
-            }
+            window.navigationBarColor = colorScheme.background.toArgb()
             val insetsController = WindowCompat.getInsetsController(window, view)
             insetsController.isAppearanceLightStatusBars = !darkTheme
             insetsController.isAppearanceLightNavigationBars = !darkTheme
@@ -193,10 +190,3 @@ object MeshTheme {
         @Composable
         get() = LocalMeshAnimations.current
 }
-
-private tailrec fun android.content.Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is android.content.ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
-

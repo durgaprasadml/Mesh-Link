@@ -31,7 +31,6 @@ import kotlin.math.sin
 fun MeshFormationCanvas(
     timeMs: Long,
     isWelcomeMode: Boolean,
-    isDark: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     // 6 Visually Identical Logo Nodes
@@ -134,7 +133,7 @@ fun MeshFormationCanvas(
         val centerGlowBloom = 1.0f + bloomNorm * 0.15f
 
         // ── Pass 1: Background & Vignette ────────────────────────────────────
-        drawBackgroundVignette(w, h, cx, cy, bgAlpha, isDark)
+        drawBackgroundVignette(w, h, cx, cy, bgAlpha)
 
         // ── Pass 2: Connection Beams with Traveling Pulse ────────────────────
         if (beamsAlpha > 0f) {
@@ -144,8 +143,7 @@ fun MeshFormationCanvas(
                 timeMs = timeMs,
                 stageStartTimesMs = stageStartTimesMs,
                 beamsAlpha = beamsAlpha,
-                unifiedPulse = unifiedPulse,
-                isDark = isDark
+                unifiedPulse = unifiedPulse
             )
         }
 
@@ -160,8 +158,7 @@ fun MeshFormationCanvas(
             centerNodeAlpha = centerNodeAlpha,
             unifiedPulse = unifiedPulse,
             centerGlowBloom = centerGlowBloom,
-            zoomProgress = zoomProgress,
-            isDark = isDark
+            zoomProgress = zoomProgress
         )
     }
 }
@@ -171,23 +168,17 @@ private fun DrawScope.drawBackgroundVignette(
     h: Float,
     cx: Float,
     cy: Float,
-    bgAlpha: Float,
-    isDark: Boolean
+    bgAlpha: Float
 ) {
-    drawRect(color = if (isDark) AnimationConstants.DeepCharcoalBg else Color.White)
+    drawRect(color = AnimationConstants.DeepCharcoalBg)
 
     if (bgAlpha <= 0f) return
 
     val vignetteRadius = w.coerceAtLeast(h) * 0.65f
-    val centerColor = if (isDark) {
-        AnimationConstants.RadialVignetteCenter.copy(alpha = 0.30f * bgAlpha)
-    } else {
-        Color(0xFFE2E8F0).copy(alpha = 0.40f * bgAlpha)
-    }
     drawRect(
         brush = Brush.radialGradient(
             colors = listOf(
-                centerColor,
+                AnimationConstants.RadialVignetteCenter.copy(alpha = 0.30f * bgAlpha),
                 Color.Transparent
             ),
             center = Offset(cx, cy),
@@ -202,15 +193,10 @@ private fun DrawScope.drawBeams(
     timeMs: Long,
     stageStartTimesMs: LongArray,
     beamsAlpha: Float,
-    unifiedPulse: Float,
-    isDark: Boolean
+    unifiedPulse: Float
 ) {
     val coreWidth = AnimationConstants.BEAM_CORE_WIDTH_DP.dp.toPx()
     val glowWidth = AnimationConstants.BEAM_GLOW_WIDTH_DP.dp.toPx()
-    val beamAuraColor = if (isDark) AnimationConstants.BeamGlowAura else Color(0xFF60A5FA)
-    val beamCoreColor = if (isDark) AnimationConstants.SoftNeonGreen else Color(0xFF2563EB)
-    val sparkGlowColor = if (isDark) AnimationConstants.SoftNeonGreenBright else Color(0xFF3B82F6)
-    val sparkCoreColor = if (isDark) AnimationConstants.StarCoreWhite else Color.White
 
     beams.forEach { beam ->
         val stageIndex = beam.discoveryStage // Stage 2..6
@@ -236,7 +222,7 @@ private fun DrawScope.drawBeams(
 
         // 1. Soft Outer Glow Aura Line
         drawLine(
-            color = beamAuraColor.copy(alpha = baseAlpha * 0.45f),
+            color = AnimationConstants.BeamGlowAura.copy(alpha = baseAlpha * 0.45f),
             start = Offset(startX, startY),
             end = Offset(currentEndX, currentEndY),
             strokeWidth = glowWidth,
@@ -245,7 +231,7 @@ private fun DrawScope.drawBeams(
 
         // 2. Crisp Core Light Line
         drawLine(
-            color = beamCoreColor.copy(alpha = baseAlpha),
+            color = AnimationConstants.SoftNeonGreen.copy(alpha = baseAlpha),
             start = Offset(startX, startY),
             end = Offset(currentEndX, currentEndY),
             strokeWidth = coreWidth,
@@ -258,12 +244,12 @@ private fun DrawScope.drawBeams(
             val sparkCenter = Offset(currentEndX, currentEndY)
 
             drawCircle(
-                color = sparkGlowColor.copy(alpha = sparkAlpha * 0.8f),
+                color = AnimationConstants.SoftNeonGreenBright.copy(alpha = sparkAlpha * 0.8f),
                 radius = 5.5.dp.toPx(),
                 center = sparkCenter
             )
             drawCircle(
-                color = sparkCoreColor.copy(alpha = sparkAlpha),
+                color = AnimationConstants.StarCoreWhite.copy(alpha = sparkAlpha),
                 radius = 2.5.dp.toPx(),
                 center = sparkCenter
             )
@@ -281,14 +267,8 @@ private fun DrawScope.drawNodes(
     centerNodeAlpha: Float,
     unifiedPulse: Float,
     centerGlowBloom: Float,
-    zoomProgress: Float,
-    isDark: Boolean
+    zoomProgress: Float
 ) {
-    val glowOuterColor = if (isDark) AnimationConstants.SoftNeonGreenGlowOuter else Color(0xFF93C5FD)
-    val glowInnerColor = if (isDark) AnimationConstants.SoftNeonGreenGlowInner else Color(0xFF60A5FA)
-    val rimColor = if (isDark) AnimationConstants.SoftNeonGreenBright else Color(0xFF2563EB)
-    val coreColor = if (isDark) AnimationConstants.StarCoreWhite else Color.White
-
     nodes.forEach { node ->
         val pos = nodePositions[node.id]
         val center = Offset(pos[0], pos[1])
@@ -334,26 +314,26 @@ private fun DrawScope.drawNodes(
 
         // Layer 1: Soft Outer Glow Aura
         drawCircle(
-            color = glowOuterColor.copy(alpha = (alpha * 0.35f * glowMultiplier).coerceIn(0f, 1f)),
+            color = AnimationConstants.SoftNeonGreenGlowOuter.copy(alpha = (alpha * 0.35f * glowMultiplier).coerceIn(0f, 1f)),
             radius = glowRadius * 1.5f,
             center = center
         )
         drawCircle(
-            color = glowInnerColor.copy(alpha = (alpha * 0.60f * glowMultiplier).coerceIn(0f, 1f)),
+            color = AnimationConstants.SoftNeonGreenGlowInner.copy(alpha = (alpha * 0.60f * glowMultiplier).coerceIn(0f, 1f)),
             radius = glowRadius * 0.8f,
             center = center
         )
 
-        // Layer 2: Halo Rim
+        // Layer 2: Neon Green Halo Rim
         drawCircle(
-            color = rimColor.copy(alpha = alpha),
+            color = AnimationConstants.SoftNeonGreenBright.copy(alpha = alpha),
             radius = radius,
             center = center
         )
 
-        // Layer 3: Star Core
+        // Layer 3: Pure White Star Core
         drawCircle(
-            color = coreColor.copy(alpha = alpha),
+            color = AnimationConstants.StarCoreWhite.copy(alpha = alpha),
             radius = radius * 0.45f,
             center = center
         )

@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.meshlink.domain.model.BleDevice
 import com.meshlink.domain.model.TransportType
 import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.ui.designsystem.theme.SuccessColorDark
 
 /**
  * Modern, Apple-inspired compact status strip for the Mesh Network screen.
@@ -157,12 +158,12 @@ fun MeshNetworkStatsBar(
                     text = "$connectedCount",
                     style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
                     fontWeight = FontWeight.Bold,
-                    color = if (connectedCount > 0) MeshTheme.colors.success else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (connectedCount > 0) SuccessColorDark else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = "Connected",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    color = if (connectedCount > 0) MeshTheme.colors.success else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (connectedCount > 0) SuccessColorDark else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

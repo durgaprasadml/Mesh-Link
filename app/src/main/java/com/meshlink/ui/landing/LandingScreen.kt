@@ -16,13 +16,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.meshlink.ui.designsystem.theme.MeshTheme
 import kotlinx.coroutines.launch
 
 /**
@@ -119,12 +117,11 @@ fun LandingScreen(
 
     // Welcome text visible during welcome hold phase for first-time users
     val showWelcomeText = isWelcome && timeMs in discoveryEndTimeMs..(discoveryEndTimeMs + AnimationConstants.WELCOME_TEXT_HOLD_MS)
-    val isDark = MeshTheme.isDark
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isDark) AnimationConstants.DeepCharcoalBg else MaterialTheme.colorScheme.background)
+            .background(AnimationConstants.DeepCharcoalBg)
             .clickable(interactionSource = interactionSource, indication = null) {
                 viewModel.onSkipClicked()
             }
@@ -133,7 +130,6 @@ fun LandingScreen(
         MeshFormationCanvas(
             timeMs = timeMs,
             isWelcomeMode = isWelcome,
-            isDark = isDark,
             modifier = Modifier.fillMaxSize()
         )
 

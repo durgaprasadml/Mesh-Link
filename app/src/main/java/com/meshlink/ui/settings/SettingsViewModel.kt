@@ -14,7 +14,7 @@ import androidx.compose.runtime.Immutable
 @Immutable
 data class ThemePreferences(
     val themeMode: String = "LIGHT",
-    val isMaterialYouEnabled: Boolean = false,
+    val isMaterialYouEnabled: Boolean = true,
     val accentColor: String = "Blue",
     val fontScale: Float = 1.0f,
     val largeTextEnabled: Boolean = false,
@@ -57,7 +57,7 @@ data class SettingsUiState(
     
     // Appearance
     val themeMode: String = "LIGHT",
-    val isMaterialYouEnabled: Boolean = false,
+    val isMaterialYouEnabled: Boolean = true,
     val fontScale: Float = 1.0f,
     val highContrast: Boolean = false,
     val accentColor: String = "Blue",

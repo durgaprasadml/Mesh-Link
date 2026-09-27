@@ -104,11 +104,12 @@ fun EmergencyAlarmScreen(
     onAcknowledge: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val dangerColor = MeshTheme.colors.danger
+    val dangerColor = Color(0xFFD32F2F)
+    val darkBackground = Color(0xFF121212)
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = darkBackground
     ) {
         Box(
             modifier = Modifier
@@ -125,7 +126,7 @@ fun EmergencyAlarmScreen(
                 Box(
                     modifier = Modifier
                         .size(100.dp)
-                        .background(dangerColor.copy(alpha = 0.15f), shape = RoundedCornerShape(50.dp)),
+                        .background(dangerColor.copy(alpha = 0.2f), shape = RoundedCornerShape(50.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -155,7 +156,7 @@ fun EmergencyAlarmScreen(
                 Text(
                     text = "Emergency alarm is active.",
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
+                    color = Color.White.copy(alpha = 0.9f),
                     textAlign = TextAlign.Center
                 )
 
@@ -189,7 +190,7 @@ fun EmergencyAlarmScreen(
                         .fillMaxWidth()
                         .height(56.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onBackground
+                        contentColor = Color.White
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {

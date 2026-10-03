@@ -126,17 +126,22 @@ class SlidingWindowManager @Inject constructor(
         }
     }
 
-    fun getNextSendableIndices(transferId: String, maxBatchSize: Int = config.dispatchBatchSize): List<Int> {
+    fun getNextSendableIndices(transferId: String, maxBatchSize: Int? = null): List<Int> {
         val state = activeWindows[transferId] ?: return emptyList()
         val result = mutableListOf<Int>()
         state.lock.withLock {
             val runtimeState = runtimeStateRegistry.getState(transferId) ?: return emptyList()
+            val effectiveBatchLimit = maxBatchSize ?: if (state.totalChunks <= config.smallFileChunkThreshold) {
+                state.windowSize
+            } else {
+                config.dispatchBatchSize
+            }
             val maxBound = minOf(state.base + state.windowSize, state.totalChunks)
             
             for (idx in state.base until maxBound) {
                 if (!runtimeState.isChunkAcked(idx) && !runtimeState.isChunkInFlight(idx)) {
                     result.add(idx)
-                    if (result.size >= maxBatchSize) break
+                    if (result.size >= effectiveBatchLimit) break
                 }
             }
         }

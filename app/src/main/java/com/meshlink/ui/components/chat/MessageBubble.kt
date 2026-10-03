@@ -327,8 +327,10 @@ fun MessageBubble(
                     // True while this message's file is loaded into the player but not yet started
                     val isThisPreparing = currentlyPreparing == message.mediaPath
                     val isThisPlaying = currentlyPlaying == message.mediaPath
-                    // Active transfer in progress for this message
-                    val isReceiving = transferProgress != null && transferProgress < 1.0f
+                    val isFailed = message.status == DeliveryStatus.FAILED || message.status == DeliveryStatus.PERMANENT_FAILURE
+                    // Active transfer in progress for this message (only when not failed and progress is active)
+                    val isTransferring = !isFailed && (if (message.isFromMe) transferProgress != null && transferProgress < 1.0f else !fileExists && transferProgress != null && transferProgress < 1.0f)
+                    val isSending = isTransferring && message.isFromMe
 
                     val durationMs = message.mediaDurationMs ?: 0L
                     val durationText = remember(durationMs) {
@@ -341,8 +343,8 @@ fun MessageBubble(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(MeshTheme.spacing.small)
                     ) {
-                        // Play / Stop button — disabled while receiving or failed
-                        val playEnabled = fileExists && !isSelectionMode && !isReceiving
+                        // Play / Stop button — disabled while receiving, sending or failed
+                        val playEnabled = fileExists && !isSelectionMode && !isTransferring && !isFailed
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
@@ -385,9 +387,10 @@ fun MessageBubble(
 
                         Column(modifier = Modifier.weight(1f)) {
                             when {
-                                message.status == DeliveryStatus.FAILED -> {
+                                isFailed -> {
+                                    val errorMsg = if (message.isFromMe) "Failed to send voice note" else "Failed to download voice note"
                                     Text(
-                                        text = "Failed to download voice note",
+                                        text = errorMsg,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.error
                                     )
@@ -398,9 +401,26 @@ fun MessageBubble(
                                         modifier = Modifier.clickable { onRetryMedia(message.messageId) }
                                     )
                                 }
-                                isReceiving -> {
+                                message.status == DeliveryStatus.RETRYING -> {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(MeshTheme.spacing.small)
+                                            .clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
+                                        color = textColor,
+                                        trackColor = textColor.copy(alpha = 0.3f)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Retrying connection\u2026",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = textColor.copy(alpha = 0.7f)
+                                    )
+                                }
+                                isTransferring -> {
                                     // Determinate transfer progress with percentage label
                                     val pct = (transferProgress!! * 100).toInt()
+                                    val actionLabel = if (isSending) "Sending" else "Receiving"
                                     LinearProgressIndicator(
                                         progress = { transferProgress },
                                         modifier = Modifier
@@ -412,12 +432,28 @@ fun MessageBubble(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Receiving\u2026 $pct%",
+                                        text = "$actionLabel\u2026 $pct%",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = textColor.copy(alpha = 0.7f)
                                     )
                                 }
-                                !fileExists && !isReceiving -> {
+                                message.status == DeliveryStatus.QUEUED && (message.isFromMe || !fileExists) -> {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(MeshTheme.spacing.small)
+                                            .clip(RoundedCornerShape(MeshTheme.spacing.extraSmall)),
+                                        color = textColor,
+                                        trackColor = textColor.copy(alpha = 0.3f)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (message.isFromMe) "Connecting\u2026" else "Waiting\u2026",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = textColor.copy(alpha = 0.7f)
+                                    )
+                                }
+                                !fileExists && !isTransferring -> {
                                     // File not present and not currently being transferred
                                     // (could be a legacy message missing its file)
                                     LinearProgressIndicator(

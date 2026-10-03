@@ -55,6 +55,10 @@ class TransferRuntimeState(
         return inFlightChunks.containsKey(chunkIndex)
     }
 
+    fun clearInFlight(chunkIndex: Int) {
+        inFlightChunks.remove(chunkIndex)
+    }
+
     fun getTimedOutChunks(timeoutMs: Long): List<Int> {
         val now = System.currentTimeMillis()
         val timedOut = mutableListOf<Int>()

@@ -184,6 +184,17 @@ class MediaMessageHandler @Inject constructor(
             // bubble shows the correct time immediately — without requiring playback first.
             // MediaMetadataRetriever is fast (~10-30 ms) and runs here on the IO dispatcher.
             val durationMs: Long? = if (isVoice) extractAudioDurationMs(completedFilePath) else null
+            if (isVoice) {
+                val f = File(completedFilePath)
+                MeshLogger.i(
+                    "AUDIO_FILE_VERIFY",
+                    "[AUDIO_FILE_VERIFY] transferId=$completedTransferId peerId=$completedSenderId filePath=$completedFilePath fileSize=${f.length()}B durationMs=$durationMs valid=${f.exists() && f.length() > 0L}"
+                )
+                MeshLogger.i(
+                    "AUDIO_PLAYBACK_READY",
+                    "[AUDIO_PLAYBACK_READY] transferId=$completedTransferId peerId=$completedSenderId filePath=$completedFilePath durationMs=$durationMs"
+                )
+            }
 
             val message = MessageEntity(
                 messageId = completedTransferId,
@@ -195,6 +206,8 @@ class MediaMessageHandler @Inject constructor(
                 status = DeliveryStatus.DELIVERED,
                 messageType = messageType,
                 mediaPath = completedFilePath,
+                mimeType = completedMimeType,
+                mediaSize = File(completedFilePath).length(),
                 mediaDurationMs = durationMs
             )
             chatDao.insertMessageAndUpdateChat(message, resolvedSenderName)
@@ -246,6 +259,10 @@ class MediaMessageHandler @Inject constructor(
         val isImage = mime?.contains("image") == true
         val isVoice = mime?.contains("audio") == true
 
+        if (isVoice) {
+            transferManager.prepareForIncomingAudio(packet.senderId)
+        }
+
         val messageType = when {
             isImage -> MessageType.IMAGE
             isVoice -> MessageType.VOICE
@@ -282,6 +299,55 @@ class MediaMessageHandler @Inject constructor(
             mimeType = mime,
             mediaSize = parsedMeta?.totalBytes,
             thumbnailBase64 = parsedMeta?.thumbnailBase64
+        )
+        chatDao.insertMessageAndUpdateChat(message, senderName)
+    }
+
+    suspend fun insertPlaceholderForStream(
+        transferId: String,
+        senderId: String,
+        fileName: String,
+        mimeType: String,
+        totalBytes: Long
+    ) {
+        val existing = chatDao.getMessageByUuid(transferId)
+        if (existing != null) return
+
+        val isImage = mimeType.contains("image")
+        val isVoice = mimeType.contains("audio")
+
+        if (isVoice) {
+            MeshLogger.i("AUDIO_RECEIVE_START", "[AUDIO_RECEIVE_START] transferId=$transferId peerId=$senderId fileName=$fileName fileSize=${totalBytes}B mimeType=$mimeType")
+        }
+
+        val messageType = when {
+            isImage -> MessageType.IMAGE
+            isVoice -> MessageType.VOICE
+            else -> MessageType.TEXT
+        }
+
+        val previewText = when {
+            isImage -> "📷 Receiving Image..."
+            isVoice -> "🎤 Receiving Voice Note..."
+            else -> "Receiving File..."
+        }
+
+        val chatId = MeshIdNormalizer.canonicalize(senderId)
+        val senderName = MeshIdNormalizer.canonicalize(senderId)
+
+        val message = MessageEntity(
+            messageId = transferId,
+            chatId = chatId,
+            senderId = senderId,
+            text = previewText,
+            timestamp = System.currentTimeMillis(),
+            isFromMe = false,
+            status = DeliveryStatus.QUEUED,
+            messageType = messageType,
+            mediaPath = null,
+            mimeType = mimeType,
+            mediaSize = totalBytes,
+            thumbnailBase64 = null
         )
         chatDao.insertMessageAndUpdateChat(message, senderName)
     }

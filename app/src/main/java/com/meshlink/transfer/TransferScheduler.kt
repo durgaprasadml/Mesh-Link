@@ -54,7 +54,8 @@ class TransferScheduler @Inject constructor() {
 
             // Throttle StateFlow emissions to prevent Compose recomposition on every 180-byte BLE chunk.
             // Always emit on completion (all chunks received) to ensure UI reflects final state promptly.
-            val isComplete = session.totalChunks > 0 && chunksTransferred >= session.totalChunks
+            val isComplete = (session.totalBytes > 0L && bytesTransferred >= session.totalBytes) ||
+                (session.totalChunks > 0 && chunksTransferred >= session.totalChunks)
             val now = System.currentTimeMillis()
             val last = lastProgressEmitMs[transferId] ?: 0L
             if (isComplete || (now - last) >= PROGRESS_EMIT_INTERVAL_MS) {
@@ -107,6 +108,13 @@ class TransferScheduler @Inject constructor() {
     /** Clean up throttle tracking when a session ends. */
     fun cleanupProgressTracking(transferId: String) {
         lastProgressEmitMs.remove(transferId)
+    }
+
+    /** Remove a session completely when it reaches terminal state (COMPLETED, FAILED, CANCELLED). */
+    fun removeSession(transferId: String) {
+        sessions.remove(transferId)
+        lastProgressEmitMs.remove(transferId)
+        publishState()
     }
 
     private fun publishState() {

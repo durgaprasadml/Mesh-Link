@@ -54,7 +54,8 @@ class ChatDetailViewModel @Inject constructor(
     private val voiceRecorder: VoiceRecorder,
     val voicePlayer: VoicePlayer,
     private val sendMessageUseCase: com.meshlink.domain.usecase.messaging.SendMessageUseCase,
-    private val transferManager: com.meshlink.transfer.TransferManager
+    private val transferManager: com.meshlink.transfer.TransferManager,
+    private val wifiDirectManager: com.meshlink.wifi.manager.WifiDirectManager? = null
 ) : ViewModel() {
 
     // URL-decode to recover original strings (colons, spaces, emojis, etc.)
@@ -70,6 +71,16 @@ class ChatDetailViewModel @Inject constructor(
         URLDecoder.decode(savedStateHandle.get<String>("name") ?: "Unknown", "UTF-8")
     } catch (_: Exception) {
         savedStateHandle.get<String>("name") ?: "Unknown"
+    }
+
+    init {
+        if (address.isNotBlank()) {
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    wifiDirectManager?.discoverPeers()
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     val messages: StateFlow<List<Message>> = if (address.isNotBlank()) {
@@ -261,6 +272,14 @@ class ChatDetailViewModel @Inject constructor(
 
     fun startRecording() {
         voiceRecorder.startRecording()
+        val target = rawPeerIdOrAddress.ifBlank { address }
+        if (target.isNotBlank()) {
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    wifiDirectManager?.discoverPeers()
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     fun stopRecordingAndSend() {

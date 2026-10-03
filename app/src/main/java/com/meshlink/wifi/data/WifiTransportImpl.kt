@@ -19,13 +19,18 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Singleton
 internal class WifiTransportImpl @Inject constructor(
     private val wifiP2pManagerFacade: WifiP2pManagerFacade,
     private val wifiSocketTransport: WifiSocketTransport,
-    @ApplicationScope private val applicationScope: CoroutineScope
+    @ApplicationScope private val applicationScope: CoroutineScope,
+    @ApplicationContext private val context: Context
 ) : WifiTransport {
 
     companion object {
@@ -92,11 +97,34 @@ internal class WifiTransportImpl @Inject constructor(
             }
         }
 
+        // Pre-warm ServerSocket on port 8988 so this device can accept Wi-Fi Direct socket connections
+        wifiSocketTransport.startServer()
+
+        // Background monitor for direct Wi-Fi peer gateway reachability
+        applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            while (isActive) {
+                kotlinx.coroutines.delay(4000L)
+                if (!wifiSocketTransport.isConnected()) {
+                    val candidateIps = com.meshlink.wifi.util.WifiNetworkUtils.getCandidatePeerIps(context)
+                    val reachable = candidateIps.firstOrNull { com.meshlink.wifi.util.WifiNetworkUtils.isTcpPortReachable(it, 8988, 350) }
+                    if (reachable != null && !wifiSocketTransport.isConnected()) {
+                        MeshLogger.d(TAG, "Discovered active Wi-Fi peer at $reachable:8988. Auto-connecting client socket...")
+                        wifiSocketTransport.connectAsClient(reachable)
+                    }
+                }
+            }
+        }
+
         // Monitor P2P State transitions to automatically orchestrate socket layer
         applicationScope.launch {
             wifiP2pManagerFacade.p2pState.collect { state ->
                 MeshLogger.d(TAG, "P2P State updated: $state")
                 when (state) {
+                    is WifiP2pState.Enabled -> {
+                        MeshLogger.d(TAG, "Wi-Fi Direct enabled. Pre-warming ServerSocket on port 8988...")
+                        wifiSocketTransport.startServer()
+                    }
+
                     is WifiP2pState.Connected -> {
                         _healthState.value = TransportHealth.CONNECTING
                         if (state.isGroupOwner) {
@@ -110,8 +138,8 @@ internal class WifiTransportImpl @Inject constructor(
 
                     is WifiP2pState.Disconnected -> {
                         _healthState.value = TransportHealth.DISCONNECTED
-                        MeshLogger.d(TAG, "Wi-Fi Direct disconnected. Stopping socket streams...")
-                        wifiSocketTransport.disconnect()
+                        MeshLogger.d(TAG, "Wi-Fi Direct link disconnected. Ensuring ServerSocket listening on port 8988...")
+                        wifiSocketTransport.startServer()
                     }
 
                     else -> {

@@ -137,21 +137,40 @@ class BleRepositoryImpl @Inject constructor(
         transferManager.onOutgoingTransferCompleted = { session ->
             applicationScope.launch {
                 stateMachine.transitionToSent(session.transferId)
+                if (session.mimeType.startsWith("audio/")) {
+                    stateMachine.transitionToDelivered(session.transferId)
+                }
             }
         }
 
         transferManager.onTransferStateChanged = { transferId, state ->
-            applicationScope.launch {
-                when (state) {
-                    com.meshlink.transfer.TransferState.QUEUED -> stateMachine.transitionToQueued(transferId)
-                    com.meshlink.transfer.TransferState.STREAMING,
-                    com.meshlink.transfer.TransferState.SENDING,
-                    com.meshlink.transfer.TransferState.RECEIVING,
-                    com.meshlink.transfer.TransferState.RESUMING -> stateMachine.transitionToSending(transferId)
-                    com.meshlink.transfer.TransferState.FAILED,
-                    com.meshlink.transfer.TransferState.CANCELLED -> stateMachine.transitionToFailed(transferId)
-                    com.meshlink.transfer.TransferState.COMPLETED -> stateMachine.transitionToSent(transferId)
-                    else -> {}
+            val session = transferManager.getSession(transferId)
+            // CRITICAL: MessageDeliveryStateMachine is strictly for OUTGOING messages sent by this device.
+            // Never transition incoming transfers through the outgoing state machine, as that sets receiver's
+            // messages to SENDING or SENT and corrupts delivery status.
+            if (session == null || session.direction == com.meshlink.transfer.TransferDirection.OUTGOING) {
+                applicationScope.launch {
+                    when (state) {
+                        com.meshlink.transfer.TransferState.QUEUED,
+                        com.meshlink.transfer.TransferState.WAITING,
+                        com.meshlink.transfer.TransferState.PREPARING,
+                        com.meshlink.transfer.TransferState.CONNECTING,
+                        com.meshlink.transfer.TransferState.WAITING_FOR_WIFI,
+                        com.meshlink.transfer.TransferState.SOCKET_CONNECTING,
+                        com.meshlink.transfer.TransferState.HANDSHAKING,
+                        com.meshlink.transfer.TransferState.READY -> stateMachine.transitionToQueued(transferId)
+                        com.meshlink.transfer.TransferState.STREAMING,
+                        com.meshlink.transfer.TransferState.SENDING,
+                        com.meshlink.transfer.TransferState.RESUMING,
+                        com.meshlink.transfer.TransferState.TRANSFERRING,
+                        com.meshlink.transfer.TransferState.WAITING_FOR_ACK,
+                        com.meshlink.transfer.TransferState.COMPLETING -> stateMachine.transitionToSending(transferId)
+                        com.meshlink.transfer.TransferState.RETRYING -> stateMachine.transitionToRetrying(transferId)
+                        com.meshlink.transfer.TransferState.FAILED,
+                        com.meshlink.transfer.TransferState.CANCELLED -> stateMachine.transitionToFailed(transferId)
+                        com.meshlink.transfer.TransferState.COMPLETED -> stateMachine.transitionToSent(transferId)
+                        else -> {}
+                    }
                 }
             }
         }

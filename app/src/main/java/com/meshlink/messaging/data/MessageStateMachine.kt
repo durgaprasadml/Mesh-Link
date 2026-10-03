@@ -60,16 +60,22 @@ class MessageStateMachine @Inject constructor(
         }
 
         if (currentStatus != null && !force) {
-            if (isTerminalState(currentStatus) && targetStatus != DeliveryStatus.SEEN && targetStatus != DeliveryStatus.DELIVERED) {
-                MeshLogger.w(TAG, "Rejected transition for $messageId from terminal state $currentStatus to $targetStatus")
-                return false
-            }
+            val isDeliveryOrSeen = targetStatus == DeliveryStatus.DELIVERED || targetStatus == DeliveryStatus.SEEN
+            val isRetryFromFailure = (currentStatus == DeliveryStatus.FAILED || currentStatus == DeliveryStatus.PERMANENT_FAILURE) &&
+                    (targetStatus == DeliveryStatus.QUEUED || targetStatus == DeliveryStatus.SENDING || targetStatus == DeliveryStatus.WAITING_FOR_ACK || targetStatus == DeliveryStatus.SENT || targetStatus == DeliveryStatus.RETRYING || isDeliveryOrSeen)
 
-            val currentPriority = getStatusPriority(currentStatus)
-            val targetPriority = getStatusPriority(targetStatus)
-            if (targetPriority < currentPriority) {
-                MeshLogger.w(TAG, "Rejected downgrade transition for $messageId from $currentStatus (priority $currentPriority) to $targetStatus (priority $targetPriority)")
-                return false
+            if (!isDeliveryOrSeen && !isRetryFromFailure) {
+                if (isTerminalState(currentStatus)) {
+                    MeshLogger.w(TAG, "Rejected transition for $messageId from terminal state $currentStatus to $targetStatus")
+                    return false
+                }
+
+                val currentPriority = getStatusPriority(currentStatus)
+                val targetPriority = getStatusPriority(targetStatus)
+                if (targetPriority < currentPriority) {
+                    MeshLogger.w(TAG, "Rejected downgrade transition for $messageId from $currentStatus (priority $currentPriority) to $targetStatus (priority $targetPriority)")
+                    return false
+                }
             }
         }
 
@@ -116,7 +122,7 @@ class MessageStateMachine @Inject constructor(
         return transitionTo(
             messageId,
             DeliveryStatus.SENDING,
-            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.SENDING)
+            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.SENDING, DeliveryStatus.FAILED, DeliveryStatus.PERMANENT_FAILURE)
         )
     }
 
@@ -124,7 +130,7 @@ class MessageStateMachine @Inject constructor(
         return transitionTo(
             messageId,
             DeliveryStatus.SENT,
-            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.WAITING_FOR_ACK, DeliveryStatus.SENT)
+            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.WAITING_FOR_ACK, DeliveryStatus.SENT, DeliveryStatus.FAILED, DeliveryStatus.PERMANENT_FAILURE)
         )
     }
 
@@ -132,7 +138,7 @@ class MessageStateMachine @Inject constructor(
         return transitionTo(
             messageId,
             DeliveryStatus.WAITING_FOR_ACK,
-            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.WAITING_FOR_ACK)
+            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.WAITING_FOR_ACK, DeliveryStatus.FAILED, DeliveryStatus.PERMANENT_FAILURE)
         )
     }
 
@@ -140,7 +146,7 @@ class MessageStateMachine @Inject constructor(
         return transitionTo(
             messageId,
             DeliveryStatus.RETRYING,
-            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.WAITING_FOR_ACK, DeliveryStatus.RETRYING)
+            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.WAITING_FOR_ACK, DeliveryStatus.RETRYING, DeliveryStatus.FAILED, DeliveryStatus.PERMANENT_FAILURE)
         )
     }
 
@@ -156,7 +162,7 @@ class MessageStateMachine @Inject constructor(
         return transitionTo(
             messageId,
             DeliveryStatus.DELIVERED,
-            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ACK, DeliveryStatus.SENT, DeliveryStatus.RELAYED, DeliveryStatus.DELIVERED)
+            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ACK, DeliveryStatus.SENT, DeliveryStatus.RELAYED, DeliveryStatus.DELIVERED, DeliveryStatus.FAILED, DeliveryStatus.PERMANENT_FAILURE)
         )
     }
 
@@ -164,7 +170,7 @@ class MessageStateMachine @Inject constructor(
         return transitionTo(
             messageId,
             DeliveryStatus.SEEN,
-            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ACK, DeliveryStatus.SENT, DeliveryStatus.RELAYED, DeliveryStatus.DELIVERED, DeliveryStatus.SEEN)
+            listOf(DeliveryStatus.PENDING, DeliveryStatus.QUEUED, DeliveryStatus.SENDING, DeliveryStatus.WAITING_FOR_ROUTE, DeliveryStatus.RETRYING, DeliveryStatus.WAITING_FOR_ACK, DeliveryStatus.SENT, DeliveryStatus.RELAYED, DeliveryStatus.DELIVERED, DeliveryStatus.SEEN, DeliveryStatus.FAILED, DeliveryStatus.PERMANENT_FAILURE)
         )
     }
 

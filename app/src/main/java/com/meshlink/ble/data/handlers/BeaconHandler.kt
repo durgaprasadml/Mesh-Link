@@ -14,6 +14,8 @@ import com.meshlink.database.data.local.UserDao
 import com.meshlink.database.data.local.UserEntity
 import com.meshlink.domain.repository.UserRepository
 import com.meshlink.core.data.UserRepositoryImpl
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,21 +26,28 @@ class BeaconHandler @Inject constructor(
     private val routingTable: RoutingTable,
     private val userDao: UserDao? = null,
     private val userRepository: UserRepository? = null,
-    private val discoveryEngine: com.meshlink.ble.discovery.DiscoveryEngine? = null
+    private val discoveryEngine: com.meshlink.ble.discovery.DiscoveryEngine? = null,
+    private val wifiP2pManagerFacadeProvider: javax.inject.Provider<com.meshlink.wifi.manager.WifiP2pManagerFacade>? = null,
+    private val wifiDirectManagerProvider: javax.inject.Provider<com.meshlink.wifi.manager.WifiDirectManager>? = null,
+    private val wifiSocketTransportProvider: javax.inject.Provider<com.meshlink.wifi.data.WifiSocketTransport>? = null,
+    @ApplicationContext private val context: Context? = null
 ) {
     companion object {
         private const val TAG = "BeaconHandler"
     }
 
+    var onSendPacket: ((MeshPacket) -> Unit)? = null
+
     /**
      * Generates a topology advertisement BEACON packet containing the local mesh ID,
-     * local registered display name, and a list of reachable multi-hop nodes and direct neighbors.
-     *
-     * @param localMeshId  The canonical mesh ID of this device.
-     * @param localUserName The display name to embed in the beacon (optional). The caller should
-     *                      supply this from a suspend context to avoid any blocking I/O here.
+     * local registered display name, Wi-Fi Direct P2P details, and reachable nodes.
      */
-    fun generateBeaconPacket(localMeshId: String, localUserName: String = ""): MeshPacket {
+    fun generateBeaconPacket(
+        localMeshId: String,
+        localUserName: String = "",
+        targetPeerId: String? = null,
+        reqWifiConnect: Boolean = false
+    ): MeshPacket {
         val canonicalLocalId = MeshIdNormalizer.canonicalize(localMeshId)
 
         val jsonArray = JSONArray()
@@ -54,10 +63,26 @@ class BeaconHandler @Inject constructor(
             }
         }
 
+        val p2pName = wifiP2pManagerFacadeProvider?.get()?.localDeviceName?.value ?: ""
+        val p2pMac = wifiP2pManagerFacadeProvider?.get()?.localDeviceAddress?.value ?: ""
+        val localWifiIp = context?.let { com.meshlink.wifi.util.WifiNetworkUtils.getLocalWifiIp(it) } ?: ""
+
         val payloadObj = JSONObject().apply {
             put("nodeId", canonicalLocalId)
             if (localUserName.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(localUserName, canonicalLocalId)) {
                 put("senderName", localUserName)
+            }
+            if (p2pName.isNotBlank()) {
+                put("p2pName", p2pName)
+            }
+            if (p2pMac.isNotBlank()) {
+                put("p2pMac", p2pMac)
+            }
+            if (localWifiIp.isNotBlank()) {
+                put("wifiIp", localWifiIp)
+            }
+            if (reqWifiConnect) {
+                put("reqWifiConnect", true)
             }
             put("reachable", jsonArray)
             put("timestamp", System.currentTimeMillis())
@@ -65,7 +90,7 @@ class BeaconHandler @Inject constructor(
 
         return MeshPacket(
             senderId = canonicalLocalId,
-            targetId = "BROADCAST",
+            targetId = targetPeerId ?: "BROADCAST",
             payload = payloadObj.toString(),
             type = PacketType.BEACON,
             encrypted = false,
@@ -95,6 +120,39 @@ class BeaconHandler @Inject constructor(
             // 2. Parse advertised reachable topology & display name
             val json = JSONObject(packet.payload)
             val senderName = json.optString("senderName", "").trim()
+            val p2pName = json.optString("p2pName", "").trim()
+            val p2pMac = json.optString("p2pMac", "").trim()
+            val wifiIp = json.optString("wifiIp", "").trim()
+            val reqWifiConnect = json.optBoolean("reqWifiConnect", false)
+
+            if (p2pName.isNotBlank() || p2pMac.isNotBlank() || wifiIp.isNotBlank()) {
+                wifiP2pManagerFacadeProvider?.get()?.registerPeerWifiDetails(senderId, p2pMac, p2pName, wifiIp)
+            }
+
+            if (wifiIp.isNotBlank()) {
+                wifiSocketTransportProvider?.get()?.registerPeerMeshHost(senderId, wifiIp)
+            }
+
+            if (reqWifiConnect) {
+                MeshLogger.i(TAG, "Received Wi-Fi connect wake request from $senderId (wifiIp=$wifiIp). Pre-warming ServerSocket & triggering discovery...")
+                wifiSocketTransportProvider?.get()?.startServer()
+                if (wifiIp.isNotBlank() && (wifiIp.startsWith("192.168.49.") || wifiIp.startsWith("192.168.43.")) && wifiSocketTransportProvider?.get()?.isConnected() == false) {
+                    wifiSocketTransportProvider?.get()?.connectAsClient(wifiIp)
+                }
+                wifiDirectManagerProvider?.get()?.discoverPeers()
+
+                val user = userRepository?.getLocalUser()
+                if (user != null) {
+                    val replyBeacon = generateBeaconPacket(
+                        localMeshId = user.meshId,
+                        localUserName = user.name,
+                        targetPeerId = senderId,
+                        reqWifiConnect = false
+                    )
+                    onSendPacket?.invoke(replyBeacon)
+                }
+            }
+
             val now = System.currentTimeMillis()
 
             if (senderName.isNotBlank() && !UserRepositoryImpl.isGenericOrInvalidName(senderName, senderId)) {

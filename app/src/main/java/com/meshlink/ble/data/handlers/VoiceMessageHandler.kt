@@ -33,8 +33,12 @@ class VoiceMessageHandler @Inject constructor(
         val voiceFile = File(filePath)
         val messageId = UUID.randomUUID().toString()
 
-        if (!voiceFile.exists() || voiceFile.length() == 0L || durationMs < MIN_DURATION_MS) {
-            MeshLogger.w(TAG, "Voice note validation failed (exists=${voiceFile.exists()}, length=${voiceFile.length()}, duration=${durationMs}ms)")
+        MeshLogger.i("AUDIO_SEND_START", "[AUDIO_SEND_START] transferId=$messageId peerId=$targetPeerId filePath=$filePath durationMs=$durationMs")
+        MeshLogger.i("AUDIO_FILE_CHECK", "[AUDIO_FILE_CHECK] transferId=$messageId exists=${voiceFile.exists()} canRead=${voiceFile.canRead()} length=${voiceFile.length()}B durationMs=$durationMs")
+
+        if (!voiceFile.exists() || !voiceFile.canRead() || voiceFile.length() == 0L || durationMs < MIN_DURATION_MS) {
+            val errReason = "Voice note validation failed (exists=${voiceFile.exists()}, canRead=${voiceFile.canRead()}, length=${voiceFile.length()}B, duration=${durationMs}ms)"
+            MeshLogger.e(TAG, "[AUDIO_TRANSFER_FAILURE] transferId=$messageId error=$errReason")
             val failedMessage = MessageEntity(
                 messageId = messageId,
                 chatId = targetPeerId,
@@ -50,6 +54,8 @@ class VoiceMessageHandler @Inject constructor(
             chatDao.insertMessageAndUpdateChat(failedMessage, chatName)
             return
         }
+
+        MeshLogger.i("AUDIO_FILE_READY", "[AUDIO_FILE_READY] transferId=$messageId fileName=${voiceFile.name} fileSize=${voiceFile.length()}B durationMs=$durationMs")
 
         val message = MessageEntity(
             messageId = messageId,

@@ -85,6 +85,9 @@ class ChunkRetransmissionScheduler @Inject constructor(
                     diagnostics.logTimeout(transferId, chunkIndex)
                     diagnostics.logRetransmission(transferId, chunkIndex, "ACK timeout")
 
+                    // Clear in-flight status so getNextSendableIndices allows re-dispatching this chunk
+                    runtimeState.clearInFlight(chunkIndex)
+
                     // Re-dispatch chunk task
                     chunkDispatcher.dispatchAvailableChunks(session, file, onSendPacket)
                 }

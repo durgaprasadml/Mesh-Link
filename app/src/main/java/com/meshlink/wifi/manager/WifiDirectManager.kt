@@ -4,7 +4,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.NetworkInfo
 import android.net.wifi.WifiManager
+import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pManager
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.service.RadioState
@@ -38,12 +40,48 @@ class WifiDirectManager @Inject constructor(
     val isConnected: Boolean
         get() = wifiP2pManagerFacade.isConnected()
 
-    suspend fun ensureConnected(targetDeviceAddress: String? = null, timeoutMs: Long = 5000L): Boolean {
+    val p2pState: StateFlow<com.meshlink.wifi.model.WifiP2pState>
+        get() = wifiP2pManagerFacade.p2pState
+
+    val localDeviceName: String
+        get() = wifiP2pManagerFacade.localDeviceName.value
+
+    val localDeviceAddress: String
+        get() = wifiP2pManagerFacade.localDeviceAddress.value
+
+    private var lastAutoDiscoveryRestartTime = 0L
+
+    fun discoverPeers() {
+        if (!isWifiEnabled) return
+        if (_radioState.value != RadioState.RUNNING && _radioState.value != RadioState.INITIALIZING) {
+            startWifiDirect()
+        } else {
+            wifiP2pManagerFacade.discoverPeers()
+        }
+    }
+
+    suspend fun ensureConnected(
+        targetDeviceAddress: String? = null,
+        timeoutMs: Long = 45000L,
+        isInitiator: Boolean = true
+    ): Boolean {
         if (!isWifiEnabled) return false
         if (_radioState.value != RadioState.RUNNING && _radioState.value != RadioState.INITIALIZING) {
             startWifiDirect()
         }
-        return wifiP2pManagerFacade.ensureConnected(targetDeviceAddress, timeoutMs)
+        return wifiP2pManagerFacade.ensureConnected(targetDeviceAddress, timeoutMs, isInitiator)
+    }
+
+    fun disconnect() {
+        wifiP2pManagerFacade.disconnect()
+    }
+
+    fun registerPeerWifiDetails(meshId: String, mac: String, name: String, ip: String = "") {
+        wifiP2pManagerFacade.registerPeerWifiDetails(meshId, mac, name, ip)
+    }
+
+    fun getPeerWifiDetails(meshId: String): PeerWifiDetails? {
+        return wifiP2pManagerFacade.getPeerWifiDetails(meshId)
     }
 
     private val wifiStateReceiver = object : BroadcastReceiver() {
@@ -73,6 +111,42 @@ class WifiDirectManager @Inject constructor(
                     } else if (!isEnabled) {
                         stopWifiDirectInternal()
                     }
+                }
+
+                WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
+                    MeshLogger.d(TAG, "WIFI_P2P_PEERS_CHANGED_ACTION")
+                    wifiP2pManagerFacade.onPeersChanged()
+                }
+
+                WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION -> {
+                    val discoveryState = intent.getIntExtra(WifiP2pManager.EXTRA_DISCOVERY_STATE, WifiP2pManager.WIFI_P2P_DISCOVERY_STOPPED)
+                    val isDiscovering = discoveryState == WifiP2pManager.WIFI_P2P_DISCOVERY_STARTED
+                    MeshLogger.d(TAG, "WIFI_P2P_DISCOVERY_CHANGED_ACTION: isDiscovering=$isDiscovering ($discoveryState)")
+                    wifiP2pManagerFacade.onDiscoveryChanged(isDiscovering)
+
+                    val p2pState = wifiP2pManagerFacade.p2pState.value
+                    val isConnectingOrConnected = isConnected || p2pState is com.meshlink.wifi.model.WifiP2pState.Connecting || p2pState is com.meshlink.wifi.model.WifiP2pState.Connected
+                    val now = System.currentTimeMillis()
+                    if (!isDiscovering && isSubsystemStarted && isWifiEnabled && !isConnectingOrConnected) {
+                        if (now - lastAutoDiscoveryRestartTime >= 30_000L) {
+                            lastAutoDiscoveryRestartTime = now
+                            MeshLogger.d(TAG, "P2P discovery stopped while subsystem is active and disconnected. Restarting discovery...")
+                            discoverPeers()
+                        }
+                    }
+                }
+
+                WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
+                    val networkInfo = @Suppress("DEPRECATION") intent.getParcelableExtra<NetworkInfo>(WifiP2pManager.EXTRA_NETWORK_INFO)
+                    MeshLogger.d(TAG, "WIFI_P2P_CONNECTION_CHANGED_ACTION: isConnected=${networkInfo?.isConnected}")
+                    wifiP2pManagerFacade.onConnectionChanged(networkInfo)
+                }
+
+                WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION -> {
+                    val device = @Suppress("DEPRECATION") intent.getParcelableExtra<WifiP2pDevice>(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE)
+                    MeshLogger.d(TAG, "WIFI_P2P_THIS_DEVICE_CHANGED_ACTION: ${device?.deviceName}")
+                    wifiP2pManagerFacade.onThisDeviceChanged(device)
+                    wifiP2pManagerFacade.requestDeviceInfo()
                 }
             }
         }

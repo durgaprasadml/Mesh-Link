@@ -93,4 +93,17 @@ class SlidingWindowManagerTest {
         assertTrue(finalResult.isComplete)
         assertEquals(2, finalResult.newBase)
     }
+
+    @Test
+    fun `getNextSendableIndices returns all chunks in single pass for small voice files`() {
+        // Voice file with 23 chunks (<= smallFileChunkThreshold of 64)
+        val windowSize = slidingWindowManager.initializeSessionWindow("voice_test", TransportType.BLE, 23)
+        assertEquals(256, windowSize)
+
+        // Calling getNextSendableIndices with default parameters should return all 23 chunks
+        val sendable = slidingWindowManager.getNextSendableIndices("voice_test")
+        assertEquals(23, sendable.size)
+        assertEquals(0, sendable.first())
+        assertEquals(22, sendable.last())
+    }
 }

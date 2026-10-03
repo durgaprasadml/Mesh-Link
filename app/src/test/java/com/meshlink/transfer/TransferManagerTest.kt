@@ -87,6 +87,24 @@ class TransferManagerTest {
     }
 
     @Test
+    fun `sendFile strictly selects Wi-Fi Direct for voice notes even when small and never selects BLE`() = runTest {
+        val voiceFile = tempFolder.newFile("sample_voice.amr")
+        voiceFile.writeBytes(ByteArray(3200) { 0x30 }) // ~3.2 KB voice note
+
+        every { metaManager.getMimeTypeForFile(voiceFile) } returns "audio/amr"
+
+        val transferId = transferManager.sendFile(
+            file = voiceFile,
+            senderId = "userA",
+            targetId = "userB",
+            priority = TransferPriority.HIGH
+        )
+
+        assertNotNull(transferId)
+        verify { scheduler.addSession(match { it.transportUsed == TransportType.WIFI_DIRECT && it.totalBytes == 3200L }) }
+    }
+
+    @Test
     fun `pauseTransfer and resumeTransfer update session state correctly`() = runTest {
         val session = TransferSession(
             transferId = "transfer_123",
@@ -146,5 +164,24 @@ class TransferManagerTest {
 
         assertEquals(800, chunks50MB)
         assertEquals(1600, chunks100MB)
+    }
+
+    @Test
+    fun `audio payload incoming META is rejected with transport violation`() = runTest {
+        val metaJson = """{"fileName":"note.m4a","mimeType":"audio/m4a","totalBytes":5000}"""
+        val packet = com.meshlink.domain.model.MeshPacket(
+            senderId = "userA",
+            targetId = "userB",
+            transferId = "audio_123",
+            payload = metaJson,
+            type = com.meshlink.domain.model.PacketType.MEDIA_META,
+            mimeType = "audio/m4a"
+        )
+        every { metaManager.parseMetaPayload(metaJson) } returns FileMetadata("note.m4a", "audio/m4a", 5000L)
+
+        transferManager.handleIncomingPacket(packet)
+
+        // Session must NOT be added for audio META packet
+        verify(exactly = 0) { scheduler.addSession(match { it.transferId == "audio_123" }) }
     }
 }

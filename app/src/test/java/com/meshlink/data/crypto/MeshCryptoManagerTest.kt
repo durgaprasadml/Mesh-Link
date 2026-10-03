@@ -188,4 +188,31 @@ class MeshCryptoManagerTest {
         verify { editor.putString("__self_signing_public_key__", "sign_pub_key") }
         verify { editor.putString("__self_signing_private_key__", "sign_priv_key") }
     }
+
+    @Test
+    fun `test encryptBytes and decryptBytes raw binary AES-GCM`() {
+        val kpg = KeyPairGenerator.getInstance("EC")
+        kpg.initialize(ECGenParameterSpec("secp256r1"))
+        val myPair = kpg.generateKeyPair()
+        val peerPair = kpg.generateKeyPair()
+
+        val myPrivBase64 = Base64.getEncoder().encodeToString(myPair.private.encoded)
+        val myPubBase64 = Base64.getEncoder().encodeToString(myPair.public.encoded)
+        val peerPubBase64 = Base64.getEncoder().encodeToString(peerPair.public.encoded)
+
+        every { sharedPrefs.getString("__self_private_key__", null) } returns myPrivBase64
+        every { sharedPrefs.getString("__self_public_key__", null) } returns myPubBase64
+        every { sharedPrefs.getString("peer_audio_test", null) } returns peerPubBase64
+        every { sharedPrefs.contains("peer_audio_test") } returns true
+
+        val rawAudioChunk = ByteArray(1024) { (it % 256).toByte() }
+        val peerId = "peer_audio_test"
+
+        val encrypted = cryptoManager.encryptBytes(rawAudioChunk, peerId)
+        assertNotNull(encrypted)
+        assertTrue(encrypted.size > rawAudioChunk.size)
+
+        val decrypted = cryptoManager.decryptBytes(encrypted, peerId)
+        assertArrayEquals(rawAudioChunk, decrypted)
+    }
 }

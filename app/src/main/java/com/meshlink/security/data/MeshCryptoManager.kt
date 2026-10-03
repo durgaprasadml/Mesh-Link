@@ -468,6 +468,35 @@ class MeshCryptoManager @Inject constructor(
         }
     }
 
+    fun encryptBytes(plainBytes: ByteArray, peerId: String): ByteArray {
+        val key = deriveSharedKey(peerId)
+        val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+        val iv = ByteArray(SecurityConstants.GCM_IV_LENGTH_BYTES)
+        java.security.SecureRandom().nextBytes(iv)
+        val spec = GCMParameterSpec(SecurityConstants.GCM_TAG_LENGTH_BITS, iv)
+        cipher.init(Cipher.ENCRYPT_MODE, key, spec)
+
+        val ciphertextWithTag = cipher.doFinal(plainBytes)
+        val combined = ByteArray(iv.size + ciphertextWithTag.size)
+        System.arraycopy(iv, 0, combined, 0, iv.size)
+        System.arraycopy(ciphertextWithTag, 0, combined, iv.size, ciphertextWithTag.size)
+        return combined
+    }
+
+    fun decryptBytes(cipherBytes: ByteArray, peerId: String): ByteArray {
+        if (cipherBytes.size <= SecurityConstants.GCM_IV_LENGTH_BYTES) {
+            throw IllegalArgumentException("Ciphertext too short for IV")
+        }
+        val key = deriveSharedKey(peerId)
+        val iv = cipherBytes.copyOfRange(0, SecurityConstants.GCM_IV_LENGTH_BYTES)
+        val ciphertextWithTag = cipherBytes.copyOfRange(SecurityConstants.GCM_IV_LENGTH_BYTES, cipherBytes.size)
+
+        val cipher = Cipher.getInstance(SecurityConstants.AES_GCM_CIPHER)
+        val spec = GCMParameterSpec(SecurityConstants.GCM_TAG_LENGTH_BITS, iv)
+        cipher.init(Cipher.DECRYPT_MODE, key, spec)
+        return cipher.doFinal(ciphertextWithTag)
+    }
+
     // ────────── Convenience ──────────
     fun encryptOrPassthrough(
         plaintext: String,

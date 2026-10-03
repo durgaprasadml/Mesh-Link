@@ -79,7 +79,13 @@ class MeshMessagingManager @Inject constructor(
 
     init {
         setupTransferManager()
-        
+
+        beaconHandler.onSendPacket = { packet ->
+            applicationScope.launch {
+                dispatchSinglePacket(packet.targetId, packet)
+            }
+        }
+
         keyExchangeHandler.onKeyExchangeComplete = {
             retryCoordinator.triggerEvent("key_exchange_complete")
             retryPendingMessages()
@@ -110,6 +116,18 @@ class MeshMessagingManager @Inject constructor(
                 }
             } else {
                 meshRouter.sendMediaPacket(packet)
+            }
+        }
+
+        transferManager.onIncomingStreamStarted = { transferId, fileName, mimeType, totalBytes, senderId ->
+            applicationScope.launch {
+                mediaMessageHandler.insertPlaceholderForStream(
+                    transferId = transferId,
+                    senderId = senderId,
+                    fileName = fileName,
+                    mimeType = mimeType,
+                    totalBytes = totalBytes
+                )
             }
         }
 
@@ -203,6 +221,10 @@ class MeshMessagingManager @Inject constructor(
                     MessageType.IMAGE, MessageType.VOICE -> {
                         val file = msg.mediaPath?.let { File(it) }
                         if (file != null && file.exists()) {
+                            if (msg.messageType == MessageType.VOICE && transferManager.isTransferActive(msg.messageId)) {
+                                MeshLogger.d(TAG, "Audio transfer ${msg.messageId} is already actively running in TransferManager. Skipping duplicate retry dispatch.")
+                                return@forEach
+                            }
                             val targetPeerId = MeshIdNormalizer.canonicalize(msg.chatId)
                             val localPeerId = MeshIdNormalizer.canonicalize(msg.senderId)
                             val priority = if (msg.messageType == MessageType.VOICE) com.meshlink.transfer.TransferPriority.HIGH else com.meshlink.transfer.TransferPriority.MEDIUM

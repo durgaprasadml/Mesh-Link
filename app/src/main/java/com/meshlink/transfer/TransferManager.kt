@@ -11,6 +11,8 @@ import com.meshlink.domain.model.RouteType
 import com.meshlink.routing.engine.IntelligentTransportManager
 import com.meshlink.routing.engine.TransportDiagnostics
 import com.meshlink.routing.engine.TransportMetrics
+import com.meshlink.wifi.data.AudioStreamResult
+import com.meshlink.wifi.data.WifiSocketTransport
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -19,6 +21,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +44,8 @@ class TransferManager @Inject constructor(
     private val analytics: TransferAnalytics,
     private val intelligentTransportManager: IntelligentTransportManager,
     private val wifiSocketTransport: com.meshlink.wifi.data.WifiSocketTransport,
+    private val wifiDirectManager: com.meshlink.wifi.manager.WifiDirectManager? = null,
+    private val beaconHandlerProvider: javax.inject.Provider<com.meshlink.ble.data.handlers.BeaconHandler>? = null,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope,
     // Phase 2 Pipeline Components (Default parameters for 100% backward compatibility)
@@ -79,6 +85,27 @@ class TransferManager @Inject constructor(
     var onTransferCompleted: ((TransferSession) -> Unit)? = null
     var onOutgoingTransferCompleted: ((TransferSession) -> Unit)? = null
     var onTransferStateChanged: ((String, TransferState) -> Unit)? = null
+    var onIncomingStreamStarted: ((transferId: String, fileName: String, mimeType: String, totalBytes: Long, senderId: String) -> Unit)? = null
+
+    private val activeOutgoingJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    fun isTransferActive(transferId: String): Boolean {
+        val job = activeOutgoingJobs[transferId]
+        if (job != null && job.isActive) return true
+        val session = scheduler.getSession(transferId) ?: sessionRegistry.getSession(transferId)
+        val state = session?.state
+        return state in listOf(
+            TransferState.PREPARING,
+            TransferState.CONNECTING,
+            TransferState.WAITING_FOR_WIFI,
+            TransferState.SOCKET_CONNECTING,
+            TransferState.HANDSHAKING,
+            TransferState.STREAMING,
+            TransferState.TRANSFERRING,
+            TransferState.WAITING_FOR_ACK,
+            TransferState.RETRYING
+        )
+    }
 
     private val transferCompletedListeners = java.util.concurrent.CopyOnWriteArrayList<(TransferSession) -> Unit>()
 
@@ -103,7 +130,17 @@ class TransferManager @Inject constructor(
 
     val transferProgress: StateFlow<Map<String, Float>> = scheduler.activeSessions
         .map { sessions ->
-            sessions.associate { it.transferId to it.getProgress() }
+            sessions
+                .filter {
+                    it.state == TransferState.SENDING ||
+                    it.state == TransferState.RECEIVING ||
+                    it.state == TransferState.STREAMING ||
+                    it.state == TransferState.TRANSFERRING ||
+                    it.state == TransferState.WAITING_FOR_ACK ||
+                    it.state == TransferState.COMPLETING ||
+                    it.state == TransferState.RETRYING
+                }
+                .associate { it.transferId to it.getProgress() }
         }
         .stateIn(applicationScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
@@ -140,6 +177,17 @@ class TransferManager @Inject constructor(
         wifiSocketTransport.onMediaStreamStarted = { transferId, fileName, mimeType, totalBytes, expectedChecksum, senderId ->
             applicationScope.launch(ioDispatcher + exceptionHandler) {
                 var session = scheduler.getSession(transferId)
+                if (session?.state?.isTerminal() == true) {
+                    MeshLogger.d(TAG, "Ignoring onMediaStreamStarted for already terminal transfer: $transferId (state=${session.state})")
+                    return@launch
+                }
+                val isAudio = mimeType.startsWith("audio/")
+                if (isAudio) {
+                    MeshLogger.i(
+                        "AUDIO_RECEIVE_START",
+                        "[AUDIO_RECEIVE_START] transferId=$transferId peerId=$senderId fileName=$fileName fileSize=${totalBytes}B mimeType=$mimeType transport=WIFI_DIRECT"
+                    )
+                }
                 if (session == null) {
                     session = TransferSession(
                         transferId = transferId,
@@ -157,21 +205,42 @@ class TransferManager @Inject constructor(
                     )
                     scheduler.addSession(session)
                     sessionRegistry.registerSession(session)
-                } else {
+                } else if (!session.state.isTerminal()) {
                     session.state = TransferState.RECEIVING
                     session.transportUsed = TransportType.WIFI_DIRECT
+                    session.totalBytes = totalBytes
+                    session.fileName = fileName
+                    session.mimeType = mimeType
                 }
-                onTransferStateChanged?.invoke(transferId, TransferState.RECEIVING)
+                if (!session.state.isTerminal()) {
+                    onTransferStateChanged?.invoke(transferId, TransferState.RECEIVING)
+                }
                 cache.persistSession(session)
+                onIncomingStreamStarted?.invoke(transferId, fileName, mimeType, totalBytes, senderId)
             }
         }
 
         wifiSocketTransport.onMediaStreamProgress = { transferId, bytesTransferred, totalBytes ->
-            updateProgressThrottled(transferId, 1, 1, bytesTransferred)
+            val session = scheduler.getSession(transferId)
+            val isAudio = session?.mimeType?.startsWith("audio/") == true
+            if (isAudio) {
+                MeshLogger.d(
+                    "AUDIO_RECEIVE_PROGRESS",
+                    "[AUDIO_RECEIVE_PROGRESS] transferId=$transferId peerId=${session?.senderId} bytesTransferred=$bytesTransferred totalBytes=$totalBytes mimeType=${session?.mimeType} transport=WIFI_DIRECT"
+                )
+            }
+            updateStreamProgressThrottled(transferId, bytesTransferred, totalBytes)
         }
 
         wifiSocketTransport.onMediaStreamCompleted = { transferId, filePath, mimeType, senderId, totalBytes ->
             applicationScope.launch(ioDispatcher + exceptionHandler) {
+                val isAudio = mimeType.startsWith("audio/")
+                if (isAudio) {
+                    MeshLogger.i(
+                        "AUDIO_RECEIVE_COMPLETE",
+                        "[AUDIO_RECEIVE_COMPLETE] transferId=$transferId peerId=$senderId fileName=${File(filePath).name} fileSize=${totalBytes}B mimeType=$mimeType transport=WIFI_DIRECT"
+                    )
+                }
                 val session = scheduler.getSession(transferId) ?: TransferSession(
                     transferId = transferId,
                     senderId = senderId,
@@ -188,7 +257,10 @@ class TransferManager @Inject constructor(
                 )
                 session.filePath = filePath
                 session.state = TransferState.COMPLETED
-                updateProgressThrottled(transferId, 1, 1, totalBytes)
+                session.bytesTransferred = totalBytes
+                session.chunksTransferred = session.totalChunks.coerceAtLeast(1)
+                scheduler.addSession(session)
+                updateStreamProgressThrottled(transferId, totalBytes, totalBytes)
                 updateState(transferId, TransferState.COMPLETED)
                 cache.persistSession(session)
                 resourceManager.releaseSessionResources(transferId)
@@ -208,7 +280,16 @@ class TransferManager @Inject constructor(
 
         wifiSocketTransport.onMediaStreamFailed = { transferId, reason ->
             applicationScope.launch(ioDispatcher + exceptionHandler) {
-                MeshLogger.w(TAG, "Incoming Wi-Fi media stream failed for $transferId: $reason")
+                val session = scheduler.getSession(transferId)
+                val isAudio = session?.mimeType?.startsWith("audio/") == true
+                if (isAudio) {
+                    MeshLogger.e(
+                        TAG,
+                        "[AUDIO_TRANSFER_FAILURE] transferId=$transferId peerId=${session?.senderId} error=$reason mimeType=${session?.mimeType} transport=WIFI_DIRECT"
+                    )
+                } else {
+                    MeshLogger.w(TAG, "Incoming Wi-Fi media stream failed for $transferId: $reason")
+                }
                 failSession(transferId, reason)
             }
         }
@@ -225,23 +306,82 @@ class TransferManager @Inject constructor(
         thumbnailBase64: String? = null
     ): String {
         val exists = withContext(ioDispatcher) { file.exists() }
-        if (!exists) {
-            MeshLogger.e(TAG, "Cannot send non-existent file: ${file.absolutePath}")
+        val canRead = withContext(ioDispatcher) { file.canRead() }
+        val fileLength = withContext(ioDispatcher) { file.length() }
+        val canOpenStream = withContext(ioDispatcher) {
+            try {
+                file.inputStream().use { true }
+            } catch (e: Exception) {
+                false
+            }
+        }
+        val mimeType = metaManager.getMimeTypeForFile(file)
+        val isAudio = mimeType.startsWith("audio/")
+
+        if (isAudio) {
+            MeshLogger.i(
+                "AUDIO_DEBUG",
+                "[AUDIO_DEBUG] uri=${file.toURI()} path=${file.absolutePath} mimeType=$mimeType fileSize=${fileLength}B exists=$exists readable=$canRead inputStream=$canOpenStream"
+            )
+            MeshLogger.i(
+                "AUDIO_SEND_START",
+                "[AUDIO_SEND_START] transferId=$transferId peerId=$targetId fileName=${file.name} fileSize=${fileLength}B mimeType=$mimeType transport=WIFI_DIRECT"
+            )
+            MeshLogger.i(
+                "AUDIO_FILE_CHECK",
+                "[AUDIO_FILE_CHECK] transferId=$transferId peerId=$targetId path=${file.absolutePath} exists=$exists canRead=$canRead size=${fileLength}B"
+            )
+        }
+
+        if (!exists || !canRead || fileLength == 0L || !canOpenStream) {
+            if (isAudio) {
+                MeshLogger.e(
+                    TAG,
+                    "[AUDIO_TRANSFER_FAILURE] transferId=$transferId peerId=$targetId error='Source audio file invalid, unreadable, or empty (exists=$exists, canRead=$canRead, size=${fileLength}B, inputStream=$canOpenStream)' mimeType=$mimeType transport=WIFI_DIRECT"
+                )
+            }
+            MeshLogger.e(TAG, "Cannot send non-existent, unreadable or empty file: ${file.absolutePath}")
             return transferId
         }
 
-        val mimeType = metaManager.getMimeTypeForFile(file)
-        val fileLength = withContext(ioDispatcher) { file.length() }
-        val isWifi = wifiSocketTransport.isConnected() || intelligentTransportManager.isWifiAvailable()
-        val selectedRoute = if (isWifi) {
+        if (isAudio) {
+            MeshLogger.i(
+                "AUDIO_FILE_READY",
+                "[AUDIO_FILE_READY] transferId=$transferId peerId=$targetId fileName=${file.name} fileSize=${fileLength}B mimeType=$mimeType transport=WIFI_DIRECT"
+            )
+            MeshLogger.i(
+                "AUDIO_METADATA",
+                "[AUDIO_METADATA] transferId=$transferId peerId=$targetId fileName=${file.name} fileSize=${fileLength}B mimeType=$mimeType transport=WIFI_DIRECT"
+            )
+        }
+
+        // ── AUDIO TRANSPORT POLICY (HARD REQUIREMENT) ──────────────────────────
+        // Audio payloads MUST be transferred exclusively via Wi-Fi Direct.
+        // BLE MUST NOT be used for audio payloads under any circumstance.
+        // If Wi-Fi Direct is not available when sendFile() is called, the session
+        // is created as WIFI_DIRECT and startOutgoingTransfer() will wait/fail-safe.
+        // ───────────────────────────────────────────────────────────────────────
+        val selectedRoute: RouteType = if (isAudio) {
+            MeshLogger.i(
+                "AUDIO_TRANSPORT_SELECTION",
+                "[AUDIO_TRANSPORT_SELECTION] transferId=$transferId peerId=$targetId selectedTransport=WIFI_DIRECT mimeType=$mimeType fileSize=${fileLength}B"
+            )
             RouteType.WIFI_DIRECT
         } else {
-            intelligentTransportManager.selectTransportForPayload(
-                destinationId = targetId,
-                packetType = PacketType.MEDIA_CHUNK,
-                payloadSizeBytes = fileLength,
-                mimeType = mimeType
-            )
+            // Non-audio: existing size-based heuristic (unchanged).
+            val isWifi = wifiSocketTransport.isConnected() || intelligentTransportManager.isWifiAvailable()
+            val isSmallMedia = fileLength <= 50_000L
+            when {
+                isWifi && !isSmallMedia -> RouteType.WIFI_DIRECT
+                wifiSocketTransport.isConnected() -> RouteType.WIFI_DIRECT
+                isSmallMedia -> RouteType.BLE
+                else -> intelligentTransportManager.selectTransportForPayload(
+                    destinationId = targetId,
+                    packetType = PacketType.MEDIA_CHUNK,
+                    payloadSizeBytes = fileLength,
+                    mimeType = mimeType
+                )
+            }
         }
 
         val transport = if (selectedRoute == RouteType.WIFI_DIRECT) TransportType.WIFI_DIRECT else TransportType.BLE
@@ -273,61 +413,377 @@ class TransferManager @Inject constructor(
         analytics.recordTransferStarted(session)
         diagnostics.logTransferStart(transferId, file.name, fileLength, selectedRoute)
 
-        val job = applicationScope.launch(ioDispatcher + exceptionHandler) {
-            startOutgoingTransfer(session)
+        val existingJob = activeOutgoingJobs[transferId]
+        if (existingJob != null && existingJob.isActive) {
+            MeshLogger.d(TAG, "Transfer $transferId is already running actively. Skipping duplicate start.")
+            return transferId
         }
+
+        val job = applicationScope.launch(ioDispatcher + exceptionHandler) {
+            try {
+                startOutgoingTransfer(session)
+            } finally {
+                activeOutgoingJobs.remove(transferId)
+            }
+        }
+        activeOutgoingJobs[transferId] = job
         resourceManager.registerJob(transferId, job)
 
         return transferId
     }
 
+    private suspend fun executeAudioTransferWithRetry(session: TransferSession, file: File) = withContext(ioDispatcher) {
+        val transferId = session.transferId
+        val peerId = session.targetId
+        val fileName = file.name
+        val fileSize = file.length()
+        val mimeType = session.mimeType
+
+        MeshLogger.i("AUDIO_SEND_START", "[AUDIO_SEND_START] transferId=$transferId peerId=$peerId file=$fileName size=${fileSize}B mime=$mimeType")
+        MeshLogger.i("AUDIO_FILE_READY", "[AUDIO_FILE_READY] transferId=$transferId path=${file.absolutePath} bytes=$fileSize mime=$mimeType checksum=${session.sha256Checksum}")
+        MeshLogger.i("AUDIO_TRANSPORT_SELECTION", "[AUDIO_TRANSPORT_SELECTION] transport=WIFI_DIRECT session=$transferId")
+
+        session.transportUsed = TransportType.WIFI_DIRECT
+        session.totalBytes = fileSize
+        session.totalChunks = ((fileSize + WifiSocketTransport.AUDIO_CHUNK_SIZE - 1) / WifiSocketTransport.AUDIO_CHUNK_SIZE).toInt().coerceAtLeast(1)
+
+        // Send out-of-band control META packet over BLE control mesh so receiver immediately:
+        //  1) Displays the incoming voice bubble placeholder in the chat right away
+        //  2) Proactively warms its Wi-Fi server socket and connects as client to GO
+        try {
+            MeshLogger.i("AUDIO_CONTROL_META", "[AUDIO_CONTROL_META] Sending out-of-band META over BLE mesh for audio transfer: $transferId target=$peerId")
+            sendMetaPacket(session)
+        } catch (e: Exception) {
+            MeshLogger.w(TAG, "Failed to send audio control META: ${e.message}")
+        }
+
+        val maxAttempts = 6
+        val retryDelaysMs = listOf(500L, 1000L, 2000L, 3000L, 4000L, 5000L)
+        var lastErrorReason = "Unknown error"
+
+        for (attempt in 1..maxAttempts) {
+            val currentSession = scheduler.getSession(transferId) ?: sessionRegistry.getSession(transferId)
+            if (currentSession?.state == TransferState.COMPLETED) {
+                MeshLogger.i("AUDIO_COMPLETE", "[AUDIO_COMPLETE] session=$transferId already marked COMPLETED. Finishing.")
+                return@withContext
+            }
+
+            if (attempt > 1) {
+                val delayMs = retryDelaysMs.getOrElse(attempt - 2) { 5000L }
+                MeshLogger.i("AUDIO_RETRY", "[AUDIO_RETRY] session=$transferId attempt=$attempt/$maxAttempts delay=${delayMs}ms lastError='$lastErrorReason'")
+                updateState(transferId, TransferState.RETRYING)
+                delay(delayMs)
+            }
+
+            // Step 1: Ensure Wi-Fi Direct connection & Socket readiness
+            updateState(transferId, TransferState.WAITING_FOR_WIFI)
+            MeshLogger.i("AUDIO_WIFI", "[AUDIO_WIFI] session=$transferId socket=CONNECTING peerId=$peerId attempt=$attempt")
+
+            val isP2pConnected = wifiDirectManager?.isConnected == true
+            var socketReady = false
+
+            if (isP2pConnected) {
+                val pState = wifiDirectManager?.p2pState?.value
+                if (pState is com.meshlink.wifi.model.WifiP2pState.Connected) {
+                    if (!pState.isGroupOwner && pState.groupOwnerAddress.isNotBlank()) {
+                        val goAddress = pState.groupOwnerAddress
+                        wifiSocketTransport.registerPeerMeshHost(peerId, goAddress)
+                        if (!wifiSocketTransport.isHostConnected(goAddress)) {
+                            wifiSocketTransport.connectAsClient(goAddress)
+                        }
+                    } else if (pState.isGroupOwner) {
+                        wifiSocketTransport.startServer()
+                    }
+                }
+                socketReady = wifiSocketTransport.isConnected()
+            }
+
+            if (!socketReady) {
+                updateState(transferId, TransferState.SOCKET_CONNECTING)
+                MeshLogger.i("AUDIO_SOCKET", "[AUDIO_SOCKET] session=$transferId requesting Wi-Fi Direct connection (initiator=true)")
+
+                // Fast Direct Wi-Fi Reachability: Check all candidate IPs concurrently
+                val peerDetails = wifiDirectManager?.getPeerWifiDetails(peerId)
+                val candidateIps = mutableListOf<String>()
+                peerDetails?.ipAddress?.takeIf { it.isNotBlank() }?.let { candidateIps.add(it) }
+                candidateIps.addAll(com.meshlink.wifi.util.WifiNetworkUtils.getCandidatePeerIps(context))
+                com.meshlink.wifi.util.WifiNetworkUtils.getArpClients().forEach { candidateIps.add(it) }
+
+                val distinctCandidates = candidateIps.distinct().filter { it.isNotBlank() && it != "0.0.0.0" }
+                val reachableIp = withContext(ioDispatcher) {
+                    val deferreds = distinctCandidates.map { candIp ->
+                        async {
+                            if (com.meshlink.wifi.util.WifiNetworkUtils.isTcpPortReachable(candIp, 8988, 350)) {
+                                candIp
+                            } else null
+                        }
+                    }
+                    deferreds.awaitAll().firstOrNull { it != null }
+                }
+
+                if (reachableIp != null) {
+                    MeshLogger.i("AUDIO_SOCKET", "[AUDIO_SOCKET] Found active TCP listener on $reachableIp:8988! Connecting...")
+                    wifiSocketTransport.registerPeerMeshHost(peerId, reachableIp)
+                    wifiSocketTransport.connectAsClient(reachableIp)
+                    val waitStart = System.currentTimeMillis()
+                    while (System.currentTimeMillis() - waitStart < 2000L) {
+                        if (wifiSocketTransport.isConnected()) {
+                            socketReady = true
+                            MeshLogger.i("AUDIO_SOCKET", "[AUDIO_SOCKET] Socket connected successfully to $reachableIp:8988")
+                            break
+                        }
+                        delay(50L)
+                    }
+                }
+
+                // If not already connected over direct Wi-Fi link, trigger P2P discovery & connection
+                if (!socketReady) {
+                    // Trigger wake beacon over mesh control plane so remote peer starts discovery
+                    try {
+                        beaconHandlerProvider?.get()?.let { bh ->
+                            val wakePacket = bh.generateBeaconPacket(
+                                localMeshId = session.senderId,
+                                targetPeerId = peerId,
+                                reqWifiConnect = true
+                            )
+                            onSendPacket?.invoke(wakePacket)
+                            MeshLogger.i("AUDIO_WIFI", "[AUDIO_WIFI] Sent Wi-Fi connect wake beacon to peer $peerId")
+                            delay(300L)
+                        }
+                    } catch (e: Exception) {
+                        MeshLogger.w("AUDIO_WIFI", "Failed to send wake beacon: ${e.message}")
+                    }
+
+                    try {
+                        wifiDirectManager?.ensureConnected(peerId, timeoutMs = 25_000L, isInitiator = true)
+                    } catch (e: Exception) {
+                        MeshLogger.w("AUDIO_WIFI", "[AUDIO_WIFI] wifiDirectManager.ensureConnected error: ${e.message}")
+                    }
+
+                    val socketWaitStart = System.currentTimeMillis()
+                    while (System.currentTimeMillis() - socketWaitStart < 20_000L) {
+                        val pState = wifiDirectManager?.p2pState?.value
+                        if (pState is com.meshlink.wifi.model.WifiP2pState.Connected) {
+                            if (!pState.isGroupOwner && pState.groupOwnerAddress.isNotBlank()) {
+                                val go = pState.groupOwnerAddress
+                                wifiSocketTransport.registerPeerMeshHost(peerId, go)
+                                if (!wifiSocketTransport.isHostConnected(go)) {
+                                    wifiSocketTransport.connectAsClient(go)
+                                }
+                            } else if (pState.isGroupOwner) {
+                                wifiSocketTransport.startServer()
+                            }
+                        }
+
+                        if (wifiSocketTransport.isConnected()) {
+                            socketReady = true
+                            break
+                        }
+                        delay(100L)
+                    }
+                }
+            }
+
+            if (!socketReady) {
+                lastErrorReason = "Wi-Fi Direct socket not ready after attempt $attempt"
+                MeshLogger.w("AUDIO_FAILURE", "[AUDIO_FAILURE] session=$transferId attempt=$attempt $lastErrorReason")
+                continue
+            }
+
+            MeshLogger.i("AUDIO_SOCKET", "[AUDIO_SOCKET] session=$transferId socket=CONNECTED")
+
+            // Step 2: Handshake & Transfer Chunks
+            updateState(transferId, TransferState.HANDSHAKING)
+            MeshLogger.i("AUDIO_HANDSHAKE", "[AUDIO_HANDSHAKE] session=$transferId state=HANDSHAKING")
+
+            updateState(transferId, TransferState.TRANSFERRING)
+            val streamStartTime = System.currentTimeMillis()
+
+            val result = wifiSocketTransport.streamAudioFile(
+                transferId = transferId,
+                file = file,
+                mimeType = mimeType,
+                expectedChecksum = session.sha256Checksum ?: "",
+                senderId = session.senderId,
+                targetPeerAddress = peerId,
+                onProgress = { bytesTransferred, totalBytes ->
+                    session.bytesTransferred = bytesTransferred
+                    val pct = if (totalBytes > 0) ((bytesTransferred * 100) / totalBytes).toInt() else 0
+                    MeshLogger.d("AUDIO_CHUNK", "[AUDIO_CHUNK] session=$transferId bytes=$bytesTransferred/$totalBytes ($pct%)")
+                    updateStreamProgressThrottled(transferId, bytesTransferred, totalBytes)
+                }
+            )
+
+            when (result) {
+                is AudioStreamResult.Success -> {
+                    updateState(transferId, TransferState.WAITING_FOR_ACK)
+                    MeshLogger.i("AUDIO_ACK", "[AUDIO_ACK] session=$transferId ack=RECEIVED")
+                    updateState(transferId, TransferState.COMPLETING)
+
+                    session.bytesTransferred = session.totalBytes
+                    session.chunksTransferred = session.totalChunks
+                    updateStreamProgressThrottled(transferId, session.totalBytes, session.totalBytes)
+                    updateState(transferId, TransferState.COMPLETED)
+
+                    resourceManager.releaseSessionResources(transferId)
+                    sessionRegistry.unregisterSession(transferId)
+                    applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
+
+                    val durationMs = (System.currentTimeMillis() - streamStartTime).coerceAtLeast(1L)
+                    val durationSec = durationMs / 1000.0
+                    val mbps = (session.totalBytes / (1024.0 * 1024.0)) / durationSec.coerceAtLeast(0.001)
+
+                    MeshLogger.i("AUDIO_COMPLETE", "[AUDIO_COMPLETE] session=$transferId file=$fileName size=${session.totalBytes}B duration=${durationMs}ms throughput=${"%.2f".format(mbps)}MB/s retries=${attempt - 1}")
+                    metrics.recordMediaTransfer(session.totalBytes, durationMs)
+                    diagnostics.logTransferCompletion(transferId, session.totalBytes, durationMs, session.getAverageSpeedBytesPerSec().toDouble())
+
+                    onOutgoingTransferCompleted?.invoke(session)
+                    return@withContext
+                }
+                is AudioStreamResult.Failed -> {
+                    lastErrorReason = result.reason
+                    MeshLogger.w("AUDIO_FAILURE", "[AUDIO_FAILURE] session=$transferId attempt=$attempt failed: $lastErrorReason")
+                }
+            }
+        }
+
+        // All attempts exhausted
+        val finalReason = "Audio transfer failed after $maxAttempts attempts: $lastErrorReason"
+        MeshLogger.e("AUDIO_FAILURE", "[AUDIO_FAILURE] session=$transferId all $maxAttempts attempts exhausted. Error: $finalReason")
+        diagnostics.logTransportUnavailable(
+            packetId = transferId,
+            packetType = PacketType.MEDIA_CHUNK,
+            requestedRoute = RouteType.WIFI_DIRECT,
+            reason = finalReason
+        )
+        failSession(transferId, finalReason)
+    }
+
     private suspend fun startOutgoingTransfer(session: TransferSession) = withContext(ioDispatcher) {
         val file = File(session.filePath ?: return@withContext)
+        val isAudio = session.mimeType.startsWith("audio/")
+
         if (!file.exists()) {
+            if (isAudio) {
+                MeshLogger.e(
+                    TAG,
+                    "[AUDIO_TRANSFER_FAILURE] transferId=${session.transferId} peerId=${session.targetId} error='Source file vanished: ${file.absolutePath}' mimeType=${session.mimeType} transport=WIFI_DIRECT"
+                )
+            }
             failSession(session.transferId, "Source file vanished")
             return@withContext
         }
 
-        // Send META packet (control plane) over mesh so receiver has file metadata and thumbnail preview immediately
-        val metaPayload = metaManager.generateMetaPayload(
-            FileMetadata(session.fileName, session.mimeType, session.totalBytes, session.sha256Checksum, session.thumbnailBase64)
-        )
-        val metaPriority = if (session.priority == TransferPriority.CRITICAL) {
-            com.meshlink.domain.model.PacketPriority.CRITICAL
-        } else {
-            com.meshlink.domain.model.PacketPriority.NORMAL
+        // ── AUDIO HARD SAFETY GUARD ──────────────────────────────────────────────
+        // Audio payloads MUST NEVER be transferred over BLE.
+        // Audio uses Wi-Fi Direct exclusively with automatic retry and resumability.
+        // ────────────────────────────────────────────────────────────────────────
+        if (isAudio) {
+            executeAudioTransferWithRetry(session, file)
+            return@withContext
         }
-        sendPacket(
-            session.senderId, session.targetId, session.transferId,
-            metaPayload, PacketType.MEDIA_META, 0, session.totalChunks, session.mimeType,
-            metaPriority
-        )
 
-        // Determine if Wi-Fi Direct streaming can be used
-        val isWifi = session.transportUsed == TransportType.WIFI_DIRECT ||
-                     wifiSocketTransport.isConnected() ||
-                     intelligentTransportManager.isWifiAvailable()
-
-        if (isWifi) {
+        // Determine if Wi-Fi Direct streaming can actually be used
+        if (session.transportUsed == TransportType.WIFI_DIRECT) {
             updateState(session.transferId, TransferState.STREAMING)
             applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
 
-            // Ensure Wi-Fi Direct socket is ready (await with short timeout if connecting)
+            // Send out-of-band control META packet over BLE control mesh BEFORE waiting for socket
+            // so the receiver is immediately notified of incoming audio and proactively initiates Wi-Fi Direct connection.
+            if (isAudio) {
+                MeshLogger.i("AUDIO_CONTROL_META", "[AUDIO_CONTROL_META] Sending out-of-band META over mesh control plane for audio transfer: ${session.transferId} target=${session.targetId}")
+                sendMetaPacket(session)
+            }
+
+            // Ensure Wi-Fi Direct socket is ready.
+            // For audio: wait up to 45s (allow time for Wi-Fi Direct PBC negotiation).
+            // For other media: wait up to 3s (existing behaviour).
+            val socketWaitTimeoutMs = if (isAudio) 45_000L else 3_000L
             var socketReady = wifiSocketTransport.isConnected()
             if (!socketReady) {
-                val connectStartTime = System.currentTimeMillis()
-                while (System.currentTimeMillis() - connectStartTime < 3000L) {
-                    if (wifiSocketTransport.isConnected()) {
-                        socketReady = true
-                        break
+                val peerDetails = wifiDirectManager?.getPeerWifiDetails(session.targetId)
+                val candidateIps = mutableListOf<String>()
+                peerDetails?.ipAddress?.takeIf { it.isNotBlank() }?.let { candidateIps.add(it) }
+                candidateIps.addAll(com.meshlink.wifi.util.WifiNetworkUtils.getCandidatePeerIps(context))
+                com.meshlink.wifi.util.WifiNetworkUtils.getArpClients().forEach { candidateIps.add(it) }
+
+                val distinctCandidates = candidateIps.distinct().filter { it.isNotBlank() && it != "0.0.0.0" }
+                val reachableIp = withContext(ioDispatcher) {
+                    val deferreds = distinctCandidates.map { candIp ->
+                        async {
+                            if (com.meshlink.wifi.util.WifiNetworkUtils.isTcpPortReachable(candIp, 8988, 400)) {
+                                candIp
+                            } else null
+                        }
                     }
-                    delay(100L)
+                    deferreds.awaitAll().firstOrNull { it != null }
+                }
+
+                if (reachableIp != null) {
+                    wifiSocketTransport.registerPeerMeshHost(session.targetId, reachableIp)
+                    wifiSocketTransport.connectAsClient(reachableIp)
+                    val waitStart = System.currentTimeMillis()
+                    while (System.currentTimeMillis() - waitStart < 2000L) {
+                        if (wifiSocketTransport.isConnected()) {
+                            socketReady = true
+                            break
+                        }
+                        delay(50L)
+                    }
+                }
+
+                if (!socketReady) {
+                    if (isAudio) {
+                        MeshLogger.i(
+                            "AUDIO_WIFI_WAIT",
+                            "[AUDIO_WIFI_WAIT] transferId=${session.transferId} peerId=${session.targetId} timeoutMs=$socketWaitTimeoutMs transport=WIFI_DIRECT"
+                        )
+                        MeshLogger.i(
+                            "AUDIO_WIFI_CONNECTION",
+                            "[AUDIO_WIFI_CONNECTION] transferId=${session.transferId} peerId=${session.targetId} requesting Wi-Fi Direct connection"
+                        )
+                    }
+                    // Proactively trigger Wi-Fi Direct connection via WifiDirectManager as INITIATOR
+                    applicationScope.launch(ioDispatcher + exceptionHandler) {
+                        try {
+                            wifiDirectManager?.ensureConnected(session.targetId, timeoutMs = socketWaitTimeoutMs, isInitiator = true)
+                        } catch (e: Exception) {
+                            MeshLogger.w(TAG, "wifiDirectManager.ensureConnected failed: ${e.message}")
+                        }
+                    }
+                    val connectStartTime = System.currentTimeMillis()
+                    while (System.currentTimeMillis() - connectStartTime < socketWaitTimeoutMs) {
+                        if (wifiSocketTransport.isConnected()) {
+                            socketReady = true
+                            break
+                        }
+                        delay(100L)
+                    }
                 }
             }
 
             if (socketReady) {
+                if (isAudio) {
+                    MeshLogger.i(
+                        "AUDIO_WIFI_SOCKET",
+                        "[AUDIO_WIFI_SOCKET] CONNECTED transferId=${session.transferId} peerId=${session.targetId}"
+                    )
+                    MeshLogger.i(
+                        "AUDIO_WIFI_STREAM",
+                        "[AUDIO_WIFI_STREAM] START transferId=${session.transferId} fileSize=${session.totalBytes}B"
+                    )
+                }
                 session.transportUsed = TransportType.WIFI_DIRECT
+                session.totalChunks = 1
+
                 val streamStartTime = System.currentTimeMillis()
+
+                if (isAudio) {
+                    MeshLogger.i(
+                        "AUDIO_TRANSFER_BEGIN",
+                        "[AUDIO_TRANSFER_BEGIN] transferId=${session.transferId} peerId=${session.targetId} fileName=${file.name} fileSize=${session.totalBytes}B mimeType=${session.mimeType} transport=WIFI_DIRECT"
+                    )
+                }
 
                 val success = wifiSocketTransport.streamFile(
                     transferId = session.transferId,
@@ -337,12 +793,20 @@ class TransferManager @Inject constructor(
                     senderId = session.senderId,
                     targetPeerAddress = session.targetId,
                     onProgress = { bytesTransferred, totalBytes ->
-                        updateProgressThrottled(session.transferId, 1, 1, bytesTransferred)
+                        if (isAudio) {
+                            MeshLogger.d(
+                                "AUDIO_TRANSFER_PROGRESS",
+                                "[AUDIO_TRANSFER_PROGRESS] transferId=${session.transferId} peerId=${session.targetId} bytesTransferred=$bytesTransferred totalBytes=$totalBytes mimeType=${session.mimeType} transport=WIFI_DIRECT"
+                            )
+                        }
+                        updateStreamProgressThrottled(session.transferId, bytesTransferred, totalBytes)
                     }
                 )
 
                 if (success) {
-                    updateProgressThrottled(session.transferId, 1, 1, session.totalBytes)
+                    session.bytesTransferred = session.totalBytes
+                    session.chunksTransferred = 1
+                    updateStreamProgressThrottled(session.transferId, session.totalBytes, session.totalBytes)
                     updateState(session.transferId, TransferState.COMPLETED)
                     resourceManager.releaseSessionResources(session.transferId)
                     sessionRegistry.unregisterSession(session.transferId)
@@ -353,31 +817,110 @@ class TransferManager @Inject constructor(
                     val mbps = (session.totalBytes / (1024.0 * 1024.0)) / durationSec.coerceAtLeast(0.001)
 
                     MeshLogger.i("MEDIA_TRANSFER", "file=${file.name}, size=${session.totalBytes}B, transport=WIFI_DIRECT, duration=${"%.2f".format(durationSec)}s, throughput=${"%.2f".format(mbps)}MB/s, retries=0, status=SUCCESS")
+                    if (isAudio) {
+                        MeshLogger.i(
+                            "AUDIO_WIFI_STREAM",
+                            "[AUDIO_WIFI_STREAM] COMPLETE transferId=${session.transferId} bytesSent=${session.totalBytes} durationMs=$durationMs"
+                        )
+                        MeshLogger.i(
+                            "AUDIO_TRANSFER_COMPLETE",
+                            "[AUDIO_TRANSFER_COMPLETE] transferId=${session.transferId} peerId=${session.targetId} fileName=${file.name} fileSize=${session.totalBytes}B mimeType=${session.mimeType} transport=WIFI_DIRECT duration=${durationMs}ms throughput=${"%.2f".format(mbps)}MB/s"
+                        )
+                    }
                     metrics.recordMediaTransfer(session.totalBytes, durationMs)
                     diagnostics.logTransferCompletion(session.transferId, session.totalBytes, durationMs, session.getAverageSpeedBytesPerSec().toDouble())
 
                     onOutgoingTransferCompleted?.invoke(session)
                     return@withContext
                 } else {
-                    MeshLogger.w(TAG, "Wi-Fi Direct stream failed for ${session.transferId}. Falling back to BLE.")
-                    session.transportUsed = TransportType.BLE
-                    diagnostics.logTransportFallback(
-                        packetId = session.transferId,
-                        packetType = PacketType.MEDIA_CHUNK,
-                        primaryRoute = RouteType.WIFI_DIRECT,
-                        fallbackRoute = RouteType.BLE,
-                        reason = "Wi-Fi Direct socket stream failed, falling back to BLE"
-                    )
+                    // Wi-Fi stream failed.
+                    if (isAudio) {
+                        // AUDIO MUST NOT fall back to BLE — fail the transfer.
+                        val reason = "Wi-Fi Direct stream failed for audio payload. Audio MUST NOT fall back to BLE."
+                        MeshLogger.e(
+                            TAG,
+                            "[AUDIO_TRANSFER_FAILURE] transferId=${session.transferId} peerId=${session.targetId} error=$reason mimeType=${session.mimeType} transport=WIFI_DIRECT"
+                        )
+                        diagnostics.logTransportUnavailable(
+                            packetId = session.transferId,
+                            packetType = PacketType.MEDIA_CHUNK,
+                            requestedRoute = RouteType.WIFI_DIRECT,
+                            reason = reason
+                        )
+                        failSession(session.transferId, reason)
+                        return@withContext
+                    } else {
+                        // Non-audio: allow BLE fallback as before.
+                        MeshLogger.w(TAG, "Wi-Fi Direct stream failed for ${session.transferId}. Falling back to BLE.")
+                        session.transportUsed = TransportType.BLE
+                        diagnostics.logTransportFallback(
+                            packetId = session.transferId,
+                            packetType = PacketType.MEDIA_CHUNK,
+                            primaryRoute = RouteType.WIFI_DIRECT,
+                            fallbackRoute = RouteType.BLE,
+                            reason = "Wi-Fi Direct socket stream failed, falling back to BLE"
+                        )
+                    }
                 }
             } else {
-                MeshLogger.w(TAG, "Wi-Fi Direct socket not connected. Falling back to BLE for ${session.transferId}")
-                session.transportUsed = TransportType.BLE
+                // Wi-Fi socket not ready after waiting.
+                if (isAudio) {
+                    // Clean up any empty/stuck Wi-Fi Direct group so discovery is restored
+                    applicationScope.launch(ioDispatcher + exceptionHandler) {
+                        try {
+                            wifiDirectManager?.disconnect()
+                        } catch (e: Exception) {
+                            MeshLogger.w(TAG, "wifiDirectManager.disconnect cleanup failed: ${e.message}")
+                        }
+                    }
+                    // AUDIO MUST NOT fall back to BLE — fail the transfer.
+                    val reason = "Wi-Fi Direct unavailable after ${socketWaitTimeoutMs}ms wait. Audio MUST NOT fall back to BLE."
+                    MeshLogger.e(
+                        TAG,
+                        "[AUDIO_TRANSFER_FAILURE] transferId=${session.transferId} peerId=${session.targetId} error=$reason mimeType=${session.mimeType} transport=WIFI_DIRECT"
+                    )
+                    MeshLogger.e(TAG, "[AUDIO_WIFI_CONNECTION] state=FAILED transferId=${session.transferId}")
+                    diagnostics.logTransportUnavailable(
+                        packetId = session.transferId,
+                        packetType = PacketType.MEDIA_CHUNK,
+                        requestedRoute = RouteType.WIFI_DIRECT,
+                        reason = reason
+                    )
+                    failSession(session.transferId, reason)
+                    return@withContext
+                } else {
+                    // Non-audio: fall back to BLE as before.
+                    MeshLogger.w(TAG, "Wi-Fi Direct socket not connected. Falling back to BLE for ${session.transferId}")
+                    session.transportUsed = TransportType.BLE
+                }
             }
+        } else {
+            // Session was not WIFI_DIRECT. If audio somehow reached here, that's a violation.
+            if (isAudio) {
+                val violation = "[AUDIO_TRANSPORT_VIOLATION] Audio payload reached BLE path in startOutgoingTransfer. " +
+                    "transferId=${session.transferId} peerId=${session.targetId} mimeType=${session.mimeType} transport=BLE"
+                MeshLogger.e(TAG, violation)
+                failSession(session.transferId, "Audio transport violation: audio must not use BLE.")
+                return@withContext
+            }
+            session.transportUsed = TransportType.BLE
         }
 
-        // BLE Path / Fallback Path:
-        updateState(session.transferId, TransferState.STREAMING)
+        // Hard check again before BLE chunking dispatch
+        if (isAudio) {
+            val violation = "[AUDIO_TRANSPORT_VIOLATION] Audio payload reached BLE chunked dispatch. " +
+                "transferId=${session.transferId} peerId=${session.targetId} mimeType=${session.mimeType} transport=BLE"
+            MeshLogger.e(TAG, violation)
+            failSession(session.transferId, "Audio transport violation: audio must not use BLE.")
+            return@withContext
+        }
+
+        // BLE Path / Fallback Path (audio is EXCLUDED above — only non-audio reaches here):
+        // Set accurate chunk count for BLE and send META packet to receiver
         session.totalChunks = chunkManager.getTotalChunks(session.totalBytes, TransportType.BLE)
+        sendMetaPacket(session)
+
+        updateState(session.transferId, TransferState.STREAMING)
         applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
 
         // Give receiver time to init cache
@@ -405,6 +948,22 @@ class TransferManager @Inject constructor(
         chunkDispatcher.dispatchAvailableChunks(session, file, onSendPacket)
     }
 
+    private suspend fun sendMetaPacket(session: TransferSession) {
+        val metaPayload = metaManager.generateMetaPayload(
+            FileMetadata(session.fileName, session.mimeType, session.totalBytes, session.sha256Checksum, session.thumbnailBase64)
+        )
+        val metaPriority = if (session.priority == TransferPriority.CRITICAL || session.priority == TransferPriority.HIGH) {
+            com.meshlink.domain.model.PacketPriority.CRITICAL
+        } else {
+            com.meshlink.domain.model.PacketPriority.NORMAL
+        }
+        sendPacket(
+            session.senderId, session.targetId, session.transferId,
+            metaPayload, PacketType.MEDIA_META, 0, session.totalChunks, session.mimeType,
+            metaPriority
+        )
+    }
+
     private val lastProgressEmitMs = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val lastProgressEmitPct = java.util.concurrent.ConcurrentHashMap<String, Float>()
 
@@ -422,7 +981,54 @@ class TransferManager @Inject constructor(
         }
     }
 
+    private fun updateStreamProgressThrottled(transferId: String, bytesTransferred: Long, totalBytes: Long) {
+        if (totalBytes <= 0L) return
+        val currentPct = (bytesTransferred.toDouble() / totalBytes.toDouble()).toFloat()
+        val lastPct = lastProgressEmitPct[transferId] ?: -1f
+        val lastTime = lastProgressEmitMs[transferId] ?: 0L
+        val now = System.currentTimeMillis()
+
+        if (bytesTransferred >= totalBytes || Math.abs(currentPct - lastPct) >= 0.01f || (now - lastTime) >= 100L) {
+            lastProgressEmitPct[transferId] = currentPct
+            lastProgressEmitMs[transferId] = now
+            val chunksDone = if (bytesTransferred >= totalBytes) 1 else 0
+            scheduler.updateSessionProgress(transferId, chunksDone, bytesTransferred)
+        }
+    }
+
     // ─────────────────── Receiver ───────────────────
+
+    fun prepareForIncomingAudio(peerId: String) {
+        applicationScope.launch(ioDispatcher + exceptionHandler) {
+            MeshLogger.i("AUDIO_PREPARE", "[AUDIO_PREPARE] Incoming audio notification from peer=$peerId. Warming Wi-Fi Direct socket...")
+            wifiSocketTransport.startServer()
+
+            val pState = wifiDirectManager?.p2pState?.value
+            if (pState is com.meshlink.wifi.model.WifiP2pState.Connected) {
+                if (!pState.isGroupOwner && pState.groupOwnerAddress.isNotBlank()) {
+                    MeshLogger.i("AUDIO_PREPARE", "[AUDIO_PREPARE] Client in P2P group. Connecting client socket to GO ${pState.groupOwnerAddress}:8988 immediately...")
+                    wifiSocketTransport.connectAsClient(pState.groupOwnerAddress)
+                }
+            } else {
+                val candidateIps = com.meshlink.wifi.util.WifiNetworkUtils.getCandidatePeerIps(context)
+                val reachable = withContext(ioDispatcher) {
+                    val deferreds = candidateIps.map { ip ->
+                        async {
+                            if (com.meshlink.wifi.util.WifiNetworkUtils.isTcpPortReachable(ip, 8988, 350)) ip else null
+                        }
+                    }
+                    deferreds.awaitAll().firstOrNull { it != null }
+                }
+                if (reachable != null) {
+                    MeshLogger.i("AUDIO_PREPARE", "[AUDIO_PREPARE] Found reachable peer at $reachable:8988. Auto-connecting client socket...")
+                    wifiSocketTransport.connectAsClient(reachable)
+                } else {
+                    MeshLogger.d("AUDIO_PREPARE", "[AUDIO_PREPARE] P2P not currently connected. Triggering peer discovery...")
+                    wifiDirectManager?.discoverPeers()
+                }
+            }
+        }
+    }
 
     fun handleIncomingPacket(packet: MeshPacket) {
         val transferId = packet.transferId ?: return
@@ -442,6 +1048,19 @@ class TransferManager @Inject constructor(
         val meta = metaManager.parseMetaPayload(packet.payload)
         if (meta == null) {
             MeshLogger.w(TAG, "Invalid META payload for $transferId")
+            return
+        }
+
+        val existingSession = scheduler.getSession(transferId)
+        if (existingSession != null && (existingSession.transportUsed == TransportType.WIFI_DIRECT || existingSession.state == TransferState.COMPLETED)) {
+            MeshLogger.d(TAG, "Ignoring META packet for existing Wi-Fi/completed transfer: $transferId")
+            return
+        }
+
+        val isAudio = meta.mimeType.startsWith("audio/")
+        if (isAudio) {
+            MeshLogger.i("AUDIO_PREPARE", "[AUDIO_PREPARE] Received MEDIA_META for incoming audio $transferId from ${packet.senderId}. Warming Wi-Fi socket.")
+            prepareForIncomingAudio(packet.senderId)
             return
         }
 
@@ -477,6 +1096,12 @@ class TransferManager @Inject constructor(
     private suspend fun handleChunk(packet: MeshPacket, transferId: String) {
         var session = scheduler.getSession(transferId)
 
+        val isAudio = session?.mimeType?.startsWith("audio/") == true || packet.mimeType?.startsWith("audio/") == true
+        if (isAudio) {
+            MeshLogger.w(TAG, "[AUDIO_TRANSPORT_VIOLATION] Received audio chunk via BLE for $transferId. Dropping chunk: audio payload must never use BLE.")
+            return
+        }
+
         if (session == null) {
             val mime = packet.mimeType ?: "application/octet-stream"
             cache.initSessionCache(transferId)
@@ -500,6 +1125,11 @@ class TransferManager @Inject constructor(
             startTimeoutMonitor(transferId)
         }
 
+        // Synchronize totalChunks in case route fallback or initial packet desynchronization occurred
+        if (packet.totalChunks > 0 && session.totalChunks != packet.totalChunks) {
+            session.totalChunks = packet.totalChunks
+        }
+
         val chunkBytes = try {
             Base64.decode(packet.payload, Base64.NO_WRAP)
         } catch (e: Exception) {
@@ -514,7 +1144,8 @@ class TransferManager @Inject constructor(
 
             sendPacket(
                 packet.targetId, packet.senderId, transferId,
-                packet.chunkIndex.toString(), PacketType.MEDIA_ACK, packet.chunkIndex, packet.totalChunks, session.mimeType
+                packet.chunkIndex.toString(), PacketType.MEDIA_ACK, packet.chunkIndex, session.totalChunks, session.mimeType,
+                com.meshlink.domain.model.PacketPriority.CRITICAL
             )
 
             // Persist session state only at meaningful milestones to avoid per-chunk disk I/O pressure.
@@ -576,7 +1207,8 @@ class TransferManager @Inject constructor(
                     for (batch in nackBatches) {
                         sendPacket(
                             session.targetId, session.senderId, session.transferId,
-                            batch, PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType
+                            batch, PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType,
+                            com.meshlink.domain.model.PacketPriority.CRITICAL
                         )
                     }
                 } else {
@@ -601,7 +1233,7 @@ class TransferManager @Inject constructor(
             val bytesDone = ackResult.newWindowBase.toLong() * chunkSize
             updateProgressThrottled(transferId, ackResult.newWindowBase, session.totalChunks, bytesDone.coerceAtMost(session.totalBytes))
 
-            if (ackResult.windowAdvancedCount > 0 && session.state == TransferState.STREAMING) {
+            if (session.state == TransferState.STREAMING) {
                 val file = File(session.filePath ?: "")
                 if (file.exists()) {
                     chunkDispatcher.dispatchAvailableChunks(session, file, onSendPacket)
@@ -666,6 +1298,10 @@ class TransferManager @Inject constructor(
         val job = applicationScope.launch(ioDispatcher + exceptionHandler) {
             delay(TRANSFER_TIMEOUT_MS)
             val session = scheduler.getSession(transferId) ?: return@launch
+            if (session.transportUsed == TransportType.WIFI_DIRECT) {
+                // Wi-Fi Direct stream handles its own socket timeout and lifecycle; do not monitor chunk cache
+                return@launch
+            }
             if (session.state == TransferState.RECEIVING || session.state == TransferState.STREAMING) {
                 val received = cache.getReceivedChunkIndices(transferId)
                 val missing = (0 until session.totalChunks).filter { !received.contains(it) }
@@ -676,7 +1312,8 @@ class TransferManager @Inject constructor(
                     for (batch in nackBatches) {
                         sendPacket(
                             session.targetId, session.senderId, transferId,
-                            batch, PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType
+                            batch, PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType,
+                            com.meshlink.domain.model.PacketPriority.CRITICAL
                         )
                     }
 
@@ -782,7 +1419,8 @@ class TransferManager @Inject constructor(
                         for (batch in nackBatches) {
                             sendPacket(
                                 session.targetId, session.senderId, transferId,
-                                batch, PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType
+                                batch, PacketType.MEDIA_NACK, 0, session.totalChunks, session.mimeType,
+                                com.meshlink.domain.model.PacketPriority.CRITICAL
                             )
                         }
                         updateState(transferId, TransferState.RECEIVING)
@@ -824,9 +1462,10 @@ class TransferManager @Inject constructor(
         scheduler.updateSessionState(transferId, newState)
         onTransferStateChanged?.invoke(transferId, newState)
         diagnostics.logSessionStateTransition(transferId, oldState, newState.name)
-        // Release throttle tracking entry when a session reaches a terminal state
+        // Release throttle tracking entry and clear session from active progress when terminal
         if (newState.isTerminal()) {
             scheduler.cleanupProgressTracking(transferId)
+            scheduler.removeSession(transferId)
         }
     }
 

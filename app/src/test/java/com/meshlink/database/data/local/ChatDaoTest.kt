@@ -106,6 +106,52 @@ class ChatDaoTest {
     }
 
     @Test
+    fun `insertMessageAndUpdateChat updates media placeholder to completed even if status was altered`() = runTest {
+        // 1. Initial placeholder inserted
+        val placeholder = MessageEntity(
+            messageId = "voice_transfer_1",
+            chatId = "peer_b",
+            senderId = "peer_b",
+            text = "🎤 Receiving Voice Note...",
+            timestamp = 1000L,
+            isFromMe = false,
+            status = DeliveryStatus.QUEUED,
+            messageType = MessageType.VOICE,
+            mediaPath = null
+        )
+        chatDao.insertMessageAndUpdateChat(placeholder, "Peer B")
+
+        // 2. Simulate transfer state callback setting status to SENDING
+        chatDao.updateMessageStatus("voice_transfer_1", DeliveryStatus.SENDING)
+
+        // 3. Completed media arrives with real filePath and duration
+        val completed = MessageEntity(
+            messageId = "voice_transfer_1",
+            chatId = "peer_b",
+            senderId = "peer_b",
+            text = "🎤 Voice Note",
+            timestamp = 2000L,
+            isFromMe = false,
+            status = DeliveryStatus.DELIVERED,
+            messageType = MessageType.VOICE,
+            mediaPath = "/data/user/0/com.meshlink/files/mesh_media/voice_test.amr",
+            mediaDurationMs = 3500L,
+            mediaSize = 14200L,
+            mimeType = "audio/amr-wb"
+        )
+        chatDao.insertMessageAndUpdateChat(completed, "Peer B")
+
+        val retrieved = chatDao.getMessageByUuid("voice_transfer_1")
+        assertNotNull(retrieved)
+        assertEquals(DeliveryStatus.DELIVERED, retrieved?.status)
+        assertEquals("/data/user/0/com.meshlink/files/mesh_media/voice_test.amr", retrieved?.mediaPath)
+        assertEquals(3500L, retrieved?.mediaDurationMs)
+        assertEquals(14200L, retrieved?.mediaSize)
+        assertEquals("audio/amr-wb", retrieved?.mimeType)
+        assertEquals("🎤 Voice Note", retrieved?.text)
+    }
+
+    @Test
     fun `updateMessageStatus updates status correctly`() = runTest {
         val message = MessageEntity(
             messageId = "msg_1", chatId = "chat_1", senderId = "user_1", text = "Hello",

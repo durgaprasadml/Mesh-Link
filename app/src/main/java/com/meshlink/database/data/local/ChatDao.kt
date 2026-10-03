@@ -39,8 +39,16 @@ interface ChatDao {
     @Query("SELECT * FROM messages WHERE status IN (:statuses)")
     suspend fun getMessagesByStatuses(statuses: List<DeliveryStatus>): List<MessageEntity>
 
-    @Query("UPDATE messages SET status = :status, text = :text, mediaPath = :mediaPath WHERE messageId = :messageId")
-    suspend fun updateMediaMessage(messageId: String, status: DeliveryStatus, text: String, mediaPath: String?)
+    @Query("UPDATE messages SET status = :status, text = :text, mediaPath = :mediaPath, mediaDurationMs = COALESCE(:mediaDurationMs, mediaDurationMs), mimeType = COALESCE(:mimeType, mimeType), mediaSize = COALESCE(:mediaSize, mediaSize) WHERE messageId = :messageId")
+    suspend fun updateMediaMessage(
+        messageId: String,
+        status: DeliveryStatus,
+        text: String,
+        mediaPath: String?,
+        mediaDurationMs: Long? = null,
+        mimeType: String? = null,
+        mediaSize: Long? = null
+    )
 
     @Query("UPDATE messages SET thumbnailBase64 = :thumbnailBase64 WHERE messageId = :messageId")
     suspend fun updateMessageThumbnail(messageId: String, thumbnailBase64: String?)
@@ -49,9 +57,26 @@ interface ChatDao {
     suspend fun insertMessageAndUpdateChat(message: MessageEntity, chatName: String) {
         val existing = getMessageByUuid(message.messageId)
         if (existing != null) {
-            if (existing.status == DeliveryStatus.QUEUED && existing.mediaPath == null) {
-                // Update placeholder to completed
-                updateMediaMessage(message.messageId, message.status, message.text, message.mediaPath)
+            if (message.mediaPath != null && (existing.mediaPath == null || existing.mediaPath != message.mediaPath || existing.status != message.status)) {
+                // Update placeholder or incomplete media message to completed
+                updateMediaMessage(
+                    messageId = message.messageId,
+                    status = message.status,
+                    text = message.text,
+                    mediaPath = message.mediaPath,
+                    mediaDurationMs = message.mediaDurationMs,
+                    mimeType = message.mimeType,
+                    mediaSize = message.mediaSize
+                )
+                val chat = getChatById(message.chatId)
+                if (chat != null) {
+                    val updatedName = if (chatName.isNotBlank() && chatName != message.chatId) chatName else chat.name
+                    insertChat(chat.copy(
+                        name = updatedName,
+                        lastMessage = message.text,
+                        lastMessageAt = message.timestamp
+                    ))
+                }
             }
             return // Ignore duplicate
         }

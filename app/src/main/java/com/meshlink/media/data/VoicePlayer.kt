@@ -130,6 +130,7 @@ class VoicePlayer @Inject constructor(
                     try {
                         prepared.start()
                         startProgressLoop()
+                        MeshLogger.i("AUDIO_PLAYBACK_READY", "[AUDIO_PLAYBACK_READY] filePath=$filePath duration=${prepared.duration}ms")
                         MeshLogger.d(TAG, "Playing: $filePath")
                     } catch (e: Exception) {
                         MeshLogger.e(TAG, "start() failed for $filePath: ${e.message}")

@@ -5,6 +5,13 @@ enum class TransferState {
     WAITING,
     PREPARING,
     CONNECTING,
+    WAITING_FOR_WIFI,
+    SOCKET_CONNECTING,
+    HANDSHAKING,
+    READY,
+    TRANSFERRING,
+    WAITING_FOR_ACK,
+    COMPLETING,
     STREAMING,
     COMPRESSING,
     SENDING,
@@ -42,9 +49,9 @@ data class TransferSession(
     val transferId: String,
     val senderId: String,
     val targetId: String,
-    val fileName: String,
-    val mimeType: String,
-    val totalBytes: Long,
+    var fileName: String,
+    var mimeType: String,
+    var totalBytes: Long,
     var totalChunks: Int,
     val direction: TransferDirection,
     var state: TransferState = TransferState.QUEUED,
@@ -60,6 +67,9 @@ data class TransferSession(
     var thumbnailBase64: String? = null
 ) {
     fun getProgress(): Float {
+        if (totalBytes > 0L) {
+            return (bytesTransferred.toDouble() / totalBytes.toDouble()).toFloat().coerceIn(0f, 1f)
+        }
         if (totalChunks <= 0) return 0f
         return (chunksTransferred.toFloat() / totalChunks.toFloat()).coerceIn(0f, 1f)
     }

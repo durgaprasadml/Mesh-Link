@@ -43,10 +43,46 @@ class VoiceRecorder @Inject constructor(
 
     fun startRecording(): Boolean = synchronized(recorderLock) {
         cleanupInternal()
+        val mediaDir = File(context.filesDir, "mesh_media")
+        if (!mediaDir.exists()) mediaDir.mkdirs()
+
+        // 1. Primary: AMR-WB (16kHz mono voice compression with minimal container overhead)
+        var started = startRecordingWithFormat(
+            mediaDir = mediaDir,
+            fileName = "voice_${System.currentTimeMillis()}.amr",
+            outputFormat = MediaRecorder.OutputFormat.AMR_WB,
+            audioEncoder = MediaRecorder.AudioEncoder.AMR_WB,
+            samplingRate = 16_000,
+            bitRate = 16_000
+        )
+
+        // 2. Fallback: AAC in MPEG-4 container (standard Android fallback)
+        if (!started) {
+            MeshLogger.w(TAG, "AMR-WB recording failed to start, falling back to AAC-M4A")
+            cleanupInternal()
+            started = startRecordingWithFormat(
+                mediaDir = mediaDir,
+                fileName = "voice_${System.currentTimeMillis()}.m4a",
+                outputFormat = MediaRecorder.OutputFormat.MPEG_4,
+                audioEncoder = MediaRecorder.AudioEncoder.AAC,
+                samplingRate = 16_000,
+                bitRate = 16_000
+            )
+        }
+
+        return started
+    }
+
+    private fun startRecordingWithFormat(
+        mediaDir: File,
+        fileName: String,
+        outputFormat: Int,
+        audioEncoder: Int,
+        samplingRate: Int,
+        bitRate: Int
+    ): Boolean {
         return try {
-            val mediaDir = File(context.filesDir, "mesh_media")
-            if (!mediaDir.exists()) mediaDir.mkdirs()
-            outputFile = File(mediaDir, "voice_${System.currentTimeMillis()}.m4a")
+            outputFile = File(mediaDir, fileName)
 
             recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 MediaRecorder(context)
@@ -57,11 +93,11 @@ class VoiceRecorder @Inject constructor(
 
             recorder?.apply {
                 setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFormat(outputFormat)
+                setAudioEncoder(audioEncoder)
                 setAudioChannels(1) // Mono
-                setAudioEncodingBitRate(16_000) // 16 kbps
-                setAudioSamplingRate(16_000) // 16 kHz
+                setAudioEncodingBitRate(bitRate)
+                setAudioSamplingRate(samplingRate)
                 setMaxDuration(MAX_DURATION_MS.toInt())
                 setOutputFile(outputFile!!.absolutePath)
                 prepare()
@@ -88,11 +124,14 @@ class VoiceRecorder @Inject constructor(
                 }
             }
 
-            MeshLogger.d(TAG, "Recording started: ${outputFile?.absolutePath}")
+            MeshLogger.d(TAG, "Recording started ($fileName): ${outputFile?.absolutePath}")
             true
         } catch (e: Exception) {
-            MeshLogger.e(TAG, "Failed to start recording: ${e.message}")
-            cleanupInternal()
+            MeshLogger.e(TAG, "Failed to start recording ($fileName): ${e.message}")
+            try { recorder?.release() } catch (_: Exception) {}
+            recorder = null
+            outputFile?.delete()
+            outputFile = null
             false
         }
     }
@@ -128,11 +167,17 @@ class VoiceRecorder @Inject constructor(
         }
 
         val path = outputFile?.absolutePath
-        return if (stopSuccessful && duration >= 300L && path != null && File(path).exists()) {
-            MeshLogger.d(TAG, "Recording stopped successfully: $path (${duration}ms)")
+        val recordedFile = path?.let { File(it) }
+        val isValid = stopSuccessful && duration >= 300L && recordedFile != null && recordedFile.exists() && recordedFile.canRead() && recordedFile.length() > 0L
+
+        MeshLogger.i(TAG, "[AUDIO_FILE_CHECK] path=$path exists=${recordedFile?.exists()} canRead=${recordedFile?.canRead()} length=${recordedFile?.length()}B duration=${duration}ms stopSuccessful=$stopSuccessful valid=$isValid")
+
+        return if (isValid) {
+            MeshLogger.i(TAG, "[AUDIO_FILE_READY] Recording finalized successfully: $path (${duration}ms, ${recordedFile!!.length()}B)")
             path to duration
         } else {
-            MeshLogger.w(TAG, "Recording discarded (duration=${duration}ms, path=$path)")
+            val discardReason = "duration=${duration}ms, exists=${recordedFile?.exists()}, length=${recordedFile?.length()}"
+            MeshLogger.w(TAG, "[AUDIO_TRANSFER_FAILURE] Recording discarded ($discardReason)")
             outputFile?.delete()
             outputFile = null
             null

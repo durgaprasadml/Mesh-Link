@@ -23,6 +23,7 @@ class WifiP2pBroadcastReceiver(
                 addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
                 addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
                 addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
+                addAction(WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION)
             }
         }
     }
@@ -39,6 +40,13 @@ class WifiP2pBroadcastReceiver(
             WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
                 MeshLogger.d(TAG, "WIFI_P2P_PEERS_CHANGED_ACTION")
                 facade.onPeersChanged()
+            }
+
+            WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION -> {
+                val discoveryState = intent.getIntExtra(WifiP2pManager.EXTRA_DISCOVERY_STATE, WifiP2pManager.WIFI_P2P_DISCOVERY_STOPPED)
+                val isDiscovering = discoveryState == WifiP2pManager.WIFI_P2P_DISCOVERY_STARTED
+                MeshLogger.d(TAG, "WIFI_P2P_DISCOVERY_CHANGED_ACTION: isDiscovering=$isDiscovering ($discoveryState)")
+                facade.onDiscoveryChanged(isDiscovering)
             }
 
             WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {

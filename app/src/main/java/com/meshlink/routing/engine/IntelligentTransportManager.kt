@@ -1,6 +1,7 @@
 package com.meshlink.routing.engine
 
 import com.meshlink.ble.api.BleTransport
+import com.meshlink.common.logger.MeshLogger
 import com.meshlink.di.ApplicationScope
 import com.meshlink.domain.model.MeshError
 import com.meshlink.domain.model.MeshPacket
@@ -72,6 +73,11 @@ class IntelligentTransportManager @Inject constructor(
         payloadSizeBytes: Long = 1024L,
         mimeType: String? = null
     ): RouteType {
+        // Audio payloads (MEDIA_CHUNK, VOICE_FRAME) MUST ALWAYS use Wi-Fi Direct
+        val isAudioPayload = (packetType == PacketType.MEDIA_CHUNK || packetType == PacketType.VOICE_FRAME) &&
+            mimeType?.startsWith("audio/") == true
+        if (isAudioPayload) return RouteType.WIFI_DIRECT
+
         if (currentPreferredTransport == "WIFI_DIRECT") return RouteType.WIFI_DIRECT
         if (currentPreferredTransport == "BLE") return RouteType.BLE
 
@@ -99,6 +105,25 @@ class IntelligentTransportManager @Inject constructor(
         val category = classifier.classify(packet)
         val preferredTransport = selectTransportForPacket(packet)
         val payloadSize = packet.payload.toByteArray(Charsets.UTF_8).size.toLong()
+        val isAudioPayload = (packet.type == PacketType.MEDIA_CHUNK || packet.type == PacketType.VOICE_FRAME) &&
+            packet.mimeType?.startsWith("audio/") == true
+
+        // ── AUDIO HARD SAFETY GUARD (packet-level) ────────────────────────────
+        // Audio PAYLOADS (chunks/frames) MUST NEVER touch BLE.
+        // Control signaling (MEDIA_META, MEDIA_ACK) is allowed on BLE control plane.
+        // ──────────────────────────────────────────────────────────────────────
+        if (isAudioPayload && preferredTransport == RouteType.BLE) {
+            MeshLogger.e(
+                TAG,
+                "[AUDIO_TRANSPORT_VIOLATION] Audio payload packet ${packet.packetId} was assigned BLE transport. " +
+                "Refusing to send. Audio payload MUST use Wi-Fi Direct."
+            )
+            return MeshResult.Error(
+                MeshError.TransportError(
+                    "[AUDIO_TRANSPORT_VIOLATION] Audio payload must never be transferred over BLE."
+                )
+            )
+        }
 
         diagnostics.logTransportSelection(
             packetId = packet.packetId,
@@ -115,7 +140,8 @@ class IntelligentTransportManager @Inject constructor(
                     metrics.recordWifiPacket(payloadSize.toInt())
                     healthMonitor.recordWifiTxResult(true, bytes = payloadSize.toInt())
                     wifiResult
-                } else if (policy.shouldAllowBleFallback(packet, category)) {
+                } else if (!isAudioPayload && policy.shouldAllowBleFallback(packet, category)) {
+                    // Non-audio only: allow BLE fallback for small payloads.
                     diagnostics.logTransportFallback(
                         packetId = packet.packetId,
                         packetType = packet.type,
@@ -131,6 +157,21 @@ class IntelligentTransportManager @Inject constructor(
                         healthMonitor.recordBleTxResult(true)
                     }
                     fallbackBleResult
+                } else if (isAudioPayload) {
+                    // Audio: Wi-Fi Direct failed — DO NOT fall back to BLE.
+                    MeshLogger.e(
+                        TAG,
+                        "[AUDIO_TRANSFER_FAILURE] Wi-Fi Direct send failed for audio payload packet ${packet.packetId}. " +
+                        "BLE fallback is PROHIBITED for audio payloads."
+                    )
+                    diagnostics.logTransportUnavailable(
+                        packetId = packet.packetId,
+                        packetType = packet.type,
+                        requestedRoute = RouteType.WIFI_DIRECT,
+                        reason = "Wi-Fi Direct failed for audio payload. BLE fallback prohibited."
+                    )
+                    healthMonitor.recordWifiTxResult(false)
+                    wifiResult
                 } else {
                     diagnostics.logTransportUnavailable(
                         packetId = packet.packetId,
@@ -141,7 +182,8 @@ class IntelligentTransportManager @Inject constructor(
                     healthMonitor.recordWifiTxResult(false)
                     wifiResult
                 }
-            } else if (policy.shouldAllowBleFallback(packet, category)) {
+            } else if (!isAudioPayload && policy.shouldAllowBleFallback(packet, category)) {
+                // Non-audio only: Wi-Fi unavailable, allow BLE fallback for small payloads.
                 diagnostics.logTransportFallback(
                     packetId = packet.packetId,
                     packetType = packet.type,
@@ -157,6 +199,21 @@ class IntelligentTransportManager @Inject constructor(
                     healthMonitor.recordBleTxResult(true)
                 }
                 fallbackBleResult
+            } else if (isAudioPayload) {
+                // Audio: Wi-Fi Direct unavailable — DO NOT fall back to BLE.
+                MeshLogger.e(
+                    TAG,
+                    "[AUDIO_TRANSFER_FAILURE] Wi-Fi Direct unavailable for audio payload packet ${packet.packetId}. " +
+                    "BLE fallback is PROHIBITED for audio payloads. Transfer must wait for Wi-Fi Direct."
+                )
+                diagnostics.logTransportUnavailable(
+                    packetId = packet.packetId,
+                    packetType = packet.type,
+                    requestedRoute = RouteType.WIFI_DIRECT,
+                    reason = "Wi-Fi Direct unavailable for audio payload. BLE fallback prohibited."
+                )
+                healthMonitor.recordWifiTxResult(false)
+                MeshResult.Error(MeshError.TransportError("Wi-Fi Direct unavailable for audio payload. BLE fallback prohibited."))
             } else {
                 diagnostics.logTransportUnavailable(
                     packetId = packet.packetId,

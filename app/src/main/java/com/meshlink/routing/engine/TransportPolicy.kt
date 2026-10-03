@@ -58,23 +58,32 @@ class TransportPolicy @Inject constructor(
      * Evaluates whether fallback to BLE is permitted if Wi-Fi Direct is unavailable.
      *
      * Rule:
-     * - Small packets (<=50KB) are allowed to fallback to BLE to ensure connectivity.
+     * - Audio payloads MUST NEVER fall back to BLE. This is a hard architectural requirement.
+     * - Small packets (<=50KB, non-audio) are allowed to fallback to BLE to ensure connectivity.
      * - Large media payloads (>50KB) MUST NOT flood BLE.
      */
     fun shouldAllowBleFallback(packet: MeshPacket, category: TransportCategory): Boolean {
         val payloadSizeBytes = packet.payload.toByteArray(Charsets.UTF_8).size.toLong()
+        val mimeType = packet.mimeType
         return shouldAllowBleFallback(
             packetType = packet.type,
             payloadSizeBytes = payloadSizeBytes,
-            category = category
+            category = category,
+            mimeType = mimeType
         )
     }
 
     fun shouldAllowBleFallback(
         packetType: PacketType,
         payloadSizeBytes: Long,
-        category: TransportCategory = classifier.classify(packetType, payloadSizeBytes, null)
+        category: TransportCategory = classifier.classify(packetType, payloadSizeBytes, null),
+        mimeType: String? = null
     ): Boolean {
+        // Audio payloads (MEDIA_CHUNK, VOICE_FRAME) MUST NEVER fall back to BLE regardless of file size.
+        val isAudioPayload = (packetType == PacketType.MEDIA_CHUNK || packetType == PacketType.VOICE_FRAME) &&
+            mimeType?.startsWith("audio/") == true
+        if (isAudioPayload) return false
+        if (mimeType != null && mimeType.startsWith("audio/") && packetType != PacketType.MEDIA_META && packetType != PacketType.MEDIA_ACK && packetType != PacketType.MEDIA_NACK) return false
         return payloadSizeBytes <= BLE_MAX_PAYLOAD_THRESHOLD
     }
 

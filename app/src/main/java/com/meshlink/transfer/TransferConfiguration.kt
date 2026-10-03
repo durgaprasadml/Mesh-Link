@@ -11,8 +11,7 @@ import javax.inject.Singleton
 class TransferConfiguration @Inject constructor() {
 
     var wifiWindowSize: Int = 16
-    // Increased from 4 → 12: a 23-chunk audio file now uses ~2 window-advance rounds
-    // instead of 6, dramatically reducing per-file transfer time over BLE.
+    // Increased from 4 → 12: window size for BLE transfers (non-audio media).
     var bleWindowSize: Int = 12
     var workerCount: Int = 4
 
@@ -27,8 +26,8 @@ class TransferConfiguration @Inject constructor() {
     var dispatchBatchSize: Int = 12
 
     // Small-file fast-path: files with ≤ smallFileChunkThreshold chunks bypass window
-    // gating entirely — all chunks are dispatched in one pass.  This covers any audio
-    // file up to ~18 KB (100 × 180 B), which includes a typical 2–5 second voice note.
+    // gating entirely — all chunks are dispatched in one pass. Applies to non-audio media.
+    // NOTE: Audio files MUST use Wi-Fi Direct and never reach this BLE fast-path.
     var smallFileChunkThreshold: Int = 100
     var bleSmallFileWindowSize: Int = 256   // Large enough to cover any small file
     var bleSmallFileAckTimeoutMs: Long = 2000L

@@ -101,6 +101,14 @@ class MediaMessageHandler @Inject constructor(
         )
     }
 
+    /**
+     * SOS front/rear images are transferred with ids of the form `<sosEventId>_front_<peer>` /
+     * `<sosEventId>_rear_<peer>`. They are displayed inside the SOS card (merged into the SOS
+     * message's mediaPath JSON) and must never get their own standalone chat message.
+     */
+    private fun isSosMediaTransferId(transferId: String): Boolean =
+        transferId.contains("_front") || transferId.contains("_rear")
+
     suspend fun receiveMediaMessage(completedTransferId: String, completedFilePath: String, completedMimeType: String, completedSenderId: String) {
         val isSosFront = completedTransferId.contains("_front") || completedFilePath.contains("_front")
         val isSosRear = completedTransferId.contains("_rear") || completedFilePath.contains("_rear")
@@ -156,6 +164,11 @@ class MediaMessageHandler @Inject constructor(
                     mediaPath = currentMediaJson.toString()
                 )
                 chatDao.insertMessageAndUpdateChat(placeholderMessage, "🚨 $resolvedSenderName")
+            }
+
+            // Remove any stale standalone placeholder (from older builds / races) for this transfer.
+            if (completedTransferId != sosEventId && chatDao.getMessageByUuid(completedTransferId) != null) {
+                chatDao.deleteMessage(completedTransferId)
             }
 
             NotificationHelper.showMessageNotification(
@@ -253,6 +266,7 @@ class MediaMessageHandler @Inject constructor(
 
     suspend fun insertPlaceholderIncomingMedia(packet: MeshPacket) {
         val transferId = packet.transferId ?: return
+        if (isSosMediaTransferId(transferId)) return
         val parsedMeta = metaManager.parseMetaPayload(packet.payload)
 
         val mime = parsedMeta?.mimeType ?: packet.mimeType
@@ -310,6 +324,7 @@ class MediaMessageHandler @Inject constructor(
         mimeType: String,
         totalBytes: Long
     ) {
+        if (isSosMediaTransferId(transferId)) return
         val existing = chatDao.getMessageByUuid(transferId)
         if (existing != null) return
 

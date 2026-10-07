@@ -519,7 +519,8 @@ fun MessageBubble(
                 MessageType.SOS -> {
                     SosEmergencyCard(
                         message = message,
-                        onLocationClick = onLocationClick
+                        onLocationClick = onLocationClick,
+                        onImageClick = onImageClick
                     )
                 }
 

@@ -45,7 +45,8 @@ import java.util.Locale
 fun SosEmergencyCard(
     message: Message,
     onLocationClick: (Double, Double) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onImageClick: (String) -> Unit = {}
 ) {
     val isDark = MeshTheme.isDark
 
@@ -432,7 +433,9 @@ fun SosEmergencyCard(
                                     coil.compose.AsyncImage(
                                         model = java.io.File(frontPath),
                                         contentDescription = "Front Camera Evidence",
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clickable { onImageClick("${message.messageId}#front") },
                                         contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                     )
                                     Surface(
@@ -485,7 +488,9 @@ fun SosEmergencyCard(
                                     coil.compose.AsyncImage(
                                         model = java.io.File(rearPath),
                                         contentDescription = "Rear Camera Evidence",
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clickable { onImageClick("${message.messageId}#rear") },
                                         contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                     )
                                     Surface(

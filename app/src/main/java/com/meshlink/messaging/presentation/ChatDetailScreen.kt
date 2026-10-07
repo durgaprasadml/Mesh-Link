@@ -155,7 +155,27 @@ fun ChatDetailScreen(
 
     if (fullscreenMessageId != null) {
         val mediaMessages = remember(uiState.messages) {
-            uiState.messages.filter { it.messageType == com.meshlink.domain.model.MessageType.IMAGE }
+            uiState.messages.flatMap { m ->
+                when (m.messageType) {
+                    com.meshlink.domain.model.MessageType.IMAGE -> listOf(m)
+                    com.meshlink.domain.model.MessageType.SOS -> {
+                        // SOS images live inside the SOS message's mediaPath JSON; expose them
+                        // as virtual image entries keyed "<sosId>#front" / "<sosId>#rear".
+                        val json = try {
+                            m.mediaPath?.takeIf { it.startsWith("{") }?.let { org.json.JSONObject(it) }
+                        } catch (_: Exception) { null }
+                        listOf("front", "rear").mapNotNull { key ->
+                            val p = json?.optString(key)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                            m.copy(
+                                messageId = "${m.messageId}#$key",
+                                messageType = com.meshlink.domain.model.MessageType.IMAGE,
+                                mediaPath = p
+                            )
+                        }
+                    }
+                    else -> emptyList()
+                }
+            }
         }
         val initialIndex = mediaMessages.indexOfFirst { it.messageId == fullscreenMessageId }.coerceAtLeast(0)
         
@@ -175,8 +195,9 @@ fun ChatDetailScreen(
                 transferProgress = uiState.transferProgress,
                 onBack = { fullscreenMessageId = null },
                 onDelete = { msg ->
-                    if (!uiState.selectedMessageIds.contains(msg.messageId)) {
-                        viewModel.toggleMessageSelection(msg.messageId)
+                    val realId = msg.messageId.substringBefore("#")
+                    if (!uiState.selectedMessageIds.contains(realId)) {
+                        viewModel.toggleMessageSelection(realId)
                     }
                     viewModel.deleteSelectedMessages()
                     fullscreenMessageId = null

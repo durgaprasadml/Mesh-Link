@@ -155,7 +155,9 @@ class MeshMessagingManager @Inject constructor(
                 DeliveryStatus.WAITING_FOR_ROUTE,
                 DeliveryStatus.RETRYING
             )
-            val pending = chatDao.getMessagesByStatuses(retryableStatuses).distinctBy { it.messageId }
+            val pending = chatDao.getMessagesByStatuses(retryableStatuses)
+                .filter { it.isFromMe }
+                .distinctBy { it.messageId }
             if (pending.isEmpty()) return
 
             connectToAllScannedDevices()
@@ -221,8 +223,8 @@ class MeshMessagingManager @Inject constructor(
                     MessageType.IMAGE, MessageType.VOICE -> {
                         val file = msg.mediaPath?.let { File(it) }
                         if (file != null && file.exists()) {
-                            if (msg.messageType == MessageType.VOICE && transferManager.isTransferActive(msg.messageId)) {
-                                MeshLogger.d(TAG, "Audio transfer ${msg.messageId} is already actively running in TransferManager. Skipping duplicate retry dispatch.")
+                            if (transferManager.isTransferActive(msg.messageId)) {
+                                MeshLogger.d(TAG, "Media transfer ${msg.messageId} (${msg.messageType}) is already actively running in TransferManager. Skipping duplicate retry dispatch.")
                                 return@forEach
                             }
                             val targetPeerId = MeshIdNormalizer.canonicalize(msg.chatId)

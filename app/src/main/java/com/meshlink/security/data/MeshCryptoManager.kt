@@ -349,8 +349,10 @@ class MeshCryptoManager @Inject constructor(
         return derivedKeys.computeIfAbsent(peerId) {
             val peerPublicKeyBase64 = getPeerPublicKey(peerId)
             if (peerPublicKeyBase64 == null) {
+                // Fail closed. Falling back to a fixed (all-zero) key would make every
+                // "encrypted" payload for an unknown peer readable/forgeable by anyone.
                 com.meshlink.common.logger.MeshLogger.w("MeshCryptoManager", "No public key for peer $peerId")
-                return@computeIfAbsent SecretKeySpec(ByteArray(32), SecurityConstants.AES_GCM_CIPHER)
+                throw IllegalStateException("No public key for peer; refusing to derive a shared key")
             }
 
             val peerKeyBytes = Base64.decode(peerPublicKeyBase64, Base64.NO_WRAP)

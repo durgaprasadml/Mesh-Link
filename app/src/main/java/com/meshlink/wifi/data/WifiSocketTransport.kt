@@ -10,6 +10,7 @@ import com.meshlink.security.data.MeshCryptoManager
 import com.meshlink.security.data.SessionManager
 import com.meshlink.security.policy.EncryptionRequirement
 import com.meshlink.security.policy.PacketEncryptionPolicy
+import com.meshlink.transfer.ReceivedMediaNaming
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -57,7 +58,11 @@ private data class AudioReceiveSession(
     val expectedChecksum: String,
     val senderId: String,
     val tempFile: File,
-    val digest: MessageDigest
+    val digest: MessageDigest,
+    /** Receiver-local, per-transfer unique destination (never derived directly from remote input). */
+    val finalFile: File,
+    /** Connection that opened this session; chunks/END from any other connection are ignored. */
+    val clientHost: String
 )
 
 enum class WifiSocketConnectionState {
@@ -95,6 +100,9 @@ class WifiSocketTransport @Inject constructor(
         private const val HEARTBEAT_WATCHDOG_TIMEOUT_MS = 30_000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val MAX_FRAME_SIZE_BYTES = 50 * 1024 * 1024 // 50MB safety limit
+        private const val MAX_MEDIA_STREAM_BYTES = 256L * 1024 * 1024 // reject absurd advertised sizes
+        // AES-GCM adds a 12 byte IV and a 16 byte tag to every plaintext chunk.
+        private const val MAX_ENCRYPTED_CHUNK_BYTES = 16 * 1024 + 256
 
         // High-Speed Binary Streaming Magic Protocol Constants
         const val MAGIC_MEDIA_STREAM_START = -0x5354524D // "STRM" (-1398035021)
@@ -128,6 +136,8 @@ class WifiSocketTransport @Inject constructor(
     private val pendingHandshakes = ConcurrentHashMap<String, CompletableDeferred<HandshakeResult>>()
     private val pendingAcks = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     private val activeAudioReceivers = ConcurrentHashMap<String, AudioReceiveSession>()
+    // transferId -> host the pending handshake/ack is riding on, so a socket failure only aborts its own transfers
+    private val pendingTransferHosts = ConcurrentHashMap<String, String>()
 
     // Connection State & Metrics Flow
     private val _connectionState = MutableStateFlow(WifiSocketConnectionState.DISCONNECTED)
@@ -322,6 +332,12 @@ class WifiSocketTransport @Inject constructor(
                                 val totalBytes = currentIn.readLong()
                                 val expectedChecksum = currentIn.readUTF()
                                 val senderId = currentIn.readUTF()
+
+                                if (totalBytes <= 0L || totalBytes > MAX_MEDIA_STREAM_BYTES) {
+                                    // Header was fully consumed, so the stream stays in sync; just refuse the transfer.
+                                    MeshLogger.w(TAG, "Rejecting media handshake $transferId from $clientHost: invalid size ${totalBytes}B")
+                                    continue
+                                }
                                 peerHostsByMeshId[senderId] = clientHost
 
                                 val isAudio = mimeType.startsWith("audio/")
@@ -331,7 +347,11 @@ class WifiSocketTransport @Inject constructor(
                                 }
 
                                 val mediaDir = File(context.filesDir, "mesh_media").apply { if (!exists()) mkdirs() }
-                                val finalFile = File(mediaDir, fileName)
+                                // fileName / transferId come from the remote peer: never use them as raw path components.
+                                val finalFile = ReceivedMediaNaming.resolveInside(
+                                    mediaDir,
+                                    ReceivedMediaNaming.receivedFileName(transferId, fileName)
+                                )
 
                                 if (finalFile.exists() && finalFile.length() == totalBytes) {
                                     if (isAudio) {
@@ -349,7 +369,10 @@ class WifiSocketTransport @Inject constructor(
                                     }
                                 } else {
                                     val tempDir = File(context.cacheDir, "wifi_media_temp").apply { if (!exists()) mkdirs() }
-                                    val tempFile = File(tempDir, "stream_${transferId}.tmp")
+                                    val tempFile = ReceivedMediaNaming.resolveInside(
+                                        tempDir,
+                                        "stream_${ReceivedMediaNaming.safeTransferId(transferId)}.tmp"
+                                    )
                                     var resumeOffset = if (tempFile.exists() && tempFile.length() in 1 until totalBytes) {
                                         tempFile.length()
                                     } else {
@@ -385,7 +408,9 @@ class WifiSocketTransport @Inject constructor(
                                         expectedChecksum = expectedChecksum,
                                         senderId = senderId,
                                         tempFile = tempFile,
-                                        digest = digest
+                                        digest = digest,
+                                        finalFile = finalFile,
+                                        clientHost = clientHost
                                     )
 
                                     if (isAudio) {
@@ -426,10 +451,16 @@ class WifiSocketTransport @Inject constructor(
                                 val totalChunks = currentIn.readInt()
                                 val offset = currentIn.readLong()
                                 val encryptedLen = currentIn.readInt()
+                                if (encryptedLen <= 0 || encryptedLen > MAX_ENCRYPTED_CHUNK_BYTES) {
+                                    // An attacker-controlled length must never size an allocation (OOM / negative size).
+                                    MeshLogger.e(TAG, "Invalid encrypted chunk length $encryptedLen from $clientHost. Closing connection.")
+                                    break
+                                }
                                 val encryptedBytes = ByteArray(encryptedLen)
                                 currentIn.readFully(encryptedBytes)
 
-                                val session = activeAudioReceivers[transferId]
+                                // Only the connection that opened the session may feed it.
+                                val session = activeAudioReceivers[transferId]?.takeIf { it.clientHost == clientHost }
                                 if (session != null) {
                                     try {
                                         val plainBytes = cryptoManager.decryptBytes(encryptedBytes, session.senderId)
@@ -459,7 +490,9 @@ class WifiSocketTransport @Inject constructor(
                                 val transferId = currentIn.readUTF()
                                 val senderChecksum = currentIn.readUTF()
 
-                                val audioSession = activeAudioReceivers.remove(transferId)
+                                val audioSession = activeAudioReceivers[transferId]
+                                    ?.takeIf { it.clientHost == clientHost }
+                                    ?.also { activeAudioReceivers.remove(transferId, it) }
                                 if (audioSession != null) {
                                     val localChecksum = audioSession.digest.digest().joinToString("") { "%02x".format(it) }
                                     val isChecksumMatch = localChecksum.equals(audioSession.expectedChecksum, ignoreCase = true) ||
@@ -468,10 +501,11 @@ class WifiSocketTransport @Inject constructor(
                                     val isLengthMatch = audioSession.tempFile.length() == audioSession.totalBytes
 
                                     if (isLengthMatch && isChecksumMatch) {
-                                        val mediaDir = File(context.filesDir, "mesh_media").apply { if (!exists()) mkdirs() }
-                                        val finalFile = File(mediaDir, audioSession.fileName)
-                                        audioSession.tempFile.copyTo(finalFile, overwrite = true)
-                                        audioSession.tempFile.delete()
+                                        val finalFile = audioSession.finalFile
+                                        if (!audioSession.tempFile.renameTo(finalFile)) {
+                                            audioSession.tempFile.copyTo(finalFile, overwrite = true)
+                                            audioSession.tempFile.delete()
+                                        }
 
                                         // Send stream ACK immediately so sender never times out
                                         synchronized(currentOut) {
@@ -501,7 +535,8 @@ class WifiSocketTransport @Inject constructor(
                                 } else {
                                     // audioSession was null: check if final file was already received & verified
                                     val mediaDir = File(context.filesDir, "mesh_media")
-                                    val existingFile = mediaDir.listFiles()?.firstOrNull { it.name.contains(transferId) }
+                                    val idPrefix = ReceivedMediaNaming.safeTransferId(transferId) + "__"
+                                    val existingFile = mediaDir.listFiles()?.firstOrNull { it.name.startsWith(idPrefix) }
                                     if (existingFile != null && existingFile.exists() && existingFile.length() > 0L) {
                                         MeshLogger.i("AUDIO_ACK", "[AUDIO_ACK] session=$transferId already complete on disk. Sending ACK to $clientHost")
                                         synchronized(currentOut) {
@@ -515,149 +550,12 @@ class WifiSocketTransport @Inject constructor(
                                 }
                             }
                             MAGIC_MEDIA_STREAM_START -> {
-                                // High-Speed Binary Media Stream Received
-                                clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
-                                val transferId = currentIn.readUTF()
-                                val fileName = currentIn.readUTF()
-                                val mimeType = currentIn.readUTF()
-                                val totalBytes = currentIn.readLong()
-                                val expectedChecksum = currentIn.readUTF()
-                                val senderId = currentIn.readUTF()
-
-                                val isAudio = mimeType.startsWith("audio/")
-                                if (isAudio) {
-                                    MeshLogger.i(
-                                        "AUDIO_RECEIVE_START",
-                                        "[AUDIO_RECEIVE_START] transferId=$transferId peerId=$senderId fileName=$fileName fileSize=${totalBytes}B mimeType=$mimeType transport=WIFI_DIRECT"
-                                    )
-                                    MeshLogger.i(
-                                        "AUDIO_HEADER_RECEIVE",
-                                        "[AUDIO_HEADER_RECEIVE] transferId=$transferId fileName=$fileName mimeType=$mimeType fileSize=${totalBytes}B chunkSize=$STREAM_BUFFER_SIZE totalChunks=1 transport=WIFI_DIRECT"
-                                    )
-                                } else {
-                                    MeshLogger.i(TAG, "MEDIA_STREAM_START: transferId=$transferId, file=$fileName, size=${totalBytes}B, mime=$mimeType, sender=$senderId from $clientHost")
-                                }
-                                onMediaStreamStarted?.invoke(transferId, fileName, mimeType, totalBytes, expectedChecksum, senderId)
-
-                                val tempDir = File(context.cacheDir, "wifi_media_temp").apply { if (!exists()) mkdirs() }
-                                val tempFile = File(tempDir, "stream_${transferId}.tmp")
-                                if (isAudio) {
-                                    MeshLogger.i("AUDIO_FILE_CREATE", "[AUDIO_FILE_CREATE] path=${tempFile.absolutePath}")
-                                }
-                                val digest = MessageDigest.getInstance("SHA-256")
-                                var receivedBytes = 0L
-
-                                try {
-                                    FileOutputStream(tempFile).use { fos ->
-                                        val bos = BufferedOutputStream(fos, STREAM_BUFFER_SIZE)
-                                        val buffer = ByteArray(STREAM_BUFFER_SIZE)
-
-                                        while (receivedBytes < totalBytes) {
-                                            val blockLen = currentIn.readInt()
-                                            if (blockLen <= 0) break
-                                            var blockRead = 0
-                                            while (blockRead < blockLen) {
-                                                val r = currentIn.read(buffer, blockRead, blockLen - blockRead)
-                                                if (r < 0) throw EOFException("Unexpected EOF during binary media stream for $transferId")
-                                                blockRead += r
-                                            }
-                                            bos.write(buffer, 0, blockLen)
-                                            digest.update(buffer, 0, blockLen)
-                                            receivedBytes += blockLen
-                                            clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
-                                            val rxBytes = bytesReceivedCounter.addAndGet(blockLen.toLong() + 4L)
-                                            updateMetrics { it.copy(bytesReceived = rxBytes) }
-                                            if (isAudio) {
-                                                val pct = if (totalBytes > 0) ((receivedBytes * 100) / totalBytes).toInt() else 0
-                                                MeshLogger.d(
-                                                    "AUDIO_CHUNK_RECEIVE",
-                                                    "[AUDIO_CHUNK_RECEIVE] transferId=$transferId index=$receivedBytes size=$blockLen"
-                                                )
-                                                MeshLogger.d(
-                                                    "AUDIO_RECEIVE_PROGRESS",
-                                                    "[AUDIO_RECEIVE_PROGRESS] bytesReceived=$receivedBytes totalBytes=$totalBytes percentage=$pct%"
-                                                )
-                                                MeshLogger.d(
-                                                    "AUDIO_FILE_WRITE",
-                                                    "[AUDIO_FILE_WRITE] bytes=$blockLen"
-                                                )
-                                            }
-                                            onMediaStreamProgress?.invoke(transferId, receivedBytes, totalBytes)
-                                        }
-                                        bos.flush()
-                                    }
-
-                                    val endMarker = currentIn.readInt()
-                                    if (endMarker == MAGIC_MEDIA_STREAM_END) {
-                                        val senderChecksum = currentIn.readUTF()
-                                        val localChecksum = digest.digest().joinToString("") { "%02x".format(it) }
-
-                                        if (localChecksum.equals(expectedChecksum, ignoreCase = true) || localChecksum.equals(senderChecksum, ignoreCase = true)) {
-                                            val mediaDir = File(context.filesDir, "mesh_media").apply { if (!exists()) mkdirs() }
-                                            val finalFile = File(mediaDir, fileName)
-                                            tempFile.copyTo(finalFile, overwrite = true)
-                                            tempFile.delete()
-
-                                            if (isAudio) {
-                                                MeshLogger.i(
-                                                    "AUDIO_FILE_FINALIZE",
-                                                    "[AUDIO_FILE_FINALIZE] path=${finalFile.absolutePath} size=${finalFile.length()}B"
-                                                )
-                                                MeshLogger.i(
-                                                    "AUDIO_RECEIVE_COMPLETE",
-                                                    "[AUDIO_RECEIVE_COMPLETE] transferId=$transferId peerId=$senderId fileName=$fileName fileSize=${finalFile.length()}B mimeType=$mimeType transport=WIFI_DIRECT"
-                                                )
-                                                MeshLogger.i(
-                                                    "AUDIO_FILE_VERIFY",
-                                                    "[AUDIO_FILE_VERIFY] transferId=$transferId peerId=$senderId filePath=${finalFile.absolutePath} fileSize=${finalFile.length()}B checksum=$localChecksum valid=true"
-                                                )
-                                            } else {
-                                                MeshLogger.i(TAG, "MEDIA_STREAM_COMPLETED: transferId=$transferId, path=${finalFile.absolutePath}, size=${finalFile.length()}B, checksum=$localChecksum (MATCH)")
-                                            }
-                                            onMediaStreamCompleted?.invoke(transferId, finalFile.absolutePath, mimeType, senderId, totalBytes)
-                                        } else {
-                                            val err = "Checksum mismatch: expected=$expectedChecksum, got=$localChecksum"
-                                            if (isAudio) {
-                                                MeshLogger.e(
-                                                    TAG,
-                                                    "[AUDIO_TRANSFER_FAILURE] transferId=$transferId peerId=$senderId error=$err mimeType=$mimeType transport=WIFI_DIRECT"
-                                                )
-                                                MeshLogger.e("AUDIO_RECEIVE_FAILURE", "[AUDIO_RECEIVE_FAILURE] transferId=$transferId error=$err")
-                                            } else {
-                                                MeshLogger.e(TAG, "MEDIA_STREAM_CHECKSUM_MISMATCH: transferId=$transferId, expected=$expectedChecksum, got=$localChecksum")
-                                            }
-                                            tempFile.delete()
-                                            onMediaStreamFailed?.invoke(transferId, err)
-                                        }
-                                    } else {
-                                        val err = "Invalid stream end marker: $endMarker (expected $MAGIC_MEDIA_STREAM_END)"
-                                        if (isAudio) {
-                                            MeshLogger.e(
-                                                TAG,
-                                                "[AUDIO_TRANSFER_FAILURE] transferId=$transferId peerId=$senderId error=$err mimeType=$mimeType transport=WIFI_DIRECT"
-                                            )
-                                            MeshLogger.e("AUDIO_RECEIVE_FAILURE", "[AUDIO_RECEIVE_FAILURE] transferId=$transferId error=$err")
-                                        } else {
-                                            MeshLogger.e(TAG, "MEDIA_STREAM_INVALID_END_MARKER: $endMarker")
-                                        }
-                                        tempFile.delete()
-                                        onMediaStreamFailed?.invoke(transferId, err)
-                                    }
-                                } catch (e: Exception) {
-                                    val err = "Error receiving binary media stream for $transferId: ${e.message}\n${e.stackTraceToString()}"
-                                    if (isAudio) {
-                                        MeshLogger.e(
-                                            TAG,
-                                            "[AUDIO_TRANSFER_FAILURE] transferId=$transferId peerId=$senderId error=$err mimeType=$mimeType transport=WIFI_DIRECT",
-                                            e
-                                        )
-                                        MeshLogger.e("AUDIO_RECEIVE_FAILURE", "[AUDIO_RECEIVE_FAILURE] transferId=$transferId error=${e.message}")
-                                    } else {
-                                        MeshLogger.e(TAG, "Error receiving binary media stream for $transferId: ${e.message}", e)
-                                    }
-                                    tempFile.delete()
-                                    onMediaStreamFailed?.invoke(transferId, "Stream error: ${e.message}")
-                                }
+                                // Legacy raw stream: plaintext, unauthenticated and never acknowledged. Every sender in
+                                // this build uses the encrypted MAGIC_STREAM_HANDSHAKE/MAGIC_AUDIO_CHUNK protocol, so
+                                // this frame can only come from a peer trying to bypass the encryption pipeline.
+                                // Its body length is unknown, so the only safe response is to drop the connection.
+                                MeshLogger.w(TAG, "Rejecting legacy unencrypted media stream from $clientHost. Closing connection.")
+                                break
                             }
                             else -> {
                                 if (length > 0) {
@@ -786,21 +684,15 @@ class WifiSocketTransport @Inject constructor(
         val totalBytes = file.length()
         val fileName = file.name
 
-        val resolvedHost = targetPeerAddress?.let { requested ->
-            when {
-                clientStreamsOut.containsKey(requested) -> requested
-                peerHostsByMeshId[requested]?.let(clientStreamsOut::containsKey) == true -> peerHostsByMeshId[requested]
-                else -> {
-                    // Check if there is an active stream on the Wi-Fi Direct subnet (192.168.49.x)
-                    val p2pHost = clientStreamsOut.keys.firstOrNull { it.startsWith("192.168.49.") }
-                    if (p2pHost != null) {
-                        registerPeerMeshHost(requested, p2pHost)
-                        p2pHost
-                    } else if (clientStreamsOut.size == 1) {
-                        clientStreamsOut.keys.single()
-                    } else null
-                }
-            }
+        // Exactly one socket, or none. (The previous 192.168.49.x "first host" rule picked an arbitrary
+        // client when the Group Owner had several, delivering media to the wrong peer.)
+        val resolvedHost = WifiStreamHostResolver.resolve(
+            requested = targetPeerAddress,
+            connectedHosts = clientStreamsOut.keys.toSet(),
+            peerHostsByMeshId = peerHostsByMeshId
+        )
+        if (resolvedHost != null && !targetPeerAddress.isNullOrBlank()) {
+            registerPeerMeshHost(targetPeerAddress, resolvedHost)
         }
         val targetStreams = resolvedHost?.let { host ->
             clientStreamsOut[host]?.let { stream -> listOf(host to stream) }
@@ -826,6 +718,7 @@ class WifiSocketTransport @Inject constructor(
                 // 1. Handshake phase
                 MeshLogger.i("AUDIO_HANDSHAKE", "[AUDIO_HANDSHAKE] session=$transferId state=HANDSHAKING sending handshake to $host")
                 pendingHandshakes[transferId] = handshakeDeferred
+                pendingTransferHosts[transferId] = host
 
                     stream.writeInt(MAGIC_STREAM_HANDSHAKE)
                     stream.writeUTF(transferId)
@@ -843,6 +736,7 @@ class WifiSocketTransport @Inject constructor(
                 pendingHandshakes.remove(transferId)
 
                 if (handshakeResponse == null) {
+                    pendingTransferHosts.remove(transferId)
                     val err = "Handshake timeout waiting for receiver response"
                     MeshLogger.e("AUDIO_FAILURE", "[AUDIO_FAILURE] session=$transferId $err")
                     MeshLogger.e("AUDIO_TRANSFER_FAILURE", "[AUDIO_TRANSFER_FAILURE] stage=HANDSHAKE_TIMEOUT exception=TimeoutException message='$err'")
@@ -850,7 +744,16 @@ class WifiSocketTransport @Inject constructor(
                     return@withContext AudioStreamResult.Failed(err)
                 }
 
+                if (handshakeResponse.status < 0 && handshakeResponse.status != MAGIC_STREAM_READY && handshakeResponse.status != MAGIC_STREAM_RESUME_REQ && handshakeResponse.status != MAGIC_STREAM_ACK) {
+                    // The connection was torn down while we waited (cleanupPeer completes with -1).
+                    pendingTransferHosts.remove(transferId)
+                    val err = "Connection closed during handshake"
+                    MeshLogger.e("AUDIO_FAILURE", "[AUDIO_FAILURE] session=$transferId $err")
+                    return@withContext AudioStreamResult.Failed(err)
+                }
+
                 if (handshakeResponse.status == MAGIC_STREAM_ACK) {
+                    pendingTransferHosts.remove(transferId)
                     MeshLogger.i("AUDIO_ACK", "[AUDIO_ACK] session=$transferId receiver already complete. ACK immediate.")
                     MeshLogger.i("AUDIO_TRANSFER_COMPLETE", "[AUDIO_TRANSFER_COMPLETE] session=$transferId file=$fileName size=${totalBytes}B status=SUCCESS (ALREADY_COMPLETE)")
                     MeshLogger.i("AUDIO_COMPLETE", "[AUDIO_COMPLETE] session=$transferId transfer already complete.")
@@ -862,6 +765,7 @@ class WifiSocketTransport @Inject constructor(
                 MeshLogger.i("AUDIO_HANDSHAKE", "[AUDIO_HANDSHAKE] session=$transferId state=READY resumeOffset=$resumeOffset")
 
                 pendingAcks[transferId] = ackDeferred
+                pendingTransferHosts[transferId] = host
 
                 // The audio chunks and end marker form one raw-stream transaction.
                 // Heartbeats and mesh packets share this socket, so the lock must cover
@@ -946,6 +850,7 @@ class WifiSocketTransport @Inject constructor(
             } catch (e: Exception) {
                 pendingHandshakes.remove(transferId)
                 pendingAcks.remove(transferId)
+                pendingTransferHosts.remove(transferId)
                 val err = "Audio stream error on $host: ${e.message}"
                 MeshLogger.e("AUDIO_TRANSFER_FAILURE", "[AUDIO_TRANSFER_FAILURE] stage=STREAM_EXCEPTION exception=${e.javaClass.simpleName} message='$err'", e)
                 MeshLogger.e("AUDIO_FAILURE", "[AUDIO_FAILURE] session=$transferId error=$err", e)
@@ -957,6 +862,15 @@ class WifiSocketTransport @Inject constructor(
         return@withContext AudioStreamResult.Failed("No target stream completed")
     }
 
+    /**
+     * Streams any media file (image, SOS evidence, voice note, ...) to exactly one connected peer using
+     * the handshaked, resumable, per-chunk AES-GCM encrypted protocol of [streamAudioFile], and only
+     * reports success once the receiver has verified and finalized the file and acknowledged it.
+     *
+     * Non-audio files used to take a separate raw path that was plaintext, never acknowledged (so a
+     * receiver-side checksum failure silently lost the image/SOS photo while the sender reported success)
+     * and wrote the file to every connected peer.
+     */
     suspend fun streamFile(
         transferId: String,
         file: File,
@@ -966,143 +880,18 @@ class WifiSocketTransport @Inject constructor(
         targetPeerAddress: String? = null,
         onProgress: ((bytesTransferred: Long, totalBytes: Long) -> Unit)? = null
     ): Boolean = withContext(Dispatchers.IO) {
-        if (mimeType.startsWith("audio/")) {
-            val res = streamAudioFile(
-                transferId = transferId,
-                file = file,
-                mimeType = mimeType,
-                expectedChecksum = expectedChecksum,
-                senderId = senderId,
-                targetPeerAddress = targetPeerAddress,
-                onProgress = onProgress
-            )
-            return@withContext (res is AudioStreamResult.Success)
-        }
-
-        if (!file.exists() || !file.canRead()) {
-            MeshLogger.e(TAG, "Cannot stream file: ${file.absolutePath} does not exist or cannot be read")
-            return@withContext false
-        }
-
-        if (clientStreamsOut.isEmpty()) {
-            MeshLogger.w(TAG, "Cannot stream file $transferId: No active socket streams available")
-            return@withContext false
-        }
-
-        val totalBytes = file.length()
-        val fileName = file.name
-
-        val targetStreams = if (targetPeerAddress != null && clientStreamsOut.containsKey(targetPeerAddress)) {
-            listOf(targetPeerAddress to clientStreamsOut[targetPeerAddress]!!)
-        } else {
-            clientStreamsOut.entries.map { it.key to it.value }
-        }
-
-        if (targetStreams.isEmpty()) {
-            MeshLogger.w(TAG, "Cannot stream file $transferId: Target streams empty")
-            return@withContext false
-        }
-
-        var overallSuccess = true
-
-        targetStreams.forEach { (host, stream) ->
-            try {
-                val isAudio = mimeType.startsWith("audio/")
-                if (isAudio) {
-                    MeshLogger.i("AUDIO_STREAM_OPEN", "[AUDIO_STREAM_OPEN] transferId=$transferId peerId=$host fileName=$fileName fileSize=${totalBytes}B mimeType=$mimeType transport=WIFI_DIRECT")
-                    MeshLogger.i("AUDIO_HEADER_SEND", "[AUDIO_HEADER_SEND] transferId=$transferId fileName=$fileName mimeType=$mimeType fileSize=${totalBytes}B chunkSize=$STREAM_BUFFER_SIZE totalChunks=1 transport=WIFI_DIRECT")
-                    MeshLogger.i("AUDIO_WIFI_SOCKET", "[AUDIO_WIFI_SOCKET] CONNECTED host=$host")
-                    MeshLogger.i("AUDIO_WIFI_STREAM", "[AUDIO_WIFI_STREAM] START transferId=$transferId")
-                    MeshLogger.i("AUDIO_WIFI_STREAM", "[AUDIO_WIFI_STREAM] FILE_SIZE=$totalBytes")
-                    MeshLogger.i("AUDIO_TRANSFER_BEGIN", "[AUDIO_TRANSFER_BEGIN] transferId=$transferId peerId=$host fileSize=${totalBytes}B mimeType=$mimeType transport=WIFI_DIRECT")
-                } else {
-                    MeshLogger.i(TAG, "MEDIA_STREAM_OUT: Starting stream of ${file.name} ($totalBytes bytes) to $host for transferId=$transferId")
-                }
-                val digest = MessageDigest.getInstance("SHA-256")
-                var computedChecksum = ""
-
-                synchronized(stream) {
-                    stream.writeInt(MAGIC_MEDIA_STREAM_START)
-                    stream.writeUTF(transferId)
-                    stream.writeUTF(fileName)
-                    stream.writeUTF(mimeType)
-                    stream.writeLong(totalBytes)
-                    stream.writeUTF(expectedChecksum)
-                    stream.writeUTF(senderId)
-                    stream.flush()
-
-                    FileInputStream(file).use { fis ->
-                        val bis = BufferedInputStream(fis, STREAM_BUFFER_SIZE)
-                        val buffer = ByteArray(STREAM_BUFFER_SIZE)
-                        var bytesTransferred = 0L
-
-                        while (bytesTransferred < totalBytes) {
-                            val toRead = minOf(buffer.size.toLong(), totalBytes - bytesTransferred).toInt()
-                            val read = bis.read(buffer, 0, toRead)
-                            if (read <= 0) break
-
-                            digest.update(buffer, 0, read)
-
-                            stream.writeInt(read)
-                            stream.write(buffer, 0, read)
-                            stream.flush()
-
-                            bytesTransferred += read
-                            val txBytes = bytesSentCounter.addAndGet(read.toLong() + 4L)
-                            updateMetrics { it.copy(bytesSent = txBytes) }
-
-                            if (isAudio) {
-                                val pct = if (totalBytes > 0) ((bytesTransferred * 100) / totalBytes).toInt() else 0
-                                MeshLogger.d("AUDIO_CHUNK_SEND", "[AUDIO_CHUNK_SEND] transferId=$transferId bytesSent=$bytesTransferred totalBytes=$totalBytes")
-                                MeshLogger.d("AUDIO_WIFI_STREAM", "[AUDIO_WIFI_STREAM] BYTES_SENT=$bytesTransferred PROGRESS=$pct%")
-                            }
-
-                            onProgress?.invoke(bytesTransferred, totalBytes)
-                        }
-                    }
-
-                    computedChecksum = digest.digest().joinToString("") { "%02x".format(it) }
-
-                    stream.writeInt(MAGIC_MEDIA_STREAM_END)
-                    stream.writeUTF(computedChecksum)
-                    stream.flush()
-                }
-
-                val txPkts = packetsSentCounter.incrementAndGet()
-                updateMetrics { it.copy(packetsSent = txPkts) }
-
-                if (isAudio) {
-                    MeshLogger.i("AUDIO_WIFI_STREAM", "[AUDIO_WIFI_STREAM] FLUSH")
-                    MeshLogger.i("AUDIO_WIFI_STREAM", "[AUDIO_WIFI_STREAM] COMPLETE transferId=$transferId")
-                    MeshLogger.i(
-                        "AUDIO_TRANSFER_COMPLETE",
-                        "[AUDIO_TRANSFER_COMPLETE] transferId=$transferId peerId=$host fileName=$fileName fileSize=${totalBytes}B mimeType=$mimeType transport=WIFI_DIRECT"
-                    )
-                } else {
-                    MeshLogger.i(TAG, "MEDIA_STREAM_OUT_COMPLETED: Successfully streamed $fileName ($totalBytes bytes) to $host, checksum=$computedChecksum")
-                }
-            } catch (e: Exception) {
-                val err = "Failed to stream media file to $host: ${e.message}\n${e.stackTraceToString()}"
-                if (mimeType.startsWith("audio/")) {
-                    MeshLogger.e(
-                        TAG,
-                        "[AUDIO_WIFI_ERROR] exception class=${e.javaClass.name} message=${e.message} cause=${e.cause} stacktrace=${e.stackTraceToString()}"
-                    )
-                    MeshLogger.e(
-                        TAG,
-                        "[AUDIO_TRANSFER_FAILURE] transferId=$transferId peerId=$host error=$err mimeType=$mimeType transport=WIFI_DIRECT",
-                        e
-                    )
-                } else {
-                    MeshLogger.e(TAG, "Failed to stream media file to $host: ${e.message}", e)
-                }
-                cleanupPeer(host)
-                overallSuccess = false
-            }
-        }
-
-        return@withContext overallSuccess
+        val res = streamAudioFile(
+            transferId = transferId,
+            file = file,
+            mimeType = mimeType,
+            expectedChecksum = expectedChecksum,
+            senderId = senderId,
+            targetPeerAddress = targetPeerAddress,
+            onProgress = onProgress
+        )
+        return@withContext (res is AudioStreamResult.Success)
     }
+
 
     suspend fun sendPacket(packet: MeshPacket) = withContext(Dispatchers.IO) {
         var packetToSend = packet
@@ -1183,6 +972,13 @@ class WifiSocketTransport @Inject constructor(
         return isHostConnected(host)
     }
 
+    fun getConnectedPeers(): List<String> {
+        return peerHostsByMeshId.entries
+            .filter { isHostConnected(it.value) }
+            .map { com.meshlink.util.MeshIdNormalizer.canonicalize(it.key) }
+            .distinct()
+    }
+
     fun disconnect() {
         manualDisconnectRequested = true
         reconnectJob?.cancel()
@@ -1210,11 +1006,14 @@ class WifiSocketTransport @Inject constructor(
         try { streamIn?.close() } catch (_: Exception) {}
         try { socket?.close() } catch (_: Exception) {}
 
-        // Complete any pending handshake/ack deferreds
-        pendingHandshakes.values.forEach { it.complete(HandshakeResult(-1, 0L)) }
-        pendingHandshakes.clear()
-        pendingAcks.values.forEach { it.complete(false) }
-        pendingAcks.clear()
+        // Fail only the transfers that were riding on THIS connection. These maps are keyed by
+        // transferId and shared by every peer; clearing them wholesale aborted unrelated in-flight
+        // transfers to other peers whenever any single socket dropped.
+        pendingTransferHosts.filterValues { it == clientHost }.keys.toList().forEach { transferId ->
+            pendingHandshakes.remove(transferId)?.complete(HandshakeResult(-1, 0L))
+            pendingAcks.remove(transferId)?.complete(false)
+            pendingTransferHosts.remove(transferId)
+        }
 
         updateMetrics { it.copy(activePeers = clientSockets.size) }
         MeshLogger.d(TAG, "Cleaned up socket resources for peer: $clientHost")

@@ -245,6 +245,10 @@ class ChatDetailViewModel @Inject constructor(
     fun retryTransfer(messageId: String) {
         viewModelScope.launch {
             val msg = getMessageUseCase(messageId) ?: return@launch
+            if (!msg.isFromMe) {
+                MeshLogger.d("ChatDetailVM", "Cannot retry outgoing send for incoming message $messageId")
+                return@launch
+            }
             if (msg.status == com.meshlink.domain.model.DeliveryStatus.PERMANENT_FAILURE || msg.status == com.meshlink.domain.model.DeliveryStatus.FAILED) {
                 if (msg.messageType == com.meshlink.domain.model.MessageType.TEXT) {
                     meshRepository.sendMessage(rawPeerIdOrAddress.ifBlank { address }, msg)

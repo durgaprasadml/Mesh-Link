@@ -67,6 +67,24 @@ class BroadcastHandler @Inject constructor(
             ttl = 15
         )
         router.routeMediaPacket(packet)
+
+        val existing = chatDao.getMessageByUuid(sosEventId)
+        if (existing == null) {
+            val outgoingMsg = MessageEntity(
+                messageId = sosEventId,
+                chatId = localPeerId,
+                senderId = localPeerId,
+                text = "🚨 SOS EMERGENCY (Dispatched) — Lat: $lat, Lng: $lng — Battery: $battery%",
+                timestamp = System.currentTimeMillis(),
+                isFromMe = true,
+                status = DeliveryStatus.SENT,
+                messageType = MessageType.SOS,
+                latitude = lat,
+                longitude = lng,
+                batteryPercent = battery
+            )
+            chatDao.insertMessageAndUpdateChat(outgoingMsg, "🚨 SOS Emergency")
+        }
     }
 
     suspend fun receiveSosMessage(packet: MeshPacket) {

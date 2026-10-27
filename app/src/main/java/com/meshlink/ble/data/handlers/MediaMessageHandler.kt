@@ -19,8 +19,11 @@ import com.meshlink.util.MeshIdNormalizer
 import com.meshlink.util.NotificationHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -46,37 +49,32 @@ class MediaMessageHandler @Inject constructor(
             ImageCompressor.generateThumbnailBase64(context, imageUri)
         }
 
+        val messageId = UUID.randomUUID().toString()
         val localFile = withContext(Dispatchers.IO) {
-            var tempFile = File(context.cacheDir, "temp_${System.currentTimeMillis()}.jpg")
+            val destFile = File(context.cacheDir, "img_${messageId}.jpg")
             try {
                 val compressedBytes = ImageCompressor.compress(context, imageUri)
                 if (compressedBytes != null) {
-                    val compressedFile = File(context.cacheDir, "comp_${System.currentTimeMillis()}.jpg")
-                    compressedFile.writeBytes(compressedBytes)
-                    compressedFile
+                    destFile.writeBytes(compressedBytes)
                 } else {
                     context.contentResolver.openInputStream(imageUri)?.use { input ->
-                        tempFile.outputStream().use { output ->
+                        destFile.outputStream().use { output ->
                             input.copyTo(output)
                         }
                     }
-                    tempFile
                 }
             } catch (e: Exception) {
                 MeshLogger.e(TAG, "Failed to compress or cache image: ${e.message}")
                 context.contentResolver.openInputStream(imageUri)?.use { input ->
-                    tempFile.outputStream().use { output ->
+                    destFile.outputStream().use { output ->
                         input.copyTo(output)
                     }
                 }
-                tempFile
-            } finally {
-                if (tempFile.exists()) tempFile.delete()
             }
+            destFile
         }
 
         val chatId = targetPeerId
-        val messageId = UUID.randomUUID().toString()
         val message = MessageEntity(
             messageId       = messageId,
             chatId          = chatId,
@@ -101,18 +99,78 @@ class MediaMessageHandler @Inject constructor(
         )
     }
 
-    /**
-     * SOS front/rear images are transferred with ids of the form `<sosEventId>_front_<peer>` /
-     * `<sosEventId>_rear_<peer>`. They are displayed inside the SOS card (merged into the SOS
-     * message's mediaPath JSON) and must never get their own standalone chat message.
-     */
-    private fun isSosMediaTransferId(transferId: String): Boolean =
-        transferId.contains("_front") || transferId.contains("_rear")
+    private val sosMediaMutex = Mutex()
+
+    data class SosMediaInfo(
+        val isSos: Boolean,
+        val isFront: Boolean,
+        val isRear: Boolean,
+        val sosEventId: String?
+    )
+
+    fun parseSosMediaInfo(transferId: String, fileName: String? = null, filePath: String? = null): SosMediaInfo {
+        val tLower = transferId.lowercase(Locale.ROOT)
+        val fLower = (fileName ?: "").lowercase(Locale.ROOT)
+        val pLower = (filePath ?: "").lowercase(Locale.ROOT)
+
+        val isFront = tLower.contains("_front") || fLower.contains("_front") || pLower.contains("_front")
+        val isRear = tLower.contains("_rear") || fLower.contains("_rear") || pLower.contains("_rear")
+        val isSos = isFront || isRear ||
+                tLower.startsWith("sos_") || tLower.contains("_sos_") ||
+                fLower.startsWith("sos_") || fLower.contains("_sos_") ||
+                pLower.contains("/sos_")
+
+        if (!isSos) {
+            return SosMediaInfo(isSos = false, isFront = false, isRear = false, sosEventId = null)
+        }
+
+        var extractedId: String? = null
+        if (tLower.contains("_front") || tLower.contains("_rear")) {
+            val before = transferId.substringBefore("_front", "").ifBlank {
+                transferId.substringBefore("_FRONT", "").ifBlank {
+                    transferId.substringBefore("_rear", "").ifBlank {
+                        transferId.substringBefore("_REAR", "")
+                    }
+                }
+            }
+            if (before.isNotBlank()) {
+                extractedId = before.trim()
+            }
+        }
+
+        if (extractedId == null) {
+            val fileBase = File(filePath ?: fileName ?: "").nameWithoutExtension
+            val bLower = fileBase.lowercase(Locale.ROOT)
+            if (bLower.contains("_front") || bLower.contains("_rear")) {
+                val before = fileBase.substringBefore("_front", "").ifBlank {
+                    fileBase.substringBefore("_FRONT", "").ifBlank {
+                        fileBase.substringBefore("_rear", "").ifBlank {
+                            fileBase.substringBefore("_REAR", "")
+                        }
+                    }
+                }
+                val candidate = before.removePrefix("sos_").removePrefix("SOS_").trim()
+                if (candidate.isNotBlank()) {
+                    extractedId = candidate
+                }
+            }
+        }
+
+        if (extractedId == null && tLower.startsWith("sos_")) {
+            extractedId = transferId.removePrefix("sos_").removePrefix("SOS_").trim()
+        }
+
+        return SosMediaInfo(
+            isSos = true,
+            isFront = isFront,
+            isRear = isRear,
+            sosEventId = extractedId?.ifBlank { null }
+        )
+    }
 
     suspend fun receiveMediaMessage(completedTransferId: String, completedFilePath: String, completedMimeType: String, completedSenderId: String) {
-        val isSosFront = completedTransferId.contains("_front") || completedFilePath.contains("_front")
-        val isSosRear = completedTransferId.contains("_rear") || completedFilePath.contains("_rear")
-        val isSosMedia = isSosFront || isSosRear
+        val sosInfo = parseSosMediaInfo(completedTransferId, filePath = completedFilePath)
+        val isSosMedia = sosInfo.isSos
 
         val existingUser = userDao.getUser(completedSenderId)
         val resolvedSenderName = when {
@@ -123,52 +181,22 @@ class MediaMessageHandler @Inject constructor(
         val chatId = MeshIdNormalizer.canonicalize(completedSenderId)
 
         if (isSosMedia) {
-            // Extract the base SOS event ID
-            val rawId = completedTransferId.substringBefore("_front").substringBefore("_rear").removePrefix("sos_")
-            val sosEventId = rawId.ifBlank { completedTransferId }
+            val sosEventId = sosInfo.sosEventId ?: completedTransferId
 
-            val existingSos = chatDao.getMessageByUuid(sosEventId)
-            val currentMediaJson = try {
-                if (existingSos?.mediaPath?.startsWith("{") == true) {
-                    org.json.JSONObject(existingSos.mediaPath)
-                } else {
-                    org.json.JSONObject()
-                }
-            } catch (_: Exception) {
-                org.json.JSONObject()
-            }
-
-            if (isSosFront) {
-                currentMediaJson.put("front", completedFilePath)
-            }
-            if (isSosRear) {
-                currentMediaJson.put("rear", completedFilePath)
-            }
-
-            if (existingSos != null) {
-                val updatedMessage = existingSos.copy(
-                    mediaPath = currentMediaJson.toString(),
-                    status = DeliveryStatus.DELIVERED
-                )
-                chatDao.insertMessageAndUpdateChat(updatedMessage, "🚨 $resolvedSenderName")
-            } else {
-                val placeholderMessage = MessageEntity(
-                    messageId = sosEventId,
-                    chatId = chatId,
+            sosMediaMutex.withLock {
+                chatDao.updateSosMediaAttachment(
+                    sosEventId = sosEventId,
+                    frontPath = if (sosInfo.isFront) completedFilePath else null,
+                    rearPath = if (sosInfo.isRear) completedFilePath else null,
                     senderId = completedSenderId,
-                    text = "🚨 SOS EMERGENCY from $resolvedSenderName",
-                    timestamp = System.currentTimeMillis(),
-                    isFromMe = false,
-                    status = DeliveryStatus.DELIVERED,
-                    messageType = MessageType.SOS,
-                    mediaPath = currentMediaJson.toString()
+                    chatId = chatId,
+                    chatName = "🚨 $resolvedSenderName"
                 )
-                chatDao.insertMessageAndUpdateChat(placeholderMessage, "🚨 $resolvedSenderName")
-            }
 
-            // Remove any stale standalone placeholder (from older builds / races) for this transfer.
-            if (completedTransferId != sosEventId && chatDao.getMessageByUuid(completedTransferId) != null) {
-                chatDao.deleteMessage(completedTransferId)
+                // Remove any stale standalone placeholder (from older builds / races) for this transfer.
+                if (completedTransferId != sosEventId && chatDao.getMessageByUuid(completedTransferId) != null) {
+                    chatDao.deleteMessage(completedTransferId)
+                }
             }
 
             NotificationHelper.showMessageNotification(
@@ -266,8 +294,9 @@ class MediaMessageHandler @Inject constructor(
 
     suspend fun insertPlaceholderIncomingMedia(packet: MeshPacket) {
         val transferId = packet.transferId ?: return
-        if (isSosMediaTransferId(transferId)) return
         val parsedMeta = metaManager.parseMetaPayload(packet.payload)
+        val metaFileName = parsedMeta?.fileName
+        if (parseSosMediaInfo(transferId, fileName = metaFileName).isSos) return
 
         val mime = parsedMeta?.mimeType ?: packet.mimeType
         val isImage = mime?.contains("image") == true
@@ -324,7 +353,7 @@ class MediaMessageHandler @Inject constructor(
         mimeType: String,
         totalBytes: Long
     ) {
-        if (isSosMediaTransferId(transferId)) return
+        if (parseSosMediaInfo(transferId, fileName = fileName).isSos) return
         val existing = chatDao.getMessageByUuid(transferId)
         if (existing != null) return
 

@@ -39,7 +39,7 @@ interface ChatDao {
     @Query("SELECT * FROM messages WHERE status IN (:statuses)")
     suspend fun getMessagesByStatuses(statuses: List<DeliveryStatus>): List<MessageEntity>
 
-    @Query("UPDATE messages SET status = :status, text = :text, mediaPath = :mediaPath, mediaDurationMs = COALESCE(:mediaDurationMs, mediaDurationMs), mimeType = COALESCE(:mimeType, mimeType), mediaSize = COALESCE(:mediaSize, mediaSize) WHERE messageId = :messageId")
+    @Query("UPDATE messages SET status = :status, text = :text, mediaPath = :mediaPath, mediaDurationMs = COALESCE(:mediaDurationMs, mediaDurationMs), mimeType = COALESCE(:mimeType, mimeType), mediaSize = COALESCE(:mediaSize, mediaSize), latitude = COALESCE(:latitude, latitude), longitude = COALESCE(:longitude, longitude), batteryPercent = COALESCE(:batteryPercent, batteryPercent) WHERE messageId = :messageId")
     suspend fun updateMediaMessage(
         messageId: String,
         status: DeliveryStatus,
@@ -47,16 +47,117 @@ interface ChatDao {
         mediaPath: String?,
         mediaDurationMs: Long? = null,
         mimeType: String? = null,
-        mediaSize: Long? = null
+        mediaSize: Long? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        batteryPercent: Int? = null
     )
 
     @Query("UPDATE messages SET thumbnailBase64 = :thumbnailBase64 WHERE messageId = :messageId")
     suspend fun updateMessageThumbnail(messageId: String, thumbnailBase64: String?)
 
     @Transaction
+    suspend fun updateSosMediaAttachment(
+        sosEventId: String,
+        frontPath: String? = null,
+        rearPath: String? = null,
+        senderId: String? = null,
+        chatId: String? = null,
+        chatName: String? = null
+    ): MessageEntity {
+        val existing = getMessageByUuid(sosEventId)
+        val currentJson = try {
+            if (existing?.mediaPath?.startsWith("{") == true) {
+                org.json.JSONObject(existing.mediaPath)
+            } else {
+                org.json.JSONObject()
+            }
+        } catch (_: Exception) {
+            org.json.JSONObject()
+        }
+
+        if (frontPath != null) {
+            currentJson.put("front", frontPath)
+        }
+        if (rearPath != null) {
+            currentJson.put("rear", rearPath)
+        }
+        val mergedPath = currentJson.toString()
+
+        if (existing != null) {
+            updateMediaMessage(
+                messageId = sosEventId,
+                status = DeliveryStatus.DELIVERED,
+                text = existing.text,
+                mediaPath = mergedPath,
+                mediaDurationMs = existing.mediaDurationMs,
+                mimeType = existing.mimeType,
+                mediaSize = existing.mediaSize,
+                latitude = existing.latitude,
+                longitude = existing.longitude,
+                batteryPercent = existing.batteryPercent
+            )
+            val updated = existing.copy(
+                mediaPath = mergedPath,
+                status = DeliveryStatus.DELIVERED
+            )
+            val chat = getChatById(existing.chatId)
+            if (chat != null) {
+                val updatedName = if (!chatName.isNullOrBlank() && chatName != existing.chatId) chatName else chat.name
+                insertChat(chat.copy(name = updatedName, lastMessage = existing.text, lastMessageAt = existing.timestamp))
+            }
+            return updated
+        } else {
+            val resolvedChatId = chatId ?: senderId ?: "BROADCAST"
+            val resolvedSenderId = senderId ?: "UNKNOWN"
+            val resolvedChatName = if (!chatName.isNullOrBlank()) chatName else "🚨 $resolvedChatId"
+            val newMessage = MessageEntity(
+                messageId = sosEventId,
+                chatId = resolvedChatId,
+                senderId = resolvedSenderId,
+                text = "🚨 SOS EMERGENCY from $resolvedChatName",
+                timestamp = System.currentTimeMillis(),
+                isFromMe = false,
+                status = DeliveryStatus.DELIVERED,
+                messageType = MessageType.SOS,
+                mediaPath = mergedPath
+            )
+            insertMessageAndUpdateChat(newMessage, resolvedChatName)
+            return newMessage
+        }
+    }
+
+    @Transaction
     suspend fun insertMessageAndUpdateChat(message: MessageEntity, chatName: String) {
         val existing = getMessageByUuid(message.messageId)
         if (existing != null) {
+            if (message.messageType == MessageType.SOS) {
+                val mergedPath = mergeSosMediaPath(existing.mediaPath, message.mediaPath)
+                val resolvedText = if (message.text.contains("Lat:") || !existing.text.contains("Lat:")) message.text else existing.text
+                updateMediaMessage(
+                    messageId = message.messageId,
+                    status = message.status,
+                    text = resolvedText,
+                    mediaPath = mergedPath,
+                    mediaDurationMs = message.mediaDurationMs ?: existing.mediaDurationMs,
+                    mimeType = message.mimeType ?: existing.mimeType,
+                    mediaSize = message.mediaSize ?: existing.mediaSize,
+                    latitude = message.latitude ?: existing.latitude,
+                    longitude = message.longitude ?: existing.longitude,
+                    batteryPercent = message.batteryPercent ?: existing.batteryPercent
+                )
+                val chat = getChatById(message.chatId)
+                if (chat != null) {
+                    val updatedName = if (chatName.isNotBlank() && chatName != message.chatId) chatName else chat.name
+                    insertChat(chat.copy(
+                        name = updatedName,
+                        lastMessage = resolvedText,
+                        lastMessageAt = message.timestamp
+                    ))
+                }
+                return
+            }
+
             if (message.mediaPath != null && (existing.mediaPath == null || existing.mediaPath != message.mediaPath || existing.status != message.status)) {
                 // Update placeholder or incomplete media message to completed
                 updateMediaMessage(
@@ -66,7 +167,10 @@ interface ChatDao {
                     mediaPath = message.mediaPath,
                     mediaDurationMs = message.mediaDurationMs,
                     mimeType = message.mimeType,
-                    mediaSize = message.mediaSize
+                    mediaSize = message.mediaSize,
+                    latitude = message.latitude,
+                    longitude = message.longitude,
+                    batteryPercent = message.batteryPercent
                 )
                 val chat = getChatById(message.chatId)
                 if (chat != null) {
@@ -101,6 +205,36 @@ interface ChatDao {
             )
         }
         insertChat(chat)
+    }
+
+    companion object {
+        fun mergeSosMediaPath(existingPath: String?, incomingPath: String?): String? {
+            if (existingPath.isNullOrBlank()) return incomingPath
+            if (incomingPath.isNullOrBlank()) return existingPath
+            return try {
+                val existingObj = if (existingPath.startsWith("{")) org.json.JSONObject(existingPath) else org.json.JSONObject()
+                val incomingObj = if (incomingPath.startsWith("{")) org.json.JSONObject(incomingPath) else org.json.JSONObject()
+                val merged = org.json.JSONObject()
+
+                val eKeys = existingObj.keys()
+                while (eKeys.hasNext()) {
+                    val k = eKeys.next()
+                    val v = existingObj.optString(k)
+                    if (v.isNotBlank()) merged.put(k, v)
+                }
+
+                val iKeys = incomingObj.keys()
+                while (iKeys.hasNext()) {
+                    val k = iKeys.next()
+                    val v = incomingObj.optString(k)
+                    if (v.isNotBlank()) merged.put(k, v)
+                }
+
+                merged.toString()
+            } catch (_: Exception) {
+                incomingPath ?: existingPath
+            }
+        }
     }
 
     @Query("UPDATE chats SET unreadCount = 0 WHERE id = :chatId")

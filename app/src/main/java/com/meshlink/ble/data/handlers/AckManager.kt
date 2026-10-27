@@ -24,7 +24,18 @@ class AckManager @Inject constructor(
     }
 
     suspend fun handleDeliveryAck(packet: MeshPacket) {
-        val packetId = packet.payload
+        val packetId = packet.payload.trim()
+        if (packetId.isBlank()) return
+        val msg = chatDao.getMessageByUuid(packetId) ?: return
+        val senderNorm = MeshIdNormalizer.canonicalize(packet.senderId)
+        val chatNorm = MeshIdNormalizer.canonicalize(msg.chatId)
+        if (!msg.isFromMe || senderNorm != chatNorm) {
+            com.meshlink.common.logger.MeshLogger.w(
+                "AckManager",
+                "Rejected DELIVERY_ACK from $senderNorm for message $packetId (isFromMe=${msg.isFromMe}, chatId=$chatNorm)"
+            )
+            return
+        }
         retryCoordinator.cancelRetryForPacket(packetId)
         deliveryTracker.onAckReceived(packetId)
     }
@@ -34,11 +45,20 @@ class AckManager @Inject constructor(
         if (payload.isBlank()) return
 
         val ids = payload.split(",")
+        val senderNorm = MeshIdNormalizer.canonicalize(packet.senderId)
         ids.forEach { id ->
             val cleanId = id.trim()
             if (cleanId.isNotBlank()) {
-                retryCoordinator.cancelRetryForPacket(cleanId)
-                deliveryTracker.onReadReceiptReceived(cleanId)
+                val msg = chatDao.getMessageByUuid(cleanId)
+                if (msg != null && msg.isFromMe && senderNorm == MeshIdNormalizer.canonicalize(msg.chatId)) {
+                    retryCoordinator.cancelRetryForPacket(cleanId)
+                    deliveryTracker.onReadReceiptReceived(cleanId)
+                } else if (msg != null) {
+                    com.meshlink.common.logger.MeshLogger.w(
+                        "AckManager",
+                        "Rejected READ_RECEIPT from $senderNorm for message $cleanId (isFromMe=${msg.isFromMe}, chatId=${msg.chatId})"
+                    )
+                }
             }
         }
     }

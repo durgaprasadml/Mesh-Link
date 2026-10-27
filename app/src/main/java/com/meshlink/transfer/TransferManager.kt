@@ -43,7 +43,7 @@ class TransferManager @Inject constructor(
     private val verifier: IntegrityVerifier,
     private val analytics: TransferAnalytics,
     private val intelligentTransportManager: IntelligentTransportManager,
-    private val wifiSocketTransport: com.meshlink.wifi.data.WifiSocketTransport,
+    val wifiSocketTransport: com.meshlink.wifi.data.WifiSocketTransport,
     private val wifiDirectManager: com.meshlink.wifi.manager.WifiDirectManager? = null,
     private val beaconHandlerProvider: javax.inject.Provider<com.meshlink.ble.data.handlers.BeaconHandler>? = null,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -62,7 +62,8 @@ class TransferManager @Inject constructor(
     val sessionRegistry: TransferSessionRegistry = TransferSessionRegistry(),
     val resourceManager: TransferResourceManager = TransferResourceManager(diagnostics),
     val cleanupManager: TransferCleanupManager = TransferCleanupManager(context, diagnostics),
-    val cacheManager: TransferCacheManager = TransferCacheManager(context, diagnostics)
+    val cacheManager: TransferCacheManager = TransferCacheManager(context, diagnostics),
+    val terminalRegistry: TerminalTransferRegistry = TerminalTransferRegistry()
 ) {
     // Phase 2 extension points (implementing architectural stubs)
     var transferQueue: com.meshlink.transfer.scheduler.TransferQueue? = null
@@ -176,6 +177,10 @@ class TransferManager @Inject constructor(
         // Wire high-speed media stream reception callbacks
         wifiSocketTransport.onMediaStreamStarted = { transferId, fileName, mimeType, totalBytes, expectedChecksum, senderId ->
             applicationScope.launch(ioDispatcher + exceptionHandler) {
+                if (terminalRegistry.isTerminal(transferId)) {
+                    MeshLogger.d(TAG, "Ignoring onMediaStreamStarted for terminal transfer: $transferId (state=${terminalRegistry.getTerminalState(transferId)})")
+                    return@launch
+                }
                 var session = scheduler.getSession(transferId)
                 if (session?.state?.isTerminal() == true) {
                     MeshLogger.d(TAG, "Ignoring onMediaStreamStarted for already terminal transfer: $transferId (state=${session.state})")
@@ -234,6 +239,10 @@ class TransferManager @Inject constructor(
 
         wifiSocketTransport.onMediaStreamCompleted = { transferId, filePath, mimeType, senderId, totalBytes ->
             applicationScope.launch(ioDispatcher + exceptionHandler) {
+                if (terminalRegistry.isCompleted(transferId)) {
+                    MeshLogger.d(TAG, "Ignoring onMediaStreamCompleted: transfer $transferId already completed")
+                    return@launch
+                }
                 val isAudio = mimeType.startsWith("audio/")
                 if (isAudio) {
                     MeshLogger.i(
@@ -333,6 +342,12 @@ class TransferManager @Inject constructor(
             )
         }
 
+        val existingJob = activeOutgoingJobs[transferId]
+        if (existingJob != null && existingJob.isActive) {
+            MeshLogger.d(TAG, "Transfer $transferId is already running actively. Skipping duplicate start.")
+            return transferId
+        }
+
         if (!exists || !canRead || fileLength == 0L || !canOpenStream) {
             if (isAudio) {
                 MeshLogger.e(
@@ -341,8 +356,10 @@ class TransferManager @Inject constructor(
                 )
             }
             MeshLogger.e(TAG, "Cannot send non-existent, unreadable or empty file: ${file.absolutePath}")
+            onTransferStateChanged?.invoke(transferId, TransferState.FAILED)
             return transferId
         }
+        terminalRegistry.remove(transferId)
 
         if (isAudio) {
             MeshLogger.i(
@@ -412,12 +429,6 @@ class TransferManager @Inject constructor(
         applicationScope.launch(ioDispatcher + exceptionHandler) { cache.persistSession(session) }
         analytics.recordTransferStarted(session)
         diagnostics.logTransferStart(transferId, file.name, fileLength, selectedRoute)
-
-        val existingJob = activeOutgoingJobs[transferId]
-        if (existingJob != null && existingJob.isActive) {
-            MeshLogger.d(TAG, "Transfer $transferId is already running actively. Skipping duplicate start.")
-            return transferId
-        }
 
         val job = applicationScope.launch(ioDispatcher + exceptionHandler) {
             try {
@@ -1045,6 +1056,10 @@ class TransferManager @Inject constructor(
     }
 
     private suspend fun handleMeta(packet: MeshPacket, transferId: String) {
+        if (terminalRegistry.isTerminal(transferId)) {
+            MeshLogger.d(TAG, "Ignoring META packet for terminal transfer: $transferId (state=${terminalRegistry.getTerminalState(transferId)})")
+            return
+        }
         val meta = metaManager.parseMetaPayload(packet.payload)
         if (meta == null) {
             MeshLogger.w(TAG, "Invalid META payload for $transferId")
@@ -1094,6 +1109,10 @@ class TransferManager @Inject constructor(
     }
 
     private suspend fun handleChunk(packet: MeshPacket, transferId: String) {
+        if (terminalRegistry.isTerminal(transferId)) {
+            MeshLogger.d(TAG, "Ignoring chunk for terminal transfer: $transferId")
+            return
+        }
         var session = scheduler.getSession(transferId)
 
         val isAudio = session?.mimeType?.startsWith("audio/") == true || packet.mimeType?.startsWith("audio/") == true
@@ -1171,7 +1190,13 @@ class TransferManager @Inject constructor(
         cache.persistSession(session)
 
         val mediaDir = File(context.filesDir, "mesh_media").also { if (!it.exists()) it.mkdirs() }
-        val outputFile = File(mediaDir, session.fileName)
+        val safeName = ReceivedMediaNaming.receivedFileName(session.transferId, session.fileName)
+        val outputFile = try {
+            ReceivedMediaNaming.resolveInside(mediaDir, safeName)
+        } catch (e: Exception) {
+            failSession(session.transferId, "Invalid output file path: ${e.message}")
+            return@withContext
+        }
 
         val assembled = cache.assembleFile(session.transferId, session.totalChunks, outputFile)
 
@@ -1464,6 +1489,7 @@ class TransferManager @Inject constructor(
         diagnostics.logSessionStateTransition(transferId, oldState, newState.name)
         // Release throttle tracking entry and clear session from active progress when terminal
         if (newState.isTerminal()) {
+            terminalRegistry.record(transferId, newState)
             scheduler.cleanupProgressTracking(transferId)
             scheduler.removeSession(transferId)
         }

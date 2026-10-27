@@ -215,4 +215,40 @@ class MeshCryptoManagerTest {
         val decrypted = cryptoManager.decryptBytes(encrypted, peerId)
         assertArrayEquals(rawAudioChunk, decrypted)
     }
+
+    @Test
+    fun `encryptBytes fails closed for a peer without a public key`() {
+        every { sharedPrefs.getString("unknown_peer", null) } returns null
+        every { sharedPrefs.contains("unknown_peer") } returns false
+
+        // Previously this silently used an all-zero AES key, i.e. a publicly known key.
+        assertThrows(IllegalStateException::class.java) {
+            cryptoManager.encryptBytes(ByteArray(64) { it.toByte() }, "unknown_peer")
+        }
+    }
+
+    @Test
+    fun `decryptBytes rejects zero-key ciphertext from a peer without a public key`() {
+        every { sharedPrefs.getString("unknown_peer", null) } returns null
+        every { sharedPrefs.contains("unknown_peer") } returns false
+
+        // An attacker who knows the old fallback key could previously forge media chunks
+        // that authenticated successfully against an unknown (spoofed) sender id.
+        val zeroKey = javax.crypto.spec.SecretKeySpec(ByteArray(32), "AES")
+        val iv = ByteArray(12) { 1 }
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, zeroKey, javax.crypto.spec.GCMParameterSpec(128, iv))
+        val forged = iv + cipher.doFinal("forged-chunk".toByteArray())
+
+        assertThrows(IllegalStateException::class.java) {
+            cryptoManager.decryptBytes(forged, "unknown_peer")
+        }
+    }
+
+    @Test
+    fun `encryptOrPassthrough with required encryption returns null for unknown peer`() {
+        every { sharedPrefs.contains("unknown_peer") } returns false
+
+        assertNull(cryptoManager.encryptOrPassthrough("secret", "unknown_peer", requireEncryption = true))
+    }
 }

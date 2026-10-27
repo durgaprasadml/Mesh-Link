@@ -145,11 +145,15 @@ class BleRepositoryImpl @Inject constructor(
 
         transferManager.onTransferStateChanged = { transferId, state ->
             val session = transferManager.getSession(transferId)
-            // CRITICAL: MessageDeliveryStateMachine is strictly for OUTGOING messages sent by this device.
-            // Never transition incoming transfers through the outgoing state machine, as that sets receiver's
-            // messages to SENDING or SENT and corrupts delivery status.
-            if (session == null || session.direction == com.meshlink.transfer.TransferDirection.OUTGOING) {
-                applicationScope.launch {
+            applicationScope.launch {
+                val isOutgoing = if (session != null) {
+                    session.direction == com.meshlink.transfer.TransferDirection.OUTGOING
+                } else {
+                    val msg = chatDao.getMessageByUuid(transferId)
+                    msg?.isFromMe ?: false
+                }
+
+                if (isOutgoing) {
                     when (state) {
                         com.meshlink.transfer.TransferState.QUEUED,
                         com.meshlink.transfer.TransferState.WAITING,
@@ -170,6 +174,14 @@ class BleRepositoryImpl @Inject constructor(
                         com.meshlink.transfer.TransferState.CANCELLED -> stateMachine.transitionToFailed(transferId)
                         com.meshlink.transfer.TransferState.COMPLETED -> stateMachine.transitionToSent(transferId)
                         else -> {}
+                    }
+                } else {
+                    // Incoming transfer state changes: update database if incoming download failed
+                    if (state == com.meshlink.transfer.TransferState.FAILED || state == com.meshlink.transfer.TransferState.CANCELLED) {
+                        val msg = chatDao.getMessageByUuid(transferId)
+                        if (msg != null && !msg.isFromMe && msg.mediaPath == null) {
+                            chatDao.updateMessageStatus(transferId, DeliveryStatus.FAILED)
+                        }
                     }
                 }
             }
@@ -548,8 +560,9 @@ class BleRepositoryImpl @Inject constructor(
                 .mapNotNull { routingCoordinator.resolveMeshId(it) }
             val routedPeers = meshRouter.routeTable.keys
                 .map { com.meshlink.util.MeshIdNormalizer.canonicalize(it) }
+            val connectedWifiPeers = transferManager.wifiSocketTransport.getConnectedPeers()
 
-            val eligiblePeers = (scannedPeers + connectedBlePeers + routedPeers)
+            val eligiblePeers = (scannedPeers + connectedBlePeers + routedPeers + connectedWifiPeers)
                 .distinct()
                 .filter { it.isNotBlank() && it != localPeerId && it != "BROADCAST" }
 

@@ -20,6 +20,12 @@ class BleMeshDataSourceImpl @Inject constructor(
     override val isAdvertising: Boolean get() = advertiser.isAdvertising
     override val isScanning: Boolean get() = scanner.isScanning
 
+    init {
+        // Connectable advertisements can be consumed by an inbound GATT link without any callback
+        // to the app; re-arm advertising (debounced + rate-limited) when the server link changes.
+        gattManager.onPeripheralLinkChanged = { connected -> advertiser.onPeripheralLinkChanged(connected) }
+    }
+
     private val _incomingPayloads = MutableSharedFlow<Pair<String, String>>()
     override val incomingPayloads: SharedFlow<Pair<String, String>> = _incomingPayloads
 

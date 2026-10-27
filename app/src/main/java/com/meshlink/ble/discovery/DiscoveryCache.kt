@@ -16,7 +16,14 @@ data class PeerDiscoveryRecord(
     var score: Int = 0,
     var state: PeerLifecycleState = PeerLifecycleState.UNKNOWN,
     var displayName: String? = null,
-    var bluetoothDeviceName: String? = null
+    var bluetoothDeviceName: String? = null,
+    /**
+     * True while a GATT link to this peer is up. Tracked separately from [state] because the
+     * lifecycle matrix cannot reach CONNECTED from DISCOVERED. A linked peer is not advertising
+     * (connectable advertisements are consumed by the link), so its [lastSeenMillis] is frozen and
+     * must not be used to expire it.
+     */
+    @Volatile var linkActive: Boolean = false
 )
 
 /**
@@ -44,7 +51,7 @@ class DiscoveryCache {
 
     private fun evictOldest() {
         peers.values.minByOrNull { it.lastSeenMillis }?.let { oldest ->
-            if (oldest.state != PeerLifecycleState.CONNECTED && oldest.state != PeerLifecycleState.CONNECTING) {
+            if (oldest.state != PeerLifecycleState.CONNECTED && oldest.state != PeerLifecycleState.CONNECTING && !oldest.linkActive) {
                 peers.remove(oldest.macAddress)
             }
         }
@@ -62,9 +69,17 @@ class DiscoveryCache {
      * Removes peers that haven't been seen in the specified timeout.
      * @return Number of evicted peers.
      */
-    fun evictStale(timeoutMillis: Long): Int {
-        val now = System.currentTimeMillis()
-        var count = 0
+    fun evictStale(timeoutMillis: Long): Int = evictStaleRecords(timeoutMillis).size
+
+    /**
+     * Same policy as [evictStale] but returns the evicted records so the caller can log and
+     * publish the change. [now] is injectable for deterministic tests.
+     */
+    fun evictStaleRecords(
+        timeoutMillis: Long,
+        now: Long = System.currentTimeMillis()
+    ): List<PeerDiscoveryRecord> {
+        val evicted = mutableListOf<PeerDiscoveryRecord>()
         val iterator = peers.entries.iterator()
         while (iterator.hasNext()) {
             val entry = iterator.next()
@@ -73,13 +88,14 @@ class DiscoveryCache {
             if ((now - record.lastSeenMillis > timeoutMillis) && 
                 record.state != PeerLifecycleState.CONNECTED &&
                 record.state != PeerLifecycleState.CONNECTING &&
-                record.state != PeerLifecycleState.READY) {
+                record.state != PeerLifecycleState.READY &&
+                !record.linkActive) {
                 
                 iterator.remove()
-                count++
+                evicted.add(record)
             }
         }
-        return count
+        return evicted
     }
     
     fun clear() {

@@ -132,8 +132,11 @@ class MeshSupervisor @Inject constructor(
                         bleScannerManager.startScanning()
                     }
                     RadioSubsystem.BLE_ADVERTISER -> {
-                        bleAdvertiserManager.stopAdvertising()
-                        meshRepository.refreshMesh()
+                        // Restart with the last requested identity; only if nothing is wanted fall
+                        // back to a full refresh that re-reads the local profile.
+                        if (!bleAdvertiserManager.recoverAdvertising("watchdog")) {
+                            meshRepository.refreshMesh()
+                        }
                     }
                     RadioSubsystem.GATT_SERVER -> {
                         meshRepository.refreshMesh()

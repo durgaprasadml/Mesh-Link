@@ -84,6 +84,22 @@ class BleGattManager @Inject constructor(
 
     fun getGattServer(): BluetoothGattServer? = gattServer
 
+    /**
+     * Invoked when a remote central connects to (`true`) or disconnects from (`false`) our GATT
+     * server. Wired to [BleAdvertiserManager.onPeripheralLinkChanged] so the connectable
+     * advertisement is re-armed if the platform consumed it for the inbound link.
+     */
+    @Volatile
+    var onPeripheralLinkChanged: ((connected: Boolean) -> Unit)? = null
+
+    private fun notifyPeripheralLinkChanged(connected: Boolean) {
+        try {
+            onPeripheralLinkChanged?.invoke(connected)
+        } catch (e: Exception) {
+            MeshLogger.w("BleGatt", "onPeripheralLinkChanged listener failed: ${e.message}")
+        }
+    }
+
     fun startServer() {
         if (!permissionChecker.hasRequiredPermissions(context)) {
             MeshLogger.w("BleGatt", "Missing permissions for starting GATT server")
@@ -337,6 +353,7 @@ class BleGattManager @Inject constructor(
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 connectionManager.addConnectedServer(device.address, device)
                 _gattEvents.tryEmit(GattEvent.Connected(device.address))
+                notifyPeripheralLinkChanged(true)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connectionManager.removeConnectedServer(device.address)
                 mtuManager.removeMtu(device.address)
@@ -344,6 +361,7 @@ class BleGattManager @Inject constructor(
                 notificationManager.clear(device.address)
                 mtuTimeoutJobs.remove(device.address)?.cancel()
                 _gattEvents.tryEmit(GattEvent.Disconnected(device.address))
+                notifyPeripheralLinkChanged(false)
             }
         }
 

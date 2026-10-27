@@ -24,6 +24,15 @@ class BleConnectionManager @Inject constructor(
             }
         }
     )
+
+    init {
+        // Lets the discovery registry verify a "linked" peer against the real GATT tables, because
+        // a locally closed GATT client (disconnectDevice/stopServer) never reports a disconnect.
+        discoveryEngine.linkProbe = { address ->
+            bleDataSource.activeClients.any { it.equals(address, ignoreCase = true) } ||
+                bleDataSource.connectedServers.any { it.equals(address, ignoreCase = true) }
+        }
+    }
     
     val activeClients: Set<String>
         get() = bleDataSource.activeClients

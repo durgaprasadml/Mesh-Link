@@ -54,6 +54,8 @@ fun MessageBubble(
     currentlyPreparing: String? = null,
     playbackProgress: Float,
     transferProgress: Float?,
+    senderDisplayName: String? = null,
+    isSenderVerified: Boolean? = null,
     onToggleSelection: () -> Unit,
     onPlayVoice: (String) -> Unit,
     onStopPlayback: () -> Unit,
@@ -62,11 +64,10 @@ fun MessageBubble(
     onRetryMedia: (String) -> Unit
 ) {
     val isMe = message.isFromMe
-    val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
-    val haptic = LocalHapticFeedback.current
-
     val isSos = message.messageType == MessageType.SOS
     val isLocation = message.messageType == MessageType.LOCATION
+    val alignment = if (isSos) Alignment.Center else if (isMe) Alignment.CenterEnd else Alignment.CenterStart
+    val haptic = LocalHapticFeedback.current
 
     val baseBubbleColor = when {
         isSos -> Color.Transparent
@@ -146,7 +147,7 @@ fun MessageBubble(
                     } else Modifier
                 )
                 .widthIn(
-                    max = if (isSos) 340.dp else if (isLocation) 290.dp else 300.dp,
+                    max = if (isSos) 480.dp else if (isLocation) 290.dp else 300.dp,
                     min = if (isSos) 280.dp else if (isLocation) 250.dp else 80.dp
                 )
                 .animateContentSize()
@@ -520,6 +521,8 @@ fun MessageBubble(
                     SosEmergencyCard(
                         message = message,
                         onLocationClick = onLocationClick,
+                        senderDisplayName = senderDisplayName,
+                        isSenderVerified = isSenderVerified,
                         onImageClick = onImageClick
                     )
                 }

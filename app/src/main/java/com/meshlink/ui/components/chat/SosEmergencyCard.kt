@@ -3,9 +3,8 @@ package com.meshlink.ui.components.chat
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
-import com.meshlink.ui.designsystem.theme.MeshTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,55 +20,142 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.meshlink.domain.model.DeliveryStatus
 import com.meshlink.domain.model.Message
 import com.meshlink.domain.model.MessageType
-import java.text.SimpleDateFormat
-import java.util.Date
+import com.meshlink.ui.designsystem.theme.MeshTheme
+import com.meshlink.util.MeshIdNormalizer
+import java.io.File
 import java.util.Locale
 
 /**
- * Redesigned Material 3 SOS Emergency Alert Card component.
- * Displays high-priority emergency alerts with visual hierarchy,
- * animated breathing icons, location details, battery level, connection state,
- * dark mode support, and TalkBack accessibility semantics.
+ * Resolves the emergency message to display on the SOS card.
+ * If the sender wrote a custom message, returns it prominently.
+ * If the message text only contains standard boilerplate coordinates/status or is blank/SOS,
+ * returns a clean message such as "Emergency assistance requested".
+ */
+fun resolveEmergencyMessage(rawText: String): String {
+    val trimmed = rawText.trim()
+    if (trimmed.isBlank() || trimmed.equals("SOS", ignoreCase = true)) {
+        return "Emergency assistance requested"
+    }
+
+    if (trimmed.startsWith("🚨 SOS EMERGENCY") || trimmed.contains("— Lat:") || trimmed.contains("— Direct Range Alert")) {
+        val segments = trimmed.split("—").map { it.trim() }
+        val customSegments = segments.drop(1).filter { seg ->
+            !seg.startsWith("Lat:", ignoreCase = true) &&
+            !seg.startsWith("Battery:", ignoreCase = true) &&
+            !seg.contains("Direct Range Alert", ignoreCase = true)
+        }
+        if (customSegments.isNotEmpty()) {
+            val custom = customSegments.joinToString(" — ").trim()
+            if (custom.isNotBlank()) return custom
+        }
+        if (trimmed.contains("Awaiting full details via Wi-Fi Direct", ignoreCase = true)) {
+            return "Emergency assistance requested (Awaiting full details via Wi-Fi Direct)"
+        }
+        return "Emergency assistance requested"
+    }
+
+    return trimmed
+}
+
+/**
+ * Resolves the sender display name from passed name, local status, or message text.
+ */
+fun resolveSosSenderDisplayName(
+    message: Message,
+    senderDisplayName: String?
+): String {
+    if (message.isFromMe) {
+        return "You"
+    }
+    if (!senderDisplayName.isNullOrBlank() && senderDisplayName != "Unknown") {
+        return senderDisplayName.removePrefix("🚨 ").trim()
+    }
+    val fromRegex = Regex("""from\s+([^(—]+?)(?:\s*\(Unverified Sender\))?(?:\s*—|$)""")
+    val match = fromRegex.find(message.text)
+    val extracted = match?.groupValues?.get(1)?.trim()
+    return when {
+        !extracted.isNullOrBlank() -> extracted.removePrefix("🚨 ").trim()
+        message.senderId.isNotBlank() -> MeshIdNormalizer.canonicalize(message.senderId)
+        else -> "Unknown Sender"
+    }
+}
+
+/**
+ * Resolves whether the sender's identity has succeeded cryptographic verification.
+ * Does not falsely show an identity as verified when cryptographic verification has not succeeded.
+ */
+fun resolveSosSenderVerification(
+    message: Message,
+    isSenderVerified: Boolean?
+): Boolean {
+    if (message.isFromMe) {
+        return true
+    }
+    if (isSenderVerified != null) {
+        return isSenderVerified
+    }
+    if (message.text.contains("Unverified Sender", ignoreCase = true)) {
+        return false
+    }
+    if (message.text.contains("Verified Sender", ignoreCase = true)) {
+        return true
+    }
+    // Default to unverified when cryptographic verification is not explicitly confirmed
+    return false
+}
+
+/**
+ * Fully visible, non-collapsible Material 3 SOS Emergency Alert Card component.
+ * Immediately displays all available emergency information (header, custom message,
+ * verified sender badge, location, battery, front & rear camera photographs, and timestamp)
+ * without requiring the user to expand or hide details.
  */
 @Composable
 fun SosEmergencyCard(
     message: Message,
     onLocationClick: (Double, Double) -> Unit,
     modifier: Modifier = Modifier,
+    senderDisplayName: String? = null,
+    isSenderVerified: Boolean? = null,
     onImageClick: (String) -> Unit = {}
 ) {
     val isDark = MeshTheme.isDark
 
-    // Color palette carefully crafted for high contrast, emergency theme, & Material 3 compliance
+    // Emergency Color Palette (High contrast, Material 3 compliant)
     val headerGradient = Brush.horizontalGradient(
         colors = if (isDark) {
-            listOf(Color(0xFFD32F2F), Color(0xFF8E0000))
+            listOf(Color(0xFFC62828), Color(0xFF8E0000))
         } else {
             listOf(Color(0xFFD32F2F), Color(0xFFB71C1C))
         }
     )
 
-    val cardBgColor = if (isDark) Color(0xFF2C1616) else Color(0xFFFFF5F5)
-    val bodyBgColor = if (isDark) Color(0xFF1E1E1E) else Color.White
-    val cardBorderColor = if (isDark) Color(0xFFEF5350).copy(alpha = 0.35f) else Color(0xFFD32F2F).copy(alpha = 0.25f)
+    val cardBgColor = if (isDark) Color(0xFF221414) else Color(0xFFFFF9F9)
+    val bodyBgColor = if (isDark) Color(0xFF181010) else Color.White
+    val sectionBgColor = if (isDark) Color(0xFF261818) else Color(0xFFFAF0F0)
+    val cardBorderColor = if (isDark) Color(0xFFEF5350).copy(alpha = 0.4f) else Color(0xFFD32F2F).copy(alpha = 0.3f)
+    val sectionBorderColor = if (isDark) Color(0xFF422424) else Color(0xFFF2DEDE)
 
-    val primaryTextColor = if (isDark) Color(0xFFE6E1E5) else MaterialTheme.colorScheme.onSurface
-    val labelTextColor = if (isDark) Color(0xFFCAC4D0) else MaterialTheme.colorScheme.onSurfaceVariant
-    val iconTintColor = if (isDark) Color(0xFFEF5350) else Color(0xFFC62828)
-    val dividerColor = if (isDark) Color(0xFF362727) else Color(0xFFF0E0E0)
+    val primaryTextColor = if (isDark) Color(0xFFF5EEEE) else MaterialTheme.colorScheme.onSurface
+    val labelTextColor = if (isDark) Color(0xFFC4B6B6) else MaterialTheme.colorScheme.onSurfaceVariant
+    val emergencyRed = if (isDark) Color(0xFFFF6B6B) else Color(0xFFD32F2F)
     val footerBgColor = if (isDark) Color(0xFF8E0000) else Color(0xFFB71C1C)
 
-    // Breathing pulse animation for emergency icon
+    // Breathing pulse animation for emergency header icon
     val infiniteTransition = rememberInfiniteTransition(label = "sosPulseAnimation")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.94f,
@@ -81,34 +167,39 @@ fun SosEmergencyCard(
         label = "pulseScale"
     )
 
+    // Resolved Metadata
+    val resolvedDisplayName = remember(senderDisplayName, message.isFromMe, message.text, message.senderId) {
+        resolveSosSenderDisplayName(message, senderDisplayName)
+    }
+
+    val resolvedIsVerified = remember(isSenderVerified, message.isFromMe, message.text) {
+        resolveSosSenderVerification(message, isSenderVerified)
+    }
+
+    val resolvedEmergencyMessage = remember(message.text) {
+        resolveEmergencyMessage(message.text)
+    }
+
     val formattedTime = remember(message.timestamp) {
         com.meshlink.ui.util.DateTimeUtils.formatTime12Hour(message.timestamp)
     }
 
     val hasLocation = message.latitude != null && message.longitude != null
-    val latStr = message.latitude?.let { String.format(Locale.US, "%.6f", it) } ?: "Unavailable"
-    val lngStr = message.longitude?.let { String.format(Locale.US, "%.6f", it) } ?: "Unavailable"
+    val latStr = message.latitude?.let { String.format(Locale.US, "%.6f", it) }
+    val lngStr = message.longitude?.let { String.format(Locale.US, "%.6f", it) }
 
-    val batteryText = if (message.batteryPercent != null && message.batteryPercent >= 0) {
-        "${message.batteryPercent}%"
-    } else {
-        "Unknown"
-    }
-
-    val connectionText = when (message.status) {
-        DeliveryStatus.RELAYED -> "Mesh Relayed"
-        else -> "Direct Mesh"
-    }
+    val hasBattery = message.batteryPercent != null && message.batteryPercent >= 0
+    val batteryText = if (hasBattery) "${message.batteryPercent}%" else "Battery information unavailable"
 
     val frontPath = remember(message.mediaPath) {
         val path = message.mediaPath ?: return@remember null
         if (path.startsWith("{")) {
             try {
                 val obj = org.json.JSONObject(path)
-                if (obj.has("front")) obj.getString("front") else null
+                if (obj.has("front")) obj.getString("front").takeIf { it.isNotBlank() } else null
             } catch (_: Exception) { null }
         } else {
-            path
+            path.takeIf { it.isNotBlank() }
         }
     }
     val rearPath = remember(message.mediaPath) {
@@ -116,26 +207,47 @@ fun SosEmergencyCard(
         if (path.startsWith("{")) {
             try {
                 val obj = org.json.JSONObject(path)
-                if (obj.has("rear")) obj.getString("rear") else null
+                if (obj.has("rear")) obj.getString("rear").takeIf { it.isNotBlank() } else null
             } catch (_: Exception) { null }
         } else {
             null
         }
     }
 
-    val talkBackDescription = remember(message, formattedTime, latStr, lngStr, batteryText, connectionText) {
+    val isFrontAvailable = remember(frontPath) {
+        frontPath != null && File(frontPath).exists()
+    }
+    val isRearAvailable = remember(rearPath) {
+        rearPath != null && File(rearPath).exists()
+    }
+
+    val talkBackDescription = remember(
+        resolvedDisplayName,
+        resolvedIsVerified,
+        resolvedEmergencyMessage,
+        hasLocation,
+        latStr,
+        lngStr,
+        hasBattery,
+        batteryText,
+        isFrontAvailable,
+        isRearAvailable,
+        formattedTime
+    ) {
         buildString {
-            append("Emergency SOS Alert. ")
+            append("SOS Emergency Alert. ")
             append("Priority: High Priority Emergency. ")
+            append("Sender: $resolvedDisplayName, ${if (resolvedIsVerified) "Verified Sender" else "Unverified Sender"}. ")
+            append("Emergency Message: $resolvedEmergencyMessage. ")
             if (hasLocation) {
-                append("Current Location: Latitude $latStr, Longitude $lngStr. ")
+                append("Location: Latitude $latStr, Longitude $lngStr. ")
             } else {
-                append("Current Location: Unavailable. ")
+                append("Location: Location unavailable. ")
             }
-            append("Battery level: $batteryText. ")
-            append("Connection type: $connectionText. ")
-            append("Sent at $formattedTime. ")
-            append("Immediate Assistance Required.")
+            append("Battery: $batteryText. ")
+            append("Front camera image: ${if (isFrontAvailable) "Available" else "Unavailable"}. ")
+            append("Rear camera image: ${if (isRearAvailable) "Available" else "Unavailable"}. ")
+            append("Timestamp: $formattedTime.")
         }
     }
 
@@ -145,90 +257,153 @@ fun SosEmergencyCard(
             .semantics(mergeDescendants = true) {
                 contentDescription = talkBackDescription
             },
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = cardBgColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         border = BorderStroke(1.dp, cardBorderColor)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // HEADER SECTION
+            // 1. EMERGENCY HEADER SECTION
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(headerGradient)
                     .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
-                Column {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Box(
                             modifier = Modifier
                                 .scale(pulseScale)
-                                .size(36.dp)
+                                .size(38.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f)),
+                                .background(Color.White.copy(alpha = 0.22f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Warning,
                                 contentDescription = "Emergency Warning Icon",
                                 tint = Color.White,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
                         Spacer(modifier = Modifier.width(12.dp))
 
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "SOS EMERGENCY",
                                 color = Color.White,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 0.5.sp
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Emergency Alert",
-                                color = Color.White.copy(alpha = 0.9f),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium
+                                text = "Sender: $resolvedDisplayName",
+                                color = Color.White.copy(alpha = 0.95f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // EMERGENCY BADGE BELOW TITLE
-                    Surface(
-                        color = Color.White.copy(alpha = 0.22f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                    // BADGES ROW: PRIORITY & VERIFICATION STATUS
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        // High Priority Badge
+                        Surface(
+                            color = Color.White.copy(alpha = 0.22f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFFF5252))
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "HIGH PRIORITY",
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.5.sp
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFF5252))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "HIGH PRIORITY",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.4.sp
+                                )
+                            }
+                        }
+
+                        // Cryptographic Sender Verification Badge
+                        if (resolvedIsVerified) {
+                            Surface(
+                                color = Color(0xFF2E7D32).copy(alpha = 0.85f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Verified Sender",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        } else {
+                            Surface(
+                                color = Color(0xFFE65100).copy(alpha = 0.85f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Warning,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Unverified Sender",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // BODY SECTION
+            // 2. BODY SECTION (ALL DETAILS VISIBLE IMMEDIATELY)
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -239,300 +414,384 @@ fun SosEmergencyCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(14.dp),
+                        .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // 1. LOCATION BLOCK
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(
-                                if (hasLocation) {
-                                    Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable(
-                                            role = Role.Button,
-                                            onClickLabel = "Open location in maps"
-                                        ) {
-                                            onLocationClick(message.latitude!!, message.longitude!!)
-                                        }
-                                } else Modifier
-                            )
+                    // A. EMERGENCY MESSAGE SECTION
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = sectionBgColor,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, sectionBorderColor)
                     ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.Campaign,
+                                    contentDescription = null,
+                                    tint = emergencyRed,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "EMERGENCY MESSAGE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = emergencyRed
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = resolvedEmergencyMessage,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = primaryTextColor
+                            )
+                        }
+                    }
+
+                    // B. LOCATION INFORMATION SECTION
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = sectionBgColor,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, sectionBorderColor)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    imageVector = if (hasLocation) Icons.Filled.LocationOn else Icons.Filled.LocationOff,
+                                    contentDescription = null,
+                                    tint = if (hasLocation) emergencyRed else labelTextColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "CURRENT LOCATION",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (hasLocation) primaryTextColor else labelTextColor
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                if (hasLocation) {
+                                    OutlinedButton(
+                                        onClick = { onLocationClick(message.latitude!!, message.longitude!!) },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp),
+                                        shape = RoundedCornerShape(6.dp),
+                                        border = BorderStroke(1.dp, emergencyRed.copy(alpha = 0.5f))
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Map,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = emergencyRed
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Open Map",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = emergencyRed
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            if (hasLocation) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Latitude",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = labelTextColor
+                                        )
+                                        Text(
+                                            text = latStr ?: "Unavailable",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = primaryTextColor
+                                        )
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "Longitude",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = labelTextColor
+                                        )
+                                        Text(
+                                            text = lngStr ?: "Unavailable",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = primaryTextColor
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = "Location unavailable",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = labelTextColor
+                                )
+                            }
+                        }
+                    }
+
+                    // C. BATTERY & TIMESTAMP SECTION
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Battery Box
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            color = sectionBgColor,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, sectionBorderColor)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (hasBattery && message.batteryPercent!! < 20) Icons.Filled.BatteryAlert else Icons.Filled.BatteryStd,
+                                        contentDescription = null,
+                                        tint = if (hasBattery && message.batteryPercent!! < 20) emergencyRed else emergencyRed.copy(alpha = 0.85f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "BATTERY",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = labelTextColor
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = batteryText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (hasBattery && message.batteryPercent!! < 20) emergencyRed else primaryTextColor
+                                )
+                            }
+                        }
+
+                        // Timestamp Box
+                        Surface(
+                            modifier = Modifier.weight(1f),
+                            color = sectionBgColor,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, sectionBorderColor)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Schedule,
+                                        contentDescription = null,
+                                        tint = emergencyRed.copy(alpha = 0.85f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (message.isFromMe) "SENT TIME" else "RECEIVED TIME",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = labelTextColor
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = formattedTime,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = primaryTextColor
+                                )
+                            }
+                        }
+                    }
+
+                    // D. EMERGENCY PHOTOGRAPHS SECTION
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Filled.LocationOn,
+                                imageVector = Icons.Filled.PhotoCamera,
                                 contentDescription = null,
-                                tint = iconTintColor,
-                                modifier = Modifier.size(18.dp)
+                                tint = emergencyRed,
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Current Location",
-                                style = MaterialTheme.typography.labelLarge,
+                                text = "EMERGENCY SCENE VISUALS",
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = primaryTextColor
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 26.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Column {
-                                Text(
-                                    text = "Latitude",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = labelTextColor
-                                )
-                                Text(
-                                    text = latStr,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = primaryTextColor
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = "Longitude",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = labelTextColor
-                                )
-                                Text(
-                                    text = lngStr,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = primaryTextColor
-                                )
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(color = dividerColor, thickness = 1.dp)
-
-                    // 2. METADATA ROW (BATTERY, CONNECTION, SENT TIME)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        // Battery
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Filled.BatteryFull,
-                                    contentDescription = null,
-                                    tint = iconTintColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Battery",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = labelTextColor
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = batteryText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = primaryTextColor,
-                                modifier = Modifier.padding(start = 20.dp)
-                            )
-                        }
-
-                        // Connection
-                        Column(modifier = Modifier.weight(1.1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Filled.CellTower,
-                                    contentDescription = null,
-                                    tint = iconTintColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Connection",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = labelTextColor
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = connectionText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = primaryTextColor,
-                                modifier = Modifier.padding(start = 20.dp)
-                            )
-                        }
-
-                        // Sent Time
-                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Filled.Schedule,
-                                    contentDescription = null,
-                                    tint = iconTintColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Sent",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = labelTextColor
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = formattedTime,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = primaryTextColor
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = dividerColor, thickness = 1.dp)
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.PhotoCamera,
-                            contentDescription = null,
-                            tint = iconTintColor,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Emergency Scene Visuals",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = primaryTextColor
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Front Camera Capture
-                        val isFrontAvailable = frontPath != null && java.io.File(frontPath).exists()
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(130.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isDark) Color(0xFF141414) else Color(0xFFF5F5F5))
-                                .then(
-                                    if (isFrontAvailable) {
-                                        Modifier.clickable { onImageClick("${message.messageId}#front") }
-                                    } else Modifier
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isFrontAvailable) {
-                                coil.compose.AsyncImage(
-                                    model = java.io.File(frontPath!!),
-                                    contentDescription = "Front Camera Evidence",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                )
-                                Surface(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .padding(6.dp),
-                                    color = Color.Black.copy(alpha = 0.65f),
-                                    shape = RoundedCornerShape(6.dp)
-                                ) {
-                                    Text(
-                                        text = "FRONT",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            // Front Camera Capture
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(135.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isFrontAvailable) Color.Black else sectionBgColor)
+                                    .border(1.dp, sectionBorderColor, RoundedCornerShape(12.dp))
+                                    .then(
+                                        if (isFrontAvailable) {
+                                            Modifier.clickable { onImageClick("${message.messageId}#front") }
+                                        } else Modifier
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isFrontAvailable) {
+                                    AsyncImage(
+                                        model = File(frontPath!!),
+                                        contentDescription = "Front camera emergency photograph. Tap to view full size.",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
                                     )
-                                }
-                            } else {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(8.dp)
-                                ) {
                                     Icon(
-                                        imageVector = Icons.Filled.PhotoCamera,
-                                        contentDescription = null,
-                                        tint = labelTextColor,
-                                        modifier = Modifier.size(24.dp)
+                                        imageVector = Icons.Filled.Fullscreen,
+                                        contentDescription = "View full size",
+                                        tint = Color.White.copy(alpha = 0.9f),
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(6.dp)
+                                            .size(20.dp)
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = if (message.isFromMe && frontPath == null) "Capturing..." else "Receiving...",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = labelTextColor,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth(),
+                                        color = Color.Black.copy(alpha = 0.7f)
+                                    ) {
+                                        Text(
+                                            text = "FRONT CAMERA",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(vertical = 3.dp)
+                                        )
+                                    }
+                                } else {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.NoPhotography,
+                                            contentDescription = null,
+                                            tint = labelTextColor.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "FRONT CAMERA",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = labelTextColor,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Unavailable",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = labelTextColor.copy(alpha = 0.75f),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
                             }
-                        }
 
-                        // Rear Camera Capture
-                        val isRearAvailable = rearPath != null && java.io.File(rearPath).exists()
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(130.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isDark) Color(0xFF141414) else Color(0xFFF5F5F5))
-                                .then(
-                                    if (isRearAvailable) {
-                                        Modifier.clickable { onImageClick("${message.messageId}#rear") }
-                                    } else Modifier
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isRearAvailable) {
-                                coil.compose.AsyncImage(
-                                    model = java.io.File(rearPath!!),
-                                    contentDescription = "Rear Camera Evidence",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                )
-                                Surface(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .padding(6.dp),
-                                    color = Color.Black.copy(alpha = 0.65f),
-                                    shape = RoundedCornerShape(6.dp)
-                                ) {
-                                    Text(
-                                        text = "REAR",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            // Rear Camera Capture
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(135.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isRearAvailable) Color.Black else sectionBgColor)
+                                    .border(1.dp, sectionBorderColor, RoundedCornerShape(12.dp))
+                                    .then(
+                                        if (isRearAvailable) {
+                                            Modifier.clickable { onImageClick("${message.messageId}#rear") }
+                                        } else Modifier
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isRearAvailable) {
+                                    AsyncImage(
+                                        model = File(rearPath!!),
+                                        contentDescription = "Rear camera emergency photograph. Tap to view full size.",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
                                     )
-                                }
-                            } else {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(8.dp)
-                                ) {
                                     Icon(
-                                        imageVector = Icons.Filled.PhotoCamera,
-                                        contentDescription = null,
-                                        tint = labelTextColor,
-                                        modifier = Modifier.size(24.dp)
+                                        imageVector = Icons.Filled.Fullscreen,
+                                        contentDescription = "View full size",
+                                        tint = Color.White.copy(alpha = 0.9f),
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(6.dp)
+                                            .size(20.dp)
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = if (message.isFromMe && rearPath == null) "Capturing..." else "Receiving...",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = labelTextColor,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth(),
+                                        color = Color.Black.copy(alpha = 0.7f)
+                                    ) {
+                                        Text(
+                                            text = "REAR CAMERA",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(vertical = 3.dp)
+                                        )
+                                    }
+                                } else {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.NoPhotography,
+                                            contentDescription = null,
+                                            tint = labelTextColor.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "REAR CAMERA",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = labelTextColor,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Unavailable",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = labelTextColor.copy(alpha = 0.75f),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -540,7 +799,7 @@ fun SosEmergencyCard(
                 }
             }
 
-            // FOOTER SECTION
+            // 3. FOOTER SECTION
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -554,17 +813,17 @@ fun SosEmergencyCard(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.PriorityHigh,
-                        contentDescription = "Warning icon",
+                        contentDescription = "Urgent warning icon",
                         tint = Color.White,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Immediate Assistance Required",
+                        text = "IMMEDIATE ASSISTANCE REQUIRED",
                         color = Color.White,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.3.sp
+                        letterSpacing = 0.4.sp
                     )
                 }
             }
@@ -572,7 +831,7 @@ fun SosEmergencyCard(
     }
 }
 
-@androidx.compose.ui.tooling.preview.Preview(name = "SOS Card Light", showBackground = true)
+@androidx.compose.ui.tooling.preview.Preview(name = "SOS Card Light - Complete", showBackground = true)
 @Composable
 private fun SosEmergencyCardLightPreview() {
     com.meshlink.ui.designsystem.theme.MeshTheme {
@@ -583,21 +842,23 @@ private fun SosEmergencyCardLightPreview() {
                     chatId = "chat_1",
                     text = "SOS",
                     senderId = "user_1",
-                    timestamp = System.currentTimeMillis(),
+                    timestamp = 1700000000000L,
                     isFromMe = false,
                     status = DeliveryStatus.DELIVERED,
-                    messageType = com.meshlink.domain.model.MessageType.SOS,
+                    messageType = MessageType.SOS,
                     latitude = 12.794620,
                     longitude = 75.174420,
                     batteryPercent = 62
                 ),
+                senderDisplayName = "Alice Smith",
+                isSenderVerified = true,
                 onLocationClick = { _, _ -> }
             )
         }
     }
 }
 
-@androidx.compose.ui.tooling.preview.Preview(name = "SOS Card Dark", showBackground = true, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@androidx.compose.ui.tooling.preview.Preview(name = "SOS Card Dark - Complete", showBackground = true, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun SosEmergencyCardDarkPreview() {
     com.meshlink.ui.designsystem.theme.MeshTheme(themeMode = "DARK") {
@@ -606,19 +867,47 @@ private fun SosEmergencyCardDarkPreview() {
                 message = Message(
                     messageId = "msg_2",
                     chatId = "chat_1",
-                    text = "SOS",
+                    text = "🚨 SOS EMERGENCY from Bob — Injured on north trail, unable to walk — Lat: 12.794620, Lng: 75.174420 — Battery: 18%",
                     senderId = "user_2",
-                    timestamp = System.currentTimeMillis(),
-                    isFromMe = true,
-                    status = DeliveryStatus.RELAYED,
-                    messageType = com.meshlink.domain.model.MessageType.SOS,
+                    timestamp = 1700000000000L,
+                    isFromMe = false,
+                    status = DeliveryStatus.DELIVERED,
+                    messageType = MessageType.SOS,
                     latitude = 12.794620,
                     longitude = 75.174420,
-                    batteryPercent = 62
+                    batteryPercent = 18
                 ),
+                senderDisplayName = "Bob Miller",
+                isSenderVerified = false,
                 onLocationClick = { _, _ -> }
             )
         }
     }
 }
 
+@androidx.compose.ui.tooling.preview.Preview(name = "SOS Card - Missing Info (Unverified)", showBackground = true)
+@Composable
+private fun SosEmergencyCardMissingInfoPreview() {
+    com.meshlink.ui.designsystem.theme.MeshTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            SosEmergencyCard(
+                message = Message(
+                    messageId = "msg_3",
+                    chatId = "chat_2",
+                    text = "🚨 SOS EMERGENCY from Charlie (Unverified Sender) — Direct Range Alert Announced. Awaiting full details via Wi-Fi Direct.",
+                    senderId = "user_3",
+                    timestamp = 1700000000000L,
+                    isFromMe = false,
+                    status = DeliveryStatus.DELIVERED,
+                    messageType = MessageType.SOS,
+                    latitude = null,
+                    longitude = null,
+                    batteryPercent = null
+                ),
+                senderDisplayName = "Charlie",
+                isSenderVerified = false,
+                onLocationClick = { _, _ -> }
+            )
+        }
+    }
+}

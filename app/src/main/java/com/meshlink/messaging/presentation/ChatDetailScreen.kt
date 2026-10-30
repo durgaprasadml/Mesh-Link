@@ -285,7 +285,7 @@ fun ChatDetailScreen(
                     }) {
                         Icon(
                             if (uiState.isSelectionMode) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = if (uiState.isSelectionMode) "Cancel selection" else "Back"
                         )
                     }
                 },
@@ -371,6 +371,7 @@ fun ChatDetailScreen(
                         currentlyPreparing = uiState.currentlyPreparing,
                         playbackProgress = uiState.playbackProgress,
                         transferProgress = msgTransferProgress,
+                        senderDisplayName = if (msg.isFromMe) "You" else viewModel.name,
                         onToggleSelection = { viewModel.toggleMessageSelection(msg.messageId) },
                         onPlayVoice = { viewModel.playVoice(it) },
                         onStopPlayback = { viewModel.stopPlayback() },
@@ -444,7 +445,11 @@ fun AttachmentIcon(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .clickable(onClick = onClick)
+            .clickable(
+                onClick = onClick,
+                role = androidx.compose.ui.semantics.Role.Button,
+                onClickLabel = "Attach $label"
+            )
             .padding(MeshTheme.spacing.mediumSmall)
     ) {
         Box(

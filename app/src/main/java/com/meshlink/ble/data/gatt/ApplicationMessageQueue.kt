@@ -6,7 +6,8 @@ import javax.inject.Singleton
 
 data class PendingApplicationMessage(
     val address: String,
-    val payload: ByteArray
+    val payload: ByteArray,
+    val priority: Int = 0
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -46,21 +47,29 @@ class ApplicationMessageQueueImpl @Inject constructor() : ApplicationMessageQueu
 
     @Synchronized
     override fun dequeueReady(address: String): PendingApplicationMessage? {
-        val iterator = pendingMessages.iterator()
-        while (iterator.hasNext()) {
-            val pending = iterator.next()
+        var highestPriorityIndex = -1
+        var highestPriority = Int.MIN_VALUE
+        for (i in pendingMessages.indices) {
+            val pending = pendingMessages[i]
             if (pending.address == address) {
-                iterator.remove()
-                return pending
+                if (pending.priority > highestPriority) {
+                    highestPriority = pending.priority
+                    highestPriorityIndex = i
+                }
             }
         }
-        return null
+        return if (highestPriorityIndex != -1) {
+            pendingMessages.removeAt(highestPriorityIndex)
+        } else {
+            null
+        }
     }
 
     @Synchronized
     override fun dropAllForDevice(address: String): List<PendingApplicationMessage> {
         val dropped = pendingMessages.filter { it.address == address }
         pendingMessages.removeAll { it.address == address }
+        dropped.forEach { BufferPool.returnBuffer(it.payload) }
         return dropped
     }
 

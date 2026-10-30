@@ -18,4 +18,5 @@ interface GattWriteQueue {
     fun setActiveWrite(write: PendingClientWrite?)
     fun requeueWithBackoff(write: PendingClientWrite, maxRetries: Int = 10, backoffBaseMs: Long = 50L): Long
     fun clear()
+    fun clearIfActiveAndExpired(address: String, write: PendingClientWrite, timeoutMs: Long = 3_000L): PendingClientWrite?
 }

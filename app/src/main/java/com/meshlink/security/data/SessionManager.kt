@@ -141,7 +141,8 @@ private val TAG = "SessionManager"
     }
 
     /**
-     * Parses the wrapped payload, validates AAD (timestamp, seq, sessionId, keyVersion).
+     * Parses the wrapped payload, validates AAD (timestamp, seq, sessionId, keyVersion)
+     * without mutating session state before cryptographic authentication succeeds.
      * Returns a Triple of (AAD bytes, Ciphertext string, keyVersion) if valid, or null if invalid.
      */
     fun validateAndUnwrap(peerId: String, payload: String): Triple<ByteArray, String, Int>? {
@@ -153,7 +154,12 @@ private val TAG = "SessionManager"
         val aadBase64 = parts[1]
         val ciphertext = parts[2]
 
-        val aadBytes = android.util.Base64.decode(aadBase64, android.util.Base64.NO_WRAP)
+        val aadBytes = try {
+            android.util.Base64.decode(aadBase64, android.util.Base64.NO_WRAP)
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Error decoding AAD Base64: ${e.message}")
+            return null
+        }
         val aadString = String(aadBytes, Charsets.UTF_8)
         
         try {
@@ -164,30 +170,24 @@ private val TAG = "SessionManager"
 
             val kv = json.optInt("kv", 1) // default to 1 for backward compatibility
 
-            var session = getSession(peerId)
+            val session = getSession(peerId)
             if (session == null) {
                 MeshLogger.e(TAG, "Rejecting packet: Unknown or missing session for $peerId")
                 return null
             }
-            if (session.sessionId != sid) {
-                MeshLogger.d(TAG, "Updating session for $peerId with sid $sid")
-                session = session.copy(sessionId = sid)
-                activeSessions[peerId] = session
+            if (sid.isBlank() || session.sessionId != sid) {
+                MeshLogger.e(TAG, "Rejecting packet: Session ID mismatch for $peerId (expected ${session.sessionId}, got $sid)")
+                return null
             }
 
             val now = System.currentTimeMillis()
 
             if (kv != session.keyVersion) {
-                if (kv == session.previousKeyVersion && now <= session.rekeyTimestamp + 60_000) {
-                    // Allowed during transition window
-                } else if (kv == session.keyVersion + 1 && cryptoManager.hasPeerKey(peerId)) {
-                    // Implicit forward rotation
-                    MeshLogger.d(TAG, "Implicit forward rotation to key version $kv for $peerId")
-                    session.previousKeyVersion = session.keyVersion
-                    session.keyVersion = kv
-                    session.rekeyTimestamp = now
-                    session.rotationReason = "implicit_forward_rotation"
-                } else {
+                val isPreviousKeyWithinGrace = kv == session.previousKeyVersion &&
+                    session.previousKeyVersion != 0 &&
+                    now <= session.rekeyTimestamp + 60_000
+                val isEligibleForwardRotation = kv == session.keyVersion + 1 && cryptoManager.hasPeerKey(peerId)
+                if (!isPreviousKeyWithinGrace && !isEligibleForwardRotation) {
                     MeshLogger.e(TAG, "Rejecting packet: Invalid keyVersion $kv. Current: ${session.keyVersion}, Prev: ${session.previousKeyVersion}")
                     return null
                 }
@@ -206,16 +206,45 @@ private val TAG = "SessionManager"
                 return null
             }
 
-            // Valid! Mark received and update activity.
-            session.markReceived(seq)
-            session.updateActivity(now)
-            session.totalDecryptedPackets.incrementAndGet()
-
             return Triple(aadBytes, ciphertext, kv)
 
         } catch (e: Exception) {
             MeshLogger.e(TAG, "Error parsing AAD JSON: ${e.message}")
             return null
+        }
+    }
+
+    /**
+     * Commits session state progression (implicit forward key rotation, replay window update,
+     * activity timestamp, and decrypted packet counter) ONLY after AES-256-GCM decryption
+     * and authentication tag verification succeed.
+     */
+    fun commitAuthenticatedPacket(peerId: String, aadBytes: ByteArray) {
+        val session = getSession(peerId) ?: return
+        try {
+            val json = JSONObject(String(aadBytes, Charsets.UTF_8))
+            val sid = json.getString("sid")
+            val seq = json.getLong("seq")
+            val kv = json.optInt("kv", 1)
+
+            if (session.sessionId != sid || session.isReplay(seq)) {
+                return
+            }
+
+            val now = System.currentTimeMillis()
+            if (kv == session.keyVersion + 1 && cryptoManager.hasPeerKey(peerId)) {
+                MeshLogger.d(TAG, "Implicit forward rotation to key version $kv for $peerId")
+                session.previousKeyVersion = session.keyVersion
+                session.keyVersion = kv
+                session.rekeyTimestamp = now
+                session.rotationReason = "implicit_forward_rotation"
+            }
+
+            session.markReceived(seq)
+            session.updateActivity(now)
+            session.totalDecryptedPackets.incrementAndGet()
+        } catch (e: Exception) {
+            MeshLogger.e(TAG, "Error committing authenticated session state: ${e.message}")
         }
     }
 }

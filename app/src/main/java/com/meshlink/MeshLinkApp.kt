@@ -56,26 +56,32 @@ class MeshLinkApp : Application(), Configuration.Provider {
         
         // Initialize MeshLogger crash reporter integration (Firebase Crashlytics)
         MeshLogger.init(meshCrashReporter)
-        meshCrashReporter.setUserId("durgaprasadmadikeri@gmail.com")
+        meshCrashReporter.initializeAnonymousIdentity()
         meshCrashReporter.logBreadcrumb("MeshLinkApp initialized")
         
         // Initialize Mesh Engine Lifecycle Manager
         meshLifecycleManager.initialize()
 
-        // Start MeshBackgroundService
-        val serviceIntent = Intent(this, MeshBackgroundService::class.java).apply {
-            action = MeshBackgroundService.ACTION_START
-        }
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
+        // Start authoritative MeshBackgroundService when Bluetooth radio and permissions are ready
+        val hasBtPerm = com.meshlink.ui.components.isBluetoothPermissionGranted(this)
+        val isBtOn = com.meshlink.ui.components.isBluetoothEnabled(this)
+        if (hasBtPerm && isBtOn) {
+            val serviceIntent = Intent(this, MeshBackgroundService::class.java).apply {
+                action = MeshBackgroundService.ACTION_START
             }
-        } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
-            MeshLogger.e("MeshLinkApp", "ForegroundServiceStartNotAllowedException on app start: ${e.message}")
-        } catch (e: Exception) {
-            MeshLogger.e("MeshLinkApp", "Failed to start MeshBackgroundService on app start: ${e.message}")
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                MeshLogger.e("MeshLinkApp", "ForegroundServiceStartNotAllowedException on app start: ${e.message}")
+            } catch (e: Exception) {
+                MeshLogger.e("MeshLinkApp", "Failed to start MeshBackgroundService on app start: ${e.message}")
+            }
+        } else {
+            MeshLogger.d("MeshLinkApp", "Deferring MeshBackgroundService start until permissions and radios are ready")
         }
 
         applicationScope.launch {

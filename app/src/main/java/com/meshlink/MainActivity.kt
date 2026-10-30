@@ -18,7 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 
 import com.meshlink.domain.repository.MeshRepository
-import com.meshlink.service.MeshRelayService
+import com.meshlink.service.MeshBackgroundService
 import com.meshlink.ui.components.hasRequiredPermissions
 import com.meshlink.ui.navigation.AppNavigation
 import com.meshlink.ui.navigation.Screen
@@ -114,7 +114,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndStartMesh() {
-        if (com.meshlink.ui.components.areRadiosAndPermissionsReady(this)) {
+        val hasBtPerm = com.meshlink.ui.components.isBluetoothPermissionGranted(this)
+        val isBtOn = com.meshlink.ui.components.isBluetoothEnabled(this)
+        if (hasBtPerm && isBtOn) {
             startRelayService()
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
@@ -124,13 +126,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         } else {
-            com.meshlink.common.logger.MeshLogger.d("MainActivity", "Bluetooth and/or Wi-Fi or permissions not ready yet; deferring mesh startup")
+            com.meshlink.common.logger.MeshLogger.d("MainActivity", "Bluetooth radio or permissions not ready yet; deferring mesh startup")
         }
     }
 
     private fun startRelayService() {
-        val intent = Intent(this, MeshRelayService::class.java).apply {
-            action = MeshRelayService.ACTION_START
+        if (MeshBackgroundService.serviceState.value == MeshBackgroundService.ServiceState.RUNNING) {
+            return
+        }
+        val intent = Intent(this, MeshBackgroundService::class.java).apply {
+            action = MeshBackgroundService.ACTION_START
         }
 
         try {
@@ -139,9 +144,8 @@ class MainActivity : ComponentActivity() {
             } else {
                 startService(intent)
             }
-
         } catch (e: Exception) {
-            com.meshlink.common.logger.MeshLogger.e("MainActivity", "Error starting relay service: ${e.message}")
+            com.meshlink.common.logger.MeshLogger.e("MainActivity", "Error starting background mesh service: ${e.message}")
         }
     }
 }

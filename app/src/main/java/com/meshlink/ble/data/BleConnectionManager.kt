@@ -48,21 +48,31 @@ class BleConnectionManager @Inject constructor(
         bleDataSource.stopServer()
     }
 
+    fun isPeerConnectedOrConnecting(address: String): Boolean {
+        if (bleDataSource.activeClients.any { it.equals(address, ignoreCase = true) } ||
+            bleDataSource.connectedServers.any { it.equals(address, ignoreCase = true) }
+        ) {
+            return true
+        }
+        val state = getPeerState(address)
+        return state == PeerConnectionState.CONNECTING ||
+            state == PeerConnectionState.CONNECTED ||
+            state == PeerConnectionState.READY ||
+            state == PeerConnectionState.KEY_EXCHANGE_STARTED ||
+            state == PeerConnectionState.KEY_EXCHANGE_COMPLETE ||
+            state == PeerConnectionState.IDENTITY_VERIFIED ||
+            state == PeerConnectionState.KEY_VERIFIED ||
+            state == PeerConnectionState.SESSION_READY ||
+            state == PeerConnectionState.SESSION_ESTABLISHED
+    }
+
     fun connectToDevice(address: String, isManual: Boolean = false) {
         if (isManual) {
             discoveryEngine.connectionPolicy.resetPeer(address)
         }
         
         val state = getPeerState(address)
-        val isAlreadyConnected = state == PeerConnectionState.CONNECTING ||
-                                 state == PeerConnectionState.CONNECTED ||
-                                 state == PeerConnectionState.READY ||
-                                 state == PeerConnectionState.KEY_EXCHANGE_STARTED ||
-                                 state == PeerConnectionState.KEY_EXCHANGE_COMPLETE ||
-                                 state == PeerConnectionState.IDENTITY_VERIFIED ||
-                                 state == PeerConnectionState.KEY_VERIFIED ||
-                                 state == PeerConnectionState.SESSION_READY ||
-                                 state == PeerConnectionState.SESSION_ESTABLISHED
+        val isAlreadyConnected = isPeerConnectedOrConnecting(address)
                                  
         if (discoveryEngine.connectionPolicy.canConnect(address, isAlreadyConnected)) {
             // Update state immediately to prevent duplicate requests if called repeatedly

@@ -96,4 +96,110 @@ class CacheManager @Inject constructor(
             Unit
         }
     }
+
+    suspend fun clearMediaCache(): Long = withContext(Dispatchers.IO) {
+        var freedBytes = 0L
+        val targetDirs = listOf(
+            getMediaCacheDir(),
+            getThumbCacheDir(),
+            getTransferChunksDir(),
+            File(context.cacheDir, "transfers")
+        )
+        for (dir in targetDirs) {
+            if (dir.exists()) {
+                dir.listFiles()?.forEach { child ->
+                    val size = calculateSize(child)
+                    if (child.deleteRecursively()) {
+                        freedBytes += size
+                    }
+                }
+            }
+        }
+        context.cacheDir.listFiles()?.forEach { file ->
+            if (file.isFile && file.name.startsWith("wifi_rx_") && file.name.endsWith(".tmp")) {
+                val len = file.length()
+                if (file.delete()) {
+                    freedBytes += len
+                }
+            }
+        }
+        MeshLogger.i(TAG, "Cleared media cache, freed $freedBytes bytes")
+        freedBytes
+    }
+
+    suspend fun clearOrphanFiles(referencedPaths: Set<String>): Long = withContext(Dispatchers.IO) {
+        val normalizedRefs = referencedPaths.mapNotNull { path ->
+            try { File(path).canonicalPath } catch (_: Exception) { File(path).absolutePath }
+        }.toSet()
+
+        var freedBytes = 0L
+        val managedDirs = listOf(
+            File(context.filesDir, "media"),
+            File(context.filesDir, "voice"),
+            File(context.filesDir, "sos"),
+            getMediaCacheDir()
+        )
+        for (dir in managedDirs) {
+            if (!dir.exists()) continue
+            dir.walkTopDown().filter { it.isFile }.forEach { file ->
+                val canonical = try { file.canonicalPath } catch (_: Exception) { file.absolutePath }
+                if (canonical !in normalizedRefs && file.absolutePath !in referencedPaths) {
+                    val len = file.length()
+                    if (file.delete()) {
+                        freedBytes += len
+                    }
+                }
+            }
+        }
+        MeshLogger.i(TAG, "Cleared orphan media files, freed $freedBytes bytes")
+        freedBytes
+    }
+
+    suspend fun getStorageBreakdown(): StorageBreakdown = withContext(Dispatchers.IO) {
+        val dbName = com.meshlink.security.data.SecurityConstants.DB_NAME
+        val dbMain = context.getDatabasePath(dbName)
+        val dbWal = File(dbMain.path + "-wal")
+        val dbShm = File(dbMain.path + "-shm")
+        val databaseBytes = (if (dbMain.exists()) dbMain.length() else 0L) +
+            (if (dbWal.exists()) dbWal.length() else 0L) +
+            (if (dbShm.exists()) dbShm.length() else 0L)
+
+        val mediaCacheBytes = calculateSize(getMediaCacheDir()) +
+            calculateSize(getThumbCacheDir()) +
+            calculateSize(getTransferChunksDir()) +
+            calculateSize(File(context.cacheDir, "transfers")) +
+            calculateSize(File(context.filesDir, "media"))
+
+        val voiceNotesBytes = calculateSize(File(context.filesDir, "voice")) +
+            (context.filesDir.listFiles()?.filter {
+                it.isFile && (it.name.endsWith(".m4a") || it.name.endsWith(".aac") || it.name.endsWith(".wav") || it.name.endsWith(".opus"))
+            }?.sumOf { it.length() } ?: 0L)
+
+        val freeSpaceBytes = context.filesDir.usableSpace.coerceAtLeast(0L)
+        val totalSpaceBytes = context.filesDir.totalSpace.coerceAtLeast(
+            databaseBytes + mediaCacheBytes + voiceNotesBytes + freeSpaceBytes
+        ).coerceAtLeast(1L)
+
+        StorageBreakdown(
+            databaseBytes = databaseBytes,
+            mediaCacheBytes = mediaCacheBytes,
+            voiceNotesBytes = voiceNotesBytes,
+            freeSpaceBytes = freeSpaceBytes,
+            totalSpaceBytes = totalSpaceBytes
+        )
+    }
+
+    private fun calculateSize(file: File): Long {
+        if (!file.exists()) return 0L
+        if (file.isFile) return file.length()
+        return file.listFiles()?.sumOf { calculateSize(it) } ?: 0L
+    }
 }
+
+data class StorageBreakdown(
+    val databaseBytes: Long = 0L,
+    val mediaCacheBytes: Long = 0L,
+    val voiceNotesBytes: Long = 0L,
+    val freeSpaceBytes: Long = 0L,
+    val totalSpaceBytes: Long = 1L
+)

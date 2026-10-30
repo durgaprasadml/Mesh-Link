@@ -73,7 +73,8 @@ class IntelligentTransportManager @Inject constructor(
         payloadSizeBytes: Long = 1024L,
         mimeType: String? = null
     ): RouteType {
-        // Audio payloads (MEDIA_CHUNK, VOICE_FRAME) MUST ALWAYS use Wi-Fi Direct
+        // SOS packets and Audio payloads MUST ALWAYS use Wi-Fi Direct
+        if (packetType == PacketType.SOS) return RouteType.WIFI_DIRECT
         val isAudioPayload = (packetType == PacketType.MEDIA_CHUNK || packetType == PacketType.VOICE_FRAME) &&
             mimeType?.startsWith("audio/") == true
         if (isAudioPayload) return RouteType.WIFI_DIRECT
@@ -105,13 +106,23 @@ class IntelligentTransportManager @Inject constructor(
         val category = classifier.classify(packet)
         val preferredTransport = selectTransportForPacket(packet)
         val payloadSize = packet.payload.toByteArray(Charsets.UTF_8).size.toLong()
+        val isSosPayload = packet.type == PacketType.SOS
         val isAudioPayload = (packet.type == PacketType.MEDIA_CHUNK || packet.type == PacketType.VOICE_FRAME) &&
             packet.mimeType?.startsWith("audio/") == true
 
-        // ── AUDIO HARD SAFETY GUARD (packet-level) ────────────────────────────
-        // Audio PAYLOADS (chunks/frames) MUST NEVER touch BLE.
-        // Control signaling (MEDIA_META, MEDIA_ACK) is allowed on BLE control plane.
-        // ──────────────────────────────────────────────────────────────────────
+        // ── HARD SAFETY GUARD (packet-level): SOS & Audio must never use BLE ──
+        if (isSosPayload && preferredTransport == RouteType.BLE) {
+            MeshLogger.e(
+                TAG,
+                "[SOS_TRANSPORT_VIOLATION] SOS packet ${packet.packetId} was assigned BLE transport. " +
+                "Refusing to send. SOS payload MUST use Wi-Fi Direct only."
+            )
+            return MeshResult.Error(
+                MeshError.TransportError(
+                    "[SOS_TRANSPORT_VIOLATION] SOS payload must never be transferred over BLE."
+                )
+            )
+        }
         if (isAudioPayload && preferredTransport == RouteType.BLE) {
             MeshLogger.e(
                 TAG,
@@ -157,6 +168,21 @@ class IntelligentTransportManager @Inject constructor(
                         healthMonitor.recordBleTxResult(true)
                     }
                     fallbackBleResult
+                } else if (isSosPayload) {
+                    // SOS: Wi-Fi Direct failed — DO NOT fall back to BLE.
+                    MeshLogger.e(
+                        TAG,
+                        "[SOS_TRANSFER_FAILURE] Wi-Fi Direct send failed for SOS payload packet ${packet.packetId}. " +
+                        "BLE fallback is PROHIBITED for SOS payloads."
+                    )
+                    diagnostics.logTransportUnavailable(
+                        packetId = packet.packetId,
+                        packetType = packet.type,
+                        requestedRoute = RouteType.WIFI_DIRECT,
+                        reason = "Wi-Fi Direct failed for SOS payload. BLE fallback prohibited."
+                    )
+                    healthMonitor.recordWifiTxResult(false)
+                    wifiResult
                 } else if (isAudioPayload) {
                     // Audio: Wi-Fi Direct failed — DO NOT fall back to BLE.
                     MeshLogger.e(
@@ -199,6 +225,21 @@ class IntelligentTransportManager @Inject constructor(
                     healthMonitor.recordBleTxResult(true)
                 }
                 fallbackBleResult
+            } else if (isSosPayload) {
+                // SOS: Wi-Fi Direct unavailable — DO NOT fall back to BLE.
+                MeshLogger.e(
+                    TAG,
+                    "[SOS_TRANSFER_FAILURE] Wi-Fi Direct unavailable for SOS payload packet ${packet.packetId}. " +
+                    "BLE fallback is PROHIBITED for SOS payloads. Must wait for Wi-Fi Direct connection."
+                )
+                diagnostics.logTransportUnavailable(
+                    packetId = packet.packetId,
+                    packetType = packet.type,
+                    requestedRoute = RouteType.WIFI_DIRECT,
+                    reason = "Wi-Fi Direct unavailable for SOS payload. BLE fallback prohibited."
+                )
+                healthMonitor.recordWifiTxResult(false)
+                MeshResult.Error(MeshError.TransportError("Wi-Fi Direct unavailable for SOS payload. BLE fallback prohibited."))
             } else if (isAudioPayload) {
                 // Audio: Wi-Fi Direct unavailable — DO NOT fall back to BLE.
                 MeshLogger.e(

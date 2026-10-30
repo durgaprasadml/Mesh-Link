@@ -144,7 +144,8 @@ class MultiPeerSosMediaTest {
             gattManager.broadcastPacket(
                 jsonPacket = any(),
                 excludeAddress = null,
-                includeAddress = peerBMac
+                includeAddress = peerBMac,
+                priority = any()
             )
         }
     }

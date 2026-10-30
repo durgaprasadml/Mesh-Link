@@ -99,10 +99,14 @@ class WifiSocketTransport @Inject constructor(
         private const val HEARTBEAT_INTERVAL_MS = 15_000L
         private const val HEARTBEAT_WATCHDOG_TIMEOUT_MS = 30_000L
         private const val MAX_BACKOFF_MS = 30_000L
-        private const val MAX_FRAME_SIZE_BYTES = 50 * 1024 * 1024 // 50MB safety limit
-        private const val MAX_MEDIA_STREAM_BYTES = 256L * 1024 * 1024 // reject absurd advertised sizes
+        const val MAX_FRAME_SIZE_BYTES = 4 * 1024 * 1024 // 4MB strict limit for single packet frames
+        const val MAX_MEDIA_STREAM_BYTES = 256L * 1024 * 1024 // reject absurd advertised sizes
         // AES-GCM adds a 12 byte IV and a 16 byte tag to every plaintext chunk.
-        private const val MAX_ENCRYPTED_CHUNK_BYTES = 16 * 1024 + 256
+        const val MAX_ENCRYPTED_CHUNK_BYTES = 16 * 1024 + 256
+
+        fun isValidFrameLength(length: Int): Boolean = length in 1..MAX_FRAME_SIZE_BYTES
+
+        fun isValidEncryptedChunkLength(length: Int): Boolean = length in 1..MAX_ENCRYPTED_CHUNK_BYTES
 
         // High-Speed Binary Streaming Magic Protocol Constants
         const val MAGIC_MEDIA_STREAM_START = -0x5354524D // "STRM" (-1398035021)
@@ -451,9 +455,9 @@ class WifiSocketTransport @Inject constructor(
                                 val totalChunks = currentIn.readInt()
                                 val offset = currentIn.readLong()
                                 val encryptedLen = currentIn.readInt()
-                                if (encryptedLen <= 0 || encryptedLen > MAX_ENCRYPTED_CHUNK_BYTES) {
-                                    // An attacker-controlled length must never size an allocation (OOM / negative size).
-                                    MeshLogger.e(TAG, "Invalid encrypted chunk length $encryptedLen from $clientHost. Closing connection.")
+                                if (chunkIndex < 0 || totalChunks <= 0 || chunkIndex >= totalChunks || offset < 0L || !isValidEncryptedChunkLength(encryptedLen)) {
+                                    // An attacker-controlled length or metadata must never size an allocation (OOM / negative size).
+                                    MeshLogger.e(TAG, "Invalid chunk framing (idx=$chunkIndex/$totalChunks, offset=$offset, len=$encryptedLen) from $clientHost. Closing connection.")
                                     break
                                 }
                                 val encryptedBytes = ByteArray(encryptedLen)
@@ -464,6 +468,12 @@ class WifiSocketTransport @Inject constructor(
                                 if (session != null) {
                                     try {
                                         val plainBytes = cryptoManager.decryptBytes(encryptedBytes, session.senderId)
+                                        if (session.tempFile.length() + plainBytes.size.toLong() > session.totalBytes) {
+                                            MeshLogger.e(TAG, "Chunk write would exceed declared totalBytes (${session.totalBytes}) for $transferId. Aborting session.")
+                                            activeAudioReceivers.remove(transferId, session)
+                                            session.tempFile.delete()
+                                            break
+                                        }
                                         FileOutputStream(session.tempFile, true).use { fos ->
                                             fos.write(plainBytes)
                                             fos.flush()
@@ -558,29 +568,24 @@ class WifiSocketTransport @Inject constructor(
                                 break
                             }
                             else -> {
-                                if (length > 0) {
-                                    if (length > MAX_FRAME_SIZE_BYTES) {
-                                        MeshLogger.e(TAG, "Frame size $length exceeds maximum allowed limit ($MAX_FRAME_SIZE_BYTES). Closing connection to $clientHost")
-                                        break
-                                    }
-                                    val payloadBytes = ByteArray(length)
-                                    currentIn.readFully(payloadBytes)
-
-                                    clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
-                                    val rxBytes = bytesReceivedCounter.addAndGet(length.toLong() + 4L)
-                                    val rxPkts = packetsReceivedCounter.incrementAndGet()
-                                    updateMetrics { it.copy(bytesReceived = rxBytes, packetsReceived = rxPkts) }
-
-                                    val jsonString = String(payloadBytes, Charsets.UTF_8)
-                                    val packet = MeshPacketParser.fromJson(jsonString)
-                                    if (packet != null) {
-                                        peerHostsByMeshId[packet.senderId] = clientHost
-                                        MeshLogger.d(TAG, "Packet Received over Wi-Fi Direct from $clientHost: ${packet.packetId} (${length}B)")
-                                        onPacketReceived?.invoke(packet)
-                                    }
-                                } else {
-                                    MeshLogger.e(TAG, "Invalid negative packet length $length from $clientHost")
+                                if (!isValidFrameLength(length)) {
+                                    MeshLogger.e(TAG, "Invalid or oversized frame length $length (max=$MAX_FRAME_SIZE_BYTES) from $clientHost. Closing connection.")
                                     break
+                                }
+                                val payloadBytes = ByteArray(length)
+                                currentIn.readFully(payloadBytes)
+
+                                clientLastHeartbeatMs[clientHost] = System.currentTimeMillis()
+                                val rxBytes = bytesReceivedCounter.addAndGet(length.toLong() + 4L)
+                                val rxPkts = packetsReceivedCounter.incrementAndGet()
+                                updateMetrics { it.copy(bytesReceived = rxBytes, packetsReceived = rxPkts) }
+
+                                val jsonString = String(payloadBytes, Charsets.UTF_8)
+                                val packet = MeshPacketParser.fromJson(jsonString)
+                                if (packet != null) {
+                                    peerHostsByMeshId[packet.senderId] = clientHost
+                                    MeshLogger.d(TAG, "Packet Received over Wi-Fi Direct from $clientHost: ${packet.packetId} (${length}B)")
+                                    onPacketReceived?.invoke(packet)
                                 }
                             }
                         }
@@ -924,6 +929,10 @@ class WifiSocketTransport @Inject constructor(
 
         val json = MeshPacketParser.toJson(packetToSend)
         val payloadBytes = json.toByteArray(Charsets.UTF_8)
+        if (!isValidFrameLength(payloadBytes.size)) {
+            MeshLogger.e(TAG, "Rejecting outgoing packet ${packetToSend.packetId}: payload size ${payloadBytes.size} exceeds MAX_FRAME_SIZE_BYTES ($MAX_FRAME_SIZE_BYTES)")
+            return@withContext
+        }
 
         if (clientStreamsOut.isEmpty()) {
             MeshLogger.w(TAG, "Cannot send packet ${packetToSend.packetId}: No active socket streams available")

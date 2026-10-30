@@ -74,12 +74,43 @@ class BleAdvertiserManager @Inject constructor(
         com.meshlink.util.MeshIdNormalizer.canonicalize(id).take(4).ifEmpty { "?" } + "…"
 
     fun startAdvertising(name: String, meshId: String, capabilities: Byte = 0) {
-        // The request is registered synchronously so a later stopAdvertising()/startAdvertising()
-        // deterministically supersedes this one, whatever order the coroutines get scheduled in.
-        val token = tracker.request(AdvertisingRequest(name, meshId, capabilities))
+        startAdvertisingRequest(AdvertisingRequest(name, meshId, capabilities, null))
+    }
+
+    fun startSosAdvertising(
+        name: String,
+        meshId: String,
+        sosEventId: String,
+        capabilities: Byte = 0
+    ) {
+        val announcement = SosAnnouncement.create(
+            senderMeshId = meshId,
+            sosEventId = sosEventId,
+            capabilities = capabilities
+        )
         MeshLogger.i(
             TAG,
-            "[BLE_ADVERTISE_START] requested node=${shortId(meshId)} state=${tracker.state} restarts=${restartCounter.get()}"
+            "[BLE_ADVERTISE_SOS_START] requested node=${shortId(meshId)} sosId=${announcement.sosIdHex}"
+        )
+        startAdvertisingRequest(AdvertisingRequest(name, meshId, capabilities, announcement))
+    }
+
+    fun stopSosAdvertising() {
+        val current = tracker.desired ?: return
+        if (current.sosAnnouncement != null) {
+            MeshLogger.i(TAG, "[BLE_ADVERTISE_SOS_STOP] reverting to normal advertising node=${shortId(current.meshId)}")
+            startAdvertising(current.name, current.meshId, current.capabilities)
+        }
+    }
+
+    private fun startAdvertisingRequest(request: AdvertisingRequest) {
+        // The request is registered synchronously so a later stopAdvertising()/startAdvertising()
+        // deterministically supersedes this one, whatever order the coroutines get scheduled in.
+        val token = tracker.request(request)
+        val sosTag = if (request.sosAnnouncement != null) " [SOS ACTIVE: ${request.sosAnnouncement.sosIdHex}]" else ""
+        MeshLogger.i(
+            TAG,
+            "[BLE_ADVERTISE_START] requested node=${shortId(request.meshId)}$sosTag state=${tracker.state} restarts=${restartCounter.get()}"
         )
         applicationScope.launch {
             lifecycleMutex.withLock { startAdvertisingLocked(token) }
@@ -120,14 +151,19 @@ class BleAdvertiserManager @Inject constructor(
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val isPowerSave = powerManager.isPowerSaveMode
         val userTxPower = settingsRepository.bleTxPower.first()
+        val isSos = request.sosAnnouncement != null
 
-        val advMode = if (isPowerSave) {
+        val advMode = if (isSos) {
+            AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
+        } else if (isPowerSave) {
             AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
         } else {
             AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
         }
 
-        val txPower = if (isPowerSave) {
+        val txPower = if (isSos) {
+            AdvertiseSettings.ADVERTISE_TX_POWER_HIGH
+        } else if (isPowerSave) {
             AdvertiseSettings.ADVERTISE_TX_POWER_LOW
         } else {
             when (userTxPower) {
@@ -145,16 +181,21 @@ class BleAdvertiserManager @Inject constructor(
             .setConnectable(true)
             .build()
 
-        // 8-byte canonical Mesh ID directly embedded in manufacturer data
         val canonicalMeshId = com.meshlink.util.MeshIdNormalizer.canonicalize(request.meshId)
-        val canonicalBytes = canonicalMeshId.toByteArray(Charsets.UTF_8)
-        val meshIdBytes = ByteArray(8)
-        System.arraycopy(canonicalBytes, 0, meshIdBytes, 0, minOf(canonicalBytes.size, 8))
-        val combinedData = ByteArray(9)
-        System.arraycopy(meshIdBytes, 0, combinedData, 0, 8)
-        combinedData[8] = request.capabilities
+        val combinedData = if (request.sosAnnouncement != null) {
+            request.sosAnnouncement.toByteArray()
+        } else {
+            // 8-byte canonical Mesh ID directly embedded in manufacturer data
+            val canonicalBytes = canonicalMeshId.toByteArray(Charsets.UTF_8)
+            val meshIdBytes = ByteArray(8)
+            System.arraycopy(canonicalBytes, 0, meshIdBytes, 0, minOf(canonicalBytes.size, 8))
+            val normalData = ByteArray(9)
+            System.arraycopy(meshIdBytes, 0, normalData, 0, 8)
+            normalData[8] = request.capabilities
+            normalData
+        }
 
-        MeshLogger.i(TAG, "[NearbyDiscovery] BLE advertise START: meshId=${request.meshId}, canonical=$canonicalMeshId, txPower=$txPower, mode=$advMode")
+        MeshLogger.i(TAG, "[NearbyDiscovery] BLE advertise START: meshId=${request.meshId}, canonical=$canonicalMeshId, isSos=$isSos, txPower=$txPower, mode=$advMode")
 
         // Primary advertising packet: contains manufacturer data with Mesh ID payload (13 bytes total)
         val data = AdvertiseData.Builder()
@@ -253,7 +294,7 @@ class BleAdvertiserManager @Inject constructor(
                         TAG,
                         "[BLE_ADVERTISE_RESTART] reason=start_failure_retry restarts=$n cause=${cause.message}"
                     )
-                    startAdvertising(request.name, request.meshId, request.capabilities)
+                    startAdvertisingRequest(request)
                 } else {
                     MeshLogger.d(TAG, "[BLE_ADVERTISE_RESTART] retry skipped: advertising no longer wanted or already active")
                 }
@@ -325,7 +366,7 @@ class BleAdvertiserManager @Inject constructor(
             "[DISCOVERY_RECOVERY] advertiser reason=$reason state=${tracker.state} restarts=$n"
         )
         MeshLogger.w(TAG, "[BLE_ADVERTISE_RESTART] reason=$reason restarts=$n")
-        startAdvertising(request.name, request.meshId, request.capabilities)
+        startAdvertisingRequest(request)
         return true
     }
 
@@ -358,7 +399,7 @@ class BleAdvertiserManager @Inject constructor(
                     "[BLE_ADVERTISE_RESTART] reason=gatt_server_link_${if (connected) "connected" else "disconnected"} " +
                         "state=${tracker.state} restarts=$n"
                 )
-                startAdvertising(request.name, request.meshId, request.capabilities)
+                startAdvertisingRequest(request)
             }
         }
     }

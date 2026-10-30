@@ -52,6 +52,9 @@ class MeshRelayService : Service() {
 
     @Inject
     lateinit var meshRepository: MeshRepository
+
+    @Inject
+    lateinit var permissionChecker: com.meshlink.core.permissions.BluetoothPermissionChecker
     
 
     private var serviceJob: Job? = null
@@ -65,14 +68,32 @@ class MeshRelayService : Service() {
                 action == android.net.wifi.WifiManager.WIFI_STATE_CHANGED_ACTION ||
                 action == android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION
             ) {
-                if (com.meshlink.ui.components.areRadiosAndPermissionsReady(this@MeshRelayService)) {
-                    MeshLogger.d(TAG, "Both Bluetooth and Wi-Fi are ON, restarting Mesh Relay")
-                    serviceScope.launch {
-                        meshRepository.autoStartMesh()
+                try {
+                    val hasBtPerm = if (::permissionChecker.isInitialized) {
+                        permissionChecker.hasRequiredPermissions(this@MeshRelayService)
+                    } else {
+                        com.meshlink.ui.components.isBluetoothPermissionGranted(this@MeshRelayService)
                     }
-                } else {
-                    MeshLogger.d(TAG, "Bluetooth or Wi-Fi turned OFF, stopping Mesh operations temporarily")
-                    meshRepository.stopMesh()
+                    val isBtOn = com.meshlink.ui.components.isBluetoothEnabled(this@MeshRelayService)
+                    if (hasBtPerm && isBtOn) {
+                        MeshLogger.d(TAG, "Bluetooth is ON and permissions granted, restarting Mesh Relay")
+                        serviceScope.launch {
+                            try {
+                                meshRepository.autoStartMesh()
+                            } catch (e: SecurityException) {
+                                MeshLogger.w(TAG, "SecurityException restarting mesh in radioStateReceiver: ${e.message}")
+                            } catch (e: Exception) {
+                                MeshLogger.e(TAG, "Error restarting mesh in radioStateReceiver: ${e.message}")
+                            }
+                        }
+                    } else {
+                        MeshLogger.d(TAG, "Bluetooth turned OFF or permissions missing, stopping Mesh operations temporarily")
+                        meshRepository.stopMesh()
+                    }
+                } catch (e: SecurityException) {
+                    MeshLogger.w(TAG, "SecurityException in radioStateReceiver: ${e.message}")
+                } catch (e: Exception) {
+                    MeshLogger.e(TAG, "Error in radioStateReceiver: ${e.message}")
                 }
             }
         }
@@ -112,6 +133,13 @@ class MeshRelayService : Service() {
                 return START_NOT_STICKY
             }
             else -> {
+                if (MeshBackgroundService.serviceState.value == MeshBackgroundService.ServiceState.RUNNING) {
+                    MeshLogger.d(TAG, "MeshBackgroundService is already running as authoritative foreground service; skipping duplicate MeshRelayService startup")
+                    restartOnDestroy = false
+                    _serviceState.value = ServiceState.STOPPED
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 _serviceState.value = ServiceState.STARTING
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

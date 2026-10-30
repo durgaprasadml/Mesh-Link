@@ -46,6 +46,7 @@ class SosEmergencyTransferTest {
         context = ApplicationProvider.getApplicationContext<Context>()
         mockkObject(com.meshlink.util.NotificationHelper)
         every { com.meshlink.util.NotificationHelper.showMessageNotification(any(), any(), any(), any()) } just Runs
+        every { com.meshlink.util.NotificationHelper.showSosNotification(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns true
 
         database = com.meshlink.util.RoomTestDatabase.createInMemoryDb(context)
         chatDao = database.chatDao
@@ -231,5 +232,81 @@ class SosEmergencyTransferTest {
         assertEquals(frontPath, virtualImages[0].mediaPath)
         assertEquals("${sosEventId}#rear", virtualImages[1].messageId)
         assertEquals(rearPath, virtualImages[1].mediaPath)
+    }
+
+    // TEST H: ReceivedMediaNaming separator handling in parseSosMediaInfo
+    @Test
+    fun `testH_parseSosMediaInfoHandlesReceivedMediaNamingSeparator`() {
+        val sosEventId = "uuid-sos-999"
+        val transferId = "stream_job_42"
+        val filePath = "/data/user/0/com.meshlink/files/mesh_media/stream_job_42__sos_${sosEventId}_front.jpg"
+
+        val info = mediaMessageHandler.parseSosMediaInfo(transferId, filePath = filePath)
+        assertTrue(info.isSos)
+        assertTrue(info.isFront)
+        assertEquals(sosEventId, info.sosEventId)
+    }
+
+    // TEST I: updateSosMediaAttachment finds existing message with or without sos_ prefix
+    @Test
+    fun `testI_updateSosMediaAttachmentMatchesExistingWithOrWithoutSosPrefix`() = runTest {
+        val sosEventId = "alert_777"
+        val initialMsg = MessageEntity(
+            messageId = "sos_$sosEventId",
+            chatId = "PEER_Z",
+            senderId = "PEER_Z",
+            text = "🚨 SOS EMERGENCY",
+            timestamp = 1000L,
+            isFromMe = false,
+            status = DeliveryStatus.DELIVERED,
+            messageType = MessageType.SOS
+        )
+        chatDao.insertMessageAndUpdateChat(initialMsg, "🚨 Peer Z")
+
+        // Attachment arrives referencing raw "alert_777" without "sos_" prefix
+        val updated = chatDao.updateSosMediaAttachment(
+            sosEventId = sosEventId,
+            frontPath = "/path/to/front.jpg",
+            chatId = "PEER_Z"
+        )
+
+        assertNotNull(updated)
+        assertEquals("sos_$sosEventId", updated.messageId)
+        val json = JSONObject(updated.mediaPath ?: "{}")
+        assertEquals("/path/to/front.jpg", json.getString("front"))
+    }
+
+    // TEST J: 1:1 chat media reflection and query retrieval
+    @Test
+    fun `testJ_oneToOneChatMessageContainsSosMediaAndRendersInChatQuery`() = runTest {
+        val sosEventId = "sos_evt_333"
+        val peerId = "PEER_BOB"
+        val peerMsgId = "${sosEventId}_${peerId}"
+        val mediaPathJson = JSONObject().apply {
+            put("front", "/path/to/bob_front.jpg")
+            put("rear", "/path/to/bob_rear.jpg")
+        }.toString()
+
+        val peerMsg = MessageEntity(
+            messageId = peerMsgId,
+            chatId = peerId,
+            senderId = "LOCAL_PEER",
+            text = "🚨 SOS EMERGENCY (Dispatched)",
+            timestamp = System.currentTimeMillis(),
+            isFromMe = true,
+            status = DeliveryStatus.SENT,
+            messageType = MessageType.SOS,
+            mediaPath = mediaPathJson
+        )
+
+        chatDao.insertMessageAndUpdateChat(peerMsg, "Bob")
+
+        val stored = chatDao.getMessageByUuid(peerMsgId)
+        assertNotNull(stored)
+        assertEquals(peerId, stored?.chatId)
+        assertEquals(MessageType.SOS, stored?.messageType)
+        val json = JSONObject(stored?.mediaPath ?: "{}")
+        assertEquals("/path/to/bob_front.jpg", json.getString("front"))
+        assertEquals("/path/to/bob_rear.jpg", json.getString("rear"))
     }
 }

@@ -97,7 +97,14 @@ data class SettingsUiState(
     // Developer / Diagnostics
     val developerMode: Boolean = true,
     val transportLogsEnabled: Boolean = true,
-    val packetCount: Long = 142850L
+    val packetCount: Long = 142850L,
+
+    // Storage Usage Breakdown (actual bytes on disk)
+    val databaseBytes: Long = 0L,
+    val mediaCacheBytes: Long = 0L,
+    val voiceNotesBytes: Long = 0L,
+    val freeSpaceBytes: Long = 0L,
+    val totalStorageBytes: Long = 1L
 )
 
 sealed class SettingsEvent {
@@ -108,11 +115,61 @@ sealed class SettingsEvent {
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val cacheManager: com.meshlink.storage.data.local.CacheManager? = null,
+    private val meshDatabase: com.meshlink.database.data.local.MeshDatabase? = null
 ) : ViewModel() {
+
+    internal var ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO
+
+    private data class ExtraSettingsState(
+        val emergencyNumber: String = "112",
+        val sosAutoBroadcast: Boolean = true,
+        val shareLiveLocation: Boolean = true,
+        val emergencyTemplate: String = "EMERGENCY! Immediate assistance needed at my coordinates.",
+        val databaseBytes: Long = 0L,
+        val mediaCacheBytes: Long = 0L,
+        val voiceNotesBytes: Long = 0L,
+        val freeSpaceBytes: Long = 0L,
+        val totalStorageBytes: Long = 1L
+    )
+
+    private val _extraState = MutableStateFlow(ExtraSettingsState())
 
     private val _uiEvent = MutableSharedFlow<SettingsEvent>(replay = 0)
     val uiEvent = _uiEvent.asSharedFlow()
+
+    init {
+        viewModelScope.launch {
+            try {
+                settingsRepository.emergencyNumber.collect { num ->
+                    _extraState.update { it.copy(emergencyNumber = num) }
+                }
+            } catch (_: Exception) {}
+        }
+        viewModelScope.launch {
+            try {
+                settingsRepository.sosAutoBroadcast.collect { enabled ->
+                    _extraState.update { it.copy(sosAutoBroadcast = enabled) }
+                }
+            } catch (_: Exception) {}
+        }
+        viewModelScope.launch {
+            try {
+                settingsRepository.shareLiveLocation.collect { enabled ->
+                    _extraState.update { it.copy(shareLiveLocation = enabled) }
+                }
+            } catch (_: Exception) {}
+        }
+        viewModelScope.launch {
+            try {
+                settingsRepository.emergencyTemplate.collect { tmpl ->
+                    _extraState.update { it.copy(emergencyTemplate = tmpl) }
+                }
+            } catch (_: Exception) {}
+        }
+        refreshStorageStats()
+    }
 
     private val combinedState: Flow<SettingsUiState> = combine(
         userRepository.localUser,
@@ -198,9 +255,11 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.glassEffectsEnabled,
         settingsRepository.cornerRadiusScale,
         settingsRepository.largeTextEnabled,
-        settingsRepository.reduceMotionEnabled
+        settingsRepository.reduceMotionEnabled,
+        _extraState
     ) { args ->
         val state = args[0] as SettingsUiState
+        val extra = args[10] as ExtraSettingsState
         state.copy(
             isMaterialYouEnabled = args[1] as Boolean,
             fontScale = args[2] as Float,
@@ -210,7 +269,16 @@ class SettingsViewModel @Inject constructor(
             glassEffectsEnabled = args[6] as Boolean,
             cornerRadiusScale = args[7] as Float,
             largeTextEnabled = args[8] as Boolean,
-            reduceMotionEnabled = args[9] as Boolean
+            reduceMotionEnabled = args[9] as Boolean,
+            emergencyNumber = extra.emergencyNumber,
+            sosAutoBroadcast = extra.sosAutoBroadcast,
+            shareLiveLocation = extra.shareLiveLocation,
+            emergencyTemplate = extra.emergencyTemplate,
+            databaseBytes = extra.databaseBytes,
+            mediaCacheBytes = extra.mediaCacheBytes,
+            voiceNotesBytes = extra.voiceNotesBytes,
+            freeSpaceBytes = extra.freeSpaceBytes,
+            totalStorageBytes = extra.totalStorageBytes
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsUiState())
 
@@ -289,6 +357,50 @@ class SettingsViewModel @Inject constructor(
     fun setLargeTextEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setLargeTextEnabled(enabled) }
     fun setReduceMotionEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setReduceMotionEnabled(enabled) }
 
+    // Emergency SOS Settings
+    fun setEmergencyNumber(number: String) = viewModelScope.launch {
+        val sanitized = number.trim().ifBlank { "112" }
+        _extraState.update { it.copy(emergencyNumber = sanitized) }
+        settingsRepository.setEmergencyNumber(sanitized)
+        _uiEvent.emit(SettingsEvent.SuccessMessage("Emergency number updated to $sanitized"))
+    }
+
+    fun setSosAutoBroadcast(enabled: Boolean) = viewModelScope.launch {
+        _extraState.update { it.copy(sosAutoBroadcast = enabled) }
+        settingsRepository.setSosAutoBroadcast(enabled)
+        _uiEvent.emit(SettingsEvent.SuccessMessage(if (enabled) "SOS auto broadcast enabled" else "SOS auto broadcast disabled"))
+    }
+
+    fun setShareLiveLocation(enabled: Boolean) = viewModelScope.launch {
+        _extraState.update { it.copy(shareLiveLocation = enabled) }
+        settingsRepository.setShareLiveLocation(enabled)
+        _uiEvent.emit(SettingsEvent.SuccessMessage(if (enabled) "Live location sharing enabled" else "Live location sharing disabled"))
+    }
+
+    fun setEmergencyTemplate(template: String) = viewModelScope.launch {
+        val sanitized = template.trim().ifBlank { "EMERGENCY! Immediate assistance needed at my coordinates." }
+        _extraState.update { it.copy(emergencyTemplate = sanitized) }
+        settingsRepository.setEmergencyTemplate(sanitized)
+        _uiEvent.emit(SettingsEvent.SuccessMessage("Emergency template updated"))
+    }
+
+    fun refreshStorageStats() {
+        viewModelScope.launch {
+            try {
+                val breakdown = cacheManager?.getStorageBreakdown() ?: return@launch
+                _extraState.update {
+                    it.copy(
+                        databaseBytes = breakdown.databaseBytes,
+                        mediaCacheBytes = breakdown.mediaCacheBytes,
+                        voiceNotesBytes = breakdown.voiceNotesBytes,
+                        freeSpaceBytes = breakdown.freeSpaceBytes,
+                        totalStorageBytes = breakdown.totalSpaceBytes
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     // Action Triggers for UI Feedback
     fun showToast(message: String) {
         viewModelScope.launch {
@@ -298,31 +410,78 @@ class SettingsViewModel @Inject constructor(
 
     fun clearMediaCache() {
         viewModelScope.launch {
-            _uiEvent.emit(SettingsEvent.SuccessMessage("Media cache cleared (500 MB freed)"))
+            try {
+                val freedBytes = cacheManager?.clearMediaCache() ?: 0L
+                val orphanFreed = clearOrphanFilesInternal()
+                val totalFreed = freedBytes + orphanFreed
+                refreshStorageStats()
+                _uiEvent.emit(SettingsEvent.SuccessMessage("Media cache cleared (${formatBytes(totalFreed)} freed)"))
+            } catch (e: Exception) {
+                _uiEvent.emit(SettingsEvent.Error("Failed to clear media cache: ${e.message ?: "unknown error"}"))
+            }
         }
+    }
+
+    fun clearOrphanFiles() {
+        viewModelScope.launch {
+            try {
+                val freed = clearOrphanFilesInternal()
+                refreshStorageStats()
+                _uiEvent.emit(SettingsEvent.SuccessMessage("Orphan files cleaned (${formatBytes(freed)} freed)"))
+            } catch (e: Exception) {
+                _uiEvent.emit(SettingsEvent.Error("Failed to clean orphan files: ${e.message ?: "unknown error"}"))
+            }
+        }
+    }
+
+    private suspend fun clearOrphanFilesInternal(): Long {
+        val manager = cacheManager ?: return 0L
+        val referencedPaths = kotlinx.coroutines.withContext(ioDispatcher) {
+            val refs = mutableSetOf<String>()
+            try {
+                val db = meshDatabase?.openHelper?.readableDatabase
+                db?.query("SELECT mediaPath FROM messages WHERE mediaPath IS NOT NULL")?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val path = cursor.getString(0)
+                        if (!path.isNullOrBlank()) refs.add(path)
+                    }
+                }
+            } catch (_: Exception) {}
+            refs
+        }
+        return manager.clearOrphanFiles(referencedPaths)
     }
 
     fun optimizeDatabase() {
         viewModelScope.launch {
-            _uiEvent.emit(SettingsEvent.SuccessMessage("Database optimized successfully"))
+            try {
+                kotlinx.coroutines.withContext(ioDispatcher) {
+                    val db = meshDatabase?.openHelper?.writableDatabase
+                    if (db != null) {
+                        db.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
+                        db.execSQL("VACUUM")
+                    }
+                }
+                refreshStorageStats()
+                _uiEvent.emit(SettingsEvent.SuccessMessage("Database optimized successfully"))
+            } catch (e: Exception) {
+                _uiEvent.emit(SettingsEvent.Error("Failed to optimize database: ${e.message ?: "unknown error"}"))
+            }
+        }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        return when {
+            bytes >= 1024L * 1024L * 1024L -> String.format(java.util.Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+            bytes >= 1024L * 1024L -> String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+            bytes >= 1024L -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0)
+            else -> "$bytes B"
         }
     }
 
     fun exportDebugLogs() {
         viewModelScope.launch {
             _uiEvent.emit(SettingsEvent.SuccessMessage("Debug logs exported to Storage/MeshLink/Logs/"))
-        }
-    }
-
-    fun backupMessages() {
-        viewModelScope.launch {
-            _uiEvent.emit(SettingsEvent.SuccessMessage("Local encrypted backup created successfully"))
-        }
-    }
-
-    fun restoreMessages() {
-        viewModelScope.launch {
-            _uiEvent.emit(SettingsEvent.SuccessMessage("Messages restored from latest backup"))
         }
     }
 }

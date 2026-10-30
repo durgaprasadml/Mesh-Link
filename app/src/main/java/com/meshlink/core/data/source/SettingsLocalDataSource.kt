@@ -79,4 +79,17 @@ interface SettingsLocalDataSource {
 
     val reduceMotionEnabled: Flow<Boolean>
     suspend fun setReduceMotionEnabled(enabled: Boolean)
+
+    // Emergency SOS Settings
+    val emergencyNumber: Flow<String>
+    suspend fun setEmergencyNumber(number: String)
+
+    val sosAutoBroadcast: Flow<Boolean>
+    suspend fun setSosAutoBroadcast(enabled: Boolean)
+
+    val shareLiveLocation: Flow<Boolean>
+    suspend fun setShareLiveLocation(enabled: Boolean)
+
+    val emergencyTemplate: Flow<String>
+    suspend fun setEmergencyTemplate(template: String)
 }

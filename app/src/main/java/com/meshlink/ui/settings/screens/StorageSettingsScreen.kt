@@ -25,13 +25,24 @@ fun StorageSettingsScreen(
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
 
-    val totalStorage = 2L * 1024 * 1024 * 1024 // 2 GB mock
+    LaunchedEffect(Unit) {
+        viewModel.refreshStorageStats()
+    }
+
+    val usedAppBytes = (uiState.databaseBytes + uiState.mediaCacheBytes + uiState.voiceNotesBytes).coerceAtLeast(1L)
     val storageCategories = listOf(
-        StorageCategory("Database (Chats)", 250 * 1024 * 1024L, MaterialTheme.colorScheme.primary),
-        StorageCategory("Media Cache", 500 * 1024 * 1024L, MaterialTheme.colorScheme.tertiary),
-        StorageCategory("Voice Notes", 120 * 1024 * 1024L, MaterialTheme.colorScheme.secondary),
-        StorageCategory("Free Space", totalStorage - 870 * 1024 * 1024L, MaterialTheme.colorScheme.surfaceVariant)
+        StorageCategory("Database (Chats)", uiState.databaseBytes, MaterialTheme.colorScheme.primary),
+        StorageCategory("Media Cache", uiState.mediaCacheBytes, MaterialTheme.colorScheme.tertiary),
+        StorageCategory("Voice Notes", uiState.voiceNotesBytes, MaterialTheme.colorScheme.secondary),
+        StorageCategory("Free Space", uiState.freeSpaceBytes, MaterialTheme.colorScheme.surfaceVariant)
     )
+
+    fun formatSize(bytes: Long): String = when {
+        bytes >= 1024L * 1024L * 1024L -> String.format(java.util.Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+        bytes >= 1024L * 1024L -> String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+        bytes >= 1024L -> String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0)
+        else -> "$bytes B"
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -64,7 +75,7 @@ fun StorageSettingsScreen(
                     Column(modifier = Modifier.padding(MeshTheme.spacing.mediumLarge)) {
                         StorageUsageBar(
                             categories = storageCategories.dropLast(1),
-                            totalBytes = 1000 * 1024 * 1024L
+                            totalBytes = usedAppBytes
                         )
                     }
                 }
@@ -80,14 +91,14 @@ fun StorageSettingsScreen(
                     Column {
                         SettingsItemRow(
                             title = "Clear Media Cache",
-                            subtitle = "Frees up 500 MB without deleting message history",
+                            subtitle = "Frees up ${formatSize(uiState.mediaCacheBytes)} without deleting message history",
                             icon = Icons.Default.Image,
                             onClick = { showClearDialog = true }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.background)
                         SettingsItemRow(
                             title = "Optimize Database Size",
-                            subtitle = "Reindex message database & compact WAL log (250 MB current)",
+                            subtitle = "Reindex message database & compact WAL log (${formatSize(uiState.databaseBytes)} current)",
                             icon = Icons.Default.Storage,
                             onClick = { viewModel.optimizeDatabase() }
                         )
@@ -95,37 +106,7 @@ fun StorageSettingsScreen(
                 }
             }
 
-            item {
-                Text("Backup & Export", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                ElevatedCard(
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
-                ) {
-                    Column {
-                        SettingsItemRow(
-                            title = "Export Messages",
-                            subtitle = "Save encrypted HTML/JSON chat archive to local storage",
-                            icon = Icons.Default.FileUpload,
-                            onClick = { viewModel.showToast("Exporting encrypted chat archive...") }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Create Local Backup",
-                            subtitle = "Generate secure passphrase-encrypted local backup",
-                            icon = Icons.Default.Backup,
-                            onClick = { viewModel.backupMessages() }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Restore Backup",
-                            subtitle = "Import messages from a previous backup file",
-                            icon = Icons.Default.Restore,
-                            onClick = { viewModel.restoreMessages() }
-                        )
-                    }
-                }
-            }
+
 
             item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }

@@ -45,6 +45,8 @@ internal class MeshRouter @Inject constructor(
         private const val TAG = "MeshRouter"
         private const val RECONNECT_INTERVAL_MS = 10_000L
         private const val MAX_RELAY_PACKETS = 1000
+        internal const val BROADCAST_MAX_AGE_MS = 15 * 60 * 1000L
+        internal const val BROADCAST_MAX_FUTURE_SKEW_MS = 5 * 60 * 1000L
     }
 
     override var localMeshId: String = ""
@@ -69,6 +71,7 @@ internal class MeshRouter @Inject constructor(
     private var incomingJob: Job? = null
     private var storeForwardJob: Job? = null
     private var queueProcessorJob: Job? = null
+    private val lastRelayedUnicastTimeMap = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     private val enforceEncryptionState = settingsRepository.advancedEncryptionEnforcement
         .stateIn(applicationScope, SharingStarted.Eagerly, true)
@@ -238,16 +241,70 @@ internal class MeshRouter @Inject constructor(
             return
         }
 
-        // Strict de-dup — reject if already processed, UNLESS it's a direct unicast message for us
-        // (we want to re-process direct duplicates so we can re-send ACKs if the sender retried;
-        // broadcast packets do not use ACKs and MUST be dropped when duplicated to prevent relay storms)
+        // Do not accept or forward broadcasts/relays originated by us (echo loop protection)
+        val isOwnPacket = canonicalLocalId.isNotBlank() && (
+            packet.senderId.equals(localMeshId, ignoreCase = true) ||
+            packet.senderId.equals(canonicalLocalId, ignoreCase = true) ||
+            com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId) == canonicalLocalId
+        )
+        if (isOwnPacket && !isDirectForMe) {
+            MeshLogger.d(TAG) { "Dropped self-originated packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}" }
+            return
+        }
+
+        // Reject packets with invalid TTL or negative hopCount before local delivery or relay
+        if (packet.ttl <= 0 || packet.hopCount < 0) {
+            topologyManager.recordDrop()
+            MeshLogger.d(TAG) { "Dropped packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} with invalid ttl=${packet.ttl} hops=${packet.hopCount}" }
+            return
+        }
+
+        // Reject routing loops before local delivery or relay
+        if (routingEngine.isRoutingLoop(packet, localMeshId)) {
+            topologyManager.recordDrop()
+            MeshLogger.d(TAG) { "Loop guard: already visited or TTL expired ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}, dropping" }
+            return
+        }
+
+        // Strict de-dup — reject if already processed, UNLESS:
+        // 1. It is a direct unicast message for us (re-process so we can re-send ACKs if the sender retried).
+        // 2. It is a unicast message or delivery ACK being relayed that is a legitimate sender retry (>= 1s since last relay).
+        // Broadcast packets do not use ACKs and MUST be dropped when duplicated to prevent relay storms.
         val isDuplicate = !routingEngine.markPacketProcessed(packet.packetId)
         if (isDuplicate) {
             topologyManager.recordDuplicate()
+            val now = System.currentTimeMillis()
+            val lastRelayTime = lastRelayedUnicastTimeMap[packet.packetId] ?: 0L
+            val isRelayRetry = !isBroadcast && !isDirectForMe && (now - lastRelayTime >= 1000L)
+
             if (isDirectForMe && packet.type != PacketType.DELIVERY_ACK) {
                 MeshLogger.d(TAG) { "Dedup: re-processing duplicate direct packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} for local delivery/ACK" }
+            } else if (isRelayRetry) {
+                lastRelayedUnicastTimeMap[packet.packetId] = now
+                MeshLogger.d(TAG) { "Dedup: re-relaying retried unicast packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)} (elapsed: ${now - lastRelayTime}ms)" }
             } else {
                 MeshLogger.d(TAG) { "Dedup: dropped duplicate ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}" }
+                return
+            }
+        } else if (!isBroadcast && !isDirectForMe) {
+            lastRelayedUnicastTimeMap[packet.packetId] = System.currentTimeMillis()
+            if (lastRelayedUnicastTimeMap.size > 2000) {
+                val pruneThreshold = System.currentTimeMillis() - 600_000L
+                lastRelayedUnicastTimeMap.entries.removeIf { it.value < pruneThreshold }
+            }
+        }
+
+        // Broadcast replay & freshness protection (guards against mutated packetId replays and stale broadcasts)
+        if (isBroadcast) {
+            if (!isFreshBroadcastPayload(packet.payload)) {
+                topologyManager.recordDrop()
+                MeshLogger.w(TAG, "Dropped stale or future-skewed broadcast packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
+                return
+            }
+            val contentDedupKey = broadcastContentSignature(packet)
+            if (contentDedupKey != null && !routingEngine.markPacketProcessed(contentDedupKey)) {
+                topologyManager.recordDuplicate()
+                MeshLogger.w(TAG, "Dedup: dropped replayed broadcast with mutated packetId ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}")
                 return
             }
         }
@@ -278,29 +335,19 @@ internal class MeshRouter @Inject constructor(
         if (isDirectForMe) return
 
         // Do not forward packets originated by us
-        if (canonicalLocalId.isNotBlank() && (
-            packet.senderId.equals(localMeshId, ignoreCase = true) ||
-            packet.senderId.equals(canonicalLocalId, ignoreCase = true) ||
-            com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId) == canonicalLocalId
-        )) {
+        if (isOwnPacket) {
+            return
+        }
+
+        // Direct-range only: SOS and Broadcast are connectionless and direct-range ONLY.
+        // Multi-hop relay or forwarding is strictly prohibited for SOS and Broadcast.
+        if (isBroadcast || packet.type == PacketType.SOS || packet.broadcastType == com.meshlink.domain.model.BroadcastType.SOS) {
+            MeshLogger.d(TAG) { "Direct-range only: suppressed multi-hop relay for ${packet.type} packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}" }
             return
         }
 
         // ACK/NACK are ephemeral
         val isAckNack = packet.type == PacketType.MEDIA_ACK || packet.type == PacketType.MEDIA_NACK
-
-        // TTL check
-        if (packet.ttl <= 0) {
-            topologyManager.recordDrop()
-            return
-        }
-
-        // Loop guard
-        if (routingEngine.isRoutingLoop(packet, localMeshId)) {
-            topologyManager.recordDrop()
-            MeshLogger.d(TAG) { "Loop guard: already visited or TTL expired ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}, dropping" }
-            return
-        }
 
         // Check Mesh Relay setting
         val relayEnabled = relayEnabledState.value
@@ -357,6 +404,15 @@ internal class MeshRouter @Inject constructor(
     }
     
     private fun storeForLater(packet: MeshPacket) {
+        val isDirectRangeOnly = packet.targetId.equals("BROADCAST", ignoreCase = true) ||
+            packet.type == PacketType.SOS ||
+            packet.broadcastType == com.meshlink.domain.model.BroadcastType.SOS ||
+            packet.ttl <= 1
+        if (isDirectRangeOnly) {
+            MeshLogger.d(TAG) { "Store-and-forward suppressed for direct-range only packet ${com.meshlink.util.MeshIdNormalizer.canonicalize(packet.packetId)}" }
+            return
+        }
+
         applicationScope.launch {
             try {
                 routingEngine.congestionMonitor.incrementRelay()
@@ -439,7 +495,11 @@ internal class MeshRouter @Inject constructor(
 
     @Deprecated("Use routeMediaPacket instead", ReplaceWith("routeMediaPacket(packet)"))
     override fun sendMediaPacket(packet: MeshPacket) {
-        val initialTtl = meshTtlState.value
+        val isDirectRangeOnly = packet.targetId.equals("BROADCAST", ignoreCase = true) ||
+            packet.type == PacketType.SOS ||
+            packet.broadcastType == com.meshlink.domain.model.BroadcastType.SOS ||
+            packet.ttl == 1
+        val initialTtl = if (isDirectRangeOnly) 1 else meshTtlState.value
         val finalPacket = packet.copy(ttl = initialTtl)
         
         routingEngine.markPacketProcessed(finalPacket.packetId)
@@ -448,17 +508,45 @@ internal class MeshRouter @Inject constructor(
 
     override suspend fun routeMediaPacket(packet: MeshPacket): com.meshlink.domain.model.DispatchResult {
         return try {
-
-            val initialTtl = meshTtlState.value
+            val isDirectRangeOnly = packet.targetId.equals("BROADCAST", ignoreCase = true) ||
+                packet.type == PacketType.SOS ||
+                packet.broadcastType == com.meshlink.domain.model.BroadcastType.SOS ||
+                packet.ttl == 1
+            val initialTtl = if (isDirectRangeOnly) 1 else meshTtlState.value
             val finalPacket = packet.copy(ttl = initialTtl)
             
             routingEngine.markPacketProcessed(finalPacket.packetId)
+            if (finalPacket.targetId.equals("BROADCAST", ignoreCase = true)) {
+                broadcastContentSignature(finalPacket)?.let { routingEngine.markPacketProcessed(it) }
+            }
             routingEngine.queueOptimizer.enqueue(finalPacket)
             _packetEvents.emit(com.meshlink.routing.api.PacketQueued(packet.packetId))
             com.meshlink.domain.model.DispatchResult.Queued
         } catch (e: Exception) {
             com.meshlink.domain.model.DispatchResult.Error(e)
         }
+    }
+
+    private fun isFreshBroadcastPayload(payload: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        val trimmed = payload.trim()
+        if (!trimmed.startsWith("{")) return true
+        return try {
+            val json = org.json.JSONObject(trimmed)
+            if (!json.has("timestamp")) return true
+            val ts = json.optLong("timestamp", -1L)
+            ts > 0L &&
+                ts >= nowMs - BROADCAST_MAX_AGE_MS &&
+                ts <= nowMs + BROADCAST_MAX_FUTURE_SKEW_MS
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    private fun broadcastContentSignature(packet: MeshPacket): String? {
+        val trimmed = packet.payload.trim()
+        if (!trimmed.startsWith("{") && packet.type != PacketType.SOS) return null
+        val canonicalSender = com.meshlink.util.MeshIdNormalizer.canonicalize(packet.senderId)
+        return "bcast:$canonicalSender:${packet.type}:${trimmed.hashCode()}"
     }
 
 

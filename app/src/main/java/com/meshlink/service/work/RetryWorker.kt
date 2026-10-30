@@ -19,7 +19,9 @@ class RetryWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
     private val chatDao: ChatDao,
-    private val meshRepository: MeshRepository
+    private val meshRepository: MeshRepository,
+    private val retryCoordinator: com.meshlink.common.recovery.RetryCoordinator,
+    private val stateMachine: com.meshlink.messaging.data.MessageStateMachine
 ) : CoroutineWorker(context, workerParams) {
 
     companion object {
@@ -39,24 +41,32 @@ class RetryWorker @AssistedInject constructor(
             )
             val pendingMessages = nonTerminalStatuses.flatMap { status ->
                 chatDao.getMessagesByStatus(status)
-            }.distinctBy { it.messageId }
+            }.filter { it.isFromMe }.distinctBy { it.messageId }
             
             if (pendingMessages.isEmpty()) {
                 MeshLogger.d(TAG, "No pending messages to retry.")
                 return@withContext Result.success()
             }
             
-            MeshLogger.d(TAG, "Found ${pendingMessages.size} pending messages to retry.")
+            MeshLogger.d(TAG, "Found ${pendingMessages.size} pending messages to check for retry.")
             
-            for (message in pendingMessages) {
-                val chat = chatDao.getChatById(message.chatId)
-                if (chat != null) {
-                    MeshLogger.d(TAG, "Retrying message ${message.messageId} to ${chat.name}")
-                    try {
-                        meshRepository.sendMessage(message.chatId, message.toDomain())
-                    } catch (e: Exception) {
-                        MeshLogger.e(TAG, "Failed to retry message ${message.messageId}", e)
-                    }
+            val now = System.currentTimeMillis()
+            val (expiredMessages, activeMessages) = pendingMessages.partition { msg ->
+                now - msg.timestamp > com.meshlink.common.recovery.RetryCoordinator.MESSAGE_TTL_MS
+            }
+
+            for (expired in expiredMessages) {
+                MeshLogger.w(TAG, "Message ${expired.messageId} reached 10m TTL. Transitioning to EXPIRED.")
+                retryCoordinator.cancelRetryForPacket(expired.messageId)
+                stateMachine.transitionToExpired(expired.messageId)
+            }
+
+            for (message in activeMessages) {
+                MeshLogger.d(TAG, "Retrying active message ${message.messageId} via RetryCoordinator")
+                try {
+                    retryCoordinator.triggerImmediateRetryForPacket(message.messageId)
+                } catch (e: Exception) {
+                    MeshLogger.e(TAG, "Failed to retry message ${message.messageId}", e)
                 }
             }
             

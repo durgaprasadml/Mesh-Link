@@ -503,8 +503,22 @@ class BleRepositoryImpl @Inject constructor(
         meshMessagingManager.sendSos()
     }
 
-    override suspend fun dispatchSos(sosEventId: String): com.meshlink.domain.model.MeshResult<Unit> {
-        return try {
+    override suspend fun dispatchSos(sosEventId: String): com.meshlink.domain.model.MeshResult<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val user = userRepository.getLocalUser()
+            if (user != null) {
+                val hasBlePerm = com.meshlink.ui.components.isBluetoothPermissionGranted(context)
+                val isBleOn = com.meshlink.ui.components.isBluetoothEnabled(context)
+                if (hasBlePerm && isBleOn) {
+                    bleDataSource.startSosAdvertising(
+                        name = user.name,
+                        meshId = user.meshId,
+                        sosEventId = sosEventId
+                    )
+                } else {
+                    com.meshlink.common.logger.MeshLogger.w(TAG, "Cannot start SOS advertising: BLE disabled or permissions missing")
+                }
+            }
             meshMessagingManager.sendSos(sosEventId)
             com.meshlink.domain.model.MeshResult.Success(Unit)
         } catch (e: Exception) {
@@ -531,29 +545,35 @@ class BleRepositoryImpl @Inject constructor(
             val mediaPathString = if (mediaJson.length() > 0) mediaJson.toString() else null
 
             val existingLocal = chatDao.getMessageByUuid(sosEventId)
+            val loc = locationProvider.getCurrentLocation()
+            val lat = existingLocal?.latitude ?: loc?.latitude
+            val lng = existingLocal?.longitude ?: loc?.longitude
+            val battery = existingLocal?.batteryPercent ?: loc?.batteryPercent ?: locationProvider.getBatteryPercent()
+            val sosText = existingLocal?.text ?: "🚨 SOS EMERGENCY (Dispatched) — Lat: $lat, Lng: $lng — Battery: $battery%"
+            val sosTimestamp = existingLocal?.timestamp ?: System.currentTimeMillis()
+
             if (existingLocal != null) {
                 val updated = existingLocal.copy(mediaPath = mediaPathString)
                 chatDao.insertMessageAndUpdateChat(updated, "🚨 SOS Emergency")
             } else {
-                val loc = locationProvider.getCurrentLocation()
                 val localMsg = MessageEntity(
                     messageId = sosEventId,
                     chatId = localPeerId,
                     senderId = localPeerId,
-                    text = "🚨 SOS EMERGENCY (Dispatched)",
-                    timestamp = System.currentTimeMillis(),
+                    text = sosText,
+                    timestamp = sosTimestamp,
                     isFromMe = true,
                     status = DeliveryStatus.SENT,
                     messageType = MessageType.SOS,
                     mediaPath = mediaPathString,
-                    latitude = loc?.latitude,
-                    longitude = loc?.longitude,
-                    batteryPercent = loc?.batteryPercent ?: locationProvider.getBatteryPercent()
+                    latitude = lat,
+                    longitude = lng,
+                    batteryPercent = battery
                 )
                 chatDao.insertMessageAndUpdateChat(localMsg, "🚨 SOS Emergency")
             }
 
-            // 2. Discover eligible nearby peers
+            // 2. Discover eligible nearby peers and active 1:1 chats
             val scannedPeers = discoveryManager.scannedDevices.value.values
                 .map { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) }
             val connectedBlePeers = (connectionManager.activeClients + connectionManager.connectedServers)
@@ -566,12 +586,59 @@ class BleRepositoryImpl @Inject constructor(
                 .distinct()
                 .filter { it.isNotBlank() && it != localPeerId && it != "BROADCAST" }
 
+            val activeChatPeers = try {
+                chatDao.getAllChats().first()
+                    .map { com.meshlink.util.MeshIdNormalizer.canonicalize(it.id) }
+                    .filter { it.isNotBlank() && it != localPeerId && it != "BROADCAST" }
+            } catch (_: Exception) {
+                emptyList<String>()
+            }
+
+            val allTargetPeers = (eligiblePeers + activeChatPeers).distinct()
+
+            // 3. Populate 1:1 chat entries for target peers so sender and receiver conversation threads reflect the emergency dispatch
+            allTargetPeers.forEach { peerId ->
+                try {
+                    val peerMsgId = "${sosEventId}_${peerId}"
+                    val peerChatName = userRepository.getUserDisplayName(peerId)
+                    val isDirectlyEligible = peerId in eligiblePeers
+                    val status = if (isDirectlyEligible) DeliveryStatus.SENT else DeliveryStatus.WAITING_FOR_ROUTE
+
+                    val existingPeerMsg = chatDao.getMessageByUuid(peerMsgId)
+                    if (existingPeerMsg != null) {
+                        val updated = existingPeerMsg.copy(
+                            mediaPath = mediaPathString,
+                            status = if (isDirectlyEligible) DeliveryStatus.SENT else existingPeerMsg.status
+                        )
+                        chatDao.insertMessageAndUpdateChat(updated, peerChatName)
+                    } else {
+                        val peerMsg = MessageEntity(
+                            messageId = peerMsgId,
+                            chatId = peerId,
+                            senderId = localPeerId,
+                            text = sosText,
+                            timestamp = sosTimestamp,
+                            isFromMe = true,
+                            status = status,
+                            messageType = MessageType.SOS,
+                            mediaPath = mediaPathString,
+                            latitude = lat,
+                            longitude = lng,
+                            batteryPercent = battery
+                        )
+                        chatDao.insertMessageAndUpdateChat(peerMsg, peerChatName)
+                    }
+                } catch (e: Exception) {
+                    com.meshlink.common.logger.MeshLogger.e(TAG, "Error recording SOS media message for 1:1 chat with $peerId: ${e.message}", e)
+                }
+            }
+
             if (eligiblePeers.isEmpty()) {
                 com.meshlink.common.logger.MeshLogger.w(TAG, "No eligible nearby peers connected/scanned for SOS media. Kept in store-and-forward.")
                 return@withContext com.meshlink.domain.model.MeshResult.Success(Unit)
             }
 
-            // 3. Send images via TransferManager to every eligible nearby peer
+            // 4. Send images via TransferManager to every eligible nearby peer
             eligiblePeers.forEach { peerId ->
                 try {
                     if (frontImage != null && frontImage.exists()) {
@@ -606,6 +673,39 @@ class BleRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             com.meshlink.common.logger.MeshLogger.e(TAG, "Failed to send SOS media: ${e.message}", e)
             com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to send SOS media", null, e))
+        }
+    }
+
+    override suspend fun cancelPendingSos(sosEventId: String): com.meshlink.domain.model.MeshResult<Unit> = withContext(Dispatchers.IO) {
+        try {
+            bleDataSource.stopSosAdvertising()
+            val existing = chatDao.getMessageByUuid(sosEventId)
+            if (existing != null && (existing.status == DeliveryStatus.PENDING || existing.status == DeliveryStatus.QUEUED)) {
+                // Delete temporary attachments
+                val pathStr = existing.mediaPath
+                if (pathStr != null) {
+                    if (pathStr.startsWith("{")) {
+                        try {
+                            val json = org.json.JSONObject(pathStr)
+                            if (json.has("front")) {
+                                java.io.File(json.getString("front")).delete()
+                            }
+                            if (json.has("rear")) {
+                                java.io.File(json.getString("rear")).delete()
+                            }
+                        } catch (_: Exception) {}
+                    } else {
+                        java.io.File(pathStr).delete()
+                    }
+                }
+                chatDao.deleteMessage(sosEventId)
+                com.meshlink.common.logger.MeshLogger.i(TAG, "Cancelled and deleted pending SOS package $sosEventId")
+            } else if (existing != null && existing.status == DeliveryStatus.SENT) {
+                com.meshlink.common.logger.MeshLogger.w(TAG, "Cannot cancel SOS $sosEventId: package has already been sent. Sent data is preserved.")
+            }
+            com.meshlink.domain.model.MeshResult.Success(Unit)
+        } catch (e: Exception) {
+            com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.RoutingError("Failed to cancel pending SOS: ${e.message}", null, e))
         }
     }
 

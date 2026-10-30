@@ -18,7 +18,8 @@ class MeshLifecycleManager @Inject constructor(
     private val meshWatchdog: MeshWatchdog,
     private val oemCompatibilityManager: OemCompatibilityManager,
     private val batteryOptimizationManager: BatteryOptimizationManager,
-    private val meshSessionManager: MeshSessionManager
+    private val meshSessionManager: MeshSessionManager,
+    private val retryCoordinator: com.meshlink.common.recovery.RetryCoordinator? = null
 ) {
     companion object {
         private const val TAG = "MeshLifecycleManager"
@@ -40,6 +41,7 @@ class MeshLifecycleManager @Inject constructor(
         if (_isMeshRunning.value) {
             MeshLogger.d(TAG, "Mesh engine is already running. Refreshing.")
             meshSupervisor.startAllSubsystems()
+            retryCoordinator?.start()
             return
         }
 
@@ -49,6 +51,7 @@ class MeshLifecycleManager @Inject constructor(
 
         meshSupervisor.startAllSubsystems()
         meshWatchdog.start()
+        retryCoordinator?.start()
     }
 
     fun stopMesh() {
@@ -56,6 +59,7 @@ class MeshLifecycleManager @Inject constructor(
         _isMeshRunning.value = false
         _isPaused.value = false
 
+        retryCoordinator?.stop()
         meshWatchdog.stop()
         meshSupervisor.stopAllSubsystems()
     }
@@ -86,6 +90,7 @@ class MeshLifecycleManager @Inject constructor(
         _isPaused.value = false
         meshSupervisor.forceRestartAllSubsystems()
         meshWatchdog.start()
+        retryCoordinator?.start()
     }
 
     fun forceInitialize() {
@@ -94,6 +99,7 @@ class MeshLifecycleManager @Inject constructor(
         _isPaused.value = false
         meshSupervisor.forceRestartAllSubsystems()
         meshWatchdog.start()
+        retryCoordinator?.start()
     }
 
     fun isFullyOperational(): Boolean {

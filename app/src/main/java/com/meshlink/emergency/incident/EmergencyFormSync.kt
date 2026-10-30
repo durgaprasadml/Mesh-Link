@@ -62,8 +62,9 @@ private val localForms = mutableMapOf<String, EmergencyForm>()
             broadcastType = BroadcastType.COMMAND
         )
         
-        // Push to router queue logic will go here (MeshRouter currently handles queueing via routingEngine)
-        // For simplicity in sync logic:
+        applicationScope.launch {
+            meshRouter.routeMediaPacket(packet)
+        }
         MeshLogger.d(TAG, "Submitted and queueing ${form.type} form: ${form.formId}")
     }
     

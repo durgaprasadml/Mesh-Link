@@ -182,7 +182,7 @@ fun DeveloperSettingsScreen(
                             onClick = {
                                 viewModel.showToast("Triggering test crash in 1s...")
                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                    throw RuntimeException("Test Crashlytics Crash - durgaprasadmadikeri@gmail.com")
+                                    throw RuntimeException("Test Crashlytics Crash")
                                 }, 1000)
                             }
                         )
@@ -196,7 +196,7 @@ fun DeveloperSettingsScreen(
                                     com.meshlink.common.logger.LogLevel.CRITICAL,
                                     com.meshlink.common.logger.LogCategory.SYSTEM,
                                     "Simulated non-fatal exception from Developer Menu",
-                                    mapOf("user_email" to "durgaprasadmadikeri@gmail.com", "triggered_by" to "DeveloperOptions"),
+                                    mapOf("triggered_by" to "DeveloperOptions"),
                                     IllegalStateException("Diagnostic Non-Fatal Test Exception")
                                 )
                                 viewModel.showToast("Non-fatal exception reported to Crashlytics")

@@ -160,18 +160,26 @@ class MeshMessagingManager @Inject constructor(
                 .distinctBy { it.messageId }
             if (pending.isEmpty()) return
 
+            val now = System.currentTimeMillis()
+            val (expired, active) = pending.partition { now - it.timestamp > com.meshlink.common.recovery.RetryCoordinator.MESSAGE_TTL_MS }
+            expired.forEach { msg ->
+                MeshLogger.w(TAG, "Message ${msg.messageId} TTL expired (${now - msg.timestamp} ms). Transitioning to EXPIRED.")
+                retryCoordinator.cancelRetryForPacket(msg.messageId)
+                stateMachine.transitionToExpired(msg.messageId)
+            }
+            if (active.isEmpty()) return
+
             connectToAllScannedDevices()
             if (!isAnyPeerConnected()) return
 
-            MeshLogger.d(TAG, "Retrying ${pending.size} pending messages...")
-            pending.forEach { msg ->
+            MeshLogger.d(TAG, "Retrying ${active.size} pending messages...")
+            active.forEach { msg ->
                 if (!routingCoordinator.hasDeliveryPath(msg.chatId)) {
                     return@forEach
                 }
                 
                 val reqEncCheck = userRepository.isEncryptionEnabled.first()
                 if (reqEncCheck && !cryptoManager.hasPeerKey(msg.chatId)) {
-                    val now = System.currentTimeMillis()
                     val lastReq = lastKeyExchangeRequest[msg.chatId] ?: 0L
                     if (now - lastReq > 10_000L) {
                         MeshLogger.w(TAG, "Missing key for ${msg.chatId}, requesting key exchange and postponing retry")
@@ -191,34 +199,7 @@ class MeshMessagingManager @Inject constructor(
                 
                 when (msg.messageType) {
                     MessageType.TEXT -> {
-                        val user = userRepository.getLocalUser() ?: return@forEach
-                        val localPeerId = MeshIdNormalizer.canonicalize(user.meshId)
-                        val wrappedPayload = JSONObject().apply {
-                            put("text", msg.text)
-                            put("senderName", user.name)
-                        }.toString()
-                        
-                        val packet = MeshPacket(
-                            packetId = msg.messageId,
-                            senderId = localPeerId,
-                            targetId = msg.chatId,
-                            payload = wrappedPayload,
-                            type = PacketType.TEXT,
-                            encrypted = false
-                        )
-                        
-                        val result = dispatchSinglePacket(msg.chatId, packet)
-                        when (result) {
-                            is com.meshlink.domain.model.DispatchResult.Queued -> {
-                                // Handled by DeliveryTracker
-                            }
-                            is com.meshlink.domain.model.DispatchResult.NoPeers,
-                            is com.meshlink.domain.model.DispatchResult.QueueFull,
-                            is com.meshlink.domain.model.DispatchResult.Rejected,
-                            is com.meshlink.domain.model.DispatchResult.Error -> {
-                                stateMachine.transitionToWaitingForRoute(msg.messageId)
-                            }
-                        }
+                        retryCoordinator.triggerImmediateRetryForPacket(msg.messageId)
                     }
                     MessageType.IMAGE, MessageType.VOICE -> {
                         val file = msg.mediaPath?.let { File(it) }
@@ -263,6 +244,61 @@ class MeshMessagingManager @Inject constructor(
                             is com.meshlink.domain.model.DispatchResult.Rejected,
                             is com.meshlink.domain.model.DispatchResult.Error -> {
                                 stateMachine.transitionToWaitingForRoute(msg.messageId)
+                            }
+                        }
+                    }
+                    MessageType.SOS -> {
+                        val targetPeerId = MeshIdNormalizer.canonicalize(msg.chatId)
+                        val localPeerId = MeshIdNormalizer.canonicalize(msg.senderId)
+                        if (targetPeerId.isNotBlank() && targetPeerId != localPeerId && targetPeerId != "BROADCAST") {
+                            val mediaJson = try {
+                                msg.mediaPath?.takeIf { it.startsWith("{") }?.let { JSONObject(it) }
+                            } catch (_: Exception) { null }
+
+                            val frontPath = mediaJson?.optString("front")?.takeIf { it.isNotBlank() }
+                            val rearPath = mediaJson?.optString("rear")?.takeIf { it.isNotBlank() }
+
+                            val frontFile = frontPath?.let { File(it) }?.takeIf { it.exists() }
+                            val rearFile = rearPath?.let { File(it) }?.takeIf { it.exists() }
+
+                            val baseSosId = if (msg.messageId.contains("_$targetPeerId")) {
+                                msg.messageId.substringBefore("_$targetPeerId")
+                            } else {
+                                msg.messageId
+                            }
+
+                            var dispatchedAny = false
+
+                            if (frontFile != null) {
+                                val frontTransferId = "${baseSosId}_front_${targetPeerId}"
+                                if (!transferManager.isTransferActive(frontTransferId)) {
+                                    transferManager.sendFile(
+                                        file = frontFile,
+                                        senderId = localPeerId,
+                                        targetId = targetPeerId,
+                                        priority = com.meshlink.transfer.TransferPriority.CRITICAL,
+                                        transferId = frontTransferId
+                                    )
+                                    dispatchedAny = true
+                                }
+                            }
+
+                            if (rearFile != null) {
+                                val rearTransferId = "${baseSosId}_rear_${targetPeerId}"
+                                if (!transferManager.isTransferActive(rearTransferId)) {
+                                    transferManager.sendFile(
+                                        file = rearFile,
+                                        senderId = localPeerId,
+                                        targetId = targetPeerId,
+                                        priority = com.meshlink.transfer.TransferPriority.CRITICAL,
+                                        transferId = rearTransferId
+                                    )
+                                    dispatchedAny = true
+                                }
+                            }
+
+                            if (dispatchedAny) {
+                                chatDao.updateMessageStatus(msg.messageId, DeliveryStatus.SENT)
                             }
                         }
                     }
@@ -404,6 +440,7 @@ class MeshMessagingManager @Inject constructor(
                     stopMeshInternal()
                     return
                 }
+                retryCoordinator.start()
                 MeshLogger.i(TAG, "[MeshStartup] MESH_READY")
 
                 beaconJob?.cancel()
@@ -478,6 +515,7 @@ class MeshMessagingManager @Inject constructor(
     }
 
     private fun stopMeshInternal() {
+        retryCoordinator.stop()
         beaconJob?.cancel()
         beaconJob = null
         stopAdvertising()

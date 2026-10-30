@@ -19,7 +19,8 @@ import javax.inject.Singleton
 class DeliveryTracker @Inject constructor(
     private val router: Router,
     private val stateMachine: MessageStateMachine,
-    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope
+    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope,
+    private val retryCoordinatorProvider: javax.inject.Provider<com.meshlink.common.recovery.RetryCoordinator>? = null
 ) {
     companion object {
         private const val TAG = "DeliveryTracker"
@@ -27,6 +28,8 @@ class DeliveryTracker @Inject constructor(
     }
 
     private val timeoutJobs = ConcurrentHashMap<String, Job>()
+    
+    fun isTracking(packetId: String): Boolean = timeoutJobs.containsKey(packetId)
     
     init {
         applicationScope.launch {
@@ -61,8 +64,13 @@ class DeliveryTracker @Inject constructor(
         timeoutJobs[packetId] = applicationScope.launch {
             delay(DELIVERY_TIMEOUT_MS)
             MeshLogger.w(TAG, "Delivery ACK timeout for packet $packetId - transitioning to RETRYING")
-            stateMachine.transitionToRetrying(packetId)
             timeoutJobs.remove(packetId)
+            stateMachine.transitionToRetrying(packetId)
+            try {
+                retryCoordinatorProvider?.get()?.triggerRetry(packetId)
+            } catch (e: Exception) {
+                MeshLogger.e(TAG, "Failed to trigger retry from DeliveryTracker for $packetId", e)
+            }
         }
     }
 

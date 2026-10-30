@@ -34,14 +34,24 @@ class RoutingCoordinator @Inject constructor(
         if (BleConstants.isBluetoothAddress(peerIdOrAddress)) return peerIdOrAddress
 
         val norm = com.meshlink.util.MeshIdNormalizer.canonicalize(peerIdOrAddress)
-        
-        val scanned = discoveryManager.scannedDevices.value.values.firstOrNull { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm }
-        if (scanned != null) return scanned.address
 
-        val record = discoveryManager.discoveryEngine.cache.getAll().firstOrNull {
-            com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm
+        // 1. Prefer an address that is currently connected in connectionManager
+        val activeClientAddress = connectionManager.activeClients.firstOrNull { clientAddr ->
+            resolveMeshId(clientAddr) == norm
         }
-        if (record != null && record.macAddress.isNotBlank()) return record.macAddress
+        if (activeClientAddress != null) return activeClientAddress
+
+        // 2. Next, look for the freshest scanned device (highest lastSeen)
+        val freshestScanned = discoveryManager.scannedDevices.value.values
+            .filter { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm }
+            .maxByOrNull { it.lastSeen }
+        if (freshestScanned != null) return freshestScanned.address
+
+        // 3. Next, look in discovery cache for the active link or freshest record
+        val records = discoveryManager.discoveryEngine.cache.getAll()
+            .filter { com.meshlink.util.MeshIdNormalizer.canonicalize(it.meshId) == norm && it.macAddress.isNotBlank() }
+        val activeOrFreshestRecord = records.firstOrNull { it.linkActive } ?: records.maxByOrNull { it.lastSeenMillis }
+        if (activeOrFreshestRecord != null) return activeOrFreshestRecord.macAddress
         
         val route = meshRouter.routeTable[peerIdOrAddress] ?: meshRouter.routeTable[norm]
         if (route != null) return route.nextHop

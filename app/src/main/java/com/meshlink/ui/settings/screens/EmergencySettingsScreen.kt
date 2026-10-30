@@ -22,10 +22,10 @@ fun EmergencySettingsScreen(
     viewModel: SettingsViewModel,
     onBack: () -> Unit
 ) {
-    var emergencyNumber by remember { mutableStateOf(uiState.emergencyNumber) }
-    var sosAutoBroadcast by remember { mutableStateOf(uiState.sosAutoBroadcast) }
-    var shareLiveLocation by remember { mutableStateOf(uiState.shareLiveLocation) }
-    var emergencyTemplate by remember { mutableStateOf(uiState.emergencyTemplate) }
+    var emergencyNumber by remember(uiState.emergencyNumber) { mutableStateOf(uiState.emergencyNumber) }
+    var sosAutoBroadcast by remember(uiState.sosAutoBroadcast) { mutableStateOf(uiState.sosAutoBroadcast) }
+    var shareLiveLocation by remember(uiState.shareLiveLocation) { mutableStateOf(uiState.shareLiveLocation) }
+    var emergencyTemplate by remember(uiState.emergencyTemplate) { mutableStateOf(uiState.emergencyTemplate) }
     var showNumberDialog by remember { mutableStateOf(false) }
     var showTemplateDialog by remember { mutableStateOf(false) }
 
@@ -50,9 +50,9 @@ fun EmergencySettingsScreen(
                 .padding(horizontal = MeshTheme.spacing.mediumLarge),
             verticalArrangement = Arrangement.spacedBy(MeshTheme.spacing.large)
         ) {
-            // Emergency Contacts & Number
+            // Emergency Hotline
             item {
-                Text("Emergency Hotline & Contacts", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Emergency Hotline", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                 ElevatedCard(
                     colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -64,13 +64,6 @@ fun EmergencySettingsScreen(
                             subtitle = "Default dialer target: $emergencyNumber",
                             icon = Icons.Default.PhoneInTalk,
                             onClick = { showNumberDialog = true }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Emergency Contacts",
-                            subtitle = "Manage designated ICE contacts for broadcast alerts",
-                            icon = Icons.Default.ContactPhone,
-                            onClick = { viewModel.showToast("Emergency contacts view opened") }
                         )
                     }
                 }
@@ -94,7 +87,7 @@ fun EmergencySettingsScreen(
                                     checked = sosAutoBroadcast,
                                     onCheckedChange = {
                                         sosAutoBroadcast = it
-                                        viewModel.showToast(if (it) "SOS auto broadcast enabled" else "SOS auto broadcast disabled")
+                                        viewModel.setSosAutoBroadcast(it)
                                     }
                                 )
                             }
@@ -109,7 +102,7 @@ fun EmergencySettingsScreen(
                                     checked = shareLiveLocation,
                                     onCheckedChange = {
                                         shareLiveLocation = it
-                                        viewModel.showToast(if (it) "Live location sharing enabled" else "Live location sharing disabled")
+                                        viewModel.setShareLiveLocation(it)
                                     }
                                 )
                             }
@@ -118,9 +111,9 @@ fun EmergencySettingsScreen(
                 }
             }
 
-            // Emergency Template & Medical Info
+            // Emergency Template
             item {
-                Text("Emergency Information & Template", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Emergency Message Template", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
                 ElevatedCard(
                     colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -132,18 +125,6 @@ fun EmergencySettingsScreen(
                             subtitle = emergencyTemplate,
                             icon = Icons.Default.EditNote,
                             onClick = { showTemplateDialog = true }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "Medical Information & ICE",
-                            subtitle = "Blood type, allergies, medical notes (Coming Soon)",
-                            icon = Icons.Default.MedicalInformation,
-                            trailingContent = {
-                                AssistChip(
-                                    onClick = { },
-                                    label = { Text("Coming Soon", style = MaterialTheme.typography.labelSmall) }
-                                )
-                            }
                         )
                     }
                 }
@@ -172,9 +153,9 @@ fun EmergencySettingsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        emergencyNumber = tempNumber
+                        emergencyNumber = tempNumber.trim().ifBlank { "112" }
                         showNumberDialog = false
-                        viewModel.showToast("Emergency number updated to $emergencyNumber")
+                        viewModel.setEmergencyNumber(emergencyNumber)
                     }
                 ) {
                     Text("Save")
@@ -207,9 +188,9 @@ fun EmergencySettingsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        emergencyTemplate = tempTemplate
+                        emergencyTemplate = tempTemplate.trim().ifBlank { uiState.emergencyTemplate }
                         showTemplateDialog = false
-                        viewModel.showToast("Emergency template updated")
+                        viewModel.setEmergencyTemplate(emergencyTemplate)
                     }
                 ) {
                     Text("Save")

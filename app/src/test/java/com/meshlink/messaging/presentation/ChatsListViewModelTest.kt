@@ -43,4 +43,33 @@ class ChatsListViewModelTest {
             }
         }
     }
+
+    @Test
+    fun `uiState preserves unread counts and search query across process recreation`() = runTest {
+        val chats = listOf(
+            Chat(id = "c1", name = "Alice", lastMessage = "Hi", lastMessageAt = 100L, unreadCount = 2),
+            Chat(id = "c2", name = "Bob", lastMessage = "Hey", lastMessageAt = 200L, unreadCount = 3)
+        )
+        every { getAllChatsUseCase() } returns flowOf(chats)
+
+        val savedState = androidx.lifecycle.SavedStateHandle(
+            mapOf(ChatsListViewModel.KEY_SEARCH_QUERY to "Alice")
+        )
+        val recreatedVm = ChatsListViewModel(
+            getAllChatsUseCase = getAllChatsUseCase,
+            defaultDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
+            savedStateHandle = savedState
+        )
+
+        recreatedVm.uiState.test {
+            var state = awaitItem()
+            if (state.chats.isEmpty()) {
+                state = awaitItem()
+            }
+            assertEquals("Alice", state.searchQuery)
+            assertEquals(1, state.chats.size)
+            assertEquals(2, state.chats[0].unreadCount)
+            assertEquals(5, state.totalUnreadCount)
+        }
+    }
 }

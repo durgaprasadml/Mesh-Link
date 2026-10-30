@@ -136,4 +136,51 @@ class WifiSocketTransportTest {
         clientTransport.disconnect()
         serverTransport.stopServer()
     }
+
+    @Test
+    fun `frame and chunk length validators reject negative, zero, and oversized lengths before allocation (ML-AUDIT-018)`() {
+        assertFalse(WifiSocketTransport.isValidFrameLength(-1))
+        assertFalse(WifiSocketTransport.isValidFrameLength(Int.MIN_VALUE))
+        assertFalse(WifiSocketTransport.isValidFrameLength(0))
+        assertTrue(WifiSocketTransport.isValidFrameLength(1))
+        assertTrue(WifiSocketTransport.isValidFrameLength(WifiSocketTransport.MAX_FRAME_SIZE_BYTES))
+        assertFalse(WifiSocketTransport.isValidFrameLength(WifiSocketTransport.MAX_FRAME_SIZE_BYTES + 1))
+        assertFalse(WifiSocketTransport.isValidFrameLength(Int.MAX_VALUE))
+
+        assertFalse(WifiSocketTransport.isValidEncryptedChunkLength(-100))
+        assertFalse(WifiSocketTransport.isValidEncryptedChunkLength(0))
+        assertTrue(WifiSocketTransport.isValidEncryptedChunkLength(1024))
+        assertTrue(WifiSocketTransport.isValidEncryptedChunkLength(WifiSocketTransport.MAX_ENCRYPTED_CHUNK_BYTES))
+        assertFalse(WifiSocketTransport.isValidEncryptedChunkLength(WifiSocketTransport.MAX_ENCRYPTED_CHUNK_BYTES + 1))
+    }
+
+    @Test
+    fun `socket server safely closes connection when peer sends oversized or negative frame length without OOM (ML-AUDIT-018)`() = runBlocking {
+        val serverTransport = createTransport()
+        var receivedAny = false
+        serverTransport.onPacketReceived = { receivedAny = true }
+        serverTransport.startServer()
+
+        // Connect raw socket and send an oversized length (Int.MAX_VALUE)
+        java.net.Socket("127.0.0.1", com.meshlink.config.WifiConfig.DEFAULT_PORT).use { rawSocket ->
+            eventually { serverTransport.isConnected() }
+            val out = java.io.DataOutputStream(rawSocket.getOutputStream())
+            out.writeInt(WifiSocketTransport.MAX_FRAME_SIZE_BYTES + 1024)
+            out.flush()
+            eventually { !serverTransport.isConnected() }
+        }
+        assertFalse(receivedAny)
+
+        // Connect raw socket and send a negative unknown frame length
+        java.net.Socket("127.0.0.1", com.meshlink.config.WifiConfig.DEFAULT_PORT).use { rawSocket ->
+            eventually { serverTransport.isConnected() }
+            val out = java.io.DataOutputStream(rawSocket.getOutputStream())
+            out.writeInt(-42)
+            out.flush()
+            eventually { !serverTransport.isConnected() }
+        }
+        assertFalse(receivedAny)
+
+        serverTransport.stopServer()
+    }
 }

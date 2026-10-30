@@ -212,13 +212,107 @@ class RekeyManagerTest {
 
         val unwrapped = sessionManager.validateAndUnwrap(peerId, dummyPayload)
         
-        // Validation should succeed due to implicit forward rotation
+        // Pre-authentication validation succeeds and returns the candidate keyVersion,
+        // but MUST NOT mutate session state before AES-GCM authentication succeeds (ML-AUDIT-002)
         assertNotNull(unwrapped)
         assertEquals(2, unwrapped!!.third) // Returns the key version
-        
-        // The session state should be updated to kv=2
+        assertEquals(1, mockSession.keyVersion)
+        assertEquals(0, mockSession.previousKeyVersion)
+        assertEquals(0L, mockSession.receiveCounter.get())
+
+        // Once decryption/authentication succeeds, commitAuthenticatedPacket advances the keyVersion and sequence window
+        sessionManager.commitAuthenticatedPacket(peerId, unwrapped.first)
         assertEquals(2, mockSession.keyVersion)
         assertEquals(1, mockSession.previousKeyVersion)
+        assertEquals(123L, mockSession.receiveCounter.get())
+    }
+
+    @Test
+    fun `test forged sid is rejected and does not overwrite active sessionId (ML-AUDIT-002)`() = runTest(testDispatcher) {
+        assertEquals(sessionId, mockSession.sessionId)
+
+        val forgedAadJson = org.json.JSONObject().apply {
+            put("sid", "forged_attacker_sid")
+            put("seq", 1L)
+            put("ts", System.currentTimeMillis())
+            put("kv", 1)
+        }
+        val aadBase64 = Base64.encodeToString(forgedAadJson.toString().toByteArray(), Base64.NO_WRAP)
+        val forgedPayload = "v2|$aadBase64|forged_ciphertext"
+
+        val unwrapped = sessionManager.validateAndUnwrap(peerId, forgedPayload)
+        assertNull(unwrapped)
+
+        // Active session ID must remain intact
+        assertEquals(sessionId, sessionManager.getSession(peerId)?.sessionId)
+        assertEquals(0L, mockSession.receiveCounter.get())
+    }
+
+    @Test
+    fun `test forged kv=current+1 with invalid ciphertext does not advance keyVersion or replay window (ML-AUDIT-002)`() = runTest(testDispatcher) {
+        every { cryptoManager.hasPeerKey(peerId) } returns true
+        assertEquals(1, mockSession.keyVersion)
+        assertEquals(0, mockSession.previousKeyVersion)
+
+        val forgedAadJson = org.json.JSONObject().apply {
+            put("sid", sessionId)
+            put("seq", 10L)
+            put("ts", System.currentTimeMillis())
+            put("kv", 2)
+        }
+        val aadBase64 = Base64.encodeToString(forgedAadJson.toString().toByteArray(), Base64.NO_WRAP)
+        val invalidCiphertextPayload = "v2|$aadBase64|tampered_ciphertext"
+
+        // Step 1: validateAndUnwrap parses metadata prior to decryption
+        val unwrapped = sessionManager.validateAndUnwrap(peerId, invalidCiphertextPayload)
+        assertNotNull(unwrapped)
+
+        // Step 2: Decryption fails (returns null), so commitAuthenticatedPacket is NEVER called.
+        // Verify keyVersion, previousKeyVersion, and replay window were NOT mutated!
+        assertEquals(1, mockSession.keyVersion)
+        assertEquals(0, mockSession.previousKeyVersion)
+        assertEquals(0L, mockSession.receiveCounter.get())
+        assertFalse(mockSession.isReplay(10L))
+        assertEquals(0L, mockSession.totalDecryptedPackets.get())
+    }
+
+    @Test
+    fun `test out-of-order packets within valid 64-packet window succeed while replays are rejected (ML-AUDIT-002)`() = runTest(testDispatcher) {
+        val now = System.currentTimeMillis()
+        fun buildPayload(seq: Long): String {
+            val aadJson = org.json.JSONObject().apply {
+                put("sid", sessionId)
+                put("seq", seq)
+                put("ts", now)
+                put("kv", 1)
+            }
+            val aadBase64 = Base64.encodeToString(aadJson.toString().toByteArray(), Base64.NO_WRAP)
+            return "v2|$aadBase64|valid_ciphertext_$seq"
+        }
+
+        // Receive packet seq = 10 first
+        val pkt10 = sessionManager.validateAndUnwrap(peerId, buildPayload(10L))
+        assertNotNull(pkt10)
+        sessionManager.commitAuthenticatedPacket(peerId, pkt10!!.first)
+        assertEquals(10L, mockSession.receiveCounter.get())
+
+        // Receive out-of-order packet seq = 5 (within 64-packet window) -> must succeed
+        val pkt5 = sessionManager.validateAndUnwrap(peerId, buildPayload(5L))
+        assertNotNull(pkt5)
+        sessionManager.commitAuthenticatedPacket(peerId, pkt5!!.first)
+        assertEquals(10L, mockSession.receiveCounter.get())
+
+        // Replay of seq = 5 -> must be rejected
+        assertNull(sessionManager.validateAndUnwrap(peerId, buildPayload(5L)))
+
+        // Replay of seq = 10 -> must be rejected
+        assertNull(sessionManager.validateAndUnwrap(peerId, buildPayload(10L)))
+
+        // Out-of-order packet seq = 7 -> must still succeed
+        val pkt7 = sessionManager.validateAndUnwrap(peerId, buildPayload(7L))
+        assertNotNull(pkt7)
+        sessionManager.commitAuthenticatedPacket(peerId, pkt7!!.first)
+        assertEquals(3L, mockSession.totalDecryptedPackets.get())
     }
 
     @Test

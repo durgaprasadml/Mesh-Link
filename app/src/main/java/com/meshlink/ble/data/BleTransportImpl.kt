@@ -4,6 +4,7 @@ import com.meshlink.common.util.MeshPacketParser
 
 import com.meshlink.ble.api.BleTransport
 import com.meshlink.domain.model.MeshPacket
+import com.meshlink.domain.model.PacketType
 import com.meshlink.domain.transport.Transport
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.mapNotNull
@@ -56,18 +57,31 @@ internal class BleTransportImpl @Inject constructor(
             return peers
         }
 
+    private fun calculatePriority(packet: MeshPacket): Int {
+        val baseLevel = packet.priority.level * 10
+        val typeScore = when (packet.type) {
+            PacketType.SOS, PacketType.DELIVERY_ACK, PacketType.READ_RECEIPT, PacketType.KEY_EXCHANGE, PacketType.SESSION_REKEY -> 4
+            PacketType.VOICE_SIGNAL, PacketType.VOICE_FRAME, PacketType.VIDEO_SIGNAL, PacketType.VIDEO_FRAME -> 3
+            PacketType.TEXT, PacketType.LOCATION, PacketType.INCIDENT_REPORT, PacketType.CHECK_IN -> 2
+            PacketType.MEDIA_META -> 1
+            PacketType.MEDIA_CHUNK, PacketType.RESOURCE_SYNC, PacketType.FORM_SYNC, PacketType.MAP_SYNC -> 0
+            else -> 1
+        }
+        return baseLevel + typeScore
+    }
+
     @Deprecated("Use sendPacket instead", ReplaceWith("sendPacket(packet)"))
     override suspend fun send(packet: MeshPacket) {
         val json = MeshPacketParser.toJson(packet)
         val targetAddress = if (packet.targetId == "BROADCAST") null else routingCoordinator.resolvePeerAddress(packet.targetId) ?: packet.targetId
-        gattManager.broadcastPacket(json, includeAddress = targetAddress)
+        gattManager.broadcastPacket(json, includeAddress = targetAddress, priority = calculatePriority(packet))
     }
 
     override suspend fun sendPacket(packet: MeshPacket): com.meshlink.domain.model.MeshResult<Unit> {
         return try {
             val json = MeshPacketParser.toJson(packet)
             val targetAddress = if (packet.targetId == "BROADCAST") null else routingCoordinator.resolvePeerAddress(packet.targetId) ?: packet.targetId
-            gattManager.broadcastPacket(json, includeAddress = targetAddress)
+            gattManager.broadcastPacket(json, includeAddress = targetAddress, priority = calculatePriority(packet))
             com.meshlink.domain.model.MeshResult.Success(Unit)
         } catch (e: Exception) {
             com.meshlink.domain.model.MeshResult.Error(
@@ -85,7 +99,7 @@ internal class BleTransportImpl @Inject constructor(
             routingCoordinator.resolvePeerAddress(packet.targetId) ?: packet.targetId
         } else null
         val resolvedExclude = if (excludeAddress != null) routingCoordinator.resolvePeerAddress(excludeAddress) ?: excludeAddress else null
-        gattManager.broadcastPacket(json, excludeAddress = resolvedExclude, includeAddress = resolvedInclude)
+        gattManager.broadcastPacket(json, excludeAddress = resolvedExclude, includeAddress = resolvedInclude, priority = calculatePriority(packet))
     }
 
     override suspend fun broadcastPacket(packet: MeshPacket, excludeAddress: String?, includeAddress: String?): com.meshlink.domain.model.MeshResult<Unit> {
@@ -97,7 +111,7 @@ internal class BleTransportImpl @Inject constructor(
                 routingCoordinator.resolvePeerAddress(packet.targetId) ?: packet.targetId
             } else null
             val resolvedExclude = if (excludeAddress != null) routingCoordinator.resolvePeerAddress(excludeAddress) ?: excludeAddress else null
-            gattManager.broadcastPacket(json, excludeAddress = resolvedExclude, includeAddress = resolvedInclude)
+            gattManager.broadcastPacket(json, excludeAddress = resolvedExclude, includeAddress = resolvedInclude, priority = calculatePriority(packet))
             com.meshlink.domain.model.MeshResult.Success(Unit)
         } catch (e: Exception) {
             com.meshlink.domain.model.MeshResult.Error(

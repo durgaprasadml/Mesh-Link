@@ -25,12 +25,27 @@ class CorePacketDispatcher @Inject constructor(
 ) : PacketDispatcher {
     private val TAG = "CorePacketDispatcher"
 
+    @Volatile
+    private var lastOpportunisticConnectAtMs: Long = 0L
+
+    companion object {
+        const val OPPORTUNISTIC_CONNECT_COOLDOWN_MS = 5_000L
+        const val MAX_OPPORTUNISTIC_CONNECTIONS = 5
+    }
+
     override suspend fun dispatchSinglePacket(targetPeerId: String, packet: MeshPacket): com.meshlink.domain.model.DispatchResult {
-        connectToPeer(targetPeerId)
-        connectToAllScannedDevices()
+        val isBroadcast = targetPeerId.equals("BROADCAST", ignoreCase = true)
+        if (isBroadcast) {
+            connectToAllScannedDevices()
+        } else {
+            val connectedOrInitiatedToTarget = connectToPeer(targetPeerId)
+            if (!connectedOrInitiatedToTarget) {
+                connectToAllScannedDevices()
+            }
+        }
         
         var packetToSend = packet
-        if (!packetToSend.encrypted && targetPeerId != "BROADCAST") {
+        if (!packetToSend.encrypted && !isBroadcast) {
             val requirement = PacketEncryptionPolicy.getRequirement(packetToSend.type)
             val shouldEncrypt = when (requirement) {
                 EncryptionRequirement.REQUIRED -> true
@@ -54,16 +69,19 @@ class CorePacketDispatcher @Inject constructor(
     }
 
     private fun connectToDevice(address: String) {
-        if (com.meshlink.ble.data.BleConstants.isBluetoothAddress(address)) {
-            connectionManager.connectToDevice(address)
+        val targetAddress = if (com.meshlink.ble.data.BleConstants.isBluetoothAddress(address)) {
+            address
         } else {
-            val resolved = routingCoordinator.resolvePeerAddress(address)
-            if (resolved != null) {
-                connectionManager.connectToDevice(resolved)
-            } else {
-                MeshLogger.w(TAG, "Cannot directly connect to $address - MAC unknown. Relying on mesh routing.")
-            }
+            routingCoordinator.resolvePeerAddress(address)
         }
+        if (targetAddress == null) {
+            MeshLogger.w(TAG, "Cannot directly connect to $address - MAC unknown. Relying on mesh routing.")
+            return
+        }
+        if (connectionManager.isPeerConnectedOrConnecting(targetAddress)) {
+            return
+        }
+        connectionManager.connectToDevice(targetAddress)
     }
 
     private fun connectToPeer(peerIdOrAddress: String): Boolean {
@@ -85,13 +103,31 @@ class CorePacketDispatcher @Inject constructor(
         val devices = discoveryManager.scannedDevices.value.values
         if (devices.isEmpty()) return
 
-        devices.forEach { device ->
-            try {
-                connectionManager.connectToDevice(device.address, isManual = false)
-            } catch (e: Exception) {
-                MeshLogger.w(TAG, "Auto-connect request failed for ${device.name}: ${e.message}")
-            }
+        val now = System.currentTimeMillis()
+        val hasAnyConnection = connectionManager.isAnyPeerConnected()
+        if (hasAnyConnection && now - lastOpportunisticConnectAtMs < OPPORTUNISTIC_CONNECT_COOLDOWN_MS) {
+            return
         }
+
+        val currentConnectedCount = (connectionManager.activeClients.size + connectionManager.connectedServers.size)
+        val remainingSlots = (MAX_OPPORTUNISTIC_CONNECTIONS - currentConnectedCount).coerceAtLeast(0)
+        if (remainingSlots == 0) {
+            return
+        }
+
+        lastOpportunisticConnectAtMs = now
+        devices
+            .asSequence()
+            .filter { !connectionManager.isPeerConnectedOrConnecting(it.address) }
+            .sortedByDescending { it.rssi }
+            .take(remainingSlots)
+            .forEach { device ->
+                try {
+                    connectionManager.connectToDevice(device.address, isManual = false)
+                } catch (e: Exception) {
+                    MeshLogger.w(TAG, "Auto-connect request failed for ${device.name}: ${e.message}")
+                }
+            }
     }
 
     fun encryptAndWrapPayload(

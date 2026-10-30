@@ -37,6 +37,7 @@ class AutomaticRetryEngineTest {
     fun setUp() {
         every { congestionMonitor.isCongested() } returns false
         every { batteryAwareNetworking.powerState.value } returns PowerState.NORMAL
+        coEvery { chatDao.updateMessageStatusConditional(any(), any(), any()) } returns 1
 
         intelligentRetryEngine = IntelligentRetryEngine(congestionMonitor, batteryAwareNetworking)
         stateMachine = MessageStateMachine(chatDao)
@@ -109,8 +110,8 @@ class AutomaticRetryEngineTest {
     }
 
     @Test
-    fun `messages exceeding 24 hour TTL transition to EXPIRED`() = runTest {
-        val oldTimestamp = System.currentTimeMillis() - (25 * 3600 * 1000L) // 25 hours ago
+    fun `messages exceeding 10 minute TTL transition to EXPIRED`() = runTest {
+        val oldTimestamp = System.currentTimeMillis() - (11 * 60 * 1000L) // 11 minutes ago
         val expiredMsg = MessageEntity(
             messageId = "msg_old_1",
             chatId = "peer_A",
@@ -129,7 +130,7 @@ class AutomaticRetryEngineTest {
         retryCoordinator.triggerEvent("ttl_check")
         runCurrent()
 
-        coVerify { chatDao.updateMessageStatus(eq("msg_old_1"), eq(DeliveryStatus.EXPIRED)) }
+        coVerify { chatDao.updateMessageStatusConditional(eq("msg_old_1"), eq(DeliveryStatus.EXPIRED), any()) }
         coVerify(exactly = 0) { meshRepository.sendMessage(any(), any()) }
     }
 }

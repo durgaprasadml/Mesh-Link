@@ -19,6 +19,20 @@ class BackgroundTaskScheduler @Inject constructor(
 
     fun schedulePeriodicWork() {
         scheduleCleanupWorker()
+        scheduleRetryWorker()
+    }
+
+    private fun scheduleRetryWorker() {
+        val retryWorkRequest = PeriodicWorkRequestBuilder<RetryWorker>(
+            15, TimeUnit.MINUTES
+        )
+            .build()
+
+        workManager.enqueueUniquePeriodicWork(
+            "MeshLink_RetryWork",
+            ExistingPeriodicWorkPolicy.KEEP,
+            retryWorkRequest
+        )
     }
 
     private fun scheduleCleanupWorker() {

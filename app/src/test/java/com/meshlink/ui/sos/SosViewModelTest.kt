@@ -114,12 +114,12 @@ class SosViewModelTest {
         advanceUntilIdle()
 
         val state = classUnderTest.uiState.value
-        assertEquals(SosStatus.DELIVERED, state.status)
+        assertEquals(SosStatus.SENT, state.status)
         assertTrue(state.sosSent)
         assertEquals(1, state.relaysReached)
         assertEquals(dummyFront.absolutePath, state.frontImagePath)
         assertEquals(dummyRear.absolutePath, state.rearImagePath)
-        assertEquals("Front and rear cameras captured", state.cameraCaptureStatus)
+        assertEquals("Front and rear photos captured", state.cameraCaptureStatus)
 
         coVerify { meshRepository.dispatchSos(any()) }
         coVerify { cameraController.captureDualSosImages(any(), any()) }
@@ -141,11 +141,11 @@ class SosViewModelTest {
         advanceUntilIdle()
 
         val state = classUnderTest.uiState.value
-        assertEquals(SosStatus.DELIVERED, state.status)
+        assertEquals(SosStatus.SENT, state.status)
         assertTrue(state.sosSent)
         assertEquals(null, state.frontImagePath)
         assertEquals(null, state.rearImagePath)
-        assertEquals("Camera permission denied; alert broadcasted without photos.", state.cameraCaptureStatus)
+        assertEquals("Camera permission denied; alert prepared without photos.", state.cameraCaptureStatus)
 
         coVerify { meshRepository.dispatchSos(any()) }
         coVerify(exactly = 0) { cameraController.captureDualSosImages(any(), any()) }
@@ -170,10 +170,10 @@ class SosViewModelTest {
         advanceUntilIdle()
 
         val state = classUnderTest.uiState.value
-        assertEquals(SosStatus.PARTIALLY_DELIVERED, state.status)
+        assertEquals(SosStatus.SENT, state.status)
         assertEquals(dummyFront.absolutePath, state.frontImagePath)
         assertEquals(null, state.rearImagePath)
-        assertTrue(state.cameraCaptureStatus?.contains("rear failed") == true)
+        assertTrue(state.cameraCaptureStatus?.contains("rear unavailable") == true)
 
         coVerify { meshRepository.sendSosMedia(any(), dummyFront, null) }
 
@@ -181,7 +181,7 @@ class SosViewModelTest {
     }
 
     @Test
-    fun `sendSos when no nearby nodes are discovered marks state as QUEUED honestly`() = runTest(testDispatcher) {
+    fun `sendSos when no nearby nodes are discovered marks state as PENDING and schedules bounded retry`() = runTest(testDispatcher) {
         scannedDevicesFlow.value = emptyMap()
 
         val dummyFront = File.createTempFile("test_front", ".jpg")
@@ -197,16 +197,42 @@ class SosViewModelTest {
         advanceUntilIdle()
 
         val state = classUnderTest.uiState.value
-        assertEquals(SosStatus.QUEUED, state.status)
+        assertEquals(SosStatus.PENDING, state.status)
         assertEquals(0, state.relaysReached)
-        assertTrue(state.sosSent)
 
         dummyFront.delete()
         dummyRear.delete()
     }
 
     @Test
+    fun `cancelSos while PENDING deletes temporary files and cancels pending SOS`() = runTest(testDispatcher) {
+        scannedDevicesFlow.value = emptyMap()
+        val dummyFront = File.createTempFile("test_front", ".jpg")
+        every { cameraController.hasCameraPermission() } returns true
+        coEvery { cameraController.captureDualSosImages(any(), any()) } returns SosDualCaptureResult(
+            frontImage = dummyFront,
+            rearImage = null
+        )
+        coEvery { meshRepository.dispatchSos(any()) } returns MeshResult.Success(Unit)
+        coEvery { meshRepository.cancelPendingSos(any()) } returns MeshResult.Success(Unit)
+
+        classUnderTest.sendSos()
+        advanceUntilIdle()
+
+        assertEquals(SosStatus.PENDING, classUnderTest.uiState.value.status)
+
+        classUnderTest.cancelSos()
+        advanceUntilIdle()
+
+        assertEquals(SosStatus.CANCELLED, classUnderTest.uiState.value.status)
+        coVerify { meshRepository.cancelPendingSos(any()) }
+    }
+
+    @Test
     fun `sendSos prevents duplicate trigger when already sending`() = runTest(testDispatcher) {
+        val mockPeer = mockk<BleDevice>(relaxed = true)
+        scannedDevicesFlow.value = mapOf("PEER1" to mockPeer)
+
         every { cameraController.hasCameraPermission() } returns true
         coEvery { cameraController.captureDualSosImages(any(), any()) } returns SosDualCaptureResult(
             frontImage = null,

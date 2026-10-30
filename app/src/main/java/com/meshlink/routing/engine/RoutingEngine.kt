@@ -24,6 +24,8 @@ class RoutingEngine @Inject constructor(
 ) {
     companion object {
         private const val TAG = "RoutingEngine"
+        private const val DEFAULT_DUPLICATE_CACHE_SIZE = 20_000
+        private const val DEFAULT_DUPLICATE_LIFETIME_MS = 10 * 60 * 1000L
     }
 
     /**
@@ -34,22 +36,37 @@ class RoutingEngine @Inject constructor(
         private val cache = ConcurrentHashMap<String, Long>()
 
         fun addIfAbsent(packetId: String): Boolean {
+            if (packetId.isBlank()) return false
             val config = configManager.currentConfig.value
+            val maxCacheSize = if (config != null && config.duplicateCacheSize > 0) {
+                config.duplicateCacheSize
+            } else {
+                DEFAULT_DUPLICATE_CACHE_SIZE
+            }
+            val lifetimeMs = if (config != null && config.duplicateCacheLifetimeMs > 0L) {
+                config.duplicateCacheLifetimeMs
+            } else {
+                DEFAULT_DUPLICATE_LIFETIME_MS
+            }
             val now = System.currentTimeMillis()
             
             // Lazy eviction: cleanup periodically if we exceed the threshold
-            if (cache.size > config.duplicateCacheSize) {
-                evictStale(now, config.duplicateCacheLifetimeMs)
-                // Hard cap fallback
-                if (cache.size > config.duplicateCacheSize) {
-                    cache.clear() // Drastic, but ensures O(1) constraints if heavily flooded
+            if (cache.size > maxCacheSize) {
+                evictStale(now, lifetimeMs)
+                // Bounded eviction of oldest entries instead of wiping the entire replay cache
+                if (cache.size > maxCacheSize) {
+                    val toRemove = (cache.size - maxCacheSize) + (maxCacheSize / 10).coerceAtLeast(1)
+                    cache.entries
+                        .sortedBy { it.value }
+                        .take(toRemove)
+                        .forEach { cache.remove(it.key, it.value) }
                 }
             }
             
             val existing = cache.putIfAbsent(packetId, now)
             if (existing != null) {
                 // Was already in cache. Check if it's expired.
-                if (now - existing > config.duplicateCacheLifetimeMs) {
+                if (now - existing > lifetimeMs) {
                     // It was expired, so we should consider it new and update timestamp
                     cache[packetId] = now
                     return true

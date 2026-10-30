@@ -151,7 +151,7 @@ fun SosScreen(
                         label = "sos_status_transition"
                     ) { targetStatus ->
                         when (targetStatus) {
-                            SosStatus.SAFE, SosStatus.FAILED -> {
+                            SosStatus.SAFE, SosStatus.FAILED, SosStatus.CANCELLED -> {
                                 HoldToActivateButton(
                                     onActivate = { viewModel.sendSos() }
                                 )
@@ -159,7 +159,8 @@ fun SosScreen(
                             else -> {
                                 ActiveSosState(
                                     state = state,
-                                    onCancel = { viewModel.resetSos() }
+                                    onCancel = { viewModel.cancelSos() },
+                                    onReset = { viewModel.resetSos() }
                                 )
                             }
                         }
@@ -217,28 +218,26 @@ fun SosScreen(
 @Composable
 fun EmergencyStatusCard(state: SosUiState) {
     val containerColor = when (state.status) {
-        SosStatus.SAFE -> MaterialTheme.colorScheme.surfaceVariant
+        SosStatus.SAFE, SosStatus.CANCELLED -> MaterialTheme.colorScheme.surfaceVariant
         SosStatus.ACTIVATING,
         SosStatus.CAPTURING_FRONT,
         SosStatus.CAPTURING_REAR,
-        SosStatus.ENCRYPTING,
+        SosStatus.PREPARING,
+        SosStatus.PENDING -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
         SosStatus.SENDING -> MeshTheme.colors.warning.copy(alpha = 0.2f)
-        SosStatus.DELIVERED -> MeshTheme.colors.success.copy(alpha = 0.2f)
-        SosStatus.PARTIALLY_DELIVERED -> MeshTheme.colors.warning.copy(alpha = 0.25f)
-        SosStatus.QUEUED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+        SosStatus.SENT -> MeshTheme.colors.success.copy(alpha = 0.2f)
         SosStatus.FAILED -> MaterialTheme.colorScheme.errorContainer
     }
     
     val contentColor = when (state.status) {
-        SosStatus.SAFE -> MaterialTheme.colorScheme.onSurfaceVariant
+        SosStatus.SAFE, SosStatus.CANCELLED -> MaterialTheme.colorScheme.onSurfaceVariant
         SosStatus.ACTIVATING,
         SosStatus.CAPTURING_FRONT,
         SosStatus.CAPTURING_REAR,
-        SosStatus.ENCRYPTING,
+        SosStatus.PREPARING,
+        SosStatus.PENDING -> MaterialTheme.colorScheme.primary
         SosStatus.SENDING -> MeshTheme.colors.warning
-        SosStatus.DELIVERED -> MeshTheme.colors.success
-        SosStatus.PARTIALLY_DELIVERED -> MeshTheme.colors.warning
-        SosStatus.QUEUED -> MaterialTheme.colorScheme.primary
+        SosStatus.SENT -> MeshTheme.colors.success
         SosStatus.FAILED -> MaterialTheme.colorScheme.onErrorContainer
     }
     
@@ -247,12 +246,12 @@ fun EmergencyStatusCard(state: SosUiState) {
         SosStatus.ACTIVATING -> "Activating SOS..."
         SosStatus.CAPTURING_FRONT -> "Capturing Front Camera..."
         SosStatus.CAPTURING_REAR -> "Capturing Rear Camera..."
-        SosStatus.ENCRYPTING -> "Encrypting Media..."
-        SosStatus.SENDING -> "Broadcasting SOS..."
-        SosStatus.DELIVERED -> "SOS Delivered"
-        SosStatus.PARTIALLY_DELIVERED -> "SOS Partially Delivered"
-        SosStatus.QUEUED -> "SOS Queued (No Peers Reachable)"
-        SosStatus.FAILED -> "Broadcast Failed"
+        SosStatus.PREPARING -> "Preparing Emergency Package..."
+        SosStatus.PENDING -> "SOS Pending (Searching for Wi-Fi Direct peers)"
+        SosStatus.SENDING -> "Transmitting SOS via Wi-Fi Direct..."
+        SosStatus.SENT -> "SOS Dispatched (Direct Wi-Fi Direct Range)"
+        SosStatus.CANCELLED -> "SOS Cancelled"
+        SosStatus.FAILED -> "Transmission Failed"
     }
 
     Card(
@@ -400,7 +399,7 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.semantics {
+        modifier = Modifier.semantics(mergeDescendants = true) {
             contentDescription = if (isPressed) "Holding to activate. $countdownValue seconds remaining." else "Hold for 3 seconds to send emergency SOS."
             role = Role.Button
         }
@@ -484,7 +483,7 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             Icons.Default.Warning,
-                            contentDescription = "Responder Location",
+                            contentDescription = null,
                             modifier = Modifier.size(MeshTheme.spacing.giant),
                             tint = MaterialTheme.colorScheme.onPrimary
                         )
@@ -509,29 +508,31 @@ fun HoldToActivateButton(onActivate: () -> Unit) {
 }
 
 @Composable
-fun ActiveSosState(state: SosUiState, onCancel: () -> Unit) {
-    val isDelivered = state.status == SosStatus.DELIVERED
-    val isPartiallyDelivered = state.status == SosStatus.PARTIALLY_DELIVERED
-    val isQueued = state.status == SosStatus.QUEUED
-    val isCompleted = isDelivered || isPartiallyDelivered || isQueued
+fun ActiveSosState(
+    state: SosUiState,
+    onCancel: () -> Unit,
+    onReset: () -> Unit = onCancel
+) {
+    val isSent = state.status == SosStatus.SENT
+    val isPending = state.status == SosStatus.PENDING
+    val isCompleted = isSent
     
     val accentColor = when {
-        isDelivered -> MeshTheme.colors.success
-        isPartiallyDelivered -> MeshTheme.colors.warning
-        isQueued -> MaterialTheme.colorScheme.primary
+        isSent -> MeshTheme.colors.success
+        isPending -> MaterialTheme.colorScheme.primary
         else -> MeshTheme.colors.warning
     }
 
     val titleText = when (state.status) {
-        SosStatus.DELIVERED -> "SUCCESS"
-        SosStatus.PARTIALLY_DELIVERED -> "PARTIAL DELIVERY"
-        SosStatus.QUEUED -> "QUEUED"
+        SosStatus.SENT -> "DISPATCHED"
+        SosStatus.PENDING -> "SOS PENDING"
         SosStatus.ACTIVATING -> "ACTIVATING"
         SosStatus.CAPTURING_FRONT -> "CAPTURING FRONT"
         SosStatus.CAPTURING_REAR -> "CAPTURING REAR"
-        SosStatus.ENCRYPTING -> "ENCRYPTING"
-        SosStatus.SENDING -> "BROADCASTING"
-        else -> "BROADCASTING"
+        SosStatus.PREPARING -> "PREPARING PACKAGE"
+        SosStatus.SENDING -> "TRANSMITTING"
+        SosStatus.CANCELLED -> "CANCELLED"
+        else -> "EMERGENCY ACTIVE"
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -545,8 +546,15 @@ fun ActiveSosState(state: SosUiState, onCancel: () -> Unit) {
         ) {
             if (isCompleted) {
                 Icon(
-                    imageVector = if (isDelivered) Icons.Default.CheckCircle else if (isQueued) Icons.Default.Schedule else Icons.Default.Warning,
+                    imageVector = Icons.Default.CheckCircle,
                     contentDescription = "Safe User",
+                    modifier = Modifier.size(72.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            } else if (isPending) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = "Pending Transmission",
                     modifier = Modifier.size(72.dp),
                     tint = MaterialTheme.colorScheme.onPrimary
                 )
@@ -567,21 +575,17 @@ fun ActiveSosState(state: SosUiState, onCancel: () -> Unit) {
             color = accentColor
         )
         
-        if (isDelivered) {
+        if (isSent) {
             Text(
-                text = "Reached ${state.relaysReached} devices in network",
+                text = "Dispatched to nearby peers via Wi-Fi Direct (direct range only)",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = MeshTheme.spacing.large)
             )
-        } else if (isPartiallyDelivered) {
+        } else if (isPending) {
             Text(
-                text = "Reached ${state.relaysReached} devices (partial media capture)",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
-        } else if (isQueued) {
-            Text(
-                text = "Stored in store-and-forward queue (0 nearby peers currently reachable)",
+                text = "Emergency package prepared. Searching for nearby Wi-Fi Direct responders...",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
@@ -655,8 +659,14 @@ fun ActiveSosState(state: SosUiState, onCancel: () -> Unit) {
         
         Spacer(modifier = Modifier.height(MeshTheme.spacing.extraLarge))
         
-        TextButton(onClick = onCancel) {
-            Text("Cancel / Stop SOS", color = MaterialTheme.colorScheme.error)
+        if (isSent) {
+            TextButton(onClick = onReset) {
+                Text("Return to Safe", color = MaterialTheme.colorScheme.primary)
+            }
+        } else {
+            TextButton(onClick = onCancel) {
+                Text("Cancel SOS", color = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }

@@ -22,10 +22,6 @@ fun PrivacySettingsScreen(
     viewModel: SettingsViewModel,
     onBack: () -> Unit
 ) {
-    var biometricUnlock by remember { mutableStateOf(uiState.biometricUnlock) }
-    var appLockEnabled by remember { mutableStateOf(uiState.appLockEnabled) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -87,44 +83,7 @@ fun PrivacySettingsScreen(
                 }
             }
 
-            // Authentication & Access
-            item {
-                Text("App Authentication", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                ElevatedCard(
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = MeshTheme.shapes.large
-                ) {
-                    Column {
-                        SettingsItemRow(
-                            title = "Biometric Unlock",
-                            subtitle = "Require fingerprint or face identification to launch Mesh Link",
-                            icon = Icons.Default.Fingerprint,
-                            trailingContent = {
-                                Switch(
-                                    checked = biometricUnlock,
-                                    onCheckedChange = {
-                                        biometricUnlock = it
-                                        viewModel.showToast(if (it) "Biometric unlock enabled" else "Biometric unlock disabled")
-                                    }
-                                )
-                            }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
-                        SettingsItemRow(
-                            title = "PIN / Pattern Lock",
-                            subtitle = "Passcode lock fallback (Coming Soon)",
-                            icon = Icons.Default.Lock,
-                            trailingContent = {
-                                AssistChip(
-                                    onClick = { },
-                                    label = { Text("Coming Soon", style = MaterialTheme.typography.labelSmall) }
-                                )
-                            }
-                        )
-                    }
-                }
-            }
+
 
             // Devices & Keys
             item {
@@ -152,56 +111,7 @@ fun PrivacySettingsScreen(
                 }
             }
 
-            // Destructive Actions
-            item {
-                Text("Danger Zone", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                Spacer(modifier = Modifier.height(MeshTheme.spacing.small))
-                ElevatedCard(
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                    shape = MeshTheme.shapes.large
-                ) {
-                    Column {
-                        SettingsItemRow(
-                            title = "Delete All Data",
-                            subtitle = "Permanently purge local database, cryptographic keys, and cache",
-                            icon = Icons.Default.DeleteForever,
-                            iconTint = MaterialTheme.colorScheme.error,
-                            textColor = MaterialTheme.colorScheme.error,
-                            onClick = { showDeleteDialog = true }
-                        )
-                    }
-                }
-            }
-
             item { Spacer(modifier = Modifier.height(MeshTheme.spacing.huge)) }
         }
-    }
-
-    // Confirmation Dialog
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Delete All Data?", color = MaterialTheme.colorScheme.error) },
-            text = {
-                Text("This will permanently remove all your messages, local encryption keys, node identity, and cached media from this device. This action cannot be undone.")
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDeleteDialog = false
-                        viewModel.showToast("All data successfully cleared")
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Delete Everything")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 }

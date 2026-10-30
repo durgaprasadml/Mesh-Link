@@ -149,7 +149,7 @@ class MediaMessageHandler @Inject constructor(
                         }
                     }
                 }
-                val candidate = before.removePrefix("sos_").removePrefix("SOS_").trim()
+                val candidate = before.substringAfterLast("__").removePrefix("sos_").removePrefix("SOS_").trim()
                 if (candidate.isNotBlank()) {
                     extractedId = candidate
                 }
@@ -199,11 +199,12 @@ class MediaMessageHandler @Inject constructor(
                 }
             }
 
-            NotificationHelper.showMessageNotification(
-                context,
-                completedSenderId,
-                "🚨 $resolvedSenderName",
-                "🚨 SOS Emergency dual camera image received"
+            NotificationHelper.showSosNotification(
+                context = context,
+                sosEventId = sosEventId,
+                senderId = completedSenderId,
+                senderName = resolvedSenderName,
+                alertText = "🚨 SOS Emergency dual camera image received"
             )
         } else {
             val isImage = completedMimeType.contains("image")

@@ -66,6 +66,8 @@ interface ChatDao {
         chatName: String? = null
     ): MessageEntity {
         val existing = getMessageByUuid(sosEventId)
+            ?: getMessageByUuid("sos_$sosEventId")
+            ?: if (sosEventId.startsWith("sos_")) getMessageByUuid(sosEventId.removePrefix("sos_")) else null
         val currentJson = try {
             if (existing?.mediaPath?.startsWith("{") == true) {
                 org.json.JSONObject(existing.mediaPath)
@@ -86,7 +88,7 @@ interface ChatDao {
 
         if (existing != null) {
             updateMediaMessage(
-                messageId = sosEventId,
+                messageId = existing.messageId,
                 status = DeliveryStatus.DELIVERED,
                 text = existing.text,
                 mediaPath = mergedPath,

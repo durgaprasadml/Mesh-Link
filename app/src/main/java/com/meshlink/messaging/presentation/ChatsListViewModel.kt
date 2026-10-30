@@ -1,5 +1,6 @@
 package com.meshlink.messaging.presentation
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.meshlink.di.DefaultDispatcher
@@ -21,16 +22,28 @@ import kotlinx.coroutines.withContext
 @androidx.compose.runtime.Immutable
 data class ChatsListUiState(
     val chats: List<Chat> = emptyList(),
-    val searchQuery: String = ""
+    val searchQuery: String = "",
+    val totalUnreadCount: Int = 0
 )
 
 @HiltViewModel
-class ChatsListViewModel @Inject constructor(
+class ChatsListViewModel(
     getAllChatsUseCase: com.meshlink.domain.usecase.messaging.GetAllChatsUseCase,
-    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default
+    @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val savedStateHandle: SavedStateHandle? = null
 ) : ViewModel() {
 
-    private val _searchQuery = MutableStateFlow("")
+    @Inject
+    constructor(
+        getAllChatsUseCase: com.meshlink.domain.usecase.messaging.GetAllChatsUseCase,
+        @DefaultDispatcher defaultDispatcher: CoroutineDispatcher
+    ) : this(getAllChatsUseCase, defaultDispatcher, null)
+
+    companion object {
+        internal const val KEY_SEARCH_QUERY = "chats_search_query"
+    }
+
+    private val _searchQuery = MutableStateFlow(savedStateHandle?.get<String>(KEY_SEARCH_QUERY) ?: "")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     @OptIn(kotlinx.coroutines.FlowPreview::class)
@@ -44,12 +57,17 @@ class ChatsListViewModel @Inject constructor(
             } else {
                 chats.filter { it.name.contains(query, ignoreCase = true) }
             }
-            ChatsListUiState(chats = filtered, searchQuery = query)
+            ChatsListUiState(
+                chats = filtered,
+                searchQuery = query,
+                totalUnreadCount = chats.sumOf { runCatching { it.unreadCount }.getOrDefault(0) }
+            )
         }
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatsListUiState())
 
     fun onSearchQueryChanged(query: String) {
         _searchQuery.value = query
+        savedStateHandle?.set(KEY_SEARCH_QUERY, query)
     }
 }

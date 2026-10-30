@@ -33,6 +33,14 @@ class BleMeshDataSourceImpl @Inject constructor(
         advertiser.startAdvertising(name, meshId, capabilities)
     }
 
+    override fun startSosAdvertising(name: String, meshId: String, sosEventId: String, capabilities: Byte) {
+        advertiser.startSosAdvertising(name, meshId, sosEventId, capabilities)
+    }
+
+    override fun stopSosAdvertising() {
+        advertiser.stopSosAdvertising()
+    }
+
     override fun stopAdvertising() {
         advertiser.stopAdvertising()
     }

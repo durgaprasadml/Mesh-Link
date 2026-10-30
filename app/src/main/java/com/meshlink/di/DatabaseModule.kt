@@ -45,7 +45,11 @@ object DatabaseModule {
 
         val lazyFactory = androidx.sqlite.db.SupportSQLiteOpenHelper.Factory { configuration ->
             object : androidx.sqlite.db.SupportSQLiteOpenHelper {
+                @Volatile
                 private var _delegate: androidx.sqlite.db.SupportSQLiteOpenHelper? = null
+                @Volatile
+                private var pendingWriteAheadLogging: Boolean? = null
+
                 private val delegate: androidx.sqlite.db.SupportSQLiteOpenHelper
                     get() {
                         if (_delegate == null) {
@@ -67,7 +71,9 @@ object DatabaseModule {
                                         throw com.meshlink.security.data.SecurityRecoveryException("Empty passphrase returned")
                                     }
                                     val factory = SupportOpenHelperFactory(passphraseBytes, hook, false)
-                                    _delegate = factory.create(configuration)
+                                    val created = factory.create(configuration)
+                                    pendingWriteAheadLogging?.let { created.setWriteAheadLoggingEnabled(it) }
+                                    _delegate = created
                                 }
                             }
                         }
@@ -77,7 +83,8 @@ object DatabaseModule {
                 override val databaseName: String? get() = configuration.name
                 
                 override fun setWriteAheadLoggingEnabled(enabled: Boolean) {
-                    delegate.setWriteAheadLoggingEnabled(enabled)
+                    pendingWriteAheadLogging = enabled
+                    _delegate?.setWriteAheadLoggingEnabled(enabled)
                 }
                 
                 private fun handleDatabaseException(e: Exception): androidx.sqlite.db.SupportSQLiteDatabase {

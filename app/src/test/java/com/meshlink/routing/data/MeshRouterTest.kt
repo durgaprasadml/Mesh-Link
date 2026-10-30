@@ -284,7 +284,7 @@ class MeshRouterTest {
     }
 
     @Test
-    fun `handleIncomingPacket delivers broadcast locally and forwards to downstream peers with original senderId`() = runTest {
+    fun `handleIncomingPacket delivers broadcast locally without multi-hop relay`() = runTest {
         every { bleTransport.connectedPeers } returns setOf("peer_address_1", "peer_address_2")
         every { routingEngine.shouldRelayBroadcast(any()) } returns true
         every { routingEngine.getNextHopForForwarding(any(), any(), any()) } returns null
@@ -300,7 +300,7 @@ class MeshRouterTest {
             payload = "Emergency update",
             type = PacketType.TEXT,
             encrypted = true,
-            ttl = 5,
+            ttl = 1,
             hopCount = 0
         )
 
@@ -312,14 +312,133 @@ class MeshRouterTest {
         assertEquals("node_original_raju", sender)
         assertEquals("pkt_bcast_multihop", receivedPacket.packetId)
 
-        // 2. Forwarded to other peers in mesh with original sender preserved and decremented TTL
+        // 2. Direct-range only: NOT forwarded or relayed to other peers
+        verify(exactly = 0) {
+            queueOptimizer.enqueue(match {
+                it.packetId == "pkt_bcast_multihop"
+            })
+        }
+    }
+
+    @Test
+    fun `handleIncomingPacket forwards ordinary unicast packet to next hop when not for me`() = runTest {
+        every { bleTransport.connectedPeers } returns setOf("peer_address_1", "peer_address_2")
+        every { routingEngine.getNextHopForForwarding(any(), any(), any()) } returns "peer_address_2"
+
+        createRouter(backgroundScope)
+        testScheduler.runCurrent()
+
+        val unicastPacket = MeshPacket(
+            packetId = "pkt_unicast_relay",
+            senderId = "node_sender_alice",
+            targetId = "node_recipient_bob",
+            payload = "Encrypted 1:1 message",
+            type = PacketType.TEXT,
+            encrypted = true,
+            ttl = 5,
+            hopCount = 0
+        )
+
+        bleIncomingPacketsFlow.emit("peer_address_1" to unicastPacket)
+        testScheduler.runCurrent()
+        testScheduler.advanceUntilIdle()
+
         verify {
             queueOptimizer.enqueue(match {
-                it.packetId == "pkt_bcast_multihop" &&
-                it.senderId == "node_original_raju" &&
+                it.packetId == "pkt_unicast_relay" &&
+                it.senderId == "node_sender_alice" &&
+                it.targetId == "node_recipient_bob" &&
                 it.ttl == 4 &&
                 it.hopCount == 1
             })
         }
+    }
+
+    @Test
+    fun `handleIncomingPacket drops stale broadcast packet with expired timestamp`() = runTest {
+        val meshRouter = createRouter(backgroundScope)
+        val receivedPayloads = mutableListOf<Pair<String, MeshPacket>>()
+        backgroundScope.launch {
+            meshRouter.incomingPayloads.collect { receivedPayloads.add(it) }
+        }
+        testScheduler.runCurrent()
+
+        val staleTimestamp = System.currentTimeMillis() - (MeshRouter.BROADCAST_MAX_AGE_MS + 60_000L)
+        val staleBroadcast = MeshPacket(
+            packetId = "pkt_bcast_stale",
+            senderId = "node_sender",
+            targetId = "BROADCAST",
+            payload = """{"text":"Old broadcast","timestamp":$staleTimestamp}""",
+            type = PacketType.TEXT,
+            encrypted = false,
+            ttl = 5
+        )
+
+        bleIncomingPacketsFlow.emit("peer_address_1" to staleBroadcast)
+        testScheduler.runCurrent()
+
+        assertTrue("Stale broadcast must not be delivered locally", receivedPayloads.isEmpty())
+        verify(exactly = 0) { queueOptimizer.enqueue(match { it.packetId == "pkt_bcast_stale" }) }
+        verify { topologyManager.recordDrop() }
+    }
+
+    @Test
+    fun `handleIncomingPacket drops replayed broadcast packet with mutated packetId`() = runTest {
+        val seenKeys = mutableSetOf<String>()
+        every { routingEngine.markPacketProcessed(any()) } answers { seenKeys.add(firstArg()) }
+
+        val meshRouter = createRouter(backgroundScope)
+        val receivedPayloads = mutableListOf<Pair<String, MeshPacket>>()
+        backgroundScope.launch {
+            meshRouter.incomingPayloads.collect { receivedPayloads.add(it) }
+        }
+        testScheduler.runCurrent()
+
+        val now = System.currentTimeMillis()
+        val jsonPayload = """{"text":"Emergency broadcast","timestamp":$now}"""
+        val firstPacket = MeshPacket(
+            packetId = "pkt_bcast_orig",
+            senderId = "node_sender",
+            targetId = "BROADCAST",
+            payload = jsonPayload,
+            type = PacketType.TEXT,
+            encrypted = false,
+            ttl = 5
+        )
+        val replayedWithMutatedId = firstPacket.copy(packetId = "pkt_bcast_replayed_new_id")
+
+        bleIncomingPacketsFlow.emit("peer_address_1" to firstPacket)
+        testScheduler.runCurrent()
+        bleIncomingPacketsFlow.emit("peer_address_1" to replayedWithMutatedId)
+        testScheduler.runCurrent()
+
+        assertEquals("Only original broadcast should be delivered", 1, receivedPayloads.size)
+        assertEquals("pkt_bcast_orig", receivedPayloads.first().second.packetId)
+    }
+
+    @Test
+    fun `handleIncomingPacket drops broadcast packet with zero TTL before local delivery`() = runTest {
+        val meshRouter = createRouter(backgroundScope)
+        val receivedPayloads = mutableListOf<Pair<String, MeshPacket>>()
+        backgroundScope.launch {
+            meshRouter.incomingPayloads.collect { receivedPayloads.add(it) }
+        }
+        testScheduler.runCurrent()
+
+        val expiredPacket = MeshPacket(
+            packetId = "pkt_bcast_ttl0",
+            senderId = "node_sender",
+            targetId = "BROADCAST",
+            payload = "Expired TTL broadcast",
+            type = PacketType.TEXT,
+            encrypted = false,
+            ttl = 0
+        )
+
+        bleIncomingPacketsFlow.emit("peer_address_1" to expiredPacket)
+        testScheduler.runCurrent()
+
+        assertTrue("Zero-TTL broadcast must not be delivered locally", receivedPayloads.isEmpty())
+        verify { topologyManager.recordDrop() }
     }
 }

@@ -37,6 +37,7 @@ data class PeerSecureSession(
      * Sliding window of 64 packets.
      */
     fun isReplay(sequence: Long): Boolean {
+        if (sequence <= 0) return true
         lock.withLock {
             val highestReceived = receiveCounter.get()
             
@@ -58,6 +59,7 @@ data class PeerSecureSession(
     }
 
     fun markReceived(sequence: Long) {
+        if (sequence <= 0) return
         lock.withLock {
             val highestReceived = receiveCounter.get()
             

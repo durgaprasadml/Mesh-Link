@@ -678,16 +678,14 @@ class MeshCryptoManager @Inject constructor(
     @Deprecated("Use decryptData instead", ReplaceWith("decryptData(peerId, data)"))
     override suspend fun decrypt(data: ByteArray, peerId: String): ByteArray {
         val ciphertext = String(data, Charsets.UTF_8)
-        val dec = decryptOrPassthrough(ciphertext, peerId)
-        if (dec == ciphertext && !ciphertext.startsWith("{")) throw Exception("Decryption failed")
+        val dec = decrypt(ciphertext, peerId) ?: throw Exception("Decryption failed")
         return dec.toByteArray(Charsets.UTF_8)
     }
 
     override suspend fun decryptData(peerId: String, data: ByteArray): com.meshlink.domain.model.MeshResult<ByteArray> {
         return try {
             val ciphertext = String(data, Charsets.UTF_8)
-            val dec = decryptOrPassthrough(ciphertext, peerId)
-            if (dec == ciphertext && !ciphertext.startsWith("{")) throw Exception("Decryption failed")
+            val dec = decrypt(ciphertext, peerId) ?: throw Exception("Decryption failed")
             com.meshlink.domain.model.MeshResult.Success(dec.toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
             com.meshlink.domain.model.MeshResult.Error(com.meshlink.domain.model.MeshError.SecurityError("Decryption failed", peerId, e))

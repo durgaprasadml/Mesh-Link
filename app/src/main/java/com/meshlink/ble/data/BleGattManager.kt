@@ -196,7 +196,7 @@ class BleGattManager @Inject constructor(
         connectionManager.removeActiveClient(address)
     }
 
-    fun broadcastPacket(jsonPacket: String, excludeAddress: String? = null, includeAddress: String? = null) {
+    fun broadcastPacket(jsonPacket: String, excludeAddress: String? = null, includeAddress: String? = null, priority: Int = 0) {
         val bytes = jsonPacket.toByteArray(Charsets.UTF_8)
 
         val matchesClient = includeAddress != null && connectionManager.activeClients.containsKey(includeAddress)
@@ -206,9 +206,9 @@ class BleGattManager @Inject constructor(
         // Dispatch to Nodes we initiated connection to
         connectionManager.activeClients.forEach { (address, _) ->
             if (shouldDirectRoute) {
-                if (address.equals(includeAddress, ignoreCase = true)) enqueueClientWrite(address, bytes)
+                if (address.equals(includeAddress, ignoreCase = true)) enqueueClientWrite(address, bytes, priority)
             } else if (excludeAddress == null || !address.equals(excludeAddress, ignoreCase = true)) {
-                enqueueClientWrite(address, bytes)
+                enqueueClientWrite(address, bytes, priority)
             }
         }
         
@@ -239,11 +239,11 @@ class BleGattManager @Inject constructor(
         }
     }
 
-    private fun enqueueClientWrite(address: String, bytes: ByteArray) {
+    private fun enqueueClientWrite(address: String, bytes: ByteArray, priority: Int = 0) {
         applicationScope.launch {
             mutex.withLock {
                 val copy = bytes.copyOf()
-                appMessageQueue.enqueue(com.meshlink.ble.data.gatt.PendingApplicationMessage(address, copy))
+                appMessageQueue.enqueue(com.meshlink.ble.data.gatt.PendingApplicationMessage(address, copy, priority))
                 flushClientWriteQueueLocked()
             }
         }
@@ -329,6 +329,22 @@ class BleGattManager @Inject constructor(
             
             if (writeStarted) {
                 writeQueue.setActiveWrite(pending)
+                // Timeout watchdog: In Android BLE, WRITE_TYPE_NO_RESPONSE onCharacteristicWrite can be dropped under load.
+                // If the callback does not arrive within 3 seconds, clear the stuck write and unblock the queue.
+                applicationScope.launch {
+                    delay(3000L)
+                    mutex.withLock {
+                        val expired = writeQueue.clearIfActiveAndExpired(pending.address, pending, 3000L)
+                        if (expired != null) {
+                            MeshLogger.w("BleGatt", "Active write callback was lost for ${pending.address}; watchdog cleared stuck write to unblock queue")
+                            BufferPool.returnBuffer(expired.bytes)
+                            if (!writeQueue.hasPendingForDevice(pending.address)) {
+                                _gattEvents.tryEmit(GattEvent.QueueEmpty(pending.address))
+                            }
+                            flushClientWriteQueueLocked()
+                        }
+                    }
+                }
             } else {
                 val backoff = writeQueue.requeueWithBackoff(pending)
                 if (backoff < 0) {

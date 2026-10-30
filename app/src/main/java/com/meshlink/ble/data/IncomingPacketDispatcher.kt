@@ -21,12 +21,25 @@ import com.meshlink.transfer.TransferManager
 import com.meshlink.util.MeshIdNormalizer
 import com.meshlink.voice.transport.VoiceTransport
 import com.meshlink.ble.data.handlers.BeaconHandler
+import com.meshlink.emergency.incident.EmergencyFormSync
+import com.meshlink.emergency.incident.Incident
+import com.meshlink.emergency.incident.IncidentManager
+import com.meshlink.emergency.incident.IncidentStatus
+import com.meshlink.emergency.incident.IncidentType
+import com.meshlink.emergency.logistics.Resource
+import com.meshlink.emergency.logistics.ResourceCategory
+import com.meshlink.emergency.logistics.ResourceManager
+import com.meshlink.emergency.rescue.TeamMemberStatus
+import com.meshlink.emergency.rescue.TeamRole
+import com.meshlink.emergency.rescue.TeamTracker
+import com.meshlink.video.transport.VideoTransport
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
+import org.json.JSONObject
 
 @Singleton
-class IncomingPacketDispatcher @Inject constructor(
+class IncomingPacketDispatcher(
     private val userRepository: UserRepository,
     private val settingsRepository: SettingsRepository,
     private val cryptoManager: MeshCryptoManager,
@@ -43,8 +56,86 @@ class IncomingPacketDispatcher @Inject constructor(
     private val broadcastHandler: BroadcastHandler,
     private val ackManager: AckManager,
     private val beaconHandler: BeaconHandler,
-    private val profileSyncManagerProvider: javax.inject.Provider<com.meshlink.profile.ProfileSyncManager>
+    private val profileSyncManagerProvider: javax.inject.Provider<com.meshlink.profile.ProfileSyncManager>,
+    private val videoTransport: VideoTransport?,
+    private val incidentManager: IncidentManager?,
+    private val emergencyFormSync: EmergencyFormSync?,
+    private val resourceManager: ResourceManager?,
+    private val teamTracker: TeamTracker?
 ) {
+    @Inject
+    constructor(
+        userRepository: UserRepository,
+        settingsRepository: SettingsRepository,
+        cryptoManager: MeshCryptoManager,
+        sessionManager: SessionManager,
+        trustManager: TrustManager,
+        rekeyManager: RekeyManager,
+        transferManager: TransferManager,
+        voiceTransport: VoiceTransport,
+        keyExchangeHandler: KeyExchangeHandler,
+        textMessageHandler: TextMessageHandler,
+        mediaMessageHandler: MediaMessageHandler,
+        locationMessageHandler: LocationMessageHandler,
+        voiceMessageHandler: VoiceMessageHandler,
+        broadcastHandler: BroadcastHandler,
+        ackManager: AckManager,
+        beaconHandler: BeaconHandler,
+        profileSyncManagerProvider: javax.inject.Provider<com.meshlink.profile.ProfileSyncManager>
+    ) : this(
+        userRepository = userRepository,
+        settingsRepository = settingsRepository,
+        cryptoManager = cryptoManager,
+        sessionManager = sessionManager,
+        trustManager = trustManager,
+        rekeyManager = rekeyManager,
+        transferManager = transferManager,
+        voiceTransport = voiceTransport,
+        keyExchangeHandler = keyExchangeHandler,
+        textMessageHandler = textMessageHandler,
+        mediaMessageHandler = mediaMessageHandler,
+        locationMessageHandler = locationMessageHandler,
+        voiceMessageHandler = voiceMessageHandler,
+        broadcastHandler = broadcastHandler,
+        ackManager = ackManager,
+        beaconHandler = beaconHandler,
+        profileSyncManagerProvider = profileSyncManagerProvider,
+        videoTransport = null,
+        incidentManager = null,
+        emergencyFormSync = null,
+        resourceManager = null,
+        teamTracker = null
+    )
+
+    @Inject
+    lateinit var injectedVideoTransport: VideoTransport
+
+    @Inject
+    lateinit var injectedIncidentManager: IncidentManager
+
+    @Inject
+    lateinit var injectedEmergencyFormSync: EmergencyFormSync
+
+    @Inject
+    lateinit var injectedResourceManager: ResourceManager
+
+    @Inject
+    lateinit var injectedTeamTracker: TeamTracker
+
+    private fun resolvedVideoTransport(): VideoTransport? =
+        videoTransport ?: if (::injectedVideoTransport.isInitialized) injectedVideoTransport else null
+
+    private fun resolvedIncidentManager(): IncidentManager? =
+        incidentManager ?: if (::injectedIncidentManager.isInitialized) injectedIncidentManager else null
+
+    private fun resolvedEmergencyFormSync(): EmergencyFormSync? =
+        emergencyFormSync ?: if (::injectedEmergencyFormSync.isInitialized) injectedEmergencyFormSync else null
+
+    private fun resolvedResourceManager(): ResourceManager? =
+        resourceManager ?: if (::injectedResourceManager.isInitialized) injectedResourceManager else null
+
+    private fun resolvedTeamTracker(): TeamTracker? =
+        teamTracker ?: if (::injectedTeamTracker.isInitialized) injectedTeamTracker else null
     private val TAG = "IncomingPacketDispatcher"
 
     suspend fun dispatch(packet: MeshPacket) {
@@ -88,10 +179,13 @@ class IncomingPacketDispatcher @Inject constructor(
                 }
             }
 
-            val decrypted = cryptoManager.decryptOrPassthrough(finalPayload, packet.senderId, validAad, usePreviousKey)
-            if (decrypted == finalPayload && !finalPayload.startsWith("{")) {
-                MeshLogger.w(TAG, "Dropping packet: Failed to decrypt payload.")
+            val decrypted = cryptoManager.decrypt(finalPayload, packet.senderId, validAad, usePreviousKey)
+            if (decrypted == null) {
+                MeshLogger.w(TAG, "Dropping packet ${packet.packetId}: Failed to decrypt payload.")
                 return
+            }
+            if (validAad != null) {
+                sessionManager.commitAuthenticatedPacket(packet.senderId, validAad)
             }
             trustManager.increaseTrustScore(packet.senderId, 1)
             processedPacket = packet.copy(payload = decrypted)
@@ -162,14 +256,23 @@ class IncomingPacketDispatcher @Inject constructor(
                     profileSyncManagerProvider.get().handleProfileImageResponse(processedPacket)
                 }
                 PacketType.VIDEO_SIGNAL,
-                PacketType.VIDEO_FRAME,
-                PacketType.INCIDENT_REPORT,
-                PacketType.CHECK_IN,
-                PacketType.FORM_SYNC,
-                PacketType.RESOURCE_SYNC,
+                PacketType.VIDEO_FRAME -> {
+                    resolvedVideoTransport()?.handleIncomingPacket(processedPacket)
+                }
+                PacketType.FORM_SYNC -> {
+                    resolvedEmergencyFormSync()?.receiveSync(processedPacket.payload)
+                }
+                PacketType.INCIDENT_REPORT -> {
+                    handleIncidentReport(processedPacket)
+                }
+                PacketType.CHECK_IN -> {
+                    handleCheckIn(processedPacket)
+                }
+                PacketType.RESOURCE_SYNC -> {
+                    handleResourceSync(processedPacket)
+                }
                 PacketType.MAP_SYNC -> {
-                    // Currently no-op or handled elsewhere, but must be explicitly defined
-                    MeshLogger.d(TAG, "Received unhandled packet type: ${processedPacket.type}")
+                    MeshLogger.i(TAG, "Received MAP_SYNC packet from ${processedPacket.senderId} (packetId=${processedPacket.packetId})")
                 }
             }
         } catch (e: Exception) {
@@ -177,4 +280,54 @@ class IncomingPacketDispatcher @Inject constructor(
         }
     }
 
+    private fun handleIncidentReport(packet: MeshPacket) {
+        val manager = resolvedIncidentManager() ?: return
+        val json = JSONObject(packet.payload)
+        val typeName = json.optString("type", IncidentType.MEDICAL.name)
+        val incidentType = runCatching { IncidentType.valueOf(typeName) }.getOrDefault(IncidentType.MEDICAL)
+        val statusName = json.optString("status", IncidentStatus.ACTIVE.name)
+        val incidentStatus = runCatching { IncidentStatus.valueOf(statusName) }.getOrDefault(IncidentStatus.ACTIVE)
+        val incident = Incident(
+            id = json.optString("id", packet.packetId),
+            type = incidentType,
+            severity = json.optInt("severity", 3).coerceIn(1, 5),
+            locationDescription = json.optString("locationDescription", "Unknown"),
+            commanderId = json.optString("commanderId", packet.senderId),
+            timestamp = json.optLong("timestamp", packet.timestamp),
+            status = incidentStatus
+        )
+        manager.syncIncomingIncident(incident)
+    }
+
+    private fun handleCheckIn(packet: MeshPacket) {
+        val tracker = resolvedTeamTracker() ?: return
+        val json = JSONObject(packet.payload)
+        val role = runCatching { TeamRole.valueOf(json.optString("role", TeamRole.VOLUNTEER.name)) }
+            .getOrDefault(TeamRole.VOLUNTEER)
+        val status = runCatching { TeamMemberStatus.valueOf(json.optString("status", TeamMemberStatus.SAFE.name)) }
+            .getOrDefault(TeamMemberStatus.SAFE)
+        tracker.processCheckIn(
+            id = json.optString("id", packet.senderId),
+            name = json.optString("name", packet.senderId),
+            role = role,
+            status = status,
+            batteryPct = json.optInt("batteryPct", 100).coerceIn(0, 100)
+        )
+    }
+
+    private fun handleResourceSync(packet: MeshPacket) {
+        val manager = resolvedResourceManager() ?: return
+        val json = JSONObject(packet.payload)
+        val category = runCatching { ResourceCategory.valueOf(json.optString("category", ResourceCategory.MEDICAL.name)) }
+            .getOrDefault(ResourceCategory.MEDICAL)
+        val resource = Resource(
+            id = json.optString("id", packet.packetId),
+            category = category,
+            name = json.optString("name", "Resource"),
+            quantity = json.optInt("quantity", 0).coerceAtLeast(0),
+            location = json.optString("location", "Unknown"),
+            ownerId = json.optString("ownerId", packet.senderId)
+        )
+        manager.syncResource(resource)
+    }
 }

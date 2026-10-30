@@ -65,6 +65,7 @@ class TransportPacketClassifier @Inject constructor() {
 
         // 3. PacketType Classification
         return when (packetType) {
+            PacketType.SOS,
             PacketType.MEDIA_CHUNK,
             PacketType.MEDIA_META,
             PacketType.VOICE_FRAME,

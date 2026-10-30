@@ -5,7 +5,7 @@ import android.content.Intent
 import android.os.Build
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.domain.repository.MeshRepository
-import com.meshlink.service.MeshRelayService
+import com.meshlink.service.MeshBackgroundService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -79,17 +79,17 @@ class CrashRecoveryManager @Inject constructor(
 
     private fun restartForegroundService() {
         try {
-            val intent = Intent(context, MeshRelayService::class.java).apply {
-                action = MeshRelayService.ACTION_START
+            val intent = Intent(context, MeshBackgroundService::class.java).apply {
+                action = MeshBackgroundService.ACTION_START
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
                 context.startService(intent)
             }
-            MeshLogger.d(TAG, "MeshRelayService recovery triggered.")
+            MeshLogger.d(TAG, "MeshBackgroundService recovery triggered.")
         } catch (e: Exception) {
-            MeshLogger.e(TAG, "Failed to recover MeshRelayService", e)
+            MeshLogger.e(TAG, "Failed to recover MeshBackgroundService", e)
         }
     }
 }

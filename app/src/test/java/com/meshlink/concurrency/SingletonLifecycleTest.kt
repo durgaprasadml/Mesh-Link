@@ -1,7 +1,6 @@
 package com.meshlink.concurrency
 
 import com.meshlink.ble.data.BleRepositoryImpl
-import com.meshlink.media.data.MediaTransferManager
 import com.meshlink.security.data.TrustManager
 import com.meshlink.config.MeshConfig
 import com.meshlink.database.data.local.TrustDao
@@ -46,28 +45,6 @@ class SingletonLifecycleTest {
         
         // We know testScope's job is cancelled, so the coroutines started via applicationScope.launch 
         // inside TrustManager are also cancelled.
-        assertTrue(testScope.coroutineContext[Job]?.isCancelled == true)
-    }
-
-    @Test
-    fun `test MediaTransferManager cancels jobs on scope cancellation`() = runTest {
-        val testDispatcher = UnconfinedTestDispatcher(testScheduler)
-        val testScope = TestScope(testDispatcher)
-        
-        val mockContext = mockk<Context>()
-        val mockConfig = mockk<MeshConfig>()
-
-        val manager = MediaTransferManager(
-            context = mockContext,
-            ioDispatcher = testDispatcher,
-            meshConfig = mockConfig,
-            applicationScope = testScope
-        )
-
-        // Cancel application scope
-        testScope.cancel()
-        
-        // Assert scope cancellation
         assertTrue(testScope.coroutineContext[Job]?.isCancelled == true)
     }
 }

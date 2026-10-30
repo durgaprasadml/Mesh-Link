@@ -98,4 +98,14 @@ class DatabaseSecurityManagerTest {
         }
         assertTrue(exception.message?.contains("Database seed cannot be recovered") == true)
     }
+
+    @Test
+    fun `DatabaseModule provideMeshDatabase defers passphrase derivation until actual DB connection open`() {
+        val mockSecManager = mockk<DatabaseSecurityManager>(relaxed = true)
+        val db = com.meshlink.di.DatabaseModule.provideMeshDatabase(context, mockSecManager)
+        assertNotNull(db)
+        // Building MeshDatabase (which calls setWriteAheadLoggingEnabled on the OpenHelper) must NOT trigger PBKDF2 key derivation on the caller thread
+        verify(exactly = 0) { mockSecManager.getDatabasePassphrase() }
+        db.close()
+    }
 }

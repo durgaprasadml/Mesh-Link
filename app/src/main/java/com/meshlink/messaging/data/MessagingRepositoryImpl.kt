@@ -37,7 +37,13 @@ class MessagingRepositoryImpl @Inject constructor(
         return chatLocalDataSource.getAllChats().map { list ->
             list.map { entity ->
                 val user = userDao.getUser(entity.id)
-                entity.toDomain().copy(profilePhotoPath = user?.profilePhotoPath)
+                val unreadMessageCount = runCatching {
+                    chatLocalDataSource.getUnreadIncomingMessages(entity.id).size
+                }.getOrDefault(0)
+                entity.toDomain().copy(
+                    unreadCount = maxOf(entity.unreadCount, unreadMessageCount),
+                    profilePhotoPath = user?.profilePhotoPath
+                )
             }
         }
     }
@@ -95,6 +101,10 @@ class MessagingRepositoryImpl @Inject constructor(
 
     override suspend fun markChatAsRead(chatId: String) {
         chatLocalDataSource.markChatAsRead(chatId)
+        val unreadIds = chatLocalDataSource.getUnreadIncomingMessages(chatId)
+        if (unreadIds.isNotEmpty()) {
+            chatLocalDataSource.markMessagesAsSeen(unreadIds)
+        }
     }
 }
 

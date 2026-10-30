@@ -27,7 +27,8 @@ enum class AdvertisingState {
 data class AdvertisingRequest(
     val name: String,
     val meshId: String,
-    val capabilities: Byte
+    val capabilities: Byte,
+    val sosAnnouncement: SosAnnouncement? = null
 )
 
 /**

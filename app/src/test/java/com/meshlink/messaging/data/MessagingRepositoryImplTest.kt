@@ -103,7 +103,30 @@ class MessagingRepositoryImplTest {
 
     @Test
     fun `markChatAsRead should call source`() = runTest {
+        coEvery { chatLocalDataSource.getUnreadIncomingMessages("chat_1") } returns listOf("m1", "m2")
         repository.markChatAsRead("chat_1")
         coVerify(exactly = 1) { chatLocalDataSource.markChatAsRead("chat_1") }
+        coVerify(exactly = 1) { chatLocalDataSource.markMessagesAsSeen(listOf("m1", "m2")) }
+    }
+
+    @Test
+    fun `getAllChats reconciles unreadCount with persisted unread incoming messages after process death`() = runTest {
+        val chatEntity = ChatEntity(
+            id = "chat_peer_1",
+            name = "Peer One",
+            lastMessage = "Unread hello",
+            lastMessageAt = 2000L,
+            unreadCount = 0
+        )
+        every { chatLocalDataSource.getAllChats() } returns flowOf(listOf(chatEntity))
+        coEvery { chatLocalDataSource.getUnreadIncomingMessages("chat_peer_1") } returns listOf("msg_a", "msg_b", "msg_c")
+        coEvery { userDao.getUser("chat_peer_1") } returns null
+
+        repository.getAllChats().test {
+            val chats = awaitItem()
+            assertEquals(1, chats.size)
+            assertEquals(3, chats[0].unreadCount)
+            awaitComplete()
+        }
     }
 }

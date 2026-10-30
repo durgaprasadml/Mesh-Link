@@ -123,4 +123,25 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setReduceMotionEnabled(enabled: Boolean) {
         localDataSource.setReduceMotionEnabled(enabled)
     }
+
+    // Emergency SOS
+    override val emergencyNumber: Flow<String> = localDataSource.emergencyNumber
+    override suspend fun setEmergencyNumber(number: String) {
+        localDataSource.setEmergencyNumber(number)
+    }
+
+    override val sosAutoBroadcast: Flow<Boolean> = localDataSource.sosAutoBroadcast
+    override suspend fun setSosAutoBroadcast(enabled: Boolean) {
+        localDataSource.setSosAutoBroadcast(enabled)
+    }
+
+    override val shareLiveLocation: Flow<Boolean> = localDataSource.shareLiveLocation
+    override suspend fun setShareLiveLocation(enabled: Boolean) {
+        localDataSource.setShareLiveLocation(enabled)
+    }
+
+    override val emergencyTemplate: Flow<String> = localDataSource.emergencyTemplate
+    override suspend fun setEmergencyTemplate(template: String) {
+        localDataSource.setEmergencyTemplate(template)
+    }
 }

@@ -1,5 +1,6 @@
 package com.meshlink.ui.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +36,14 @@ enum class SettingsDestination {
     HOME, PROFILE, NETWORK, MESSAGING, EMERGENCY, STORAGE, APPEARANCE, NOTIFICATIONS, PRIVACY, DEVELOPER, ABOUT
 }
 
+internal fun resolveSettingsBackDestination(currentDestination: SettingsDestination): SettingsDestination? {
+    return if (currentDestination != SettingsDestination.HOME) {
+        SettingsDestination.HOME
+    } else {
+        null
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -41,10 +51,14 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var currentDestination by remember { mutableStateOf(SettingsDestination.HOME) }
+    var currentDestination by rememberSaveable { mutableStateOf(SettingsDestination.HOME) }
     val userName = uiState.user?.name ?: "Mesh User"
     val nodeId = uiState.user?.meshId?.take(8)?.uppercase() ?: "NODE-8A9F"
     val snackbarHostState = remember { SnackbarHostState() }
+
+    BackHandler(enabled = currentDestination != SettingsDestination.HOME) {
+        resolveSettingsBackDestination(currentDestination)?.let { currentDestination = it }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collectLatest { event ->
@@ -175,7 +189,7 @@ fun SettingsHome(
             SettingCategory(
                 title = "Storage & Data",
                 items = listOf(
-                    SettingRowData("Storage & Data", "Database, Cache, Backup & Export", Icons.Default.Storage, SettingsDestination.STORAGE)
+                    SettingRowData("Storage & Data", "Database, Storage Optimization & Cache", Icons.Default.Storage, SettingsDestination.STORAGE)
                 )
             ),
             SettingCategory(
@@ -193,7 +207,7 @@ fun SettingsHome(
             SettingCategory(
                 title = "Privacy & Security",
                 items = listOf(
-                    SettingRowData("Privacy & Security", "AES-256 E2EE, Biometrics & Trusted Keys", Icons.Default.Security, SettingsDestination.PRIVACY)
+                    SettingRowData("Privacy & Security", "AES-256 E2EE & Trusted Keys", Icons.Default.Security, SettingsDestination.PRIVACY)
                 )
             ),
             SettingCategory(

@@ -46,6 +46,13 @@ class SettingsLocalDataSourceImpl @Inject constructor(
         val CORNER_RADIUS_SCALE = floatPreferencesKey("corner_radius_scale")
         val LARGE_TEXT_ENABLED = booleanPreferencesKey("large_text_enabled")
         val REDUCE_MOTION_ENABLED = booleanPreferencesKey("reduce_motion_enabled")
+
+        // Emergency SOS
+        val EMERGENCY_NUMBER = stringPreferencesKey("emergency_number")
+        val SOS_AUTO_BROADCAST = booleanPreferencesKey("sos_auto_broadcast")
+        val SHARE_LIVE_LOCATION = booleanPreferencesKey("share_live_location")
+        val EMERGENCY_TEMPLATE = stringPreferencesKey("emergency_template")
+        const val DEFAULT_EMERGENCY_TEMPLATE = "EMERGENCY! Immediate assistance needed at my coordinates."
     }
 
     // Security settings removed
@@ -159,5 +166,26 @@ class SettingsLocalDataSourceImpl @Inject constructor(
     override val reduceMotionEnabled: Flow<Boolean> = dataStore.data.map { it[REDUCE_MOTION_ENABLED] ?: false }
     override suspend fun setReduceMotionEnabled(enabled: Boolean) {
         dataStore.edit { it[REDUCE_MOTION_ENABLED] = enabled }
+    }
+
+    // Emergency SOS
+    override val emergencyNumber: Flow<String> = dataStore.data.map { it[EMERGENCY_NUMBER] ?: "112" }
+    override suspend fun setEmergencyNumber(number: String) {
+        dataStore.edit { it[EMERGENCY_NUMBER] = number.trim().ifBlank { "112" } }
+    }
+
+    override val sosAutoBroadcast: Flow<Boolean> = dataStore.data.map { it[SOS_AUTO_BROADCAST] ?: true }
+    override suspend fun setSosAutoBroadcast(enabled: Boolean) {
+        dataStore.edit { it[SOS_AUTO_BROADCAST] = enabled }
+    }
+
+    override val shareLiveLocation: Flow<Boolean> = dataStore.data.map { it[SHARE_LIVE_LOCATION] ?: true }
+    override suspend fun setShareLiveLocation(enabled: Boolean) {
+        dataStore.edit { it[SHARE_LIVE_LOCATION] = enabled }
+    }
+
+    override val emergencyTemplate: Flow<String> = dataStore.data.map { it[EMERGENCY_TEMPLATE] ?: DEFAULT_EMERGENCY_TEMPLATE }
+    override suspend fun setEmergencyTemplate(template: String) {
+        dataStore.edit { it[EMERGENCY_TEMPLATE] = template.trim().ifBlank { DEFAULT_EMERGENCY_TEMPLATE } }
     }
 }

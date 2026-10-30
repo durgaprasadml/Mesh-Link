@@ -60,16 +60,20 @@ class MessageStateMachine @Inject constructor(
         }
 
         if (currentStatus != null && !force) {
-            val isDeliveryOrSeen = targetStatus == DeliveryStatus.DELIVERED || targetStatus == DeliveryStatus.SEEN
-            val isRetryFromFailure = (currentStatus == DeliveryStatus.FAILED || currentStatus == DeliveryStatus.PERMANENT_FAILURE) &&
-                    (targetStatus == DeliveryStatus.QUEUED || targetStatus == DeliveryStatus.SENDING || targetStatus == DeliveryStatus.WAITING_FOR_ACK || targetStatus == DeliveryStatus.SENT || targetStatus == DeliveryStatus.RETRYING || isDeliveryOrSeen)
-
-            if (!isDeliveryOrSeen && !isRetryFromFailure) {
-                if (isTerminalState(currentStatus)) {
+            if (isTerminalState(currentStatus)) {
+                // The only allowed transition from a terminal state without force is DELIVERED -> SEEN
+                if (!(currentStatus == DeliveryStatus.DELIVERED && targetStatus == DeliveryStatus.SEEN)) {
                     MeshLogger.w(TAG, "Rejected transition for $messageId from terminal state $currentStatus to $targetStatus")
                     return false
                 }
+            }
 
+            val isRetryFromFailure = (currentStatus == DeliveryStatus.FAILED || currentStatus == DeliveryStatus.PERMANENT_FAILURE) &&
+                    (targetStatus == DeliveryStatus.QUEUED || targetStatus == DeliveryStatus.SENDING || targetStatus == DeliveryStatus.WAITING_FOR_ACK || targetStatus == DeliveryStatus.SENT || targetStatus == DeliveryStatus.RETRYING || targetStatus == DeliveryStatus.DELIVERED || targetStatus == DeliveryStatus.SEEN)
+
+            val isNonTerminalCycle = !isTerminalState(currentStatus) && !isTerminalState(targetStatus)
+
+            if (!isRetryFromFailure && !isNonTerminalCycle) {
                 val currentPriority = getStatusPriority(currentStatus)
                 val targetPriority = getStatusPriority(targetStatus)
                 if (targetPriority < currentPriority) {
@@ -80,13 +84,7 @@ class MessageStateMachine @Inject constructor(
         }
 
         val rowsUpdated = if (allowedPreviousStatuses.isNotEmpty()) {
-            val count = chatDao.updateMessageStatusConditional(messageId, targetStatus, allowedPreviousStatuses)
-            if (count == 0 && currentStatus != null && allowedPreviousStatuses.contains(currentStatus)) {
-                chatDao.updateMessageStatus(messageId, targetStatus)
-                1
-            } else {
-                count
-            }
+            chatDao.updateMessageStatusConditional(messageId, targetStatus, allowedPreviousStatuses)
         } else {
             chatDao.updateMessageStatus(messageId, targetStatus)
             1

@@ -53,7 +53,11 @@ class MeshBackgroundService : Service() {
     @Inject
     lateinit var discoveryEngine: DiscoveryEngine
 
+    @Inject
+    lateinit var permissionChecker: com.meshlink.core.permissions.BluetoothPermissionChecker
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var notificationObserverJob: kotlinx.coroutines.Job? = null
     private var restartOnDestroy = true
 
     private val radioStateReceiver = object : BroadcastReceiver() {
@@ -63,12 +67,25 @@ class MeshBackgroundService : Service() {
                 action == android.net.wifi.WifiManager.WIFI_STATE_CHANGED_ACTION ||
                 action == android.net.wifi.p2p.WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION
             ) {
-                if (com.meshlink.ui.components.areRadiosAndPermissionsReady(this@MeshBackgroundService)) {
-                    MeshLogger.d(TAG, "Both Bluetooth and Wi-Fi are ON: restoring mesh lifecycle")
-                    meshLifecycleManager.startMesh()
-                } else {
-                    MeshLogger.d(TAG, "Bluetooth or Wi-Fi turned OFF: pausing mesh lifecycle")
+                try {
+                    val hasBtPerm = if (::permissionChecker.isInitialized) {
+                        permissionChecker.hasRequiredPermissions(this@MeshBackgroundService)
+                    } else {
+                        com.meshlink.ui.components.isBluetoothPermissionGranted(this@MeshBackgroundService)
+                    }
+                    val isBtOn = com.meshlink.ui.components.isBluetoothEnabled(this@MeshBackgroundService)
+                    if (hasBtPerm && isBtOn) {
+                        MeshLogger.d(TAG, "Bluetooth is ON and permissions granted: restoring mesh lifecycle")
+                        meshLifecycleManager.startMesh()
+                    } else {
+                        MeshLogger.d(TAG, "Bluetooth turned OFF or permissions missing: pausing mesh lifecycle")
+                        meshLifecycleManager.pauseMesh()
+                    }
+                } catch (e: SecurityException) {
+                    MeshLogger.w(TAG, "SecurityException in radioStateReceiver: ${e.message}")
                     meshLifecycleManager.pauseMesh()
+                } catch (e: Exception) {
+                    MeshLogger.e(TAG, "Error handling radio state change: ${e.message}")
                 }
             }
         }
@@ -130,12 +147,22 @@ class MeshBackgroundService : Service() {
                 }
 
                 meshLifecycleManager.initialize()
-                meshLifecycleManager.startMesh()
+                val hasBtPerm = if (::permissionChecker.isInitialized) {
+                    permissionChecker.hasRequiredPermissions(this)
+                } else {
+                    com.meshlink.ui.components.isBluetoothPermissionGranted(this)
+                }
+                if (hasBtPerm && com.meshlink.ui.components.isBluetoothEnabled(this)) {
+                    meshLifecycleManager.startMesh()
+                } else {
+                    MeshLogger.w(TAG, "Deferring mesh subsystem startup in MeshBackgroundService until Bluetooth permissions and radio are ready")
+                }
                 _serviceState.value = ServiceState.RUNNING
                 MeshLogger.d(TAG, "[MeshStartup] BACKGROUND_SERVICE_ACTIVE")
 
-                // Observe nearby count to dynamically update notification
-                serviceScope.launch {
+                // Observe nearby count to dynamically update notification (single active collector)
+                notificationObserverJob?.cancel()
+                notificationObserverJob = serviceScope.launch {
                     discoveryEngine.scannedDevices.collect { map ->
                         updateNotification(map.size)
                     }

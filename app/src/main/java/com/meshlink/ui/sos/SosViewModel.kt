@@ -35,17 +35,29 @@ enum class SosStatus {
     ACTIVATING,
     CAPTURING_FRONT,
     CAPTURING_REAR,
-    ENCRYPTING,
+    PREPARING,
+    PENDING,
     SENDING,
-    DELIVERED,
-    PARTIALLY_DELIVERED,
-    QUEUED,
-    FAILED
+    SENT,
+    FAILED,
+    CANCELLED;
+
+    companion object {
+        @Deprecated("Use SENT instead", ReplaceWith("SENT"))
+        val DELIVERED = SENT
+        @Deprecated("Use SENT instead", ReplaceWith("SENT"))
+        val PARTIALLY_DELIVERED = SENT
+        @Deprecated("Use PENDING instead", ReplaceWith("PENDING"))
+        val QUEUED = PENDING
+        @Deprecated("Use PREPARING instead", ReplaceWith("PREPARING"))
+        val ENCRYPTING = PREPARING
+    }
 }
 
 @Immutable
 data class SosUiState(
     val status: SosStatus = SosStatus.SAFE,
+    val currentSosId: String? = null,
     val isFetchingLocation: Boolean = false,
     val latitude: Double? = null,
     val longitude: Double? = null,
@@ -87,6 +99,9 @@ class SosViewModel @Inject constructor(
     val uiState: StateFlow<SosUiState> = _uiState.asStateFlow()
 
     private var cameraId: String? = null
+    private var sosJob: kotlinx.coroutines.Job? = null
+    private var retryJob: kotlinx.coroutines.Job? = null
+    private var currentPendingSosId: String? = null
 
     init {
         checkReadiness()
@@ -149,7 +164,7 @@ class SosViewModel @Inject constructor(
             currentStatus == SosStatus.ACTIVATING ||
             currentStatus == SosStatus.CAPTURING_FRONT ||
             currentStatus == SosStatus.CAPTURING_REAR ||
-            currentStatus == SosStatus.ENCRYPTING ||
+            currentStatus == SosStatus.PREPARING ||
             currentStatus == SosStatus.SENDING) {
             MeshLogger.w("SosViewModel", "SOS dispatch already in progress, ignoring duplicate trigger")
             return
@@ -168,72 +183,66 @@ class SosViewModel @Inject constructor(
             ) 
         }
 
-        viewModelScope.launch {
+        sosJob?.cancel()
+        sosJob = viewModelScope.launch {
             val sosEventId = UUID.randomUUID().toString()
+            currentPendingSosId = sosEventId
             try {
-                // 1. Immediately dispatch the SOS alert packet to the mesh
-                _uiState.update { it.copy(status = SosStatus.SENDING) }
-                val result = meshRepository.dispatchSos(sosEventId)
-                val reachableRelays = meshRepository.scannedDevices.value.size
+                // 1. Bounded Location Collection (3 seconds max timeout)
+                val location = kotlinx.coroutines.withTimeoutOrNull(3000L) {
+                    locationProvider.getCurrentLocation()
+                }
+                val lat = location?.latitude
+                val lng = location?.longitude
+                val battery = location?.batteryPercent ?: locationProvider.getBatteryPercent()
 
-                // 2. Immediately start camera capture (if permitted) - NEVER request permission here
+                // 2. Bounded Dual Camera Capture (5 seconds max timeout)
                 var frontFile: File? = null
                 var rearFile: File? = null
                 var captureStatus = "Camera unavailable"
 
                 if (hasCamera) {
-                    _uiState.update { it.copy(status = SosStatus.CAPTURING_FRONT, cameraCaptureStatus = "Capturing front camera...") }
-                    val captureResult = cameraController.captureDualSosImages(sosEventId)
-                    frontFile = captureResult.frontImage
-                    rearFile = captureResult.rearImage
-
-                    captureStatus = when {
-                        captureResult.bothSucceeded -> "Front and rear cameras captured"
-                        frontFile != null -> "Front camera captured (rear failed: ${captureResult.rearError})"
-                        rearFile != null -> "Rear camera captured (front failed: ${captureResult.frontError})"
-                        else -> "Camera capture failed: ${captureResult.frontError ?: captureResult.rearError ?: "unknown"}"
+                    _uiState.update { it.copy(status = SosStatus.CAPTURING_FRONT, cameraCaptureStatus = "Capturing emergency photos...") }
+                    val captureResult = kotlinx.coroutines.withTimeoutOrNull(5000L) {
+                        cameraController.captureDualSosImages(sosEventId)
                     }
-
-                    // 3. Encrypt and dispatch captured photos through existing TransferManager pipeline
-                    if (captureResult.hasAtLeastOneImage) {
-                        _uiState.update { it.copy(status = SosStatus.ENCRYPTING, cameraCaptureStatus = "Encrypting and dispatching photos...") }
-                        meshRepository.sendSosMedia(sosEventId, frontFile, rearFile)
-                    }
-                } else {
-                    captureStatus = "Camera permission denied; alert broadcasted without photos."
-                }
-
-                if (result is com.meshlink.domain.model.MeshResult.Success) {
-                    val finalStatus = when {
-                        reachableRelays == 0 -> SosStatus.QUEUED
-                        hasCamera && (frontFile == null || rearFile == null) && (frontFile != null || rearFile != null) -> SosStatus.PARTIALLY_DELIVERED
-                        else -> SosStatus.DELIVERED
-                    }
-
-                    _uiState.update { 
-                        it.copy(
-                            isSending = false, 
-                            sosSent = true,
-                            status = finalStatus,
-                            relaysReached = reachableRelays,
-                            frontImagePath = frontFile?.absolutePath,
-                            rearImagePath = rearFile?.absolutePath,
-                            cameraCaptureStatus = captureStatus
-                        ) 
+                    if (captureResult != null) {
+                        frontFile = captureResult.frontImage
+                        rearFile = captureResult.rearImage
+                        captureStatus = when {
+                            captureResult.bothSucceeded -> "Front and rear photos captured"
+                            frontFile != null -> "Front photo captured (rear unavailable: ${captureResult.rearError})"
+                            rearFile != null -> "Rear photo captured (front unavailable: ${captureResult.frontError})"
+                            else -> "Camera capture unavailable: ${captureResult.frontError ?: captureResult.rearError ?: "unknown"}"
+                        }
+                    } else {
+                        captureStatus = "Camera capture timed out; photos marked unavailable"
                     }
                 } else {
-                    _uiState.update { 
-                        it.copy(
-                            isSending = false, 
-                            status = SosStatus.FAILED,
-                            errorMessage = "Failed to broadcast SOS",
-                            frontImagePath = frontFile?.absolutePath,
-                            rearImagePath = rearFile?.absolutePath,
-                            cameraCaptureStatus = captureStatus
-                        ) 
-                    }
+                    captureStatus = "Camera permission denied; alert prepared without photos."
                 }
+
+                _uiState.update {
+                    it.copy(
+                        status = SosStatus.PREPARING,
+                        currentSosId = sosEventId,
+                        latitude = lat,
+                        longitude = lng,
+                        batteryPercent = battery,
+                        frontImagePath = frontFile?.absolutePath,
+                        rearImagePath = rearFile?.absolutePath,
+                        cameraCaptureStatus = captureStatus
+                    )
+                }
+
+                // 3. Persist Prepared Package as PENDING
+                _uiState.update { it.copy(status = SosStatus.PENDING) }
+
+                // 4. Transmit over Wi-Fi Direct or Schedule Bounded Retries
+                transmitOrScheduleRetry(sosEventId, frontFile, rearFile)
+
             } catch (e: Exception) {
+                MeshLogger.e("SosViewModel", "Error preparing SOS package: ${e.message}", e)
                 _uiState.update { 
                     it.copy(
                         isSending = false, 
@@ -245,15 +254,121 @@ class SosViewModel @Inject constructor(
         }
     }
 
-    
+    private suspend fun transmitOrScheduleRetry(
+        sosEventId: String,
+        frontFile: File?,
+        rearFile: File?
+    ) {
+        _uiState.update { it.copy(status = SosStatus.SENDING) }
+        val result = meshRepository.dispatchSos(sosEventId)
+        if (frontFile != null || rearFile != null) {
+            meshRepository.sendSosMedia(sosEventId, frontFile, rearFile)
+        }
+
+        val reachableRelays = meshRepository.scannedDevices.value.size
+        if (result is com.meshlink.domain.model.MeshResult.Success && reachableRelays > 0) {
+            _uiState.update {
+                it.copy(
+                    isSending = false,
+                    sosSent = true,
+                    status = SosStatus.SENT,
+                    relaysReached = reachableRelays
+                )
+            }
+        } else {
+            // Retain visible PENDING status when Wi-Fi Direct is not currently available
+            _uiState.update {
+                it.copy(
+                    isSending = false,
+                    status = SosStatus.PENDING,
+                    relaysReached = 0
+                )
+            }
+            startBoundedRetryLoop(sosEventId, frontFile, rearFile)
+        }
+    }
+
+    private fun startBoundedRetryLoop(
+        sosEventId: String,
+        frontFile: File?,
+        rearFile: File?
+    ) {
+        retryJob?.cancel()
+        retryJob = viewModelScope.launch {
+            var attempts = 0
+            val maxAttempts = 10
+            while (attempts < maxAttempts && _uiState.value.status == SosStatus.PENDING) {
+                kotlinx.coroutines.delay(15_000L) // Bounded frequency: retry every 15 seconds
+                attempts++
+                if (_uiState.value.status != SosStatus.PENDING) break
+                MeshLogger.i("SosViewModel", "Retrying pending SOS $sosEventId (attempt $attempts/$maxAttempts)...")
+                val res = meshRepository.dispatchSos(sosEventId)
+                if (frontFile != null || rearFile != null) {
+                    meshRepository.sendSosMedia(sosEventId, frontFile, rearFile)
+                }
+                val reachable = meshRepository.scannedDevices.value.size
+                if (res is com.meshlink.domain.model.MeshResult.Success && reachable > 0) {
+                    _uiState.update {
+                        it.copy(
+                            isSending = false,
+                            sosSent = true,
+                            status = SosStatus.SENT,
+                            relaysReached = reachable
+                        )
+                    }
+                    break
+                }
+            }
+        }
+    }
+
+    fun cancelSos() {
+        val currentStatus = _uiState.value.status
+        if (currentStatus == SosStatus.PENDING || currentStatus == SosStatus.ACTIVATING || currentStatus == SosStatus.PREPARING) {
+            sosJob?.cancel()
+            retryJob?.cancel()
+            val sosId = currentPendingSosId
+            if (sosId != null) {
+                viewModelScope.launch {
+                    meshRepository.cancelPendingSos(sosId)
+                }
+            }
+            // Delete temporary captured files
+            _uiState.value.frontImagePath?.let { File(it).delete() }
+            _uiState.value.rearImagePath?.let { File(it).delete() }
+
+            _uiState.update {
+                it.copy(
+                    status = SosStatus.CANCELLED,
+                    isSending = false,
+                    sosSent = false,
+                    frontImagePath = null,
+                    rearImagePath = null,
+                    cameraCaptureStatus = "SOS cancelled"
+                )
+            }
+        } else if (currentStatus == SosStatus.SENT) {
+            MeshLogger.w("SosViewModel", "Cannot cancel SOS: package has already been sent. Sent records are preserved.")
+        }
+    }
+
     fun resetSos() {
+        if (_uiState.value.status == SosStatus.PENDING) {
+            cancelSos()
+        }
+        sosJob?.cancel()
+        retryJob?.cancel()
+        currentPendingSosId = null
         _uiState.update {
             it.copy(
                 status = SosStatus.SAFE,
                 isSending = false,
                 sosSent = false,
                 errorMessage = null,
-                relaysReached = 0
+                relaysReached = 0,
+                frontImagePath = null,
+                rearImagePath = null,
+                cameraCaptureStatus = null
             )
         }
     }

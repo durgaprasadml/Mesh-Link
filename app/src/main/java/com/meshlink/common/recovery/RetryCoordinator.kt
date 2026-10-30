@@ -29,18 +29,23 @@ class RetryCoordinator @Inject constructor(
     private val relayDao: RelayDao,
     private val intelligentRetryEngine: IntelligentRetryEngine,
     private val stateMachine: MessageStateMachine,
-    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope
+    @com.meshlink.di.ApplicationScope private val applicationScope: CoroutineScope,
+    private val deliveryTrackerProvider: javax.inject.Provider<com.meshlink.messaging.data.DeliveryTracker>? = null
 ) {
     companion object {
         private const val TAG = "RetryCoordinator"
-        const val MESSAGE_TTL_MS = 86_400_000L // 24 Hours TTL
-        private const val PERIODIC_TIMER_INTERVAL_MS = 300_000L // 5 minutes periodic fallback
+        const val MESSAGE_TTL_MS = 10 * 60 * 1000L // 10 Minutes TTL (600,000 ms)
+        private const val PERIODIC_TIMER_INTERVAL_MS = 30_000L // 30 seconds periodic fallback
     }
+
+    var clock: () -> Long = { System.currentTimeMillis() }
 
     private var isRunning = false
     private val retryAttemptMap = ConcurrentHashMap<String, Int>()
     private val scheduledJobs = ConcurrentHashMap<String, Job>()
     private var periodicJob: Job? = null
+
+    fun isRunning(): Boolean = isRunning
 
     fun start() {
         if (isRunning) return
@@ -81,7 +86,31 @@ class RetryCoordinator @Inject constructor(
         applicationScope.launch {
             val message = chatDao.getMessageByUuid(messageId) ?: return@launch
             if (isPendingDeliveryStatus(message.status)) {
+                val now = clock()
+                if (now - message.timestamp > MESSAGE_TTL_MS) {
+                    MeshLogger.w(TAG, "Message $messageId reached 10m TTL. Transitioning to EXPIRED.")
+                    cancelRetryForPacket(messageId)
+                    stateMachine.transitionToExpired(messageId)
+                    return@launch
+                }
                 retrySingleMessage(message, isImmediate = true)
+            }
+        }
+    }
+
+    fun triggerRetry(messageId: String) {
+        if (!isRunning) return
+        applicationScope.launch {
+            val message = chatDao.getMessageByUuid(messageId) ?: return@launch
+            if (isPendingDeliveryStatus(message.status)) {
+                val now = clock()
+                if (now - message.timestamp > MESSAGE_TTL_MS) {
+                    MeshLogger.w(TAG, "Message $messageId reached 10m TTL. Transitioning to EXPIRED.")
+                    cancelRetryForPacket(messageId)
+                    stateMachine.transitionToExpired(messageId)
+                    return@launch
+                }
+                retrySingleMessage(message, isImmediate = false)
             }
         }
     }
@@ -121,20 +150,31 @@ class RetryCoordinator @Inject constructor(
 
         val pendingMessages = nonTerminalStatuses.flatMap { status ->
             chatDao.getMessagesByStatus(status)
-        }.distinctBy { it.messageId }
+        }.filter { it.isFromMe }.distinctBy { it.messageId }
 
         if (pendingMessages.isEmpty()) return
 
         MeshLogger.d(TAG, "Processing ${pendingMessages.size} pending messages for retry (Event: $isEventTriggered)...")
 
-        val now = System.currentTimeMillis()
-        pendingMessages.forEach { msg ->
-            // Check TTL expiration
-            if (now - msg.timestamp > MESSAGE_TTL_MS) {
-                MeshLogger.w(TAG, "Message ${msg.messageId} TTL expired (${now - msg.timestamp} ms). Transitioning to EXPIRED.")
-                cancelRetryForPacket(msg.messageId)
-                stateMachine.transitionToExpired(msg.messageId)
-                return@forEach
+        val now = clock()
+        val (expiredMessages, activeMessages) = pendingMessages.partition { now - it.timestamp > MESSAGE_TTL_MS }
+
+        expiredMessages.forEach { msg ->
+            MeshLogger.w(TAG, "Message ${msg.messageId} TTL expired (${now - msg.timestamp} ms). Transitioning to EXPIRED.")
+            cancelRetryForPacket(msg.messageId)
+            stateMachine.transitionToExpired(msg.messageId)
+        }
+
+        activeMessages.forEach { msg ->
+            if (msg.status == DeliveryStatus.WAITING_FOR_ACK || msg.status == DeliveryStatus.SENDING) {
+                val isTracking = deliveryTrackerProvider?.get()?.isTracking(msg.messageId) == true
+                if (isTracking) {
+                    // Still actively tracking 30s timeout, avoid duplicate dispatch
+                    return@forEach
+                } else {
+                    // Stranded by process restart or lost timeout
+                    stateMachine.transitionToRetrying(msg.messageId)
+                }
             }
 
             retrySingleMessage(msg, isImmediate = isEventTriggered)
@@ -143,12 +183,16 @@ class RetryCoordinator @Inject constructor(
 
     private fun retrySingleMessage(msg: com.meshlink.database.data.local.MessageEntity, isImmediate: Boolean) {
         val messageId = msg.messageId
+        if (scheduledJobs[messageId]?.isActive == true) {
+            MeshLogger.d(TAG, "Retry job already active for $messageId; skipping duplicate schedule")
+            return
+        }
+
         val attempt = (retryAttemptMap[messageId] ?: 0) + 1
         retryAttemptMap[messageId] = attempt
 
-        val delayMs = if (isImmediate || attempt <= 1) 0L else intelligentRetryEngine.calculateRetryDelay(attempt)
+        val delayMs = if (isImmediate && attempt <= 1) 0L else intelligentRetryEngine.calculateRetryDelay(attempt)
 
-        scheduledJobs[messageId]?.cancel()
         scheduledJobs[messageId] = applicationScope.launch {
             if (delayMs > 0) {
                 stateMachine.transitionToRetrying(messageId)
@@ -163,6 +207,15 @@ class RetryCoordinator @Inject constructor(
                 return@launch
             }
 
+            // Re-verify 10-minute expiry after backoff delay
+            val now = clock()
+            if (now - latestMsg.timestamp > MESSAGE_TTL_MS) {
+                MeshLogger.w(TAG, "Message $messageId reached 10m TTL during backoff delay. Transitioning to EXPIRED.")
+                cancelRetryForPacket(messageId)
+                stateMachine.transitionToExpired(messageId)
+                return@launch
+            }
+
             if (!intelligentRetryEngine.shouldRetryNow()) {
                 MeshLogger.d(TAG, "Skipping retry attempt $attempt for $messageId due to battery/congestion")
                 return@launch
@@ -172,7 +225,7 @@ class RetryCoordinator @Inject constructor(
                 MeshLogger.d(TAG, "Attempting delivery attempt $attempt for message $messageId to ${msg.chatId}")
                 val transitioned = stateMachine.transitionToSending(messageId)
                 if (!transitioned) {
-                    MeshLogger.w(TAG, "Aborting retry for $messageId: failed to transition to SENDING")
+                    MeshLogger.w(TAG, "Aborting retry for $messageId: failed to transition to SENDING (status may have changed)")
                     cancelRetryForPacket(messageId)
                     return@launch
                 }

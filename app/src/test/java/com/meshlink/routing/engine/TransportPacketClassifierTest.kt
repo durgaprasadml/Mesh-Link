@@ -17,12 +17,12 @@ class TransportPacketClassifierTest {
         assertEquals(TransportCategory.CONTROL, classifier.classify(PacketType.MEDIA_ACK))
         assertEquals(TransportCategory.CONTROL, classifier.classify(PacketType.MEDIA_NACK))
         assertEquals(TransportCategory.CONTROL, classifier.classify(PacketType.LOCATION))
-        assertEquals(TransportCategory.CONTROL, classifier.classify(PacketType.SOS))
         assertEquals(TransportCategory.CONTROL, classifier.classify(PacketType.BEACON))
     }
 
     @Test
     fun `classify categorizes high bandwidth media packet types as MEDIA`() {
+        assertEquals(TransportCategory.MEDIA, classifier.classify(PacketType.SOS))
         assertEquals(TransportCategory.MEDIA, classifier.classify(PacketType.MEDIA_CHUNK))
         assertEquals(TransportCategory.MEDIA, classifier.classify(PacketType.MEDIA_META))
         assertEquals(TransportCategory.MEDIA, classifier.classify(PacketType.VOICE_FRAME))

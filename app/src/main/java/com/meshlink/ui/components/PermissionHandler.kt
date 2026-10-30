@@ -1460,13 +1460,25 @@ fun isNotificationPermissionGranted(context: Context): Boolean {
 }
 
 fun isBluetoothEnabled(context: Context): Boolean {
-    val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-    return bluetoothManager?.adapter?.isEnabled == true
+    return try {
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        bluetoothManager?.adapter?.isEnabled == true
+    } catch (_: SecurityException) {
+        false
+    } catch (_: Exception) {
+        false
+    }
 }
 
 fun isWifiEnabled(context: Context): Boolean {
-    val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-    return wifiManager?.isWifiEnabled == true
+    return try {
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        wifiManager?.isWifiEnabled == true
+    } catch (_: SecurityException) {
+        false
+    } catch (_: Exception) {
+        false
+    }
 }
 
 fun areRadiosAndPermissionsReady(context: Context): Boolean {

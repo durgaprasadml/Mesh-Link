@@ -31,7 +31,8 @@ class BleScannerManager @Inject constructor(
     private val settingsRepository: SettingsRepository,
     @ApplicationScope private val applicationScope: CoroutineScope,
     private val permissionChecker: BluetoothPermissionChecker,
-    private val restartCoordinator: BleRestartCoordinator
+    private val restartCoordinator: BleRestartCoordinator,
+    private val broadcastHandlerProvider: javax.inject.Provider<com.meshlink.ble.data.handlers.BroadcastHandler>? = null
 ) {
     companion object {
         private const val TAG = "BleScanner"
@@ -47,7 +48,7 @@ class BleScannerManager @Inject constructor(
     private var scanCallback: ScanCallback? = null
 
     val isScanning: Boolean
-        get() = scanCallback != null
+        get() = discoveryEngine.isScanning || scanCallback != null
 
 
     init {
@@ -239,5 +240,21 @@ class BleScannerManager @Inject constructor(
             rssi = rssi,
             capabilities = capabilities
         )
+
+        if (SosAnnouncement.isSosAnnouncement(manufacturerData)) {
+            val announcement = SosAnnouncement.parse(manufacturerData!!)
+            if (announcement != null) {
+                MeshLogger.i(TAG, "[NearbyDiscovery] Valid SOS announcement detected from $deviceAddress (node=${announcement.senderMeshId}, sosId=${announcement.sosIdHex})")
+                applicationScope.launch {
+                    try {
+                        broadcastHandlerProvider?.get()?.receiveSosAnnouncement(announcement, deviceAddress)
+                    } catch (e: Exception) {
+                        MeshLogger.e(TAG, "[NearbyDiscovery] Error processing SOS announcement from $deviceAddress: ${e.message}", e)
+                    }
+                }
+            } else {
+                MeshLogger.w(TAG, "[NearbyDiscovery] Rejected corrupted or tampered SOS announcement from $deviceAddress")
+            }
+        }
     }
 }

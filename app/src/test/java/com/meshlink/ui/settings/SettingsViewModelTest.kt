@@ -58,6 +58,10 @@ class SettingsViewModelTest {
         every { settingsRepository.cornerRadiusScale } returns flowOf(1.0f)
         every { settingsRepository.largeTextEnabled } returns flowOf(false)
         every { settingsRepository.reduceMotionEnabled } returns flowOf(false)
+        every { settingsRepository.emergencyNumber } returns flowOf("112")
+        every { settingsRepository.sosAutoBroadcast } returns flowOf(true)
+        every { settingsRepository.shareLiveLocation } returns flowOf(true)
+        every { settingsRepository.emergencyTemplate } returns flowOf("EMERGENCY! Immediate assistance needed at my coordinates.")
 
         viewModel = SettingsViewModel(userRepository, settingsRepository)
     }
@@ -114,5 +118,61 @@ class SettingsViewModelTest {
         testScheduler.advanceUntilIdle()
 
         coVerify { settingsRepository.setThemeMode("DARK") }
+    }
+
+    @Test
+    fun `emergency settings persist to settingsRepository`() = runTest(testDispatcher) {
+        viewModel.setEmergencyNumber("108")
+        viewModel.setSosAutoBroadcast(false)
+        viewModel.setShareLiveLocation(false)
+        viewModel.setEmergencyTemplate("Need medical help at Sector 4")
+        testScheduler.advanceUntilIdle()
+
+        coVerify { settingsRepository.setEmergencyNumber("108") }
+        coVerify { settingsRepository.setSosAutoBroadcast(false) }
+        coVerify { settingsRepository.setShareLiveLocation(false) }
+        coVerify { settingsRepository.setEmergencyTemplate("Need medical help at Sector 4") }
+    }
+
+    @Test
+    fun `clearMediaCache and optimizeDatabase execute real maintenance operations`() = runTest(testDispatcher) {
+        val cacheManager = mockk<com.meshlink.storage.data.local.CacheManager>(relaxed = true)
+        val meshDatabase = mockk<com.meshlink.database.data.local.MeshDatabase>(relaxed = true)
+        val openHelper = mockk<androidx.sqlite.db.SupportSQLiteOpenHelper>(relaxed = true)
+        val sqliteDb = mockk<androidx.sqlite.db.SupportSQLiteDatabase>(relaxed = true)
+
+        coEvery { cacheManager.clearMediaCache() } returns 2048L
+        coEvery { cacheManager.clearOrphanFiles(any()) } returns 1024L
+        coEvery { cacheManager.getStorageBreakdown() } returns com.meshlink.storage.data.local.StorageBreakdown(
+            databaseBytes = 4096L,
+            mediaCacheBytes = 0L,
+            voiceNotesBytes = 512L,
+            freeSpaceBytes = 100_000L,
+            totalSpaceBytes = 200_000L
+        )
+        every { meshDatabase.openHelper } returns openHelper
+        every { openHelper.writableDatabase } returns sqliteDb
+        every { openHelper.readableDatabase } returns sqliteDb
+
+        val vmWithStorage = SettingsViewModel(userRepository, settingsRepository, cacheManager, meshDatabase).apply {
+            ioDispatcher = testDispatcher
+        }
+        vmWithStorage.clearMediaCache()
+        vmWithStorage.optimizeDatabase()
+        testScheduler.advanceUntilIdle()
+
+        coVerify { cacheManager.clearMediaCache() }
+        coVerify { cacheManager.clearOrphanFiles(any()) }
+        verify { sqliteDb.execSQL("VACUUM") }
+    }
+
+    @Test
+    fun `resolveSettingsBackDestination returns HOME for all subscreens and null for HOME`() {
+        org.junit.Assert.assertNull(resolveSettingsBackDestination(SettingsDestination.HOME))
+        SettingsDestination.entries
+            .filter { it != SettingsDestination.HOME }
+            .forEach { subDestination ->
+                assertEquals(SettingsDestination.HOME, resolveSettingsBackDestination(subDestination))
+            }
     }
 }

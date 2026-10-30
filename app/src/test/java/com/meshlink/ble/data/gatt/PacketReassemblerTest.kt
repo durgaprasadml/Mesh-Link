@@ -55,4 +55,28 @@ class PacketReassemblerTest {
         
         assertNull(classUnderTest.handleFragment(address, frag3))
     }
+
+    @Test
+    fun `handleFragment aborts and drops buffer when accumulated size exceeds MAX_REASSEMBLED_PACKET_BYTES (ML-AUDIT-018)`() {
+        val chunk = ByteArray(128 * 1024) { 'A'.code.toByte() }
+        val startFrag = ByteArray(chunk.size + 1).apply {
+            this[0] = PacketFragmenterImpl.TYPE_START
+            System.arraycopy(chunk, 0, this, 1, chunk.size)
+        }
+        val contFrag = ByteArray(chunk.size + 1).apply {
+            this[0] = PacketFragmenterImpl.TYPE_CONT
+            System.arraycopy(chunk, 0, this, 1, chunk.size)
+        }
+        val endFrag = ByteArray(10).apply {
+            this[0] = PacketFragmenterImpl.TYPE_END
+        }
+
+        // Start (128 KB) + 4 CONT (512 KB) exceeds 512 KB limit and clears buffer
+        assertNull(classUnderTest.handleFragment(address, startFrag))
+        repeat(4) {
+            assertNull(classUnderTest.handleFragment(address, contFrag))
+        }
+        // Subsequent END fragment must return null because the oversized buffer was evicted
+        assertNull(classUnderTest.handleFragment(address, endFrag))
+    }
 }

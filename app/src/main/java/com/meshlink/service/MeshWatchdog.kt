@@ -5,6 +5,8 @@ import com.meshlink.ble.data.BleScannerManager
 import com.meshlink.common.logger.MeshLogger
 import com.meshlink.routing.engine.TransportDiagnostics
 import com.meshlink.wifi.manager.WifiDirectManager
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -30,13 +32,17 @@ class MeshWatchdog @Inject constructor(
         private val BACKOFF_SCHEDULE_MS = listOf(1000L, 2000L, 5000L, 10000L, 20000L, 30000L, 60000L)
     }
 
+    private val watchdogLock = Any()
+    @Volatile
     private var heartbeatJob: Job? = null
-    private val failureCounts = mutableMapOf<RadioSubsystem, Int>()
-    private var recoveryCount: Int = 0
+    private val failureCounts = ConcurrentHashMap<RadioSubsystem, Int>()
+    private val recoveryCount = AtomicInteger(0)
 
-    fun getRecoveryCount(): Int = recoveryCount
+    fun getRecoveryCount(): Int = recoveryCount.get()
 
-    fun start() {
+    fun getFailureCount(subsystem: RadioSubsystem): Int = failureCounts[subsystem] ?: 0
+
+    fun start() = synchronized(watchdogLock) {
         if (heartbeatJob?.isActive == true) return
         MeshLogger.d(TAG, "Starting Mesh Watchdog heartbeat service")
 
@@ -48,7 +54,7 @@ class MeshWatchdog @Inject constructor(
         }
     }
 
-    fun stop() {
+    fun stop() = synchronized(watchdogLock) {
         MeshLogger.d(TAG, "Stopping Mesh Watchdog heartbeat service")
         heartbeatJob?.cancel()
         heartbeatJob = null
@@ -82,9 +88,8 @@ class MeshWatchdog @Inject constructor(
     }
 
     private suspend fun handleSubsystemFailure(subsystem: RadioSubsystem, reason: String) {
-        val count = failureCounts.getOrDefault(subsystem, 0) + 1
-        failureCounts[subsystem] = count
-        recoveryCount++
+        val count = failureCounts.compute(subsystem) { _, prev -> (prev ?: 0) + 1 } ?: 1
+        recoveryCount.incrementAndGet()
 
         val backoffIndex = (count - 1).coerceAtMost(BACKOFF_SCHEDULE_MS.lastIndex)
         val backoffDelay = BACKOFF_SCHEDULE_MS[backoffIndex]

@@ -36,4 +36,13 @@ class TransportPolicyTest {
         assertTrue(policy.shouldAllowBleFallback(smallMediaChunk, TransportCategory.MEDIA))
         assertFalse(policy.shouldAllowBleFallback(largePacket, TransportCategory.MEDIA))
     }
+
+    @Test
+    fun `sosPacketsMustNeverFallBackToBle`() {
+        val sosPacket = MeshPacket(
+            senderId = "a", targetId = "b", payload = "SOS", type = PacketType.SOS
+        )
+        assertFalse(policy.shouldAllowBleFallback(sosPacket, TransportCategory.MEDIA))
+        assertEquals(RouteType.WIFI_DIRECT, policy.getPreferredTransport(PacketType.SOS))
+    }
 }

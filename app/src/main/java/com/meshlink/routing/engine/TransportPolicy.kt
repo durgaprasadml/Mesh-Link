@@ -79,6 +79,9 @@ class TransportPolicy @Inject constructor(
         category: TransportCategory = classifier.classify(packetType, payloadSizeBytes, null),
         mimeType: String? = null
     ): Boolean {
+        // SOS payloads MUST NEVER fall back to BLE under any condition.
+        if (packetType == PacketType.SOS) return false
+
         // Audio payloads (MEDIA_CHUNK, VOICE_FRAME) MUST NEVER fall back to BLE regardless of file size.
         val isAudioPayload = (packetType == PacketType.MEDIA_CHUNK || packetType == PacketType.VOICE_FRAME) &&
             mimeType?.startsWith("audio/") == true

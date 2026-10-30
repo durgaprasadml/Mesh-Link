@@ -11,9 +11,8 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import net.zetetic.database.sqlcipher.SQLiteDatabase
 
 @Singleton
@@ -25,7 +24,7 @@ class DatabaseSecurityManager @Inject constructor(
         private const val TAG = "DbSecurity"
     }
 
-    private val migrationMutex = Mutex()
+    private val migrationLock = Any()
 
     private val encPrefs: SharedPreferences by lazy {
         val masterKey = MasterKey.Builder(context)
@@ -41,58 +40,59 @@ class DatabaseSecurityManager @Inject constructor(
     }
 
     @Throws(SecurityRecoveryException::class)
-    fun getDatabasePassphrase(): SecureDatabaseKey = runBlocking {
-        migrationMutex.withLock {
-            com.meshlink.common.logger.MeshLogger.d(TAG, "Initializing database passphrase derivation")
-            val legacyPrefs = context.getSharedPreferences(SecurityConstants.DB_PREFS_NAME_LEGACY, Context.MODE_PRIVATE)
+    suspend fun getDatabasePassphraseAsync(): SecureDatabaseKey = withContext(Dispatchers.IO) {
+        getDatabasePassphrase()
+    }
+
+    @Throws(SecurityRecoveryException::class)
+    fun getDatabasePassphrase(): SecureDatabaseKey = synchronized(migrationLock) {
+        com.meshlink.common.logger.MeshLogger.d(TAG, "Initializing database passphrase derivation")
+        val legacyPrefs = context.getSharedPreferences(SecurityConstants.DB_PREFS_NAME_LEGACY, Context.MODE_PRIVATE)
+        
+        val secureKey = getOrGenerateSecurePassphrase()
+        
+        val migrationState = encPrefs.getString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_NOT_STARTED)
+        com.meshlink.common.logger.MeshLogger.d(TAG, "Migration state = $migrationState")
+        
+        if (migrationState != SecurityConstants.STATE_VERIFIED) {
+            val legacyPassphraseStr = legacyPrefs.getString(SecurityConstants.KEY_LEGACY_PASSPHRASE, null)
+            com.meshlink.common.logger.MeshLogger.d(TAG, "Legacy key detected = ${legacyPassphraseStr != null}")
             
-            val secureKey = getOrGenerateSecurePassphrase()
-            
-            val migrationState = encPrefs.getString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_NOT_STARTED)
-            com.meshlink.common.logger.MeshLogger.d(TAG, "Migration state = $migrationState")
-            
-            val dbFile = context.getDatabasePath(SecurityConstants.DB_NAME)
-            
-            if (migrationState != SecurityConstants.STATE_VERIFIED) {
-                val legacyPassphraseStr = legacyPrefs.getString(SecurityConstants.KEY_LEGACY_PASSPHRASE, null)
-                com.meshlink.common.logger.MeshLogger.d(TAG, "Legacy key detected = ${legacyPassphraseStr != null}")
+            if (legacyPassphraseStr != null) {
+                val legacyPassBytes = legacyPassphraseStr.toByteArray(Charsets.UTF_8)
+                var legacyKey: SecureDatabaseKey? = null
                 
-                if (legacyPassphraseStr != null) {
-                    val legacyPassBytes = legacyPassphraseStr.toByteArray(Charsets.UTF_8)
-                    var legacyKey: SecureDatabaseKey? = null
+                try {
+                    legacyKey = SecureDatabaseKey(legacyPassBytes)
+                    com.meshlink.common.logger.MeshLogger.d(TAG, "Changing migration state to IN_PROGRESS")
+                    encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_IN_PROGRESS).apply()
                     
-                    try {
-                        legacyKey = SecureDatabaseKey(legacyPassBytes)
-                        com.meshlink.common.logger.MeshLogger.d(TAG, "Changing migration state to IN_PROGRESS")
-                        encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_IN_PROGRESS).apply()
+                    val result = migrateDatabaseIfNeeded(legacyKey, secureKey)
+                    if (result is RekeyResult.Success || result is RekeyResult.MigrationNotRequired) {
+                        com.meshlink.common.logger.MeshLogger.d(TAG, "Migration complete. Deleting legacy key.")
+                        legacyPrefs.edit().remove(SecurityConstants.KEY_LEGACY_PASSPHRASE).apply()
+                        encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_VERIFIED).apply()
+                    } else {
+                        com.meshlink.common.logger.MeshLogger.w(TAG, "Migration failed, falling back to legacy passphrase. State = FAILED.")
+                        encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_FAILED).apply()
                         
-                        val result = migrateDatabaseIfNeeded(legacyKey, secureKey)
-                        if (result is RekeyResult.Success || result is RekeyResult.MigrationNotRequired) {
-                            com.meshlink.common.logger.MeshLogger.d(TAG, "Migration complete. Deleting legacy key.")
-                            legacyPrefs.edit().remove(SecurityConstants.KEY_LEGACY_PASSPHRASE).apply()
-                            encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_VERIFIED).apply()
-                        } else {
-                            com.meshlink.common.logger.MeshLogger.w(TAG, "Migration failed, falling back to legacy passphrase. State = FAILED.")
-                            encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_FAILED).apply()
-                            
-                            // To fallback without returning destroyed key, we duplicate the legacy key to return
-                            val fallbackBytes = Arrays.copyOf(legacyKey.getBytes(), legacyKey.getBytes().size)
-                            secureKey.close() // Close the new key since we fallback
-                            return@withLock SecureDatabaseKey(fallbackBytes)
-                        }
-                    } finally {
-                        legacyKey?.close()
-                        // Ensure original string bytes are wiped
-                        Arrays.fill(legacyPassBytes, 0.toByte())
+                        // To fallback without returning destroyed key, we duplicate the legacy key to return
+                        val fallbackBytes = Arrays.copyOf(legacyKey.getBytes(), legacyKey.getBytes().size)
+                        secureKey.close() // Close the new key since we fallback
+                        return@synchronized SecureDatabaseKey(fallbackBytes)
                     }
-                } else {
-                    com.meshlink.common.logger.MeshLogger.d(TAG, "No legacy key found. Marking VERIFIED.")
-                    encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_VERIFIED).apply()
+                } finally {
+                    legacyKey?.close()
+                    // Ensure original string bytes are wiped
+                    Arrays.fill(legacyPassBytes, 0.toByte())
                 }
+            } else {
+                com.meshlink.common.logger.MeshLogger.d(TAG, "No legacy key found. Marking VERIFIED.")
+                encPrefs.edit().putString(SecurityConstants.KEY_MIGRATION_STATE, SecurityConstants.STATE_VERIFIED).apply()
             }
-            
-            return@withLock secureKey
         }
+        
+        return@synchronized secureKey
     }
 
     @Throws(SecurityRecoveryException::class)

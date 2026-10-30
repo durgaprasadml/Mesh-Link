@@ -26,10 +26,40 @@ class MeshCrashReporter @Inject constructor(
     }
 
     fun setUserId(userId: String) {
-        crashlytics.setUserId(userId)
+        val sanitized = sanitizeIdentifier(userId)
+        if (sanitized.isNotBlank()) {
+            crashlytics.setUserId(sanitized)
+        }
+    }
+
+    fun initializeAnonymousIdentity(): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val existing = prefs.getString(KEY_ANON_ID, null)
+        val anonId = if (!existing.isNullOrBlank() && !existing.contains("@")) {
+            existing
+        } else {
+            "anon-${java.util.UUID.randomUUID().toString().replace("-", "").take(12)}".also {
+                prefs.edit().putString(KEY_ANON_ID, it).apply()
+            }
+        }
+        crashlytics.setUserId(anonId)
+        return anonId
     }
 
     fun logBreadcrumb(message: String) {
         crashlytics.log(message)
+    }
+
+    companion object {
+        private const val PREFS_NAME = "mesh_crash_reporter_prefs"
+        private const val KEY_ANON_ID = "anonymous_crash_id"
+
+        internal fun sanitizeIdentifier(rawId: String): String {
+            val trimmed = rawId.trim()
+            if (trimmed.isBlank() || trimmed.contains("@")) {
+                return ""
+            }
+            return trimmed
+        }
     }
 }
